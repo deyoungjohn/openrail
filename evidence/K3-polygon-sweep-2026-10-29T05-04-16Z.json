@@ -1,0 +1,54 @@
+{
+  "test_id": "K3-polygon-sweep",
+  "spec_ref": "owed_engine_v3.md §3.2, §6 K3; owed_test_plan.md v1.1",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T05:04:16Z",
+  "finished_utc": "2026-10-29T05:04:16Z",
+  "dry_run": false,
+  "result": "FAIL",
+  "thresholds": {
+    "max_overhead_usd": 0.2,
+    "signature_recovers_to_derived": true,
+    "transfer_confirmed": true,
+    "treasury_gain_equals_amount": true
+  },
+  "measurements": {
+    "derived_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "recovered_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "amount_usd": 2,
+    "signature_seconds": 6.622,
+    "near_gas_tgas": 9.605706484528,
+    "near_burnt": 0.0009159341359528,
+    "base_tx_status": "0x0",
+    "base_gas_used": "118756",
+    "base_gas_eth": 0.036056717127624816,
+    "base_confirm_seconds": 2.726,
+    "treasury_gain_raw": "0",
+    "derived_balance_fall_raw": "0",
+    "prices_used": {
+      "eth": 0.090589,
+      "near": 4.45
+    },
+    "overhead_usd": 0.007342248852864365
+  },
+  "tx": [
+    {
+      "chain": "near",
+      "hash": "FoQByTyYKBQRKetTUfMT8XudRo4i9rBvFo3qWonGQefg",
+      "purpose": "inv-2.owed-test.nearhackathons.near.sign via vault -> v1.signer"
+    },
+    {
+      "chain": "polygon",
+      "hash": "0xc896947e170a627742a3706b05dbd8484c7a14b44b3519635cecc2c0ed90a4cb",
+      "purpose": "EIP-3009 transferWithAuthorization (relayer)"
+    }
+  ],
+  "observations": [
+    "derived address funded by the human; no key for it exists anywhere; the signature came from the MPC through the keyless vault",
+    "overhead = gas in the chain's gas token x its price + NEAR burnt x NEAR price, prices from 1click /v0/tokens at run time",
+    "chain Polygon (id 137), USDC 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359; the derived address is the same on every EVM chain"
+  ],
+  "fallback_triggered": "K3: EIP-3009 path failed -> plain ERC-20 transfer plus a gas top-up",
+  "spend_usd": 0.007342248852864365
+}

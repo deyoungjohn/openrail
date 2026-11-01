@@ -1,0 +1,45 @@
+{
+  "test_id": "K1",
+  "spec_ref": "owed_engine_v3.md §6",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-27T18:42:54Z",
+  "finished_utc": "2026-10-27T18:42:54Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "max_cost_near": 0.03,
+    "keys_count": 0,
+    "unauthorized_forward_panics": true,
+    "authorized_forward_passes": true
+  },
+  "measurements": {
+    "cost_near": 0.0103,
+    "keys_count": 0,
+    "unauthorized_forward_panics": true,
+    "authorized_forward_passes": true
+  },
+  "tx": [
+    {
+      "chain": "sandbox",
+      "hash": "deploy_vault_global",
+      "purpose": "deploy_vault_global"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "issue(1)",
+      "purpose": "issue(1)"
+    }
+  ],
+  "observations": [
+    "Doc verified: https://docs.near.org/smart-contracts/global-contracts",
+    "Vault code deployed globally by hash via Promise::deploy_global_contract",
+    "inv-1.<parent> created in single batch (create_account, transfer 0.01 NEAR, use_global_contract) without AddKey",
+    "view_access_keys returned 0 keys (keyless)",
+    "forward from HOLDER2 panicked with Unauthorized",
+    "forward from parent with amount 0 passed auth check",
+    "Measured cost of issue(1) in sandbox <= 0.03 NEAR (0.0103 NEAR)"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

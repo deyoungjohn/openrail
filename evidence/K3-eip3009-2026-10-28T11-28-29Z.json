@@ -1,0 +1,103 @@
+{
+  "test_id": "K3-eip3009",
+  "spec_ref": "owed_engine_v3.md §3.2 Rail B / plan K3 T0 [verify] EIP-3009 views",
+  "tier": "T1",
+  "network": "base+arbitrum (read-only)",
+  "started_utc": "2026-10-28T11:28:29Z",
+  "finished_utc": "2026-10-28T11:28:29Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "base_domain_separator_matches": true,
+    "arb_domain_separator_matches": true,
+    "authorization_state_readable": true,
+    "implemented_selector": "e3ee160e"
+  },
+  "measurements": {
+    "expected_selector": "e3ee160e",
+    "domain_constants": {
+      "name": "USD Coin",
+      "version": "2"
+    },
+    "chains": [
+      {
+        "label": "base",
+        "rpc_host": "rpc.ankr.com",
+        "chain_id_http_status": 200,
+        "http_statuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "chain_id_onchain": "0x2105",
+        "block": "0x32bbfbb",
+        "domain_separator_onchain": "0x02fa7265e7c5d81118673727957699e4d68f74cd74b7db77da710fe8a2c7834f",
+        "domain_separator_computed": "0x02fa7265e7c5d81118673727957699e4d68f74cd74b7db77da710fe8a2c7834f",
+        "domain_match": true,
+        "authorization_state_fresh": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "nonces_zero": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "selector_probe": {
+          "e3ee160e": "error data=0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002645 msg=execution reverted: ECRecover: invalid signature 'v' value",
+          "eb46e437": "error: execution reverted",
+          "ef55255f": "error: execution reverted"
+        },
+        "measured_selector": "e3ee160e"
+      },
+      {
+        "label": "arbitrum",
+        "rpc_host": "rpc.ankr.com",
+        "chain_id_http_status": 200,
+        "http_statuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "chain_id_onchain": "0xa4b1",
+        "block": "0x1eefd592",
+        "domain_separator_onchain": "0x08d11903f8419e68b1b8721bcbe2e9fc68569122a77ef18c216f10b3b5112c78",
+        "domain_separator_computed": "0x08d11903f8419e68b1b8721bcbe2e9fc68569122a77ef18c216f10b3b5112c78",
+        "domain_match": true,
+        "authorization_state_fresh": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "nonces_zero": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "selector_probe": {
+          "e3ee160e": "error data=0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002645 msg=execution reverted: ECRecover: invalid signature 'v' value",
+          "eb46e437": "error: execution reverted",
+          "ef55255f": "error: execution reverted"
+        },
+        "measured_selector": "e3ee160e"
+      }
+    ],
+    "base_domain_match": true,
+    "arb_domain_match": true,
+    "authorization_state_readable": true,
+    "measured_selectors": [
+      "e3ee160e",
+      "e3ee160e"
+    ],
+    "errors": []
+  },
+  "tx": [],
+  "observations": [
+    "EIP-3009 fetched this session: https://eips.ethereum.org/EIPS/eip-3009 — transferWithAuthorization is 9-arg (payload + v,r,s); the EIP publishes receiveWithAuthorization selector 0xef55bec6 as a cross-check",
+    "EIP-712: https://eips.ethereum.org/EIPS/eip-712",
+    "USDC contract addresses: https://developers.circle.com/stablecoins/usdc-contract-addresses",
+    "4byte lookup for 0xe3ee160e: https://www.4byte.directory/api/v1/signatures/?hex_signature=0xe3ee160e → count 0 (fetched this session)",
+    "4byte lookup for 0xef55255f → count 0 (fetched this session)",
+    "0xeb46e437 explained: it is the keccak selector of the 6-arg payload-only string transferWithAuthorization(address,address,uint256,bytes32,bytes32,uint256,uint256) I derived first; the deployed contract takes 9 args (payload + v,r,s), so eb46e437 matches nothing on-chain (4byte count 0, empty revert above). The calldata builder bug behind it was fixed before the K3-vectors report: calldata now carries 9 words (6 payload + v,r,s). 0xef55255f was a separate misremembered value (not from the fetched EIP; the EIP-published receive selector is 0xef55bec6) and also matches nothing.",
+    "run history: 2026-10-27T19:16 run failed with code bug (encodeAddressHex not defined) before any read; 19:20 run died on a network-level fetch failure for BOTH chains (no HTTP status was received — connection error, not an HTTP error); 19:24 run completed with successful reads; this run re-verifies and records the HTTP status of every call in measurements.chains[].http_statuses",
+    "selector decided empirically on-chain: recognized selector reverts with Error(string) data from a zero-balance sender, unknown selector reverts with empty data (eth_chainId tested first in every probeChain)",
+    "rpc hosts recorded, rpc paths/keys redacted by lib/env.ts (vars match *_RPC_URL)"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

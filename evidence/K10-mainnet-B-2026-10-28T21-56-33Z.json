@@ -1,0 +1,33 @@
+{
+  "test_id": "K10-mainnet-B",
+  "spec_ref": "owed_engine_v3.md §3.6, §2a-5, fact P2; plan K10",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T21:56:33Z",
+  "finished_utc": "2026-10-28T21:56:33Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "advance_goes_to_claimable_when_owner_unregistered": true
+  },
+  "measurements": {
+    "checks": {
+      "owner_not_paid": true,
+      "claimable_equals_advance": true,
+      "usdc_held_equals_claimable": true,
+      "financier_not_refunded": true,
+      "lien_set": true
+    },
+    "advance_raw": "1000000",
+    "owner_gain_raw": "0",
+    "claimable_raw": "1000000",
+    "contract_holds_raw": "1000000"
+  },
+  "tx": [],
+  "observations": [
+    "real native USDC on NEAR (17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1); owner unreg.nearhackathons.near",
+    "the advance stays in the owner account (case A) or in claimable (case B); recover with PHASE=withdraw and release_storage.ts"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 1
+}

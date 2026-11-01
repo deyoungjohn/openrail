@@ -1,0 +1,923 @@
+{
+  "test_id": "K2prime-partA-routes",
+  "spec_ref": "owed_test_plan.md v1.1 K2′ part A",
+  "tier": "T1",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T03:08:53Z",
+  "finished_utc": "2026-10-29T03:08:53Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "routes": 13,
+    "amounts_usd": [
+      10,
+      50,
+      100,
+      999,
+      1000
+    ],
+    "every_route_accepts_at_least_one_amount": true,
+    "no_deposit_sent": true
+  },
+  "measurements": {
+    "quotes_accepted": 65,
+    "quotes_rejected": 0,
+    "quotes_errored": 0,
+    "routes_without_any_accepted_quote": [],
+    "routes": [
+      {
+        "route": "R1",
+        "originChain": "base",
+        "payerAsset": "USDC",
+        "swapType": "FLEX_INPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.991983333333,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 35,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 35 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10000000",
+            "minAmountIn": "9900000",
+            "amountOut": "10000000",
+            "amountInUsd": "9.994710000000",
+            "amountOutUsd": "9.994710000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "50000000",
+            "minAmountIn": "49500000",
+            "amountOut": "50000000",
+            "amountInUsd": "49.973550000000",
+            "amountOutUsd": "49.973550000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "100000000",
+            "minAmountIn": "99000000",
+            "amountOut": "100000000",
+            "amountInUsd": "99.947100000000",
+            "amountOutUsd": "99.947100000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "999000000",
+            "minAmountIn": "989010000",
+            "amountOut": "999000000",
+            "amountInUsd": "998.471529000000",
+            "amountOutUsd": "998.471529000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1000000000",
+            "minAmountIn": "990000000",
+            "amountOut": "1000000000",
+            "amountInUsd": "999.471000000000",
+            "amountOutUsd": "999.471000000000",
+            "spreadPct": 0
+          }
+        ]
+      },
+      {
+        "route": "R2",
+        "originChain": "arbitrum",
+        "payerAsset": "USDC",
+        "swapType": "FLEX_INPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.992916666667,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 25,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 25 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10000000",
+            "minAmountIn": "9900000",
+            "amountOut": "10000000",
+            "amountInUsd": "9.994710000000",
+            "amountOutUsd": "9.994710000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "50000000",
+            "minAmountIn": "49500000",
+            "amountOut": "50000000",
+            "amountInUsd": "49.973550000000",
+            "amountOutUsd": "49.973550000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "100000000",
+            "minAmountIn": "99000000",
+            "amountOut": "100000000",
+            "amountInUsd": "99.947100000000",
+            "amountOutUsd": "99.947100000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "999000000",
+            "minAmountIn": "989010000",
+            "amountOut": "999000000",
+            "amountInUsd": "998.471529000000",
+            "amountOutUsd": "998.471529000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1000000000",
+            "minAmountIn": "990000000",
+            "amountOut": "1000000000",
+            "amountInUsd": "999.471000000000",
+            "amountOutUsd": "999.471000000000",
+            "spreadPct": 0
+          }
+        ]
+      },
+      {
+        "route": "R3",
+        "originChain": "ethereum",
+        "payerAsset": "USDC",
+        "swapType": "FLEX_INPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.990783333334,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 45,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 45 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10000000",
+            "minAmountIn": "9900000",
+            "amountOut": "9999322",
+            "amountInUsd": "9.994710000000",
+            "amountOutUsd": "9.994032358662",
+            "spreadPct": 0.006780459715160591
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "50000000",
+            "minAmountIn": "49500000",
+            "amountOut": "49996609",
+            "amountInUsd": "49.973550000000",
+            "amountOutUsd": "49.970160793839",
+            "spreadPct": 0.006782459986442772
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "100000000",
+            "minAmountIn": "99000000",
+            "amountOut": "99993216",
+            "amountInUsd": "99.947100000000",
+            "amountOutUsd": "99.940319588736",
+            "spreadPct": 0.006784460257787195
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "999000000",
+            "minAmountIn": "989010000",
+            "amountOut": "998898638",
+            "amountInUsd": "998.471529000000",
+            "amountOutUsd": "998.370220620498",
+            "spreadPct": 0.010147375934256637
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1000000000",
+            "minAmountIn": "990000000",
+            "amountOut": "999931756",
+            "amountInUsd": "999.471000000000",
+            "amountOutUsd": "999.402792101076",
+            "spreadPct": 0.006824865756140198
+          }
+        ]
+      },
+      {
+        "route": "R4",
+        "originChain": "optimism",
+        "payerAsset": "USDC",
+        "swapType": "FLEX_INPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.9844,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 35,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 35 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10000000",
+            "minAmountIn": "9900000",
+            "amountOut": "9997980",
+            "amountInUsd": "9.994710000000",
+            "amountOutUsd": "9.992691068580",
+            "spreadPct": 0.02020408122441047
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "50000000",
+            "minAmountIn": "49500000",
+            "amountOut": "49989901",
+            "amountInUsd": "49.973550000000",
+            "amountOutUsd": "49.963456342371",
+            "spreadPct": 0.020202080416201678
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "100000000",
+            "minAmountIn": "99000000",
+            "amountOut": "99979801",
+            "amountInUsd": "99.947100000000",
+            "amountOutUsd": "99.926911685271",
+            "spreadPct": 0.020203080820306737
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "999000000",
+            "minAmountIn": "989010000",
+            "amountOut": "998798212",
+            "amountInUsd": "998.471529000000",
+            "amountOutUsd": "998.269847745852",
+            "spreadPct": 0.020203079818896432
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1000000000",
+            "minAmountIn": "990000000",
+            "amountOut": "999798010",
+            "amountInUsd": "999.471000000000",
+            "amountOutUsd": "999.269116852710",
+            "spreadPct": 0.020203080820295358
+          }
+        ]
+      },
+      {
+        "route": "R5",
+        "originChain": "polygon",
+        "payerAsset": "USDC",
+        "swapType": "FLEX_INPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.967733333333,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 35,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 35 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10000000",
+            "minAmountIn": "9900000",
+            "amountOut": "9997990",
+            "amountInUsd": "9.994710000000",
+            "amountOutUsd": "9.992701063290",
+            "spreadPct": 0.020104040912225778
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "50000000",
+            "minAmountIn": "49500000",
+            "amountOut": "49989950",
+            "amountInUsd": "49.973550000000",
+            "amountOutUsd": "49.963505316450",
+            "spreadPct": 0.020104040912236446
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "100000000",
+            "minAmountIn": "99000000",
+            "amountOut": "99979901",
+            "amountInUsd": "99.947100000000",
+            "amountOutUsd": "99.927011632371",
+            "spreadPct": 0.020103040510112587
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "999000000",
+            "minAmountIn": "989010000",
+            "amountOut": "998798212",
+            "amountInUsd": "998.471529000000",
+            "amountOutUsd": "998.269847745852",
+            "spreadPct": 0.020203079818896432
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1000000000",
+            "minAmountIn": "990000000",
+            "amountOut": "999798010",
+            "amountInUsd": "999.471000000000",
+            "amountOutUsd": "999.269116852710",
+            "spreadPct": 0.020203080820295358
+          }
+        ]
+      },
+      {
+        "route": "R6",
+        "originChain": "bnb",
+        "payerAsset": "USDC",
+        "swapType": "FLEX_INPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.984716666667,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 35,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 35 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10000000000000000000",
+            "minAmountIn": "9900000000000000000",
+            "amountOut": "9998080",
+            "amountInUsd": "9.994710000000",
+            "amountOutUsd": "9.992791015680",
+            "spreadPct": 0.01920368710792067
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "50000000000000000000",
+            "minAmountIn": "49500000000000000000",
+            "amountOut": "49990400",
+            "amountInUsd": "49.973550000000",
+            "amountOutUsd": "49.963955078400",
+            "spreadPct": 0.01920368710793489
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "100000000000000000000",
+            "minAmountIn": "99000000000000000000",
+            "amountOut": "99985132",
+            "amountInUsd": "99.947100000000",
+            "amountOutUsd": "99.932239865172",
+            "spreadPct": 0.014870210902969465
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "999000000000000000000",
+            "minAmountIn": "989010000000000000000",
+            "amountOut": "998808201",
+            "amountInUsd": "998.471529000000",
+            "amountOutUsd": "998.279831461671",
+            "spreadPct": 0.01920278586098443
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1000000000000000000000",
+            "minAmountIn": "990000000000000000000",
+            "amountOut": "999851329",
+            "amountInUsd": "999.471000000000",
+            "amountOutUsd": "999.322407646959",
+            "spreadPct": 0.014869310635276817
+          }
+        ]
+      },
+      {
+        "route": "R7",
+        "originChain": "solana",
+        "payerAsset": "USDC",
+        "swapType": "FLEX_INPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.983016666667,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 20,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 20 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10000000",
+            "minAmountIn": "9900000",
+            "amountOut": "9999567",
+            "amountInUsd": "9.994710000000",
+            "amountOutUsd": "9.994277229057",
+            "spreadPct": 0.004330187497119563
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "50000000",
+            "minAmountIn": "49500000",
+            "amountOut": "49993857",
+            "amountInUsd": "49.973550000000",
+            "amountOutUsd": "49.967410249647",
+            "spreadPct": 0.012287509643435382
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "100000000",
+            "minAmountIn": "99000000",
+            "amountOut": "99987715",
+            "amountInUsd": "99.947100000000",
+            "amountOutUsd": "99.934821498765",
+            "spreadPct": 0.012286509397681689
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "999000000",
+            "minAmountIn": "989010000",
+            "amountOut": "998906920",
+            "amountInUsd": "998.471529000000",
+            "amountOutUsd": "998.378498239320",
+            "spreadPct": 0.009318185522230064
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1000000000",
+            "minAmountIn": "990000000",
+            "amountOut": "999943501",
+            "amountInUsd": "999.471000000000",
+            "amountOutUsd": "999.414530887971",
+            "spreadPct": 0.0056502192317412795
+          }
+        ]
+      },
+      {
+        "route": "R8",
+        "originChain": "near",
+        "payerAsset": "USDC",
+        "swapType": "FLEX_INPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.993083333334,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 20,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 20 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10000000",
+            "minAmountIn": "9900000",
+            "amountOut": "10000000",
+            "amountInUsd": "9.994710000000",
+            "amountOutUsd": "9.994710000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "50000000",
+            "minAmountIn": "49500000",
+            "amountOut": "50000000",
+            "amountInUsd": "49.973550000000",
+            "amountOutUsd": "49.973550000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "100000000",
+            "minAmountIn": "99000000",
+            "amountOut": "100000000",
+            "amountInUsd": "99.947100000000",
+            "amountOutUsd": "99.947100000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "999000000",
+            "minAmountIn": "989010000",
+            "amountOut": "999000000",
+            "amountInUsd": "998.471529000000",
+            "amountOutUsd": "998.471529000000",
+            "spreadPct": 0
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1000000000",
+            "minAmountIn": "990000000",
+            "amountOut": "1000000000",
+            "amountInUsd": "999.471000000000",
+            "amountOutUsd": "999.471000000000",
+            "spreadPct": 0
+          }
+        ]
+      },
+      {
+        "route": "R9",
+        "originChain": "ethereum",
+        "payerAsset": "ETH",
+        "swapType": "EXACT_OUTPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.9781,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 45,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 45 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "4387251306203223",
+            "minAmountIn": "4343378793141190",
+            "amountOut": "10000000",
+            "amountInUsd": "10.127355425187",
+            "amountOutUsd": "9.994710000000",
+            "spreadPct": 1.3271563175619945
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "21936254776117514",
+            "minAmountIn": "21716892228356338",
+            "amountOut": "50000000",
+            "amountInUsd": "50.636773074999",
+            "amountOutUsd": "49.973550000000",
+            "spreadPct": 1.327148211401823
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "43872509113510377",
+            "minAmountIn": "43433784022375273",
+            "amountOut": "100000000",
+            "amountInUsd": "101.273545137263",
+            "amountOutUsd": "99.947100000000",
+            "spreadPct": 1.3271471981308047
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "438521967783790254",
+            "minAmountIn": "434136748105952351",
+            "amountOut": "999000000",
+            "amountInUsd": "1012.266569553390",
+            "amountOutUsd": "998.471529000000",
+            "spreadPct": 1.3816158150454365
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "438953889396938366",
+            "minAmountIn": "434564350502968982",
+            "amountOut": "1000000000",
+            "amountInUsd": "1013.263600128317",
+            "amountOutUsd": "999.471000000000",
+            "spreadPct": 1.3799900275562735
+          }
+        ]
+      },
+      {
+        "route": "R10",
+        "originChain": "base",
+        "payerAsset": "ETH",
+        "swapType": "EXACT_OUTPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.990083333333,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 35,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 35 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "4389536919503948",
+            "minAmountIn": "4345641550308908",
+            "amountOut": "10000000",
+            "amountInUsd": "10.132631443506",
+            "amountOutUsd": "9.994710000000",
+            "spreadPct": 1.3799444256611781
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "21945015984396174",
+            "minAmountIn": "21725565824552212",
+            "amountOut": "50000000",
+            "amountInUsd": "50.656997097741",
+            "amountOutUsd": "49.973550000000",
+            "spreadPct": 1.367617665226895
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "43894420449668525",
+            "minAmountIn": "43455476245171839",
+            "amountOut": "100000000",
+            "amountInUsd": "101.324124389197",
+            "amountOutUsd": "99.947100000000",
+            "spreadPct": 1.377753220650714
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "438502101440751467",
+            "minAmountIn": "434117080426343952",
+            "amountOut": "999000000",
+            "amountInUsd": "1012.220710881773",
+            "amountOutUsd": "998.471529000000",
+            "spreadPct": 1.3770229277887585
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "439006451030499129",
+            "minAmountIn": "434616386520194137",
+            "amountOut": "1000000000",
+            "amountInUsd": "1013.384931300763",
+            "amountOutUsd": "999.471000000000",
+            "spreadPct": 1.3921295666170415
+          }
+        ]
+      },
+      {
+        "route": "R11",
+        "originChain": "arbitrum",
+        "payerAsset": "ETH",
+        "swapType": "EXACT_OUTPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.990216666667,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 25,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 25 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "4390240179518830",
+            "minAmountIn": "4346337777723641",
+            "amountOut": "10000000",
+            "amountInUsd": "10.134254820794",
+            "amountOutUsd": "9.994710000000",
+            "spreadPct": 1.3961867907523147
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "21948099735129299",
+            "minAmountIn": "21728618737778006",
+            "amountOut": "50000000",
+            "amountInUsd": "50.664115504583",
+            "amountOutUsd": "49.973550000000",
+            "spreadPct": 1.3818620141714941
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "43896643489071048",
+            "minAmountIn": "43457677054180337",
+            "amountOut": "100000000",
+            "amountInUsd": "101.329255964432",
+            "amountOutUsd": "99.947100000000",
+            "spreadPct": 1.3828875119257962
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "438527464509515790",
+            "minAmountIn": "434142189864420632",
+            "amountOut": "999000000",
+            "amountInUsd": "1012.279257975186",
+            "amountOutUsd": "998.471529000000",
+            "spreadPct": 1.3828865995823525
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "438964674312343704",
+            "minAmountIn": "434575027569220266",
+            "amountOut": "1000000000",
+            "amountInUsd": "1013.288495595642",
+            "amountOutUsd": "999.471000000000",
+            "spreadPct": 1.3824808919560405
+          }
+        ]
+      },
+      {
+        "route": "R12",
+        "originChain": "optimism",
+        "payerAsset": "ETH",
+        "swapType": "EXACT_OUTPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.986616666667,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 35,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 35 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "4390506753962551",
+            "minAmountIn": "4346601686422925",
+            "amountOut": "10000000",
+            "amountInUsd": "10.134870170577",
+            "amountOutUsd": "9.994710000000",
+            "spreadPct": 1.402343545505585
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "21952845911740390",
+            "minAmountIn": "21733317452622986",
+            "amountOut": "50000000",
+            "amountInUsd": "50.675071388825",
+            "amountOutUsd": "49.973550000000",
+            "spreadPct": 1.4037853801160818
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "43906032279316559",
+            "minAmountIn": "43466971956523393",
+            "amountOut": "100000000",
+            "amountInUsd": "101.350928672283",
+            "amountOutUsd": "99.947100000000",
+            "spreadPct": 1.4045716907073822
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "438742053464030190",
+            "minAmountIn": "434354632929389888",
+            "amountOut": "999000000",
+            "amountInUsd": "1012.774606534229",
+            "amountOutUsd": "998.471529000000",
+            "spreadPct": 1.4324972839790326
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "439209493530078037",
+            "minAmountIn": "434817398594777256",
+            "amountOut": "1000000000",
+            "amountInUsd": "1013.853626485091",
+            "amountOutUsd": "999.471000000000",
+            "spreadPct": 1.4390238921480474
+          }
+        ]
+      },
+      {
+        "route": "R13",
+        "originChain": "solana",
+        "payerAsset": "SOL",
+        "swapType": "EXACT_OUTPUT",
+        "floor_usd": 10,
+        "valid_minutes_from_response_deadline": 4379.989816666666,
+        "grace_hours_added_to_requested_deadline": 72,
+        "time_estimate_seconds": 20,
+        "validity_note": "http 201; response deadline = requested deadline + 72.0 h; timeEstimate 20 s",
+        "probes": [
+          {
+            "usd": 10,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "101452197",
+            "minAmountIn": "100437675",
+            "amountOut": "10000000",
+            "amountInUsd": "10.137103524240",
+            "amountOutUsd": "9.994710000000",
+            "spreadPct": 1.4246889028296066
+          },
+          {
+            "usd": 50,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "507258466",
+            "minAmountIn": "502185881",
+            "amountOut": "50000000",
+            "amountInUsd": "50.685265922720",
+            "amountOutUsd": "49.973550000000",
+            "spreadPct": 1.4241852394316519
+          },
+          {
+            "usd": 100,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "1014516920",
+            "minAmountIn": "1004371750",
+            "amountOut": "100000000",
+            "amountInUsd": "101.370530646400",
+            "amountOutUsd": "99.947100000000",
+            "spreadPct": 1.4241840397570242
+          },
+          {
+            "usd": 999,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10135034422",
+            "minAmountIn": "10033684077",
+            "amountOut": "999000000",
+            "amountInUsd": "1012.692639446240",
+            "amountOutUsd": "998.471529000000",
+            "spreadPct": 1.424288027569788
+          },
+          {
+            "usd": 1000,
+            "verdict": "ACCEPT",
+            "http": 201,
+            "amountIn": "10145248054",
+            "minAmountIn": "10043795573",
+            "amountOut": "1000000000",
+            "amountInUsd": "1013.713185555680",
+            "amountOutUsd": "999.471000000000",
+            "spreadPct": 1.4249723659495828
+          }
+        ]
+      }
+    ]
+  },
+  "tx": [],
+  "observations": [
+    "dry quotes (no depositAddress, nothing sent); one non-dry quote per route at $10 only to read its validity window; no deposit sent, it expires",
+    "the response `deadline` is the requested deadline plus a grace window (observed +72 h); the PRICE is only meant to hold until the requested deadline, so the pay page must count down to the deadline it asked for, never to the one in the response",
+    "a dry quote does not validate the live floor or the recipient: part C (human) confirms each route with a real deposit",
+    "spread = (amountInUsd − amountOutUsd) / amountOutUsd as quoted by 1Click, in percent"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

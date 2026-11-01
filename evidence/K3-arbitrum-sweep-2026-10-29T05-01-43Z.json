@@ -1,0 +1,54 @@
+{
+  "test_id": "K3-arbitrum-sweep",
+  "spec_ref": "owed_engine_v3.md §3.2, §6 K3; owed_test_plan.md v1.1",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T05:01:43Z",
+  "finished_utc": "2026-10-29T05:01:43Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "max_overhead_usd": 0.2,
+    "signature_recovers_to_derived": true,
+    "transfer_confirmed": true,
+    "treasury_gain_equals_amount": true
+  },
+  "measurements": {
+    "derived_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "recovered_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "amount_usd": 2,
+    "signature_seconds": 8.057,
+    "near_gas_tgas": 9.603643505515,
+    "near_burnt": 0.0009157278380515,
+    "base_tx_status": "0x1",
+    "base_gas_used": "98266",
+    "base_gas_eth": 0.0000023756002032,
+    "base_confirm_seconds": 0.748,
+    "treasury_gain_raw": "2000000",
+    "derived_balance_fall_raw": "2000000",
+    "prices_used": {
+      "eth": 2319.5,
+      "near": 4.45
+    },
+    "overhead_usd": 0.009585193550651575
+  },
+  "tx": [
+    {
+      "chain": "near",
+      "hash": "DfjZoHDEkYSr5Gg5RoXsfokGt3hEz1L3ZxFHu2ryWmfG",
+      "purpose": "inv-2.owed-test.nearhackathons.near.sign via vault -> v1.signer"
+    },
+    {
+      "chain": "arbitrum",
+      "hash": "0x87e62f5a181eb4c53d11d88f947da6157fe49e4100004dee65f786658d699e9a",
+      "purpose": "EIP-3009 transferWithAuthorization (relayer)"
+    }
+  ],
+  "observations": [
+    "derived address funded by the human; no key for it exists anywhere; the signature came from the MPC through the keyless vault",
+    "overhead = gas in the chain's gas token x its price + NEAR burnt x NEAR price, prices from 1click /v0/tokens at run time",
+    "chain Arbitrum (id 42161), USDC 0xaf88d065e77c8cC2239327C5EDb3A432268e5831; the derived address is the same on every EVM chain"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0.009585193550651575
+}

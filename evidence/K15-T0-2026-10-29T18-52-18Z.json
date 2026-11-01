@@ -1,0 +1,76 @@
+{
+  "test_id": "K15-T0",
+  "spec_ref": "owed_test_plan_v1_2_untested.md K15 T0",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-29T18:52:18Z",
+  "finished_utc": "2026-10-29T18:52:18Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "named_checks": 8,
+    "wasm_imports_clean": true,
+    "digest_vectors": 20
+  },
+  "measurements": {
+    "rows": [
+      {
+        "name": "sweep_digest_matches_vectors",
+        "state": "GREEN"
+      },
+      {
+        "name": "sweep_payload_built_by_contract",
+        "state": "GREEN"
+      },
+      {
+        "name": "sweep_only_allowlisted_relayer",
+        "state": "GREEN"
+      },
+      {
+        "name": "sweep_nonce_single_use",
+        "state": "GREEN"
+      },
+      {
+        "name": "sweep_amount_le_seen_balance",
+        "state": "GREEN"
+      },
+      {
+        "name": "sweep_blocked_in_transfer_window",
+        "state": "GREEN"
+      },
+      {
+        "name": "sol_message_relayer_fields_only",
+        "state": "GREEN"
+      },
+      {
+        "name": "sweep_bound_is_per_chain",
+        "state": "GREEN"
+      }
+    ],
+    "green": 8,
+    "wasm_imports_clean": true,
+    "wasm_bytes": 296673,
+    "built_with": "RUSTFLAGS=--cfg near cargo build --target wasm32-unknown-unknown --release",
+    "k3_digest_vectors_matched_by_the_contract": 20,
+    "solana_vectors_matched_by_the_contract": 8,
+    "request_sweep_total_tgas": 9.3,
+    "gas_split_tgas": {
+      "vault_sign_call": 265,
+      "callback": 15
+    }
+  },
+  "tx": [],
+  "observations": [
+    "the digest the compiled contract builds equals the 20 K3 vectors byte for byte (the K3 vectors are fuzzed: random values, validAfter and nonce), via the contract view test_digest which uses the same builder as request_sweep",
+    "the relayer-supplied arguments are exactly token_id, chain, amount, deposit_address, deadline, sweep_id. Extra fields passed to the call (from, value, nonce, token_contract, validAfter) are ignored: from = the stored derived address, the token contract, domain and chain id come from stored per-chain config, validAfter = 0, nonce = sha256(token_id || sweep_id)",
+    "the calldata the contract stores and emits equals the one built natively from the signer response (selector + nine arguments, v = 27 + recovery_id); the relayer broadcasts it unmodified",
+    "Solana: the message the contract builds equals the TypeScript message (the builder K3 used on mainnet) on 8 vectors; the only relayer-supplied fields are the blockhash and the fee payer, which must be the allow-listed relayer key; an extra authority, destination or mint passed by the relayer is ignored",
+    "sweep_amount_le_seen_balance RECORDED: the contract cannot read an EVM balance. The bound is checked against the balance the allow-listed relayer reported with report_balance, so it is exactly as trustworthy as that report; a lying relayer can request a sweep larger than the balance, and the chain then rejects the transfer (the authorization is single-use and the lock expires)",
+    "FINDING (gas): the keyless vault attaches a fixed 250 Tgas to v1.signer::sign, so the contract must give the vault MORE than 250. With 250 the vault call fails and the sweep is released as failed. 265 for the vault call plus 15 for the callback works inside the 300 Tgas transaction limit, which leaves almost no room: a contract-initiated sweep cannot also do other work in the same transaction. The relayer pays the prepaid gas hold (about 0.28 NEAR at 10x gas price) from its NEAR account",
+    "spike assumptions: the derived EVM and Solana addresses and the Solana token accounts are passed to issue (the real build derives them or checks them against the MPC derivation view); the mock v1.signer returns the real response SHAPES, the real signatures are the T2 run",
+    "FINDING AT T2: the first version kept ONE pending_sweep_amount across chains but compared it with a per-chain reported balance, so a Solana sweep was refused while an EVM sweep was pending (the T0 tests had reported a much larger balance and missed it). Fixed (pending per chain) with the test sweep_bound_is_per_chain, which fails against the old check. The spec has the same single pending_sweep_amount field: it needs to be per chain",
+    "mutation check: 9 deliberate breaks (nonce ignores the token id, from replaced, allow-list removed, sweep id reuse, seen-balance check removed, transfer-window check removed, fee payer unchecked, wrong Solana header, v without 27) were each caught by the intended test"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

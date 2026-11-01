@@ -1,0 +1,22 @@
+{
+  "test_id": "H0-overlay-leak",
+  "spec_ref": "docs/owed_test_plan.md §0.5",
+  "tier": "T0",
+  "network": "local",
+  "started_utc": "2026-10-28T11:40:04Z",
+  "finished_utc": "2026-10-28T11:40:04Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "overlay_redaction": true
+  },
+  "measurements": {
+    "fake_overlay_written_on_purpose": "«redacted:OWED_SELFTEST_OVERLAY_KEY»"
+  },
+  "tx": [],
+  "observations": [
+    "overlay leak attempt «redacted:OWED_SELFTEST_OVERLAY_KEY» — must be «redacted:OWED_SELFTEST_OVERLAY_KEY»"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

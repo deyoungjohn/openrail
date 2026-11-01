@@ -1,0 +1,23 @@
+{
+  "test_id": "H0-leak",
+  "spec_ref": "docs/owed_test_plan.md §0.5",
+  "tier": "T0",
+  "network": "local",
+  "started_utc": "2026-10-28T11:40:04Z",
+  "finished_utc": "2026-10-28T11:40:04Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "redactor_must_strip_fake_secret": true
+  },
+  "measurements": {
+    "fake_secret_written_on_purpose": "«redacted:OWED_SELFTEST_SECRET»",
+    "redacted_fake_secret": "prefix-«redacted:OWED_SELFTEST_SECRET»-suffix"
+  },
+  "tx": [],
+  "observations": [
+    "deliberate leak attempt «redacted:OWED_SELFTEST_SECRET» — must be «redacted:OWED_SELFTEST_SECRET»"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

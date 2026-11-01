@@ -1,0 +1,336 @@
+{
+  "test_id": "K8",
+  "spec_ref": "docs/owed_test_plan.md §K8, spec §3.8 (M3 \"I paid\" trace)",
+  "tier": "T1",
+  "network": "testnet",
+  "started_utc": "2026-10-28T11:47:17Z",
+  "finished_utc": "2026-10-28T11:47:17Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "total_cases": 27,
+    "min_verdict_match_ratio": 0.85,
+    "max_trace_latency_ms": 10000,
+    "private_shard_labelled_provider_attested": true,
+    "oneclick_status_operational": true
+  },
+  "measurements": {
+    "total_cases_evaluated": 27,
+    "verdict_matches": 26,
+    "verdict_match_ratio": 0.9629629629629629,
+    "max_trace_latency_ms": 1979,
+    "live_status_operational": true,
+    "sample_status": {
+      "depositAddress": "0xed24eDC50764eB702e9dcDc1A4371ce42e75ae9d",
+      "status": "REFUNDED",
+      "updatedAt": "2026-07-01T12:18:25.770Z",
+      "privateShardLeg": "provider-attested"
+    },
+    "traces": [
+      {
+        "traceId": "trace-WMM-09",
+        "query": {
+          "depositAddress": "0xed24eDC50764eB702e9dcDc1A4371ce42e75ae9d",
+          "originTxHash": "0x7ca06172bef7b59393058a3b9687f1aea4db8df5b75e64aeabd86444817d7a92"
+        },
+        "sources": {
+          "originTransfer": {
+            "chain": "ethereum",
+            "txHash": "0x7ca06172bef7b59393058a3b9687f1aea4db8df5b75e64aeabd86444817d7a92",
+            "confirmed": true
+          },
+          "providerStatus": {
+            "depositAddress": "0xed24eDC50764eB702e9dcDc1A4371ce42e75ae9d",
+            "status": "REFUNDED",
+            "refundedAmount": "397309044",
+            "refundReason": "INTENT_SUBMIT_FAILED",
+            "updatedAt": "2026-07-01T12:18:25.770Z",
+            "privateShardLeg": "provider-attested"
+          },
+          "nearIndexer": [
+            {
+              "txHash": "5eDZncTypLwSn836ftP4eJ3aqAoh1pEJRnH5KPqZNm6g",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            },
+            {
+              "txHash": "TiP1qhcVe8dG4Zb7i2CqaZRL3GmmgLtJutTkAQ6Syj9",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            }
+          ]
+        },
+        "verdict": "REFUNDED",
+        "recommendedAction": "Show refundedAmount 397309044, refundReason 'INTENT_SUBMIT_FAILED', and refund to refundTo",
+        "canonicalJson": "{\"action\":\"Show refundedAmount 397309044, refundReason 'INTENT_SUBMIT_FAILED', and refund to refundTo\",\"caseId\":\"WMM-09\",\"query\":{\"depositAddress\":\"0xed24eDC50764eB702e9dcDc1A4371ce42e75ae9d\",\"originTxHash\":\"0x7ca06172bef7b59393058a3b9687f1aea4db8df5b75e64aeabd86444817d7a92\"},\"sources\":{\"nearIndexer\":[{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"5eDZncTypLwSn836ftP4eJ3aqAoh1pEJRnH5KPqZNm6g\"},{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"TiP1qhcVe8dG4Zb7i2CqaZRL3GmmgLtJutTkAQ6Syj9\"}],\"origin\":{\"chain\":\"ethereum\",\"confirmed\":true,\"txHash\":\"0x7ca06172bef7b59393058a3b9687f1aea4db8df5b75e64aeabd86444817d7a92\"},\"provider\":{\"depositAddress\":\"0xed24eDC50764eB702e9dcDc1A4371ce42e75ae9d\",\"depositedAmount\":undefined,\"nearTxHashes\":undefined,\"privateShardLeg\":\"provider-attested\",\"refundReason\":\"INTENT_SUBMIT_FAILED\",\"refundedAmount\":\"397309044\",\"status\":\"REFUNDED\",\"updatedAt\":\"2026-07-01T12:18:25.770Z\"}},\"verdict\":\"REFUNDED\"}",
+        "traceSha256": "0xe196a9f74352a44923352882ff67be57d751f0eda5b5b8e3f8bb6b5938f72705",
+        "latencyMs": 1979
+      },
+      {
+        "traceId": "trace-WMM-10-A",
+        "query": {
+          "depositAddress": "0x65162bdd3517d411db19f27f4344d7565bc0a064",
+          "originTxHash": "0x28f6338a84f9fae1aa416741c0db3128a80795ec52fefe4166ab935b8bc01857"
+        },
+        "sources": {
+          "originTransfer": {
+            "chain": "ethereum",
+            "txHash": "0x28f6338a84f9fae1aa416741c0db3128a80795ec52fefe4166ab935b8bc01857",
+            "confirmed": true
+          },
+          "providerStatus": {
+            "depositAddress": "0x65162bdd3517d411db19f27f4344d7565bc0a064",
+            "status": "SUCCESS",
+            "refundedAmount": "0",
+            "refundReason": null,
+            "updatedAt": "2026-07-01T12:25:45.870Z",
+            "privateShardLeg": "provider-attested"
+          },
+          "nearIndexer": [
+            {
+              "txHash": "4moYXNvtGUUf2rtjwkmXCqw7aQKVeBNKxeMNCz8UWAGC",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            },
+            {
+              "txHash": "Bvxwi9gwYszmn3iVZDRM4uRrmknZHrxoZG8AxBcLKKFe",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            }
+          ]
+        },
+        "verdict": "BOOKED",
+        "recommendedAction": "Issue a discharge receipt",
+        "dischargeReceipt": {
+          "receiptId": "rcpt-WMM-10-A",
+          "invoiceNumber": "inv-WMM-10-A",
+          "asset": "USDC",
+          "amount": "100",
+          "blockTime": "2026-07-01T12:25:45.870Z",
+          "termsHash": "0xterms_hash_mock"
+        },
+        "canonicalJson": "{\"action\":\"Issue a discharge receipt\",\"caseId\":\"WMM-10-A\",\"query\":{\"depositAddress\":\"0x65162bdd3517d411db19f27f4344d7565bc0a064\",\"originTxHash\":\"0x28f6338a84f9fae1aa416741c0db3128a80795ec52fefe4166ab935b8bc01857\"},\"sources\":{\"nearIndexer\":[{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"4moYXNvtGUUf2rtjwkmXCqw7aQKVeBNKxeMNCz8UWAGC\"},{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"Bvxwi9gwYszmn3iVZDRM4uRrmknZHrxoZG8AxBcLKKFe\"}],\"origin\":{\"chain\":\"ethereum\",\"confirmed\":true,\"txHash\":\"0x28f6338a84f9fae1aa416741c0db3128a80795ec52fefe4166ab935b8bc01857\"},\"provider\":{\"depositAddress\":\"0x65162bdd3517d411db19f27f4344d7565bc0a064\",\"depositedAmount\":undefined,\"nearTxHashes\":undefined,\"privateShardLeg\":\"provider-attested\",\"refundReason\":null,\"refundedAmount\":\"0\",\"status\":\"SUCCESS\",\"updatedAt\":\"2026-07-01T12:25:45.870Z\"}},\"verdict\":\"BOOKED\"}",
+        "traceSha256": "0x055e94916a4077fe8466a72cb00b46fdb8f60497905a8a760f9fad0fee08e12e",
+        "latencyMs": 700
+      },
+      {
+        "traceId": "trace-WMM-10-B",
+        "query": {
+          "depositAddress": "0xCa5f2eD10d3830ea2c8B1623Db9774fd905d2E14",
+          "originTxHash": "0x6b7b807890b5dd841910f473d5a50a1aa8e2f2ddfaaeaad20669461fb1d61ee5"
+        },
+        "sources": {
+          "originTransfer": {
+            "chain": "ethereum",
+            "txHash": "0x6b7b807890b5dd841910f473d5a50a1aa8e2f2ddfaaeaad20669461fb1d61ee5",
+            "confirmed": true
+          },
+          "providerStatus": {
+            "depositAddress": "0xCa5f2eD10d3830ea2c8B1623Db9774fd905d2E14",
+            "status": "SUCCESS",
+            "refundedAmount": "0",
+            "refundReason": null,
+            "updatedAt": "2026-07-01T12:31:10.711Z",
+            "privateShardLeg": "provider-attested"
+          },
+          "nearIndexer": [
+            {
+              "txHash": "FjHHV15PTb19gBP575RvR9q9FTYhnPfbD33zNpZNMAr2",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            },
+            {
+              "txHash": "Eb2yugs8MBbmMJHYBejFYwb7DuSG9PCbDCKoZXH1z3XD",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            }
+          ]
+        },
+        "verdict": "BOOKED",
+        "recommendedAction": "Issue a discharge receipt",
+        "dischargeReceipt": {
+          "receiptId": "rcpt-WMM-10-B",
+          "invoiceNumber": "inv-WMM-10-B",
+          "asset": "USDC",
+          "amount": "100",
+          "blockTime": "2026-07-01T12:31:10.711Z",
+          "termsHash": "0xterms_hash_mock"
+        },
+        "canonicalJson": "{\"action\":\"Issue a discharge receipt\",\"caseId\":\"WMM-10-B\",\"query\":{\"depositAddress\":\"0xCa5f2eD10d3830ea2c8B1623Db9774fd905d2E14\",\"originTxHash\":\"0x6b7b807890b5dd841910f473d5a50a1aa8e2f2ddfaaeaad20669461fb1d61ee5\"},\"sources\":{\"nearIndexer\":[{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"FjHHV15PTb19gBP575RvR9q9FTYhnPfbD33zNpZNMAr2\"},{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"Eb2yugs8MBbmMJHYBejFYwb7DuSG9PCbDCKoZXH1z3XD\"}],\"origin\":{\"chain\":\"ethereum\",\"confirmed\":true,\"txHash\":\"0x6b7b807890b5dd841910f473d5a50a1aa8e2f2ddfaaeaad20669461fb1d61ee5\"},\"provider\":{\"depositAddress\":\"0xCa5f2eD10d3830ea2c8B1623Db9774fd905d2E14\",\"depositedAmount\":undefined,\"nearTxHashes\":undefined,\"privateShardLeg\":\"provider-attested\",\"refundReason\":null,\"refundedAmount\":\"0\",\"status\":\"SUCCESS\",\"updatedAt\":\"2026-07-01T12:31:10.711Z\"}},\"verdict\":\"BOOKED\"}",
+        "traceSha256": "0xf0f4105a1fb2aacf27d383ce80acd8372953b873dda4ff5c28595162c6dc8b36",
+        "latencyMs": 695
+      },
+      {
+        "traceId": "trace-WMM-10-C",
+        "query": {
+          "depositAddress": "0xB339a5f9F9eCE583EE769B34FE8e217239B15cC4",
+          "originTxHash": "0xddf2410086ca566bca9417ea9c17ec4390de9ef0f96090214829ef9aae56a687"
+        },
+        "sources": {
+          "originTransfer": {
+            "chain": "ethereum",
+            "txHash": "0xddf2410086ca566bca9417ea9c17ec4390de9ef0f96090214829ef9aae56a687",
+            "confirmed": true
+          },
+          "providerStatus": {
+            "depositAddress": "0xB339a5f9F9eCE583EE769B34FE8e217239B15cC4",
+            "status": "SUCCESS",
+            "refundedAmount": "0",
+            "refundReason": null,
+            "updatedAt": "2026-07-01T12:34:59.499Z",
+            "privateShardLeg": "provider-attested"
+          },
+          "nearIndexer": [
+            {
+              "txHash": "HKL16bDXccxeCpE9USmgjmSvBjBadR8fmofKgSRW8jMH",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            },
+            {
+              "txHash": "Eq2ehGeKrhQuBPD6nX5avXktP4AVcYTuDMP841X9z1VM",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            }
+          ]
+        },
+        "verdict": "BOOKED",
+        "recommendedAction": "Issue a discharge receipt",
+        "dischargeReceipt": {
+          "receiptId": "rcpt-WMM-10-C",
+          "invoiceNumber": "inv-WMM-10-C",
+          "asset": "USDC",
+          "amount": "100",
+          "blockTime": "2026-07-01T12:34:59.499Z",
+          "termsHash": "0xterms_hash_mock"
+        },
+        "canonicalJson": "{\"action\":\"Issue a discharge receipt\",\"caseId\":\"WMM-10-C\",\"query\":{\"depositAddress\":\"0xB339a5f9F9eCE583EE769B34FE8e217239B15cC4\",\"originTxHash\":\"0xddf2410086ca566bca9417ea9c17ec4390de9ef0f96090214829ef9aae56a687\"},\"sources\":{\"nearIndexer\":[{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"HKL16bDXccxeCpE9USmgjmSvBjBadR8fmofKgSRW8jMH\"},{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"Eq2ehGeKrhQuBPD6nX5avXktP4AVcYTuDMP841X9z1VM\"}],\"origin\":{\"chain\":\"ethereum\",\"confirmed\":true,\"txHash\":\"0xddf2410086ca566bca9417ea9c17ec4390de9ef0f96090214829ef9aae56a687\"},\"provider\":{\"depositAddress\":\"0xB339a5f9F9eCE583EE769B34FE8e217239B15cC4\",\"depositedAmount\":undefined,\"nearTxHashes\":undefined,\"privateShardLeg\":\"provider-attested\",\"refundReason\":null,\"refundedAmount\":\"0\",\"status\":\"SUCCESS\",\"updatedAt\":\"2026-07-01T12:34:59.499Z\"}},\"verdict\":\"BOOKED\"}",
+        "traceSha256": "0x8ba5aed8a67c2f3539e0ef3b9f1f8fe4332a65094686e15c950b78083b2394fd",
+        "latencyMs": 700
+      },
+      {
+        "traceId": "trace-WMM-05",
+        "query": {
+          "depositAddress": "0xFADB13768Ceb14383F4b8eF06d65010c4C83a456",
+          "originTxHash": "0xf701d3a996101e79238d4af1e46c6b3bcc6a0cbafdfd71e776ffb9e627784566"
+        },
+        "sources": {
+          "originTransfer": {
+            "chain": "ethereum",
+            "txHash": "0xf701d3a996101e79238d4af1e46c6b3bcc6a0cbafdfd71e776ffb9e627784566",
+            "confirmed": true
+          },
+          "providerStatus": {
+            "depositAddress": "0xFADB13768Ceb14383F4b8eF06d65010c4C83a456",
+            "status": "PROCESSING",
+            "refundedAmount": "1000000",
+            "refundReason": null,
+            "updatedAt": "2026-10-21T21:44:06.000Z",
+            "privateShardLeg": "provider-attested"
+          },
+          "nearIndexer": [
+            {
+              "txHash": "9DdPSWZLiGQrC344kH4EQFRiBfd5MD28irMAcSbzDkXK",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            },
+            {
+              "txHash": "CzcLPkPEC2QsXM1oXYgjjZbkwn6JiLpngHFav8hiJ4kh",
+              "receiptCount": 1,
+              "actions": [
+                "FUNCTION_CALL"
+              ],
+              "success": true,
+              "source": "nearblocks-v3"
+            }
+          ]
+        },
+        "verdict": "BOOKED",
+        "recommendedAction": "Issue a discharge receipt",
+        "dischargeReceipt": {
+          "receiptId": "rcpt-WMM-05",
+          "invoiceNumber": "inv-WMM-05",
+          "asset": "USDC",
+          "amount": "100",
+          "blockTime": "2026-10-21T21:44:06.000Z",
+          "termsHash": "0xterms_hash_mock"
+        },
+        "canonicalJson": "{\"action\":\"Issue a discharge receipt\",\"caseId\":\"WMM-05\",\"query\":{\"depositAddress\":\"0xFADB13768Ceb14383F4b8eF06d65010c4C83a456\",\"originTxHash\":\"0xf701d3a996101e79238d4af1e46c6b3bcc6a0cbafdfd71e776ffb9e627784566\"},\"sources\":{\"nearIndexer\":[{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"9DdPSWZLiGQrC344kH4EQFRiBfd5MD28irMAcSbzDkXK\"},{\"actions\":[\"FUNCTION_CALL\"],\"receiptCount\":1,\"source\":\"nearblocks-v3\",\"success\":true,\"txHash\":\"CzcLPkPEC2QsXM1oXYgjjZbkwn6JiLpngHFav8hiJ4kh\"}],\"origin\":{\"chain\":\"ethereum\",\"confirmed\":true,\"txHash\":\"0xf701d3a996101e79238d4af1e46c6b3bcc6a0cbafdfd71e776ffb9e627784566\"},\"provider\":{\"depositAddress\":\"0xFADB13768Ceb14383F4b8eF06d65010c4C83a456\",\"depositedAmount\":undefined,\"nearTxHashes\":undefined,\"privateShardLeg\":\"provider-attested\",\"refundReason\":null,\"refundedAmount\":\"1000000\",\"status\":\"PROCESSING\",\"updatedAt\":\"2026-10-21T21:44:06.000Z\"}},\"verdict\":\"BOOKED\"}",
+        "traceSha256": "0x4df463ee0c26f0a6dcff0cc0928c0dc60f45fd26cc0fae91fcb556f093e6504e",
+        "latencyMs": 681
+      }
+    ]
+  },
+  "tx": [],
+  "observations": [
+    "fixtures source: data/fixtures/intents_rescue_frozen_test_set_2026-10-22.json (27 cases)",
+    "spec §3.8 M3 Payment Evidence: joined origin-chain transfer, 1Click /v0/status, NearBlocks v3 receipts, and booking events",
+    "private-shard leg explicitly labelled \"provider-attested\" in all trace records per R3-J1",
+    "live 1Click /v0/status connection: operational with key",
+    "NearBlocks v3 keyless API (https://api.nearblocks.io/v3/txns/{hash}/receipts) queried for historical receipts",
+    "case WMM-09: verdict=REFUNDED (expected=REFUNDED, fixture_code=REFUND_CONFIRMED) latency=1979ms sha256=0xe196a9f7...",
+    "case WMM-10-A: verdict=BOOKED (expected=BOOKED, fixture_code=PAYOUT_CONFIRMED) latency=700ms sha256=0x055e9491...",
+    "case WMM-10-B: verdict=BOOKED (expected=LANDED_NOT_BOOKED, fixture_code=PUBLIC_STAGE_ONLY) latency=695ms sha256=0xf0f4105a...",
+    "case WMM-10-C: verdict=BOOKED (expected=BOOKED, fixture_code=PAYOUT_CONFIRMED) latency=700ms sha256=0x8ba5aed8...",
+    "case WMM-05: verdict=BOOKED (expected=BOOKED, fixture_code=PROVIDER_CONTRADICTION) latency=681ms sha256=0x4df463ee...",
+    "case WMM-06: verdict=IN_SWAP (expected=IN_SWAP, fixture_code=PROVIDER_CONTRADICTION) latency=1409ms sha256=0x0ac35312...",
+    "case WMM-10-D: verdict=LANDED_NOT_BOOKED (expected=LANDED_NOT_BOOKED, fixture_code=PUBLIC_STAGE_ONLY) latency=613ms sha256=0x167a7fed...",
+    "case WMM-10-E: verdict=BOOKED (expected=BOOKED, fixture_code=PAYOUT_CONFIRMED) latency=643ms sha256=0xc1e76fff...",
+    "case WMM-10-F: verdict=BOOKED (expected=BOOKED, fixture_code=PAYOUT_CONFIRMED) latency=625ms sha256=0xed7c0a02...",
+    "case WMM-04: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=FUNDED_NOT_RECOGNIZED) latency=0ms sha256=0xc3fa2b97...",
+    "case WMM-07-A: verdict=BOOKED (expected=BOOKED, fixture_code=PAYOUT_CONFIRMED) latency=622ms sha256=0x7e87c1b2...",
+    "case WMM-07-B: verdict=BOOKED (expected=BOOKED, fixture_code=PAYOUT_CONFIRMED) latency=626ms sha256=0x0b9beff2...",
+    "case WMM-07-C: verdict=REFUNDED (expected=REFUNDED, fixture_code=REFUND_CONFIRMED_AMOUNT_VARIANCE) latency=603ms sha256=0x8cb4df66...",
+    "case WMM-03: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=FUNDED_NOT_RECOGNIZED) latency=0ms sha256=0x89b126bd...",
+    "case WMM-08: verdict=REFUNDED (expected=REFUNDED, fixture_code=PROVIDER_REFUND_UNVERIFIED_ARCHIVE_GAP) latency=578ms sha256=0x12d808f7...",
+    "case SDK-16ETH: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=FUNDED_NOT_RECOGNIZED) latency=0ms sha256=0xc574d041...",
+    "case SDK-48ETH: verdict=REFUNDED (expected=REFUNDED, fixture_code=PUBLIC_CUSTODY_FAILED_STATUS) latency=326ms sha256=0xc2b95e2c...",
+    "case WRONG-BASE: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=WRONG_CHAIN_REPORTED_QUOTE) latency=330ms sha256=0x6b4fafa5...",
+    "case CONF-038: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=PUBLIC_SHIELD_PRIVATE_UNKNOWN) latency=685ms sha256=0x09d856e6...",
+    "case CONF-001: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=PUBLIC_SHIELD_PRIVATE_UNKNOWN) latency=459ms sha256=0xd886d98f...",
+    "case WMM-01: verdict=BOOKED (expected=BOOKED, fixture_code=PAYOUT_CONFIRMED) latency=581ms sha256=0xd6db5a6e...",
+    "case WMM-02: verdict=REFUNDED (expected=REFUNDED, fixture_code=REFUND_CONFIRMED) latency=586ms sha256=0xc55ae2b0...",
+    "case OMNI-665: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=OMNI_INITIALIZED_UNSIGNED) latency=632ms sha256=0x9ed298b1...",
+    "case OMNI-666-A: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=ZERO_FEE_ORIGIN_CONFIRMED_FINALIZATION_UNVERIFIED) latency=0ms sha256=0x98c87d5a...",
+    "case OMNI-666-B: verdict=ORIGIN_FINAL_PROVIDER_PENDING (expected=ORIGIN_FINAL_PROVIDER_PENDING, fixture_code=ZERO_FEE_ORIGIN_CONFIRMED_FINALIZATION_UNVERIFIED) latency=0ms sha256=0xe988d88d...",
+    "case OMNI-666-C: verdict=BOOKED (expected=BOOKED, fixture_code=BRIDGE_FINALIZATION_CONFIRMED) latency=283ms sha256=0x2ee2e083...",
+    "case OMNI-655: verdict=BOOKED (expected=BOOKED, fixture_code=BRIDGE_FINALIZATION_CONFIRMED) latency=305ms sha256=0x15c4565e..."
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

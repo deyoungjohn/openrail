@@ -1,0 +1,30 @@
+{
+  "test_id": "K3-rust-parity",
+  "spec_ref": "plan K3 T0; owed_engine_v3.md §3.2",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-28T21:02:45Z",
+  "finished_utc": "2026-10-28T21:02:45Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "vectors": 20,
+    "byte_for_byte": true,
+    "signer_recovered_equals_fixture": true
+  },
+  "measurements": {
+    "tests_passed": [
+      "constants_match_the_published_typehashes",
+      "twenty_vectors_match_byte_for_byte",
+      "sweep_nonce_is_sha256_of_token_then_sweep"
+    ],
+    "tests_failed": [],
+    "vectors_checked": 20
+  },
+  "tx": [],
+  "observations": [
+    "Rust crate contracts/k3-digest with injected keccak/sha256; checks constants, domain separator, struct hash, digest, 9-argument calldata and signer recovery (k256) against reports/K3-vectors-*.json"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

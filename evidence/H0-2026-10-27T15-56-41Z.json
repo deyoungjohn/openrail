@@ -1,0 +1,42 @@
+{
+  "test_id": "H0",
+  "spec_ref": "docs/owed_test_plan.md §0.5, §0.6",
+  "tier": "T0",
+  "network": "local",
+  "started_utc": "2026-10-27T15:56:41Z",
+  "finished_utc": "2026-10-27T15:56:41Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "expected_leak_attempts": 6,
+    "secret_value_in_stdout": "absent",
+    "secret_value_in_stderr": "absent",
+    "secret_value_in_report": "absent"
+  },
+  "measurements": {
+    "leak_attempts": 6,
+    "child_report": "/home/dell/Projects/tests/near-ops/owed-spikes/reports/H0-leak-2026-10-27T15-56-40Z.json",
+    "child_exit_zero": true,
+    "report_found": true,
+    "stdout_clean": true,
+    "stderr_clean": true,
+    "report_clean": true,
+    "redaction_marker_in_report": true,
+    "redaction_marker_in_stdout": true,
+    "log_reached_stdout": true,
+    "uncaught_non_zero_exit": true,
+    "uncaught_stderr_clean": true,
+    "uncaught_reported": true,
+    "child_exit_code": 0,
+    "uncaught_exit_code": 1,
+    "redacted_as": "«redacted:OWED_SELFTEST_SECRET»"
+  },
+  "tx": [],
+  "observations": [
+    "redactor wraps console.*, process.stdout.write, process.stderr.write, the report writer, and uncaughtException/unhandledRejection output",
+    "fake secret never printed, logged, committed or asked for; only its name appears in output",
+    "script: /home/dell/Projects/tests/near-ops/owed-spikes/tests/selftest_redaction.ts"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

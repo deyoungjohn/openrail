@@ -1,0 +1,38 @@
+{
+  "test_id": "K14-T1-amended",
+  "spec_ref": "owed_test_plan_v1_2_untested.md K14 T1; amends K14-T1-2026-10-29T15-48-08Z.json",
+  "tier": "T1",
+  "network": "testnet",
+  "started_utc": "2026-10-29T15:49:54Z",
+  "finished_utc": "2026-10-29T15:49:54Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "script_digest_recovers_wallet_account": true,
+    "wallet_shows_readable_fields": "recorded"
+  },
+  "measurements": {
+    "owed_contract": "k14.owed-test.nearhackathons.near",
+    "token_id": "inv-1",
+    "terms": "Owed K14 rehearsal invoice inv-1: 100 USDC, due in 30 days",
+    "terms_hash": "0xd98522becd565a844c8085c3a3f0aa32848b46399feea758319e4f62ae5c572c",
+    "amount_due": "100000000",
+    "due_date": 1795880725,
+    "chain_id": 1,
+    "debtor_evm": "0x12dcbbc7f96b87220e90b46d9528db156b1da841",
+    "signature": "0x9ef2736dfde03334366171169ad8244ef4e04158af4122b13b4bb02c6ed0ab24354411d1f37869a025018c51ccf52d5bc4c61aa95519f5824a98033a9dd74a201c",
+    "digest": "0xe363c753b30337aab3abeb4a39457f02636aa75154c91f050222f2e9fcf88883",
+    "signature_recovers_to_wallet_account": true,
+    "recovered_address": "0x12dcbbc7f96b87220e90b46d9528db156b1da841",
+    "wallet_shows_readable_fields": "NOT RECORDED (the human saved without answering; asked again)",
+    "screenshot_path": "NOT RECORDED (the screenshot shared in chat is of the local page, not the wallet pop-up)"
+  },
+  "tx": [],
+  "observations": [
+    "the original report says FAIL only because the script treated an unanswered readability question as a failure; the signature itself matched. The script now records readability as an observation and passes on parity",
+    "PARITY CONFIRMED against a real wallet: the wallet computed its own EIP-712 digest for chain 1; our encoder's digest recovers the wallet account from the wallet's signature, so the two digests are identical",
+    "readability of the wallet pop-up (the reason D5 chose EIP-712) is still to be recorded: yes / no, hex only / partly, with a screenshot of the pop-up"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

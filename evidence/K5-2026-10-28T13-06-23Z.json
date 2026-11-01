@@ -1,0 +1,233 @@
+{
+  "test_id": "K5",
+  "spec_ref": "owed_engine_v3.md §4 (K5), §6",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-28T13:05:26Z",
+  "finished_utc": "2026-10-28T13:06:23Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "runs": 5,
+    "no_transfer_under_lock": true,
+    "distribution_invariant": "distribution_to_holder_or_beneficiary",
+    "later_bookings_follow_new_owner": true,
+    "clear_stale_lock_respects_expiry": true
+  },
+  "measurements": {
+    "seed": 1,
+    "runs_completed": 5,
+    "issue_failures": 0,
+    "tx_total": 33,
+    "transfer_attempts": 12,
+    "transfer_attempts_under_lock": 11,
+    "transfer_successes_under_lock": 0,
+    "lock_observed": {
+      "Reconciling": 2,
+      "Sweeping": 9,
+      "TransferWindow": 0,
+      "None": 1,
+      "unknown": 0
+    },
+    "action_counts": {
+      "nft_transfer": 3,
+      "reconcile_then_transfer": 4,
+      "sweep_then_transfer": 5,
+      "request_sweep": 3,
+      "reconcile": 2,
+      "prepare_transfer": 1,
+      "booking_callback": 1
+    },
+    "sweep_then_transfer_pairs": 2,
+    "blocks_sweep_to_transfer": [
+      5,
+      5
+    ],
+    "distributions_checked": 1,
+    "distributions_to_snapshot": 0,
+    "ownership_changes": 1,
+    "clear_stale_lock_no_ops": 0,
+    "violations": [],
+    "violation_count": 0
+  },
+  "tx": [
+    {
+      "chain": "sandbox",
+      "hash": "D4n6B4DY4236dZDBa9LUX6Z5RLPnxT3Z7xhUcYXDgJ3P",
+      "purpose": "issue"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "1jpjaQyTvcJUa6VKcFroYjo2jMMRa91YHRFTmtp5auG",
+      "purpose": "nft_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "Abs6NE9tjPNRhBGy2uhZpFFrShyCfMC4WnVbvMvUBQQf",
+      "purpose": "reconcile"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "EB2obFoyLjVbcqiBA5YrmN288p2JuaP6rGUxJGfwCJZo",
+      "purpose": "reconcile_then_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "DQTiMfyfPKA1QusDtWyMLXAYVnwKD5vfkuYE9y42D5Jc",
+      "purpose": "request_sweep"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "7MFW55kPNBM2gmbCNheXQbMsJ9ViLLFgwY7pfvkSs69c",
+      "purpose": "sweep_then_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "7snyLjU9KmCnAQTnm1gZkiExtQ47ad7a5hAtcNbqdFN9",
+      "purpose": "issue"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "CksLZ8yUN5Z1WfYgXEJo9XbHFHPFxbiP43GFzfjS3BVA",
+      "purpose": "request_sweep"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "7KiFX8DqQa4NgQLXkkALnesAFFPJkY5DFxeKx5768kFo",
+      "purpose": "request_sweep"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "HJoH5PPPJZR5JQ6bttevFChDBJqa81DPma9tiLE1H8gF",
+      "purpose": "request_sweep"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "8dZU1PbgTgavXcsY97j3RSJ6Ek6R1A91m8t4Ciq6Atsa",
+      "purpose": "sweep_then_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "36s7o1z1Lnb6UyxPcWJyEXTWcqFvDWkhEnwLYknRFvUF",
+      "purpose": "reconcile"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "3nqV8YTaP36TQKJSfbRhnznZ9LLndh27EuBTFYQtrHnu",
+      "purpose": "reconcile_then_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "MU5KzCNN7FUUxr5VjCD9Gng5FbtpKFKcGX1kJwUg36P",
+      "purpose": "issue"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "5b6kmWJg8Q7SPXqfY5HobDPEwChgRxC46Y8KYKGgsnhw",
+      "purpose": "request_sweep"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "DQKsj5jEpVCW3wjtUfcsG6VbXwfCq3eSq3SzRUTe5qXd",
+      "purpose": "reconcile"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "AVNFjmFUVJLsUBXed3p89r6ttiMMihWBVeBo5HDfUt4S",
+      "purpose": "prepare_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "df4XQez9YKi6GVUPBtfUzQFGts3iMzSArf1n7AYrcBc",
+      "purpose": "request_sweep"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "FVnNUvQZhTiskJXJnrnXk8TRzRBejeZgEdwqKcbYJhvM",
+      "purpose": "sweep_then_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "H4UwJYzM6ao5obaijEykTa2pR2XdzcEs6UygtY4BLvfC",
+      "purpose": "reconcile"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "FT8X9W2yG7ybJ3WDvPLALCo5PUo7LhDRefbB3WcpeRVY",
+      "purpose": "reconcile_then_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "7szMpTAFbS1zpa47W9k4ihkcNZiPWtxtJFCdkdf2zJaA",
+      "purpose": "issue"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "4F7wBkgtwCoB7biCtovM69fJ8ta72uxUfSTYaMimih1Q",
+      "purpose": "request_sweep"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "Bo3yUe1EUbdTuMxvemU9ZrpXD3ReYeaRvn3Q6Teg5tuQ",
+      "purpose": "sweep_then_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "J2F5jh7TWdZ1cAyBEn1xc9DZnAF2Y7ynBAnzsNGSYawe",
+      "purpose": "nft_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "9TwZfjFs8FHYoAW9d6eBUC4fkoL7MYc2uq6WR6n29j9U",
+      "purpose": "issue"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "JCiP8tx8nx7Sc7iW8Yea8dsZt2UrGtB1c8BXA7eFMGKF",
+      "purpose": "reconcile"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "A1NeGyTjFTuJh9iB9SDk6gFsPZXJNiavABs68UPHexsR",
+      "purpose": "booking_callback"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "DX2F16ccn5dYXS8YMJD29wrZgeNJVWwKCyeKTg43hh4H",
+      "purpose": "request_sweep"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "S3SttmeZ8MactdeApyiZziQu6QsnrUCZ3B6HNMC1iNM",
+      "purpose": "sweep_then_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "5eRBUhe3TgH6BJUjps7QPcBZdpC4pQvY62zU7QFRR2Zi",
+      "purpose": "nft_transfer"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "F6EGyAR2UTqLxRwiajMCxSiX1V7BeXhVB5YoqZnKVicR",
+      "purpose": "reconcile"
+    },
+    {
+      "chain": "sandbox",
+      "hash": "8buunUkNg6xqKJYD7KKa6d9fyXGF59qi6WqzyqTW3Gk3",
+      "purpose": "reconcile_then_transfer"
+    }
+  ],
+  "observations": [
+    "contract=dev-29478-4800.test.near buyer=k5-buyer.test.near payer=k5-payer.test.near",
+    "wasm=/home/dell/Projects/tests/near-ops/owed-spikes/contracts/target/wasm32-unknown-unknown/release/owed_k5.wasm",
+    "seed=1 runs=5",
+    "observation channel: get_invoice (contract emits no NEP-297 events, spec §2d gap)",
+    "nft_transfer reverted: failed",
+    "request_sweep reverted: failed",
+    "reconcile reverted: failed",
+    "prepare_transfer reverted: failed",
+    "elapsed 57s, 33 transactions"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

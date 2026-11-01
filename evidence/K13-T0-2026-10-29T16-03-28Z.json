@@ -1,0 +1,87 @@
+{
+  "test_id": "K13-T0",
+  "spec_ref": "owed_test_plan_v1_2_untested.md K13 T0",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-29T16:03:28Z",
+  "finished_utc": "2026-10-29T16:03:28Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "named_checks": 8,
+    "wasm_imports_clean": true
+  },
+  "measurements": {
+    "rows": [
+      {
+        "name": "nft_mint_on_issue",
+        "state": "GREEN"
+      },
+      {
+        "name": "nft_transfer_requires_one_yocto",
+        "state": "GREEN"
+      },
+      {
+        "name": "nft_transfer_only_owner_or_approved",
+        "state": "GREEN"
+      },
+      {
+        "name": "nft_transfer_rules_enforced",
+        "state": "GREEN"
+      },
+      {
+        "name": "nft_transfer_call_refund_restores_owner",
+        "state": "GREEN"
+      },
+      {
+        "name": "nft_transfer_call_keeps_locks",
+        "state": "GREEN"
+      },
+      {
+        "name": "nft_events_nep297",
+        "state": "GREEN"
+      },
+      {
+        "name": "payee_follows_token_real",
+        "state": "GREEN"
+      },
+      {
+        "name": "transfer_under_reconciling_lock_panics",
+        "state": "GREEN"
+      },
+      {
+        "name": "k13_gas_and_storage",
+        "state": "GREEN"
+      }
+    ],
+    "green": 10,
+    "wasm_imports_clean": true,
+    "wasm_bytes": 330548,
+    "wasm_bytes_after_cargo_near_wasm_opt": 268935,
+    "cargo_near_ok": true,
+    "gas_tgas": {
+      "issue": 12.22,
+      "prepare_transfer": 6.26,
+      "nft_transfer": 3.45,
+      "reconcile": 16.25
+    },
+    "storage_bytes_per_token": 507,
+    "storage_bytes_first_token": 648,
+    "storage_lock_near_if_deployed": 2.6893499999999997
+  },
+  "tx": [],
+  "observations": [
+    "DECISION: NEP-171, 177, 178 and 181 are hand-written on env::promise_*; near-contract-standards is NOT used. Reason: its nft_transfer_call builds promises with the near-sdk Promise type, which links gas-key and universal-state host functions that mainnet protocol 86 lacks (K1, K4). PREDICTED from that finding, not tested: the crate was not downloaded (needs the human's OK). Cost for the build: about +6 h as the plan estimated",
+    "the spec transfer rules 1 to 7 are enforced inside nft_transfer and nft_transfer_call themselves (message \"RULE n\"); an approved account is bound by the same rules; the approval is cleared on transfer",
+    "nft_transfer_call keeps a TransferWindow lock until its callback: a sweep requested by the receiver while it runs is refused; a receiver that returns true or panics gets the token back, with a transfer and a refund event",
+    "headline flow in the sandbox: A is paid payment minus floor(25 bps); prepare_transfer runs a fresh reconcile and opens the window; after nft_transfer the next payment on the same route pays B and A receives nothing",
+    "2 yoctoNEAR: nft_transfer panics (RULE 6); it is not refunded",
+    "the plan item \"outside TransferWindow where required\" is not a separate case: spec rule 1 allows lock None as well as TransferWindow, so a plain transfer without prepare_transfer is allowed; the cut-off rule is the reason prepare_transfer exists (a fresh reconcile before the sale)",
+    "NOT in this spike: D-S8 (a failed distribution keeps the booking). The K4 behaviour (roll back on failure) is kept; D-S8 is in the owed-core model and for the real build",
+    "invoice accounts are deployed directly with the vault (0.1 NEAR each, as K12); the global-hash path is proven by K1",
+    "mutation check: 9 deliberate breaks (ack rule, window does not block sweeps, failed receiver keeps the token, reconcile pays the issuer, approved account skips the rules, lien rule, settled rule, no window from nft_transfer_call, no window from prepare_transfer) were each caught by the intended test",
+    "a mainnet deploy locks about 2.7 NEAR as storage for the optimised wasm (3.3 for the unoptimised): recoverable with release_storage.ts"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

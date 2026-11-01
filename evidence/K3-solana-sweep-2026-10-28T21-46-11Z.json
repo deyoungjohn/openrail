@@ -1,0 +1,62 @@
+{
+  "test_id": "K3-solana-sweep",
+  "spec_ref": "owed_engine_v3.md §3.2, §6 K3 Solana",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T21:46:11Z",
+  "finished_utc": "2026-10-28T21:46:11Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "max_overhead_usd": 0.2,
+    "confirmed": true,
+    "treasury_gain_equals_amount": true,
+    "signature_verifies_against_derived_key": true
+  },
+  "measurements": {
+    "derived_address": "6oEGUW2K2KZiE6bJMzwiuJ4pRr15enKswDc8WM5QZPhu",
+    "treasury": "BKWzyizMT6ha5p5vJ4nyEimrxjrJHybAvKC5JDhvk36d",
+    "amount_usd": 1,
+    "mpc_signing_seconds": 6.89,
+    "near_gas_tgas": 10.465839119438,
+    "near_burnt": 0.0010019473994438,
+    "solana_fee_lamports": 10000,
+    "confirm_seconds": 2.651,
+    "status": {
+      "confirmationStatus": "finalized",
+      "confirmations": null,
+      "err": null,
+      "slot": 462633274,
+      "status": {
+        "Ok": null
+      }
+    },
+    "treasury_gain_raw": "1000000",
+    "derived_fall_raw": "1000000",
+    "treasury_token_account_created": true,
+    "ata_rent_usd_not_counted_as_overhead": 0.2085775584,
+    "overhead_usd": 0.005762011199369175,
+    "prices_used": {
+      "sol": 102.28,
+      "near": 4.73
+    }
+  },
+  "tx": [
+    {
+      "chain": "near",
+      "hash": "4BXKcPhBru6B8xyhFBNh468C1P3A27kt1ytyQcd12vCS",
+      "purpose": "inv-2.owed-test.nearhackathons.near.sign Ed25519 via vault -> v1.signer"
+    },
+    {
+      "chain": "solana",
+      "hash": "4BZvoXtgeieoU2bSKn3smPZs7wSzhwsLsBWWRfDTjBhAE8fDKfeskCSHM724s2vR97hsuNjt5jfpDPJBbaBVqjQf",
+      "purpose": "SPL TransferChecked, fee payer relayer, authority MPC-derived"
+    }
+  ],
+  "observations": [
+    "the derived Solana address is keyless; the signature came from the MPC through the vault",
+    "overhead = Solana fee + NEAR burnt at live prices; the one-time token-account rent (if created) is reported separately"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0.21433956959936917
+}

@@ -1,0 +1,51 @@
+{
+  "test_id": "K8-record-evidence",
+  "spec_ref": "owed_engine_v3.md §2a payment_log, §3.8; plan K8",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-28T21:10:29Z",
+  "finished_utc": "2026-10-28T21:10:29Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "stored_hash_equals_sha256_of_canonical_json": true,
+    "only_owner_or_relayer": true,
+    "append_only": true
+  },
+  "measurements": {
+    "checks": [
+      {
+        "name": "stored_trace_sha256_equals_sha256_of_canonical_json",
+        "passed": true,
+        "details": {
+          "traces": 3,
+          "stored": [
+            "0xa28b77805ff10df4b6ca0d3e3e307dffb24854ca10e5e5993392f4a751a37f21",
+            "0x25c7dd72c83bebff1cfa7ee694d360c6991d0ba0749a166856eb34f453d6d4b3",
+            "0x8939ff08b4c930dc35f59c39e859580bba65d2c90661f53d438aa773b8dcd7cc"
+          ]
+        }
+      },
+      {
+        "name": "only_owner_or_allow_listed_relayer_can_record",
+        "passed": true,
+        "details": {
+          "strangerFailed": true
+        }
+      },
+      {
+        "name": "log_is_append_only",
+        "passed": true,
+        "details": {
+          "mutated": false
+        }
+      }
+    ]
+  },
+  "tx": [],
+  "observations": [
+    "canonical JSON taken from the real-data traces of reports/K8-real-*.json; the contract computes the hash itself with env::sha256"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

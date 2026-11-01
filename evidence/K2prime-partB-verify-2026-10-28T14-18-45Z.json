@@ -1,0 +1,60 @@
+{
+  "test_id": "K2prime-partB-verify",
+  "spec_ref": "owed_engine_v3.md §3.2; plan K2′ part B",
+  "tier": "T1",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T14:18:45Z",
+  "finished_utc": "2026-10-28T14:18:45Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "credited_pct_of_sent_min": 99.8,
+    "max_minutes_origin_to_credit": 15,
+    "provider_status": "SUCCESS",
+    "public_balance_visible": true
+  },
+  "measurements": {
+    "legs": [
+      {
+        "chain": "base",
+        "sent_base_units": "10000000",
+        "credited_base_units": "10000000",
+        "difference_base_units": "0",
+        "credited_pct_of_sent": 100,
+        "provider_status": "SUCCESS",
+        "near_tx_hash_count": 2,
+        "deposited_amount_reported": "10000000",
+        "refunded_amount_reported": "0",
+        "minutes_origin_to_credit": 0.30133333333333334,
+        "status_updated_at_heartbeat": "2026-10-28T13:44:06.000Z",
+        "public_balance_visible": true,
+        "pass": true
+      },
+      {
+        "chain": "arbitrum",
+        "sent_base_units": "10000000",
+        "credited_base_units": "10000000",
+        "difference_base_units": "0",
+        "credited_pct_of_sent": 100,
+        "provider_status": "SUCCESS",
+        "near_tx_hash_count": 2,
+        "deposited_amount_reported": "10000000",
+        "refunded_amount_reported": "0",
+        "minutes_origin_to_credit": 0.1874,
+        "status_updated_at_heartbeat": "2026-10-28T13:44:05.000Z",
+        "public_balance_visible": true,
+        "pass": true
+      }
+    ]
+  },
+  "tx": [],
+  "observations": [
+    "account read: inv-1.owed-test.nearhackathons.near; balances are the raw mt_balance_of on intents.near (public view), not a formatted dollar value",
+    "minutes = block time of the last nearTxHash (the public transfer intent, from NearBlocks v3) minus the origin-chain block time; the status updatedAt is a heartbeat and is NOT used (it was 27 minutes after the credit)",
+    "each swap shows two NEAR txs: ft_deposit to intents.near (bridged credit to the deposit-address account), then execute_intents with a public transfer intent to the invoice account",
+    "the Intents credit landed on a NEAR account that did not exist; recovery needs the account to exist and be controllable by the parent (design impact: issue(n) must run before recovery, ideally before the payer sees the deposit address)",
+    "the original part B report records only transactions_broadcast; this report supersedes it for the PASS decision"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

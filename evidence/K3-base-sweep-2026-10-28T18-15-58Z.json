@@ -1,0 +1,53 @@
+{
+  "test_id": "K3-base-sweep",
+  "spec_ref": "owed_engine_v3.md §3.2, §6 K3",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T18:15:58Z",
+  "finished_utc": "2026-10-28T18:15:58Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "max_overhead_usd": 0.2,
+    "signature_recovers_to_derived": true,
+    "transfer_confirmed": true,
+    "treasury_gain_equals_amount": true
+  },
+  "measurements": {
+    "derived_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "recovered_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "amount_usd": 2,
+    "signature_seconds": 7.145,
+    "near_gas_tgas": 9.6071547235,
+    "near_burnt": 0.00091607895985,
+    "base_tx_status": "0x1",
+    "base_gas_used": "80952",
+    "base_gas_eth": 5.828544e-7,
+    "base_confirm_seconds": 2.676,
+    "treasury_gain_raw": "2000000",
+    "derived_balance_fall_raw": "2000000",
+    "prices_used": {
+      "eth": 2340.76,
+      "near": 4.61
+    },
+    "overhead_usd": 0.005587446270252501
+  },
+  "tx": [
+    {
+      "chain": "near",
+      "hash": "Ej4zSc6hZD9nRa2gAmGdMKsfFBgQxM9VM7HC4iRhbX4v",
+      "purpose": "inv-2.owed-test.nearhackathons.near.sign via vault -> v1.signer"
+    },
+    {
+      "chain": "base",
+      "hash": "0x015b704b1ce9f6bb60469700e0efd6869d8881094c264d56311b21360cd0dd7a",
+      "purpose": "EIP-3009 transferWithAuthorization (relayer)"
+    }
+  ],
+  "observations": [
+    "derived address funded by the human; no key for it exists anywhere; the signature came from the MPC through the keyless vault",
+    "overhead = Base gas in ETH x ETH price + NEAR burnt x NEAR price, prices from 1click /v0/tokens at run time"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0.005587446270252501
+}

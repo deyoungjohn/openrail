@@ -1,0 +1,32 @@
+{
+  "test_id": "K2prime-partB",
+  "spec_ref": "owed_engine_v3.md §3.2, §6 (K2′ part B)",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T08:57:17Z",
+  "finished_utc": "2026-10-29T08:57:17Z",
+  "dry_run": true,
+  "result": "SKIPPED",
+  "thresholds": {
+    "amount_per_chain_usd": 11,
+    "total_deposit_usd": 11,
+    "max_spend_usd": 5,
+    "chains": [
+      "base"
+    ]
+  },
+  "measurements": {
+    "simulation_verified": true,
+    "dry_quotes_obtained": 1
+  },
+  "tx": [],
+  "observations": [
+    "K2' part B execution: mode=DRY_RUN",
+    "recipient=holder2.nearhackathons.near, refundTo=0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
+    "planned spend: $11 USDC across base",
+    "dry quote base: simulated successfully (output ~$10.993631000000)",
+    "Dry run completed. Zero value moved. Ready for human operator execution."
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

@@ -1,0 +1,277 @@
+{
+ "owed_contract": "owedk14.test.near",
+ "typed_data": {
+  "domain": {
+   "name": "Owed",
+   "version": "1",
+   "verifyingContract": "0x0000000000000000000000000000000000000000",
+   "chainId": "the wallet chain, one of chain_ids"
+  },
+  "ack": {
+   "Acknowledge": [
+    {
+     "name": "kind",
+     "type": "string"
+    },
+    {
+     "name": "owedContract",
+     "type": "string"
+    },
+    {
+     "name": "tokenId",
+     "type": "string"
+    },
+    {
+     "name": "termsHash",
+     "type": "bytes32"
+    },
+    {
+     "name": "amountDue",
+     "type": "uint256"
+    },
+    {
+     "name": "dueDate",
+     "type": "uint64"
+    }
+   ]
+  }
+ },
+ "chain_ids": [
+  1,
+  10,
+  56,
+  137,
+  8453,
+  42161
+ ],
+ "other_deployment": {
+  "owed_contract": "owedother.test.near",
+  "ack_sig": "0xde8e68cc5fb301aec386d9cde54f2d53f4cc85473c9c75a056f1ab92eace58d21805a9aef0c064016e21ba9b537af693b4285e94a2b75913bb579279e3c5f3a01c"
+ },
+ "valid": [
+  {
+   "token_id": "inv-1",
+   "debtor_evm": "0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf",
+   "terms_hash": "0xcbb8fbc762aa06e92b83fedd378924eb383ca2447513ac6dd84fee4292e09541",
+   "amount_due": "1000000",
+   "due_date": 1800000000,
+   "chain_id": 1,
+   "digest": "0x12cd4549525e6b9c1da83593f89f7f1e192a349486471625c312463c3cdf7068",
+   "sig": "0xeee1c4bcfbe46cc164f37e50fb7cb4e5a33e5fc4f2f9a3ab17013884c9cb6e633c6a5aaa6bb2ddee58d68ed9891f493242be9acfa1cdc578cf10270059e855071c",
+   "sig_v01": "0xeee1c4bcfbe46cc164f37e50fb7cb4e5a33e5fc4f2f9a3ab17013884c9cb6e633c6a5aaa6bb2ddee58d68ed9891f493242be9acfa1cdc578cf10270059e8550701"
+  },
+  {
+   "token_id": "inv-2",
+   "debtor_evm": "0x096c29ec9a33e5ffa4a1b36fe8bc7825e4419adf",
+   "terms_hash": "0xd7fed5541a024bd1b741d0ae5f239fd0e2049de28efc4796464b1dea79fb363e",
+   "amount_due": "2000007",
+   "due_date": 1800086400,
+   "chain_id": 10,
+   "digest": "0x5c9a5c2b9aa16505dd91eb2a17e7b5f95eebf36f3e7c98c6990ec41eab0aae80",
+   "sig": "0x3d3071cd5e7b0784a9e8c7d123948d5ef1fc1379ef625a1dc4f5cba4018cb68f30aabb568b30bdb1e685ea9ade88cb577370b0592b2e5ba6cb1845b058ca29301b",
+   "sig_v01": "0x3d3071cd5e7b0784a9e8c7d123948d5ef1fc1379ef625a1dc4f5cba4018cb68f30aabb568b30bdb1e685ea9ade88cb577370b0592b2e5ba6cb1845b058ca293000"
+  },
+  {
+   "token_id": "inv-3",
+   "debtor_evm": "0x6cc4a0cf8c09bb6bb03882111a5d2e851bcc5863",
+   "terms_hash": "0x189f0582a320f5519742e39d398ebe3bc9d787a47a41626c6863ab10a94570d5",
+   "amount_due": "3000014",
+   "due_date": 1800172800,
+   "chain_id": 56,
+   "digest": "0x32e1f12baa6e0b210534598befbf599d9972f8e43564ad6c36364f805af0ed0c",
+   "sig": "0xba50d0be49c8390c781c7dfc95b01146bb1e85d92267a8b55f5ca90a7e6d9aee664f62a346740d09808a979f610b9bfe50c9ba1caa7f160e329c6f0ee4292c011c",
+   "sig_v01": "0xba50d0be49c8390c781c7dfc95b01146bb1e85d92267a8b55f5ca90a7e6d9aee664f62a346740d09808a979f610b9bfe50c9ba1caa7f160e329c6f0ee4292c0101"
+  },
+  {
+   "token_id": "inv-4",
+   "debtor_evm": "0x464ed2722150032d57da7ad57553fd7e8cfa1234",
+   "terms_hash": "0x3c14b4941db6c96ef1769467c268bc07c74129bffe6740d1214f5ba1c57f1b5b",
+   "amount_due": "4000021",
+   "due_date": 1800259200,
+   "chain_id": 137,
+   "digest": "0x4fac376bcc1fa57047a8cefa9d20589bb4a5de13cd04b8e91950d5d94e034511",
+   "sig": "0x43b4a89bd5f9d1c288efc04bd35fa1caf44b774ff993467b72c6d59ce74dbc9b2dc102ae8c52bffb357022d7993bc8895aea7a2b62237ecaf7529940fecca2a41c",
+   "sig_v01": "0x43b4a89bd5f9d1c288efc04bd35fa1caf44b774ff993467b72c6d59ce74dbc9b2dc102ae8c52bffb357022d7993bc8895aea7a2b62237ecaf7529940fecca2a401"
+  },
+  {
+   "token_id": "inv-5",
+   "debtor_evm": "0x50c8d59443d8c470a287139a6251e87185f9565a",
+   "terms_hash": "0x9f1c03b9a8489f1d26144ae9b4fd378b61718a0db4438cc6fac959af08a776fb",
+   "amount_due": "5000028",
+   "due_date": 1800345600,
+   "chain_id": 8453,
+   "digest": "0xd8c8db1dc678d1e7366b2ff1a82623c5939fa676fb0ecb72b472a2943c1b66da",
+   "sig": "0x690ae23eb8cb30d8c94446d939c7a8317c4597f71f798030aff6dfb4d6cb625e646ac93d8e8c927c55076fc8c8c04b00f20081a15b54ae721389a500e2387b2c1c",
+   "sig_v01": "0x690ae23eb8cb30d8c94446d939c7a8317c4597f71f798030aff6dfb4d6cb625e646ac93d8e8c927c55076fc8c8c04b00f20081a15b54ae721389a500e2387b2c01"
+  },
+  {
+   "token_id": "inv-6",
+   "debtor_evm": "0x7bf4635859b58f24c881012269c091607c223c6b",
+   "terms_hash": "0xd91825cc5d09bf87b61e95d522ef112d77fc7c1577aa6a7a688551ef1dbc4e70",
+   "amount_due": "6000035",
+   "due_date": 1800432000,
+   "chain_id": 42161,
+   "digest": "0xa102fddbc4e73dcc61bb8d6b1586464489f1086a93d759627b6259bf3988876a",
+   "sig": "0x6827cf2689a04c90f731ae6adf990928dc42e1ee665b492e2b598e438af52068067e16e45515e1a635d7a9cb9503ebadcebd7a9427a215854185761a18226d211b",
+   "sig_v01": "0x6827cf2689a04c90f731ae6adf990928dc42e1ee665b492e2b598e438af52068067e16e45515e1a635d7a9cb9503ebadcebd7a9427a215854185761a18226d2100"
+  },
+  {
+   "token_id": "inv-7",
+   "debtor_evm": "0x3cda2df6a817501221d5fab911bf78a191973944",
+   "terms_hash": "0x0a4a91299dbc0622500195ecaac5fda59fece00a3b00bc953945630fd406e75f",
+   "amount_due": "7000042",
+   "due_date": 1800518400,
+   "chain_id": 1,
+   "digest": "0x472b6219e82d69e2e609f35b00850b07db3a48ed72450163423889447f3afb9a",
+   "sig": "0xd1be40dcab290a18a53d2d5696826529f2d4d795f1da0362ababa96a1c0d9b734da48db5b3f57a4abc286436f8789b45f6d1dd0c1e111c3c4bdb02865a7c4db91b",
+   "sig_v01": "0xd1be40dcab290a18a53d2d5696826529f2d4d795f1da0362ababa96a1c0d9b734da48db5b3f57a4abc286436f8789b45f6d1dd0c1e111c3c4bdb02865a7c4db900"
+  },
+  {
+   "token_id": "inv-8",
+   "debtor_evm": "0x9c08923e2e85d28b1cb0e1314a2f4f79867d7be2",
+   "terms_hash": "0x66e71e5064b7b3ae3331679ec3e6b46d43c5b804e72d6d8a0367f03ddec8b7d8",
+   "amount_due": "8000049",
+   "due_date": 1800604800,
+   "chain_id": 10,
+   "digest": "0x1944f374c6b46fa12e4b2f01a73f582abdb5189dba45b89e2d82dd0a6bba6bca",
+   "sig": "0xa04096df055adbc5931cefb6005ec0f755e0a7237d404cf23bcbee415352681d64f0b611291757c7402d086da1fac9ae8943b9860b7ae7960aaef55e873055e91c",
+   "sig_v01": "0xa04096df055adbc5931cefb6005ec0f755e0a7237d404cf23bcbee415352681d64f0b611291757c7402d086da1fac9ae8943b9860b7ae7960aaef55e873055e901"
+  },
+  {
+   "token_id": "inv-9",
+   "debtor_evm": "0x00ab36f5505d3700c0a3bb2d1b4ee4dbd72cc1ea",
+   "terms_hash": "0xca019a0cf3b76316669e284e80781e6773880910adaede00524398329c3f1d94",
+   "amount_due": "9000056",
+   "due_date": 1800691200,
+   "chain_id": 56,
+   "digest": "0xbee420470586adce053cee157e9211890f666dcba54ec2ba6df5547f0e8a780f",
+   "sig": "0x4e6a92e40b1d25c06e023e3b407faa6553d0ee826f8c5f98930fc480bdb25c300cb1ee0aec4bd732586df433eea1aafac052fbceb666ab453402bd5ceb3938001c",
+   "sig_v01": "0x4e6a92e40b1d25c06e023e3b407faa6553d0ee826f8c5f98930fc480bdb25c300cb1ee0aec4bd732586df433eea1aafac052fbceb666ab453402bd5ceb39380001"
+  },
+  {
+   "token_id": "inv-10",
+   "debtor_evm": "0x24b7fd3361e6ce954ae6f48a204c13abb9890736",
+   "terms_hash": "0x1c79ab37db3d7d14267b42af1d33779aa1c5352459204176192d9e9c7ce6dfa2",
+   "amount_due": "10000063",
+   "due_date": 1800777600,
+   "chain_id": 137,
+   "digest": "0xd8b5fe7aefeef43ea82bc2f74199444e6fb04616a3fde606cdb235622959285f",
+   "sig": "0x17370d7af1515823693ed5113cb49de608cd2e4a16ec3fa4c9a344bdd3ffcb814cde9935ce3f2018567042d5cfd4d35c44d9ca6a0d32f91153eb6ece72701ada1c",
+   "sig_v01": "0x17370d7af1515823693ed5113cb49de608cd2e4a16ec3fa4c9a344bdd3ffcb814cde9935ce3f2018567042d5cfd4d35c44d9ca6a0d32f91153eb6ece72701ada01"
+  },
+  {
+   "token_id": "inv-11",
+   "debtor_evm": "0x4522eceff46b10a4542f935333b42b273f43a20b",
+   "terms_hash": "0x9e90afead423363f5f0490e0146e90aeae3403df6c324215461129920122f93c",
+   "amount_due": "11000070",
+   "due_date": 1800864000,
+   "chain_id": 8453,
+   "digest": "0x53af4b2b17083ea74155c37aa8a39981499313d1677587d89c21a4406e8046c4",
+   "sig": "0x5931041faa700ee5dc8ea6f888c74ab67d16012fd8a39cd84520bebbe203fb5564f0281a6a958a230531dcf65a70e1a99c7f485e53874b5c318004e5d0118d3d1c",
+   "sig_v01": "0x5931041faa700ee5dc8ea6f888c74ab67d16012fd8a39cd84520bebbe203fb5564f0281a6a958a230531dcf65a70e1a99c7f485e53874b5c318004e5d0118d3d01"
+  },
+  {
+   "token_id": "inv-12",
+   "debtor_evm": "0x57f3c3b62d00c94f5a642203cfef9f79b6e31168",
+   "terms_hash": "0xcc840ac7cb6a92ac7bd95be84df0606784156de483c7c8867aa143cf5d1c5e91",
+   "amount_due": "12000077",
+   "due_date": 1800950400,
+   "chain_id": 42161,
+   "digest": "0x7d49e59e88c5ed34adf5713b9441c1ad9098d1e27b5ab343679de78931cfb9ce",
+   "sig": "0x6c7b417b498bd6843483834da8625fe03780648fd7376f2fece3b36fb26c5a2404fbfb2dbb9a60b5983d71d68c26e289f736355949883830a00c8c106bc562ef1c",
+   "sig_v01": "0x6c7b417b498bd6843483834da8625fe03780648fd7376f2fece3b36fb26c5a2404fbfb2dbb9a60b5983d71d68c26e289f736355949883830a00c8c106bc562ef01"
+  },
+  {
+   "token_id": "inv-13",
+   "debtor_evm": "0x0bec5e1e72f8e03b2c585f41a3ca5b4ae910280f",
+   "terms_hash": "0xb5c7880c3cc72b4915e96c91db03d12a39779c04b52a04ebe05788be6f128145",
+   "amount_due": "13000084",
+   "due_date": 1801036800,
+   "chain_id": 1,
+   "digest": "0x827113cca7a69ff7b9752883b070b5f94b515f0899c3b734e01ccff6805ae563",
+   "sig": "0xfa3275e3a94a356392e4182cfaea9321ebbbce9fa5509c8cadf93029f9f08a337c5d37575dc051f5ee54a3c4bb424bc17d81f34af4d171c5814def9a2ac5ee771b",
+   "sig_v01": "0xfa3275e3a94a356392e4182cfaea9321ebbbce9fa5509c8cadf93029f9f08a337c5d37575dc051f5ee54a3c4bb424bc17d81f34af4d171c5814def9a2ac5ee7700"
+  },
+  {
+   "token_id": "inv-14",
+   "debtor_evm": "0xc9a1ec1d9d44c6bcec756945b6c448cc51bbb27e",
+   "terms_hash": "0x29065c0d6bcd7be31deb9726613da4bf5ac8cbf2e2efe8a8c2c0a6a9d10bd37e",
+   "amount_due": "14000091",
+   "due_date": 1801123200,
+   "chain_id": 10,
+   "digest": "0xec90e63ca0fd142d43fbed6dbae0128d3d75e6595e096084653e4225240df242",
+   "sig": "0x0dbaf23133cf733a6b05c8996a374481f4bda8ba8d983e62b2aeec23b15e4e922707a225b46c6fdce4409377c63a77a8768285ddd605a317847f1ed77fb745c01c",
+   "sig_v01": "0x0dbaf23133cf733a6b05c8996a374481f4bda8ba8d983e62b2aeec23b15e4e922707a225b46c6fdce4409377c63a77a8768285ddd605a317847f1ed77fb745c001"
+  },
+  {
+   "token_id": "inv-15",
+   "debtor_evm": "0x092ceecd5f13d19e8dd09469bd095fe1600a11c7",
+   "terms_hash": "0xc5bfad7eb34fc9ac44c9870dfa5f9b7129eb3f45bd97cd13cb1013630878d1ba",
+   "amount_due": "15000098",
+   "due_date": 1801209600,
+   "chain_id": 56,
+   "digest": "0x85c3f5bf12719cc59cafdf7ac3f9433031fc2a5299c37cce49a3824c03a11500",
+   "sig": "0x6c41d435a265c961092c307828400563f1bbb78cda9b883b68a1a5d43d63782f548a89b02c6116a2ec0b424f367cbf5600d581f5fed9b7a63d074b5263b931981c",
+   "sig_v01": "0x6c41d435a265c961092c307828400563f1bbb78cda9b883b68a1a5d43d63782f548a89b02c6116a2ec0b424f367cbf5600d581f5fed9b7a63d074b5263b9319801"
+  },
+  {
+   "token_id": "inv-16",
+   "debtor_evm": "0xd9f6c60d63ff366cf368d2aacee4d55f2a2e1c37",
+   "terms_hash": "0xf255c677a4a4f4037dff4a1a76f915f841aef71494fd86cc2c6190662eab3231",
+   "amount_due": "16000105",
+   "due_date": 1801296000,
+   "chain_id": 137,
+   "digest": "0xf78ca3edd67424e7bede8157851189450e482dbbd9da425e25c019382e8e5c59",
+   "sig": "0x74c2a6f8534a3bad5f351e685f2e738d538428abe02551520e0bd92a2539984850048edbf071333a0a1d81ae77e6492420eb88d8acb6e9e0bc09c39041d8d44e1c",
+   "sig_v01": "0x74c2a6f8534a3bad5f351e685f2e738d538428abe02551520e0bd92a2539984850048edbf071333a0a1d81ae77e6492420eb88d8acb6e9e0bc09c39041d8d44e01"
+  },
+  {
+   "token_id": "inv-17",
+   "debtor_evm": "0x444b9c62152c09bcfe6521cbfd35c50d8f904242",
+   "terms_hash": "0xf7927a50d548c9564e1a7c3681f56683fbbd72562834564114432abc14f02f5c",
+   "amount_due": "17000112",
+   "due_date": 1801382400,
+   "chain_id": 8453,
+   "digest": "0x2ed28e6372418f4aa17bd9d71a25631aedbc59de5bd7bfef04e75674db75a4b8",
+   "sig": "0x0615a0c1ff1667e6c0d6640c597d91bcf1641364016bb5293d567616f14e2cc268bc8644d6b741e4dce7fe82b30901d3802464189c8746b54c82fe5f899938071c",
+   "sig_v01": "0x0615a0c1ff1667e6c0d6640c597d91bcf1641364016bb5293d567616f14e2cc268bc8644d6b741e4dce7fe82b30901d3802464189c8746b54c82fe5f8999380701"
+  },
+  {
+   "token_id": "inv-18",
+   "debtor_evm": "0xe8c94a518d398fba313913fc74e526f61a066af8",
+   "terms_hash": "0x73c40dd847f17dcaec711ece2a61ee1722ae75d068504a9c3885ecfe28911678",
+   "amount_due": "18000119",
+   "due_date": 1801468800,
+   "chain_id": 42161,
+   "digest": "0x4d8453f9cb3abfa215d254a3ed804a5c4041864d53c10d3973c73bd5471d0881",
+   "sig": "0x623ec96035f7c9b9417b80435e7b406e042c9c10064429414c8222fe3d79d4ea6ec0d1b9dc94bdd3cd9a0462aca45bc49876bd6c8073b0a30aa4cea304f9983c1b",
+   "sig_v01": "0x623ec96035f7c9b9417b80435e7b406e042c9c10064429414c8222fe3d79d4ea6ec0d1b9dc94bdd3cd9a0462aca45bc49876bd6c8073b0a30aa4cea304f9983c00"
+  },
+  {
+   "token_id": "inv-19",
+   "debtor_evm": "0x6c608bf306896868a9f3c74ab7fbacf076bb400e",
+   "terms_hash": "0xb4b3e43c10c3b4bac512ddeb3c79914f29f4ce864904dd2f2f69c5f766ebace0",
+   "amount_due": "19000126",
+   "due_date": 1801555200,
+   "chain_id": 1,
+   "digest": "0x20f09fbc6abf36bb8b4b58b5d775a853f4d92f57c9e39fdf75d5a2c321459488",
+   "sig": "0xbd90b2d2eee8dd6a276f4e69afde99f3cdbab481255db352978089aea90091fa3cb3395bc9d75994c8d380d343ee2488b04e5ef1331af0c69f9c3f0aec53fb8c1c",
+   "sig_v01": "0xbd90b2d2eee8dd6a276f4e69afde99f3cdbab481255db352978089aea90091fa3cb3395bc9d75994c8d380d343ee2488b04e5ef1331af0c69f9c3f0aec53fb8c01"
+  },
+  {
+   "token_id": "inv-20",
+   "debtor_evm": "0x6b53b089371b7a2a6e265b64f2f0c9b476b0a28f",
+   "terms_hash": "0xb2fdd32551aaac44b1897a945f7a166e76f98ad726d7b70fed630575ef762a3b",
+   "amount_due": "20000133",
+   "due_date": 1801641600,
+   "chain_id": 10,
+   "digest": "0xde216b7637e8db394853617b868cd2d44447e52caa2eb2cec94cc52c3ed4065a",
+   "sig": "0x81da479083c21c86a48464be9b735b076a3e545534634c78069cd4a916559b5347c3736a1f451720a9766550d327c40e71ef21e704a5863ce8539ac12fe574e71b",
+   "sig_v01": "0x81da479083c21c86a48464be9b735b076a3e545534634c78069cd4a916559b5347c3736a1f451720a9766550d327c40e71ef21e704a5863ce8539ac12fe574e700"
+  }
+ ],
+ "wrong_signer_sig": "0x8e3f1ab954ce06f699c4e1ad322e7b9976984e01f8b4c10c838702a17200aab82d0ea25c0ad88860712dda98142b3828f6d0cb1bc2f962a5e2d10bc8b39611a91c",
+ "sig_signed_for_other_contract": "0x88583f78b8bda6ca55539937d2ffd52d0f1c60c731071a22f65006137e35fa2a21f079bba320d8eb0177fc4678400ac714449f4743849e012d1cbe5694ef954d1b",
+ "high_s_sig": "0xeee1c4bcfbe46cc164f37e50fb7cb4e5a33e5fc4f2f9a3ab17013884c9cb6e63c395a555944d2211a729712676e0b6cc77f042170d7adac2f0c2378c764dec3a1b",
+ "safe_contract_wallet_blob": "0x000000000000000000000000f3d1f1f8d9e1e005c8a0da978252fe5a12552bdf000000000000000000000000000000000000000000000000000000000000004100"
+}

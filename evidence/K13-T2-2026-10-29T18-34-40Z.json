@@ -1,0 +1,68 @@
+{
+  "test_id": "K13-T2",
+  "spec_ref": "owed_test_plan_v1_2_untested.md K13 T2",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T18:34:40Z",
+  "finished_utc": "2026-10-29T18:34:40Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "step2_issuer_paid_to_the_base_unit": true,
+    "step4_new_holder_paid_to_the_base_unit": true,
+    "wasm_imports_clean": true
+  },
+  "measurements": {
+    "contract": "k13.owed-test.nearhackathons.near",
+    "invoice_account": "inv-1.k13.owed-test.nearhackathons.near",
+    "wasm_bytes": 268935,
+    "storage_locked_near": 2.6893499999999997,
+    "round1": {
+      "ok": true,
+      "payee": "owed-test.nearhackathons.near",
+      "payee_gain_raw": "1995000",
+      "expected_raw": "1995000",
+      "status": "PartiallyPaid",
+      "reconcile_tx": "H6YTuhLmJyR1ghM4zL1SSs9VreWgA4vwUyb1gQDWoM2X",
+      "reconcile_gas_tgas": 22.77768238696
+    },
+    "round2": {
+      "ok": true,
+      "payee": "holder2.nearhackathons.near",
+      "payee_gain_raw": "1995000",
+      "status": "Paid",
+      "reconcile_gas_tgas": 22.899713667587
+    },
+    "prepare_transfer_gas_tgas": 7.921487168217,
+    "nft_transfer_gas_tgas": 3.249902856134,
+    "nft_in_wallet": "<wallet or explorer, screenshot path, or not shown and why>"
+  },
+  "tx": [
+    {
+      "chain": "near-mainnet",
+      "hash": "9eYc1TZu7xUk9UVzNc4KoEePCqQWAhHg5euKf5cq18jx",
+      "purpose": "K13 step"
+    },
+    {
+      "chain": "near-mainnet",
+      "hash": "7cNUSsyGP2JXG3bMdeJa5K3iNiyYcRzoJRyY1G2Ybpr5",
+      "purpose": "K13 step"
+    },
+    {
+      "chain": "near-mainnet",
+      "hash": "H6YTuhLmJyR1ghM4zL1SSs9VreWgA4vwUyb1gQDWoM2X",
+      "purpose": "K13 step"
+    },
+    {
+      "chain": "near-mainnet",
+      "hash": "3pK7BTt2cbaHfqBx9w1TaGCEzTWM2KzuEqkWNyF3AJ2m",
+      "purpose": "K13 step"
+    }
+  ],
+  "observations": [
+    "the same invoice account was paid twice by the same route; the payee followed the token",
+    "the NFT view in a wallet or explorer is recorded by the human in K13_WALLET_NOTE"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 4
+}

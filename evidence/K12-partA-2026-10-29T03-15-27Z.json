@@ -1,0 +1,36 @@
+{
+  "test_id": "K12-partA",
+  "spec_ref": "owed_test_plan_modules.md K12 part A; checkout_cost_constant",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-29T03:15:27Z",
+  "finished_utc": "2026-10-29T03:15:27Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "invoices": 50,
+    "storage_bytes_identical": true,
+    "gas_spread_max": 0.02,
+    "last_ten_gas_not_above_first_ten_by": 0.02
+  },
+  "measurements": {
+    "invoices": 50,
+    "storage_bytes_per_account": 132,
+    "storage_bytes_distinct_values": 1,
+    "storage_near_locked_per_account": 0.00132,
+    "gas_tgas_min": 10.067580833873,
+    "gas_tgas_max": 10.068035719747,
+    "gas_tgas_first_ten_avg": 10.0676263224604,
+    "gas_tgas_last_ten_avg": 10.068035719747,
+    "parent_total_spent_near_min": 0.0171561262841745,
+    "parent_total_spent_near_max": 0.0172644853157247,
+    "note_cost": "parent_total_spent includes the 0.01 NEAR transferred to the new account (it stays on the account) plus the burnt gas"
+  },
+  "tx": [],
+  "observations": [
+    "keyless factory (contracts/k1-factory) with the global vault; the sandbox parent is the factory account itself",
+    "sandbox gas price differs from mainnet: the mainnet measurement is K1 (issue cost 0.0172 NEAR)"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

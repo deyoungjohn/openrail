@@ -1,0 +1,97 @@
+{
+  "test_id": "K12-partB",
+  "spec_ref": "owed_test_plan_modules.md K12 part B",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T08:37:39Z",
+  "finished_utc": "2026-10-29T08:37:39Z",
+  "dry_run": false,
+  "result": "FAIL",
+  "thresholds": {
+    "online_p50_seconds": 180,
+    "online_cost_pct_at_50_usd": 1,
+    "in_store_p50_seconds": 30
+  },
+  "measurements": {
+    "rows": [
+      {
+        "checkout": 2,
+        "route": "R1",
+        "seconds_to_origin_finality": 2.7,
+        "seconds_to_public_credit": 23.1,
+        "seconds_to_booked": 30.3,
+        "source": "copied from the terminal output of the interrupted run (no spread recorded)"
+      },
+      {
+        "checkout": 3,
+        "route": "R1",
+        "note": "payment landed but the first reconcile failed for lack of NEAR on the K4 account; booked later by hand (fee 5000 to financier, 1995000 to holder2), timings not comparable and excluded from p50",
+        "seconds_to_booked": null,
+        "source": "receipts pasted from the terminal; the run then died on a network fetch error"
+      },
+      {
+        "checkout": 4,
+        "route": "R1",
+        "receipt_status": "0x1",
+        "seconds_to_origin_finality": 2.657,
+        "seconds_to_public_credit": 30.195,
+        "seconds_to_booked": 35.73,
+        "credited_raw": "2000000",
+        "spread_usd": 0,
+        "near_spent_incl_account_funding": 0.10928286552496459
+      },
+      {
+        "checkout": 5,
+        "route": "R1",
+        "receipt_status": "0x1",
+        "seconds_to_origin_finality": 3.78,
+        "seconds_to_public_credit": 26.979,
+        "seconds_to_booked": 32.911,
+        "credited_raw": "2000000",
+        "spread_usd": 0,
+        "near_spent_incl_account_funding": 0.1092751135249646
+      },
+      {
+        "checkout": 6,
+        "route": "R10",
+        "receipt_status": "0x1",
+        "seconds_to_origin_finality": 0.632,
+        "seconds_to_public_credit": 23.5,
+        "seconds_to_booked": 30.472,
+        "credited_raw": "2000000",
+        "spread_usd": 0.023979466035999986,
+        "near_spent_incl_account_funding": 0.10928981873772811
+      }
+    ],
+    "p50_seconds_to_booked": 30.472,
+    "max_seconds_to_booked": 35.73,
+    "online_viable": true,
+    "in_store_viable": false,
+    "cost_pct_of_10": 0.7911999999999999,
+    "cost_pct_of_50": 0.15824,
+    "cost_note": "cost per checkout = invoice account (global-vault issue 0.0172 NEAR at NEAR price 4.6 USD, K1 mainnet) + the quoted 1Click spread scaled to the sale; the run itself used direct-deploy invoice accounts (0.1 NEAR each, mostly locked and recoverable)"
+  },
+  "tx": [
+    {
+      "chain": "base",
+      "hash": "0x6720b09f73854fee9a82ae91365b226b6032bbfbdd1ceb883b0306c41085b7dd",
+      "purpose": "checkout 4 payer transaction"
+    },
+    {
+      "chain": "base",
+      "hash": "0x2725d5dc248dd952278933a2a372125d3318f121f289226f5d256e7e4e6c3889",
+      "purpose": "checkout 5 payer transaction"
+    },
+    {
+      "chain": "base",
+      "hash": "0x8ce6d75a9b5f6993d1b72dc7b29343688c0c178fde4d9d54fe22a04f635a9b44",
+      "purpose": "checkout 6 payer transaction"
+    }
+  ],
+  "observations": [
+    "PASS means all six checkouts were booked; viability is a human decision from the p50 and cost numbers",
+    "booking time includes the reconcile call made by this script right after the credit appears; a watcher in the product would do the same"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 12
+}

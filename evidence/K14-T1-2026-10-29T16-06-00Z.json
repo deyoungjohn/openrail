@@ -1,0 +1,36 @@
+{
+  "test_id": "K14-T1",
+  "spec_ref": "owed_test_plan_v1_2_untested.md K14 T1",
+  "tier": "T1",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T16:06:00Z",
+  "finished_utc": "2026-10-29T16:06:00Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "script_digest_recovers_wallet_account": true,
+    "wallet_shows_readable_fields": "recorded"
+  },
+  "measurements": {
+    "owed_contract": "k14.owed-test.nearhackathons.near",
+    "token_id": "inv-1",
+    "terms": "Owed K14 rehearsal invoice inv-1: 100 USDC, due in 30 days",
+    "terms_hash": "0xd98522becd565a844c8085c3a3f0aa32848b46399feea758319e4f62ae5c572c",
+    "amount_due": "100000000",
+    "due_date": 1795881895,
+    "chain_id": 1,
+    "debtor_evm": "0x12dcbbc7f96b87220e90b46d9528db156b1da841",
+    "signature": "0x006fd2783938297e5a39e1b81a6e665343dd1a926c137d1d432a74494703176505e89edb92c93035576d4152f9ef520114d65a825da5f6767ca3ccec152dd4f01c",
+    "digest": "0x3e64922a3429da0f0fd34298f5fe34cd9ca3b6552b42ab4afab73676c32caf9b",
+    "signature_recovers_to_wallet_account": true,
+    "recovered_address": "0x12dcbbc7f96b87220e90b46d9528db156b1da841",
+    "wallet_shows_readable_fields": "yes",
+    "screenshot_path": ""
+  },
+  "tx": [],
+  "observations": [
+    "the wallet computed its own EIP-712 digest from the typed data; the script computed ours independently; the recovered address equals the wallet account only if the two digests are identical (independent parity check against a wallet implementation)"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

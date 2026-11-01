@@ -1,0 +1,28 @@
+{
+  "test_id": "K3-sol-keys",
+  "spec_ref": "owed_test_plan.md K3 / prompt 2026-10-27 19:00 (RELAYER_SOL_KEY is a BIP39 phrase)",
+  "tier": "T1",
+  "network": "local",
+  "started_utc": "2026-10-28T11:28:07Z",
+  "finished_utc": "2026-10-28T11:28:07Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "valid_bip39_phrase": true,
+    "phantom_path_is_m_44_501_0_0": true,
+    "phrase_never_logged": true
+  },
+  "measurements": {
+    "phantom_address": "BKWzyizMT6ha5p5vJ4nyEimrxjrJHybAvKC5JDhvk36d",
+    "phantom_path": "m/44'/501'/0'/0'"
+  },
+  "tx": [],
+  "observations": [
+    "Phantom style: BIP39 seed -> SLIP-0010 ed25519 m/44'/501'/0'/0' — slip-0010.md fetched 2026-10-27; implementation matches the published ed25519 vectors (chain m and m/0H/1H/2H/2H)",
+    "human confirmed this address on 2026-10-27 with `solana-keygen pubkey prompt://?key=0/0` matching the derivation (prompts/agent2.md 21:30): the relayer wallet is the Phantom-path address recorded in measurements.phantom_address",
+    "the plain-seed \"solana-keygen style\" candidate was REMOVED on 2026-10-28: it did not match the human's `solana-keygen pubkey prompt://` output (orchestrator 21:30), so that derivation was wrong for this wallet; lib/sol_keys.ts now derives the Phantom path only and no wrong address is kept in this report",
+    "the phrase itself is never printed, logged or written to any report"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

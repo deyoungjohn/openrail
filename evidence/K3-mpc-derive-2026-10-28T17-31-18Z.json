@@ -1,0 +1,47 @@
+{
+  "test_id": "K3-mpc-derive",
+  "spec_ref": "owed_test_plan.md line 164: get inv-1 EVM address for path evm-1 and Solana for sol-1 from the MPC derivation view [verify]",
+  "tier": "T1",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T17:31:18Z",
+  "finished_utc": "2026-10-28T17:31:18Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "view_name_verified": "derived_public_key",
+    "evm_address_derived": true,
+    "solana_address_derived": true,
+    "mpc_sign_latency_leg": "not part of this test (sign call is a value move, human/T2)"
+  },
+  "measurements": {
+    "rpc_host": "free.rpc.fastnear.com",
+    "mpc_contract": "v1.signer",
+    "predecessor": "inv-2.owed-test.nearhackathons.near",
+    "addresses": {
+      "evm": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+      "sol": "6oEGUW2K2KZiE6bJMzwiuJ4pRr15enKswDc8WM5QZPhu"
+    },
+    "args_variant": {
+      "evm": "path+predecessor+domain_id",
+      "sol": "path+predecessor+domain_id"
+    },
+    "raw_derived_public_key": {
+      "evm": "secp256k1:4jFDc2uyLn6jcfNrernqhhYwaJEjo3GCAKs89mhkJLsAWvjzvB3VkdYQDoGxwGtTop7VSu7Y6qA5c7uuZc4R6xVZ",
+      "sol": "ed25519:6oEGUW2K2KZiE6bJMzwiuJ4pRr15enKswDc8WM5QZPhu"
+    },
+    "violation_count": 0,
+    "violations": []
+  },
+  "tx": [],
+  "observations": [
+    "[verify] view name: derived_public_key(path, predecessor?, domain_id?) — verified at https://github.com/near/mpc/blob/main/crates/contract/src/api/keys.rs (fetched this session)",
+    "[verify] domain ids: DomainId(pub u64), legacy_ecdsa_id() = 0 — https://github.com/near/mpc/blob/main/crates/primitives/src/domain.rs; docs confirm 0 = Secp256k1, 1 = Ed25519",
+    "docs equivalent (client-side): chainsig.js deriveAddressAndPublicKey(nearAccount, path) — https://docs.near.org/chain-abstraction/chain-signatures/implementation (fetched this session)",
+    "derivation paths doc: https://docs.near.org/chain-abstraction/chain-signatures — address = NEAR account + path string + MPC master public key (additive key derivation)",
+    "MPC contract ids: mainnet v1.signer, testnet v1.signer-prod.testnet (same docs page)",
+    "addresses depend on the exact predecessor string — the real inv-1 account id must match invAccount before funding anything derived here",
+    "rpc host only; NEAR_RPC_URL is a secret var and never written to the report"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

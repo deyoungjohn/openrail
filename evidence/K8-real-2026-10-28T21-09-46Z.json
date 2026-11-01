@@ -1,0 +1,97 @@
+{
+  "test_id": "K8-real",
+  "spec_ref": "owed_engine_v3.md §3.8; plan K8",
+  "tier": "T1",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T21:09:46Z",
+  "finished_utc": "2026-10-28T21:09:46Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "verdicts_as_expected": true,
+    "max_trace_ms": 10000,
+    "status_answers_with_key": true,
+    "deposit_submit_2xx": true,
+    "trace_sha256_matches_canonical_json": true
+  },
+  "measurements": {
+    "checks": {
+      "verdictsOk": true,
+      "fast": true,
+      "statusOk": true,
+      "hashOk": true,
+      "submitOk": true
+    },
+    "traces": [
+      {
+        "id": "K2prime-base",
+        "expected": "LANDED_NOT_BOOKED",
+        "verdict": "LANDED_NOT_BOOKED",
+        "latency_ms": 4246,
+        "provider_status": "SUCCESS",
+        "credit_amount": "10000000",
+        "credit_receiver": "inv-1.owed-test.nearhackathons.near",
+        "invoice_booked_total": null,
+        "origin_confirmed": true,
+        "trace_sha256": "0xa28b77805ff10df4b6ca0d3e3e307dffb24854ca10e5e5993392f4a751a37f21",
+        "canonical_json": "{\"query\":{\"depositAddress\":\"0x5c953efdc2c7128490c80b1803019ac841a3d9e6\",\"originTxHash\":\"0x9dcc7eaefeccef743e966c2aef195012675629abfd7bd6b0663bc3553787be35\"},\"sources\":{\"invoiceBookedTotal\":null,\"nearCredit\":{\"amount\":\"10000000\",\"receiver\":\"inv-1.owed-test.nearhackathons.near\",\"token\":\"nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near\"},\"originTransfer\":{\"amount\":\"10000000\",\"chain\":\"BASE_RPC_URL\",\"confirmed\":true,\"txHash\":\"0x9dcc7eaefeccef743e966c2aef195012675629abfd7bd6b0663bc3553787be35\"},\"providerStatus\":{\"amountOut\":\"10000000\",\"depositedAmount\":\"10000000\",\"nearTxHashes\":[\"8Cj1rY8VacsaPyRgz3J7udZngx5m214eyp4dBDgyoYFv\",\"3DfKE9s9jexiPsoeUvt7nBijrLU7qwBPaprbXDGR7b2D\"],\"privateShardLeg\":\"provider-attested\",\"status\":\"SUCCESS\"}},\"traceId\":\"real-K2prime-base\",\"verdict\":\"LANDED_NOT_BOOKED\"}"
+      },
+      {
+        "id": "K2prime-arbitrum",
+        "expected": "LANDED_NOT_BOOKED",
+        "verdict": "LANDED_NOT_BOOKED",
+        "latency_ms": 959,
+        "provider_status": "SUCCESS",
+        "credit_amount": "10000000",
+        "credit_receiver": "inv-1.owed-test.nearhackathons.near",
+        "invoice_booked_total": null,
+        "origin_confirmed": true,
+        "trace_sha256": "0x25c7dd72c83bebff1cfa7ee694d360c6991d0ba0749a166856eb34f453d6d4b3",
+        "canonical_json": "{\"query\":{\"depositAddress\":\"0xea8c2d88271f22aca4b2e827fa780445f2ea3cff\",\"originTxHash\":\"0xe574e3c52d92bfef5027bf8dc89ed214bdbd1cc3e115497b336da3d0e04c99a7\"},\"sources\":{\"invoiceBookedTotal\":null,\"nearCredit\":{\"amount\":\"10000000\",\"receiver\":\"inv-1.owed-test.nearhackathons.near\",\"token\":\"nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near\"},\"originTransfer\":{\"amount\":\"10000000\",\"chain\":\"ARB_RPC_URL\",\"confirmed\":true,\"txHash\":\"0xe574e3c52d92bfef5027bf8dc89ed214bdbd1cc3e115497b336da3d0e04c99a7\"},\"providerStatus\":{\"amountOut\":\"10000000\",\"depositedAmount\":\"10000000\",\"nearTxHashes\":[\"ApdiVUBeE6QgUFyDX9vG3hHN7K3LEMW9UKB6rY71F4YU\",\"BGCBdTFXS6hSeVTFFF8j2qPvbx4nTDKQZ4Eq7NRq1t3K\"],\"privateShardLeg\":\"provider-attested\",\"status\":\"SUCCESS\"}},\"traceId\":\"real-K2prime-arbitrum\",\"verdict\":\"LANDED_NOT_BOOKED\"}"
+      },
+      {
+        "id": "K4-deposit-base",
+        "expected": "BOOKED",
+        "verdict": "BOOKED",
+        "latency_ms": 877,
+        "provider_status": "SUCCESS",
+        "credit_amount": "10000000",
+        "credit_receiver": "inv-1.k4.owed-test.nearhackathons.near",
+        "invoice_booked_total": "10000000",
+        "origin_confirmed": true,
+        "trace_sha256": "0x8939ff08b4c930dc35f59c39e859580bba65d2c90661f53d438aa773b8dcd7cc",
+        "canonical_json": "{\"query\":{\"depositAddress\":\"0x84ac1efd2552f02d9dd08c6c91e9fe473ddc0b7d\",\"originTxHash\":\"0x619ec19fa4563339d2b51e4a810fdd069eeafa810664a9f0a5a6e3b12fc09402\"},\"sources\":{\"invoiceBookedTotal\":\"10000000\",\"nearCredit\":{\"amount\":\"10000000\",\"receiver\":\"inv-1.k4.owed-test.nearhackathons.near\",\"token\":\"nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near\"},\"originTransfer\":{\"amount\":\"10000000\",\"chain\":\"BASE_RPC_URL\",\"confirmed\":true,\"txHash\":\"0x619ec19fa4563339d2b51e4a810fdd069eeafa810664a9f0a5a6e3b12fc09402\"},\"providerStatus\":{\"amountOut\":\"10000000\",\"depositedAmount\":\"10000000\",\"nearTxHashes\":[\"8cDysV69qchx9emuEFBV2m4SWWMUKQjKtY7ZLDbJTu1J\",\"AbQhhqYR2xXFXmUsKMTbUTnJ1Wgj2WxbTNPDDx3415Gk\"],\"privateShardLeg\":\"provider-attested\",\"status\":\"SUCCESS\"}},\"traceId\":\"real-K4-deposit-base\",\"verdict\":\"BOOKED\"}"
+      }
+    ],
+    "deposit_submit": {
+      "http": 200,
+      "body_excerpt": "{\"skipped\":true}",
+      "skipped": true
+    }
+  },
+  "tx": [
+    {
+      "chain": "evm",
+      "hash": "0x9dcc7eaefeccef743e966c2aef195012675629abfd7bd6b0663bc3553787be35",
+      "purpose": "trace input K2prime-base"
+    },
+    {
+      "chain": "evm",
+      "hash": "0xe574e3c52d92bfef5027bf8dc89ed214bdbd1cc3e115497b336da3d0e04c99a7",
+      "purpose": "trace input K2prime-arbitrum"
+    },
+    {
+      "chain": "evm",
+      "hash": "0x619ec19fa4563339d2b51e4a810fdd069eeafa810664a9f0a5a6e3b12fc09402",
+      "purpose": "trace input K4-deposit-base"
+    }
+  ],
+  "observations": [
+    "real K2′ deposits (never booked: no contract behind inv-1) must read LANDED_NOT_BOOKED; the K4 deposit, booked by reconcile, must read BOOKED",
+    "booked comes from the K4 mainnet report (the k4 contract code was released afterwards, so its view no longer exists); the credit comes from the public transfer intent in the last nearTxHash (NearBlocks v3)",
+    "the sandbox record_evidence anchoring from the plan is NOT done: no spike contract has record_evidence; it needs Agent 2",
+    "lib/tracer.ts read nearTxHashes and depositedAmount from the top level of /v0/status; on live data they are under swapDetails (fixed here, not yet in lib/tracer.ts)"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

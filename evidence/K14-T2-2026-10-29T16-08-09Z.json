@@ -1,0 +1,41 @@
+{
+  "test_id": "K14-T2",
+  "spec_ref": "owed_test_plan_v1_2_untested.md K14 T2",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T16:08:09Z",
+  "finished_utc": "2026-10-29T16:08:09Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "ack_stored": true,
+    "event_shows_recovered_address": true,
+    "wallet_digest_equals_contract_digest": true
+  },
+  "measurements": {
+    "contract": "k14.owed-test.nearhackathons.near",
+    "token_id": "inv-1",
+    "chain_id": 1,
+    "debtor_evm": "0x12dcbbc7f96b87220e90b46d9528db156b1da841",
+    "stored_signer": "0x12dcbbc7f96b87220e90b46d9528db156b1da841",
+    "event_logs": [
+      "EVENT_JSON:{\"standard\":\"owed\",\"version\":\"1.0.0\",\"event\":\"ack\",\"data\":[{\"token_id\":\"inv-1\",\"signer\":\"0x12dcbbc7f96b87220e90b46d9528db156b1da841\",\"chain_id\":1}]}"
+    ],
+    "acknowledge_gas_tgas": 2.56907351986,
+    "wasm_bytes": 201828,
+    "storage_locked_near": 2.01828
+  },
+  "tx": [
+    {
+      "chain": "near-mainnet",
+      "hash": "Dx6XWR4ept12YWrtfx6mE6yzba5dL1AdTi9XSVHfoTDx",
+      "purpose": "acknowledge with the real wallet signature"
+    }
+  ],
+  "observations": [
+    "the signature is the one produced by the T1 wallet; the contract recovered it with env::ecrecover on mainnet",
+    "storage locked 2.02 NEAR: recover with release_storage.ts then move_near.ts"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

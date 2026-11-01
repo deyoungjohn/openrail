@@ -1,0 +1,54 @@
+{
+  "test_id": "K3-optimism-sweep",
+  "spec_ref": "owed_engine_v3.md §3.2, §6 K3; owed_test_plan.md v1.1",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T05:02:51Z",
+  "finished_utc": "2026-10-29T05:02:51Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "max_overhead_usd": 0.2,
+    "signature_recovers_to_derived": true,
+    "transfer_confirmed": true,
+    "treasury_gain_equals_amount": true
+  },
+  "measurements": {
+    "derived_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "recovered_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "amount_usd": 2,
+    "signature_seconds": 6.644,
+    "near_gas_tgas": 9.607356345823,
+    "near_burnt": 0.0009160991220823001,
+    "base_tx_status": "0x1",
+    "base_gas_used": "98052",
+    "base_gas_eth": 1.17710053272e-7,
+    "base_confirm_seconds": 3.079,
+    "treasury_gain_raw": "2000000",
+    "derived_balance_fall_raw": "2000000",
+    "prices_used": {
+      "eth": 2319.22,
+      "near": 4.45
+    },
+    "overhead_usd": 0.004349636603015724
+  },
+  "tx": [
+    {
+      "chain": "near",
+      "hash": "ExmpBFRvTfJxuPh96tyyD5PmQs23Hjk2LbWkU1xhDihb",
+      "purpose": "inv-2.owed-test.nearhackathons.near.sign via vault -> v1.signer"
+    },
+    {
+      "chain": "optimism",
+      "hash": "0x1bf520df9b87e46271aba46eeec06e5eb06647dddeaed316249011316311186e",
+      "purpose": "EIP-3009 transferWithAuthorization (relayer)"
+    }
+  ],
+  "observations": [
+    "derived address funded by the human; no key for it exists anywhere; the signature came from the MPC through the keyless vault",
+    "overhead = gas in the chain's gas token x its price + NEAR burnt x NEAR price, prices from 1click /v0/tokens at run time",
+    "chain Optimism (id 10), USDC 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85; the derived address is the same on every EVM chain"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0.004349636603015724
+}

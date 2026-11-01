@@ -1,0 +1,71 @@
+{
+  "test_id": "K4-mainnet",
+  "spec_ref": "owed_engine_v3.md §3.3; plan K4",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T19:30:30Z",
+  "finished_utc": "2026-10-28T19:30:30Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "holder_gain": "payment - floor(payment*25/10000)",
+    "fee_gain": "floor(payment*25/10000)",
+    "lock_released": true,
+    "reconcile_idempotent": true
+  },
+  "measurements": {
+    "checks": {
+      "contract_read_equals_rpc_view": true,
+      "holder_gain_exact": true,
+      "fee_gain_exact": true,
+      "lock_released": true,
+      "second_reconcile_books_nothing": true
+    },
+    "payment_raw": "10000000",
+    "fee_raw": "25000",
+    "holder_gain_raw": "9975000",
+    "fee_gain_raw": "25000",
+    "invoice_state": {
+      "token_id": "inv-1",
+      "owner_id": "holder2.nearhackathons.near",
+      "invoice_account": "inv-1.k4.owed-test.nearhackathons.near",
+      "amount_due": "100000000",
+      "booked_total": "10000000",
+      "distributed_total": "9975000",
+      "fee_total": "25000",
+      "surplus": "0",
+      "last_seen_balance": {
+        "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1": "0",
+        "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near": "0",
+        "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near": "0",
+        "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near": "0"
+      },
+      "last_read": [
+        "0",
+        "10000000",
+        "0",
+        "0"
+      ],
+      "lock": "None",
+      "status": "PARTIALLY_PAID"
+    }
+  },
+  "tx": [
+    {
+      "chain": "near",
+      "hash": "7kJUu3ZRgT3obTKya9yMZrBEmH2PLDAvH3MVJ9Tkzz5g",
+      "purpose": "reconcile"
+    },
+    {
+      "chain": "near",
+      "hash": "8r2GAzdzkQi9S2zgKNapEWmufodWU1oy1uxFU7nu6DTY",
+      "purpose": "second reconcile (must book nothing)"
+    }
+  ],
+  "observations": [
+    "real intents.near; balances read from the chain, not from the contract",
+    "fallback if this fails: ft_withdraw to the holder NEAR account (spec 3.3)"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0.1
+}

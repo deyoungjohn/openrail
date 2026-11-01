@@ -1,0 +1,109 @@
+{
+  "test_id": "K10",
+  "spec_ref": "docs/owed_test_plan.md §K10, spec §3.6 (M1 Encumbrance & atomic advance)",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-28T11:49:25Z",
+  "finished_utc": "2026-10-28T11:49:25Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "expected_assertions": 3,
+    "fund_atomic_refunds_all_invalids": true,
+    "waterfall_repayment_exact_cap": true,
+    "nft_transfer_blocked_under_lien": true
+  },
+  "measurements": {
+    "total_assertions": 3,
+    "passed_assertions": 3,
+    "assertions": [
+      {
+        "name": "fund_atomic_20_fuzzed_attempts",
+        "passed": true,
+        "details": {
+          "total": 20,
+          "validAccepted": 2,
+          "invalidRefunded": 18
+        }
+      },
+      {
+        "name": "waterfall_two_payments_cap_1020",
+        "passed": true,
+        "details": {
+          "totalBeneficiaryUsd": 1020,
+          "totalOwnerUsd": 476.25,
+          "totalFeeUsd": 3.75,
+          "finalStatus": "PAID",
+          "extCleared": true
+        }
+      },
+      {
+        "name": "nft_transfer_panics_under_encumbrance",
+        "passed": true,
+        "details": {
+          "saleUnderLienBlocked": true,
+          "saleAfterClearAllowed": true
+        }
+      }
+    ],
+    "fuzzed_results_sample": [
+      {
+        "index": 0,
+        "type": "wrong_sender",
+        "refunded": true,
+        "extSet": false
+      },
+      {
+        "index": 1,
+        "type": "wrong_amount",
+        "refunded": true,
+        "extSet": false
+      },
+      {
+        "index": 2,
+        "type": "expired",
+        "refunded": true,
+        "extSet": false
+      },
+      {
+        "index": 3,
+        "type": "owner_changed",
+        "refunded": true,
+        "extSet": false
+      },
+      {
+        "index": 4,
+        "type": "lock_held",
+        "refunded": true,
+        "extSet": false
+      },
+      {
+        "index": 5,
+        "type": "sweep_pending",
+        "refunded": true,
+        "extSet": false
+      },
+      {
+        "index": 6,
+        "type": "offer_missing",
+        "refunded": true,
+        "extSet": false
+      },
+      {
+        "index": 7,
+        "type": "valid",
+        "refunded": false,
+        "extSet": true
+      }
+    ]
+  },
+  "tx": [],
+  "observations": [
+    "Encumbrance & atomic advance tested against spec §3.6 rules",
+    "20 fuzzed ft_transfer_call funding attempts verified: all invalid conditions refunded in full with no state mutation",
+    "$1,500 invoice with cap $1,020 booked in two payments ($800 and $700): beneficiary receives exactly $1,020, owner receives $476.25, fee is $3.75 (25 bps on cash), ext cleared",
+    "Secondary sale (nft_transfer) strictly blocked while ext is active; allowed immediately after cap is satisfied"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

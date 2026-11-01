@@ -1,0 +1,55 @@
+{
+  "test_id": "K3-solana-latency",
+  "spec_ref": "plan K3 Solana: MPC signing latency vs blockhash validity window",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T19:49:13Z",
+  "finished_utc": "2026-10-28T19:49:13Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "signature_verifies_against_derived_pubkey": true,
+    "max_signing_seconds_below_window": 49
+  },
+  "measurements": {
+    "invoice": "inv-2.owed-test.nearhackathons.near",
+    "mpc_contract": "v1.signer",
+    "solana_address": "6oEGUW2K2KZiE6bJMzwiuJ4pRr15enKswDc8WM5QZPhu",
+    "samples_seconds": [
+      6.439,
+      7.482,
+      8.742
+    ],
+    "max_seconds": 8.742,
+    "min_seconds": 6.439,
+    "all_verified": true,
+    "tgas_per_sample": [
+      10.139474435108,
+      10.137552975611,
+      10.103399253944
+    ]
+  },
+  "tx": [
+    {
+      "chain": "near",
+      "hash": "8MVsU2ZmHuaw17QwAnUseXZo98DX9uJNmZQdue2tRm9c",
+      "purpose": "ed25519 sign sample 1"
+    },
+    {
+      "chain": "near",
+      "hash": "F4m1u9YrK8BMzmDAEVSswtAZRpW3gvUUFvyQUCZzh87o",
+      "purpose": "ed25519 sign sample 2"
+    },
+    {
+      "chain": "near",
+      "hash": "DWP6aK72qa9TsR4LjjgZisZ2n2FBg2AJuFQboiZVdjYb",
+      "purpose": "ed25519 sign sample 3"
+    }
+  ],
+  "observations": [
+    "mainnet MPC",
+    "blockhash window used: 49 s (K3-solana report: 146 blocks at about 3 slots/s); a Solana transaction must be broadcast inside it, so signing latency plus broadcast must stay well under it"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0.01335901239324498
+}

@@ -1,0 +1,107 @@
+{
+  "test_id": "K12-partB-amended",
+  "spec_ref": "owed_test_plan_modules.md K12 part B; amends K12-partB-2026-10-29T08-37-39Z.json",
+  "tier": "T2",
+  "network": "testnet",
+  "started_utc": "2026-10-29T12:13:42Z",
+  "finished_utc": "2026-10-29T12:13:42Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "online_p50_seconds": 180,
+    "online_cost_pct_at_50_usd": 1,
+    "in_store_p50_seconds": 30
+  },
+  "measurements": {
+    "rows": [
+      {
+        "checkout": 1,
+        "route": "R1",
+        "seconds_to_origin_finality": 2.8,
+        "seconds_to_public_credit": 23,
+        "seconds_to_booked": 28.6,
+        "source": "pasted by the human from the terminal line of the interrupted first run; no tx hash or spread recorded"
+      },
+      {
+        "checkout": 2,
+        "route": "R1",
+        "seconds_to_origin_finality": 2.7,
+        "seconds_to_public_credit": 23.1,
+        "seconds_to_booked": 30.3,
+        "source": "copied from the terminal output of the interrupted run (no spread recorded)"
+      },
+      {
+        "checkout": 3,
+        "route": "R1",
+        "note": "payment landed but the first reconcile failed for lack of NEAR on the K4 account; booked later by hand (fee 5000 to financier, 1995000 to holder2), timings not comparable and excluded from p50",
+        "seconds_to_booked": null,
+        "source": "receipts pasted from the terminal; the run then died on a network fetch error"
+      },
+      {
+        "checkout": 4,
+        "route": "R1",
+        "receipt_status": "0x1",
+        "seconds_to_origin_finality": 2.657,
+        "seconds_to_public_credit": 30.195,
+        "seconds_to_booked": 35.73,
+        "credited_raw": "2000000",
+        "spread_usd": 0,
+        "near_spent_incl_account_funding": 0.10928286552496459
+      },
+      {
+        "checkout": 5,
+        "route": "R1",
+        "receipt_status": "0x1",
+        "seconds_to_origin_finality": 3.78,
+        "seconds_to_public_credit": 26.979,
+        "seconds_to_booked": 32.911,
+        "credited_raw": "2000000",
+        "spread_usd": 0,
+        "near_spent_incl_account_funding": 0.1092751135249646
+      },
+      {
+        "checkout": 6,
+        "route": "R10",
+        "receipt_status": "0x1",
+        "seconds_to_origin_finality": 0.632,
+        "seconds_to_public_credit": 23.5,
+        "seconds_to_booked": 30.472,
+        "credited_raw": "2000000",
+        "spread_usd": 0.023979466035999986,
+        "near_spent_incl_account_funding": 0.10928981873772811
+      }
+    ],
+    "timed_checkouts": 5,
+    "p50_seconds_to_booked": 30.472,
+    "max_seconds_to_booked": 35.73,
+    "online_viable": true,
+    "in_store_viable": false,
+    "cost_pct_of_10": 0.7911999999999999,
+    "cost_pct_of_50": 0.15824
+  },
+  "tx": [
+    {
+      "chain": "base",
+      "hash": "0x6720b09f73854fee9a82ae91365b226b6032bbfbdd1ceb883b0306c41085b7dd",
+      "purpose": "checkout 4 payer transaction"
+    },
+    {
+      "chain": "base",
+      "hash": "0x2725d5dc248dd952278933a2a372125d3318f121f289226f5d256e7e4e6c3889",
+      "purpose": "checkout 5 payer transaction"
+    },
+    {
+      "chain": "base",
+      "hash": "0x8ce6d75a9b5f6993d1b72dc7b29343688c0c178fde4d9d54fe22a04f635a9b44",
+      "purpose": "checkout 6 payer transaction"
+    }
+  ],
+  "observations": [
+    "the original report is FAIL only because checkout 1 had been lost from the progress file when the run was interrupted; this report adds it from the human paste, everything else is copied unchanged",
+    "checkouts 1 to 5 paid USDC on Base (R1); checkout 6 paid ETH on Base (R10) with a 1.2% spread",
+    "checkout 3 is excluded from the timings: its first reconcile failed for lack of NEAR on the K4 account and it was booked by hand",
+    "p50 is 30.5 s against the 30 s in-store threshold: in-store checkout is missed by half a second and the spread of the five timings is 28.6 to 35.7 s"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 12
+}

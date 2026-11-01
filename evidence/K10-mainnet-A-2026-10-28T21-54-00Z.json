@@ -1,0 +1,34 @@
+{
+  "test_id": "K10-mainnet-A",
+  "spec_ref": "owed_engine_v3.md §3.6, §2a-5, fact P2; plan K10",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T21:54:00Z",
+  "finished_utc": "2026-10-28T21:54:00Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "owner_paid_exactly": true,
+    "lien_set": true
+  },
+  "measurements": {
+    "checks": {
+      "owner_paid_exactly": true,
+      "financier_spent_exactly": true,
+      "contract_holds_nothing": true,
+      "claimable_zero": true,
+      "lien_set": true
+    },
+    "advance_raw": "5000000",
+    "owner_gain_raw": "5000000",
+    "claimable_raw": "0",
+    "contract_holds_raw": "0"
+  },
+  "tx": [],
+  "observations": [
+    "real native USDC on NEAR (17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1); owner holder2.nearhackathons.near",
+    "the advance stays in the owner account (case A) or in claimable (case B); recover with PHASE=withdraw and release_storage.ts"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 5
+}

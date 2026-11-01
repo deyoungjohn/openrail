@@ -1,0 +1,70 @@
+{
+  "test_id": "K10-real-payout",
+  "spec_ref": "owed_engine_v3.md §3.6, §2a-5, §4 M1 tests; plan K10",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-28T21:05:49Z",
+  "finished_utc": "2026-10-28T21:05:49Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "expected_checks": 5
+  },
+  "measurements": {
+    "total": 5,
+    "passed": 5,
+    "checks": [
+      {
+        "name": "R1_registered_owner_paid_by_ft_transfer",
+        "passed": true,
+        "details": {
+          "ownerGain": "1000000000",
+          "financierSpent": "1000000000",
+          "contractHolds": "0",
+          "claimable": "0"
+        }
+      },
+      {
+        "name": "R2_unregistered_owner_goes_to_claimable",
+        "passed": true,
+        "details": {
+          "claimable": "1000000000",
+          "contractHolds": "1000000000",
+          "financierSpent": "1000000000",
+          "usdc_held_equals_claimable": true
+        }
+      },
+      {
+        "name": "R3_withdraw_claimable_pays_out_after_registering",
+        "passed": true,
+        "details": {
+          "ownerGain": "1000000000",
+          "contractHolds": "0",
+          "claimable": "0"
+        }
+      },
+      {
+        "name": "R4_wrong_amount_refunded_in_full",
+        "passed": true,
+        "details": {
+          "financierDelta": "0",
+          "contractHolds": "0"
+        }
+      },
+      {
+        "name": "R5_fund_only_from_usdc_contract",
+        "passed": true,
+        "details": {
+          "returned": "1000000000"
+        }
+      }
+    ]
+  },
+  "tx": [],
+  "observations": [
+    "mock NEP-141 (contracts/k10-ft-mock) with registration, ft_transfer_call and the standard resolve step",
+    "contracts/k10 pays the advance with ft_transfer when a token contract is configured; the T0 simulated mode remains for tests without a token"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

@@ -1,0 +1,70 @@
+{
+  "test_id": "K15-T2",
+  "spec_ref": "owed_test_plan_v1_2_untested.md K15 T2",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T18:53:12Z",
+  "finished_utc": "2026-10-29T18:53:12Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "both_transfers_confirm": true,
+    "broadcast_calldata_equals_contract_calldata": true,
+    "solana_message_equals_typescript": true,
+    "wasm_imports_clean": true,
+    "overhead_usd_lte": 0.2
+  },
+  "measurements": {
+    "contract": "k15.owed-test.nearhackathons.near",
+    "invoice": "inv-1.k15.owed-test.nearhackathons.near",
+    "wasm_bytes": 239647,
+    "storage_locked_near": 2.39647,
+    "derived_evm": "0x13d0fdf666d345d8d4ab83897ac0ee10f710d162",
+    "derived_sol": "Hkw9anXME3hkUtVMVqU8xX7KF6enP9bJDdqJhdziiE8x",
+    "evm": {
+      "ok": true,
+      "calldata_equal": true,
+      "signed_seconds": 12.638,
+      "base_tx": "0x7d299951a830194fdaf241ce126bb35654b79547c9237b35a4e386c3300dc9c7",
+      "near_tx": "7f2nH5G4kJTMaqto5CqdsdSiJb3DQ2heTEe1GFQURs87",
+      "gas_used": "0x13c2c"
+    },
+    "sol": {
+      "ok": true,
+      "same_message": true,
+      "mpc_signature_verifies": true,
+      "signed_seconds": 12.164,
+      "confirm_seconds": 3.404,
+      "solana_tx": "5wMAGeCseCrkgvjisG5YQmRG1AUyN6zj6nXPLmTRwN9hvxQVSs4xY4y8qeobLD4M1fRcjpHpa4ezbMf6ometstjt"
+    }
+  },
+  "tx": [
+    {
+      "chain": "near-mainnet",
+      "hash": "7f2nH5G4kJTMaqto5CqdsdSiJb3DQ2heTEe1GFQURs87",
+      "purpose": "EVM request_sweep"
+    },
+    {
+      "chain": "base",
+      "hash": "0x7d299951a830194fdaf241ce126bb35654b79547c9237b35a4e386c3300dc9c7",
+      "purpose": "EVM broadcast"
+    },
+    {
+      "chain": "near-mainnet",
+      "hash": "AQqMfbfVf988mjRaL7tyUkHcHrmh8pqbPXRod4cMeYkB",
+      "purpose": "request_sweep_sol (contract builds the message, MPC signs)"
+    },
+    {
+      "chain": "solana",
+      "hash": "5wMAGeCseCrkgvjisG5YQmRG1AUyN6zj6nXPLmTRwN9hvxQVSs4xY4y8qeobLD4M1fRcjpHpa4ezbMf6ometstjt",
+      "purpose": "relayer sends the contract message"
+    }
+  ],
+  "observations": [
+    "BUG FOUND at this run: the deployed contract keeps ONE pending_sweep_amount across chains while the watcher reports a balance PER CHAIN, so the Solana sweep was refused (twice) while the EVM sweep was pending. Fixed in the source (pending per chain, test sweep_bound_is_per_chain, which fails against the old check); the deployed version was not redeployed, and for this run the Solana balance was reported together with the amount still pending from the EVM sweep. The spec has the same single pending_sweep_amount and needs it per chain",
+    "the relayer supplied only the six listed arguments (EVM) and the blockhash and fee payer (Solana); the contract built every other field from stored state",
+    "the Solana fee payer is the allow-listed relayer key; overhead is cents (see K3 for the per-chain figures)"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

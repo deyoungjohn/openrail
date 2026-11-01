@@ -1,0 +1,39 @@
+{
+  "test_id": "K2prime-partB",
+  "spec_ref": "owed_engine_v3.md §3.2, §6 (K2′ part B)",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-28T13:17:26Z",
+  "finished_utc": "2026-10-28T13:17:26Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "amount_per_chain_usd": 10,
+    "total_deposit_usd": 20,
+    "max_spend_usd": 25
+  },
+  "measurements": {
+    "transactions_broadcast": 2
+  },
+  "tx": [
+    {
+      "chain": "base",
+      "hash": "0x9dcc7eaefeccef743e966c2aef195012675629abfd7bd6b0663bc3553787be35",
+      "purpose": "1Click deposit origin transfer"
+    },
+    {
+      "chain": "arbitrum",
+      "hash": "0xe574e3c52d92bfef5027bf8dc89ed214bdbd1cc3e115497b336da3d0e04c99a7",
+      "purpose": "1Click deposit origin transfer"
+    }
+  ],
+  "observations": [
+    "K2' part B execution: mode=LIVE",
+    "recipient=inv-1.owed-test.nearhackathons.near, refundTo=0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
+    "planned spend: $20 USDC across base, arbitrum",
+    "Broadcasted 2 origin transfers successfully.",
+    "Recovery available via scripts/recover_funds.ts."
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 20
+}

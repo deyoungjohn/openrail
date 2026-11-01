@@ -1,0 +1,43 @@
+{
+  "test_id": "K2prime-partC-negative-check",
+  "spec_ref": "owed_test_plan.md v1.1 K2′ part C negative case (R10)",
+  "tier": "T2",
+  "network": "testnet",
+  "started_utc": "2026-10-29T09:53:04Z",
+  "finished_utc": "2026-10-29T09:53:04Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "refunded_in_full_less_gas": true,
+    "invoice_balance_unchanged": true
+  },
+  "measurements": {
+    "routes": [
+      {
+        "route": "R10",
+        "status": "REFUNDED",
+        "deposit_address": "0x91d5e6a98036384182994911507772ac6c37761f",
+        "sent_raw": "2185595998195297",
+        "refunded_raw": "2185035998195297",
+        "refund_fee_raw": "560000000000",
+        "refund_fee_usd_approx": 0.0013,
+        "refund_reason": "AMOUNT_MORE_THAN_BALANCE",
+        "invoice_balance_change_raw": "0",
+        "note": "half of the quoted ETH (0.0021856 ETH, about $5.07) sent; refunded within the first 20 min; the run itself was cut by a network error while polling, so the status was read afterwards by deposit address (recovered from the deposit tx)"
+      }
+    ]
+  },
+  "tx": [
+    {
+      "chain": "base",
+      "hash": "0x147e8022affa948fccc056dedd2161576821091372b3a1ebb6e7cd9e9f9d7902",
+      "purpose": "R10 negative case: 50% of the quoted ETH to the 1Click deposit address"
+    }
+  ],
+  "observations": [
+    "an underpaying client gets the money back, not half a payment: REFUNDED 99.97% (fee 0.00000056 ETH), invoice Intents balance unchanged (0 before, 0 after)",
+    "the 1Click refund reason for a short deposit is AMOUNT_MORE_THAN_BALANCE"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0.0014
+}

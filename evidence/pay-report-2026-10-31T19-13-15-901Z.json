@@ -1,0 +1,181 @@
+{
+  "generatedAt": "2026-10-31T19:13:15.901Z",
+  "mode": "live",
+  "route": "USDC Base -> USDC Arbitrum, EXACT_OUTPUT, confidentiality basic",
+  "payer": "0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
+  "recipient": "0xDF1e22fc38864C8b3F1bDb44029A75bC1cD9dc23",
+  "timeline": [
+    {
+      "at": "2026-10-31T19:13:17.459Z",
+      "event": "quote received"
+    },
+    {
+      "at": "2026-10-31T19:13:18.879Z",
+      "event": "deposit sent",
+      "txHash": "0xbf67e5fe8d2213b2e86260ddb1766413553f4495efa9a0d9090cf6abd6b1e681"
+    },
+    {
+      "at": "2026-10-31T19:13:19.100Z",
+      "event": "deposit confirmed on Base",
+      "block": "53342327",
+      "status": "success"
+    },
+    {
+      "at": "2026-10-31T19:13:19.325Z",
+      "event": "deposit hash submit failed (optional step)",
+      "error": "/v0/deposit/submit 500: Empty AMQP response"
+    },
+    {
+      "at": "2026-10-31T19:13:19.860Z",
+      "event": "status PENDING_DEPOSIT"
+    },
+    {
+      "at": "2026-10-31T19:13:42.660Z",
+      "event": "status PROCESSING"
+    },
+    {
+      "at": "2026-10-31T19:13:59.081Z",
+      "event": "status SUCCESS"
+    }
+  ],
+  "payerBalancesBefore": {
+    "usdcBase": 63.402424,
+    "ethBaseWei": "3128075780212598"
+  },
+  "quote": {
+    "signatureVerifies": true,
+    "confidentialityEcho": "basic",
+    "depositAddress": "0xB923175842bC0BFd8E091a02Cfd6bf6f4B7ef273",
+    "amountIn": "2025734",
+    "minAmountIn": "2005476",
+    "amountOut": "2000000",
+    "amountInUsd": "2.025734000000",
+    "timeEstimateSeconds": 34,
+    "withdrawFee": "5300",
+    "deadline": "2026-11-03T19:33:16.554Z",
+    "signedQuoteResponse": {
+      "quote": {
+        "amountIn": "2025734",
+        "amountInFormatted": "2.025734",
+        "amountInUsd": "2.025734000000",
+        "minAmountIn": "2005476",
+        "amountOut": "2000000",
+        "amountOutFormatted": "2.0",
+        "amountOutUsd": "2.000000000000",
+        "minAmountOut": "2000000",
+        "timeEstimate": 34,
+        "refundFee": "2400",
+        "withdrawFee": "5300",
+        "deadline": "2026-11-03T19:33:16.554Z",
+        "timeWhenInactive": "2026-11-03T19:33:16.554Z",
+        "depositAddress": "0xB923175842bC0BFd8E091a02Cfd6bf6f4B7ef273"
+      },
+      "quoteRequest": {
+        "dry": false,
+        "depositMode": "SIMPLE",
+        "swapType": "EXACT_OUTPUT",
+        "slippageTolerance": 100,
+        "originAsset": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+        "depositType": "ORIGIN_CHAIN",
+        "destinationAsset": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+        "amount": "2000000",
+        "refundTo": "0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
+        "refundType": "ORIGIN_CHAIN",
+        "recipient": "0xDF1e22fc38864C8b3F1bDb44029A75bC1cD9dc23",
+        "recipientType": "DESTINATION_CHAIN",
+        "deadline": "2026-10-31T19:33:16.554Z",
+        "confidentiality": "basic",
+        "quoteWaitingTimeMs": 0,
+        "insured": false,
+        "appFees": [
+          {
+            "recipient": "2238fd089f1c92b206c218cd16b8676cb98964e0d50f8ab729c6396a81e07805",
+            "fee": 1,
+            "limitOrderId": null
+          }
+        ]
+      },
+      "signature": "ed25519:2zvrhA7QH1DkB4nypGysZZmqUrJMB8pgwq6JPSWRboTwaKsCgHd3jYc3GWaJ1hS6b2k5ia34GDRoT35dGP8JnYPr",
+      "timestamp": "2026-10-31T19:13:17.198Z",
+      "correlationId": "6004c4ed-2aed-4934-aa06-61883f1105a1"
+    }
+  },
+  "status": {
+    "final": "SUCCESS",
+    "secondsFromDepositToFinal": 40,
+    "topLevelSigned": false,
+    "depositedAmount": "2025734",
+    "amountIn": "2005476",
+    "amountOut": "2000000",
+    "withdrawFee": "5300",
+    "slippage": 0,
+    "refundedAmount": "0",
+    "refundReason": null,
+    "originChainTxHashes": [
+      {
+        "hash": "0xbf67e5fe8d2213b2e86260ddb1766413553f4495efa9a0d9090cf6abd6b1e681",
+        "explorerUrl": ""
+      }
+    ],
+    "destinationChainTxHashes": [
+      {
+        "hash": "0x8a15a964b4e1cb43c60b10094a1483a5973922f742dcd58083c85d75570de861",
+        "explorerUrl": ""
+      }
+    ],
+    "nearTxHashes": [
+      "E2gaNMxhMrKUokPRS66TVQHpLUqf3kHLctsAbRQ6mQwV",
+      "GEWuiCvLrAh9MfAWqb2MWFA5X4K993fAYyCfumgWTtKi",
+      "J5kh6uGkcJgWCZt1Gur2wBv43V8AzH4NpnETWYA3AVKp",
+      "EH8gNa1vnzEYpFkTQBbWRYno9Dy8dgwZy1uR9d4pprnx"
+    ],
+    "intentHashes": [
+      "FeX2UJVpzyJAJxwrxF3DM9YuPuHmVfrxMfnE5u8dP3yY",
+      "ABg7DahsWvxUXsCzx1X3orXnnSMrkATSQHWCEeH2SJMp",
+      "GNgB7RBT2f7NTsB7htutviCi8NhTDHUQjc7hoqEQHCG3"
+    ]
+  },
+  "onChain": {
+    "origin": [
+      {
+        "hash": "0xbf67e5fe8d2213b2e86260ddb1766413553f4495efa9a0d9090cf6abd6b1e681",
+        "txFrom": "0x12dcbbc7f96b87220e90b46d9528db156b1da841",
+        "transfers": [
+          {
+            "from": "0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
+            "to": "0xB923175842bC0BFd8E091a02Cfd6bf6f4B7ef273",
+            "value": "2025734"
+          }
+        ]
+      }
+    ],
+    "destination": [
+      {
+        "hash": "0x8a15a964b4e1cb43c60b10094a1483a5973922f742dcd58083c85d75570de861",
+        "txFrom": "0x2cff890f0378a11913b6129b2e97417a2c302680",
+        "transfers": [
+          {
+            "from": "0x2CfF890f0378a11913B6129B2E97417a2c302680",
+            "to": "0xDF1e22fc38864C8b3F1bDb44029A75bC1cD9dc23",
+            "value": "2000000"
+          }
+        ]
+      }
+    ]
+  },
+  "verdicts": {
+    "finalStatus": "SUCCESS",
+    "originHashesReported": true,
+    "destinationHashesReported": true,
+    "originHashIncludesOurDeposit": true,
+    "onChainDepositEqualsSignedAmountIn": true,
+    "onChainPayoutEqualsSignedAmountOut": true,
+    "onChainPayoutAmount": "2000000",
+    "payoutSenders": [
+      "0x2CfF890f0378a11913B6129B2E97417a2c302680"
+    ],
+    "payoutSenderIsDepositAddress": false,
+    "statusResponseSigned": false,
+    "secondsFromDepositToFinal": 40
+  }
+}

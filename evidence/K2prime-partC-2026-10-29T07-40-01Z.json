@@ -1,0 +1,196 @@
+{
+  "test_id": "K2prime-partC",
+  "spec_ref": "owed_test_plan.md v1.1 K2′ part C",
+  "tier": "T2",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T07:40:01Z",
+  "finished_utc": "2026-10-29T07:40:01Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "usdc_routes_public_gain_pct": 99.8,
+    "volatile_routes_gain_between_amountOut_and_plus_0_01_usdc": true,
+    "max_minutes": 15,
+    "negative_case": "refunded in full, invoice balance unchanged"
+  },
+  "measurements": {
+    "routes": [
+      {
+        "route": "R4",
+        "deposit_address": "0xA1872634ce7fA8800B9573f4880Ac6eF14235E1d",
+        "public_balance_before_raw": "770834",
+        "deposit_tx": "0x9221ddf609771b4728cd64ba407e145b519586c8ebcf0d2f568f901e60eee194",
+        "status": "SUCCESS",
+        "public_gain_raw": "9997980",
+        "amount_out_raw": "9997980",
+        "amount_in_sent_raw": "10000000",
+        "refunded_amount": "0",
+        "spread_usd": 0.0020188607199997932,
+        "minutes": 1.471,
+        "near_tx_hashes": [
+          "EmrgyW7pyxGdTJjJbjY4o77QkQFinQyyHSwty5HjbBH8",
+          "CW5vFg7nGWVC15dQDLz7viEv8WAPzzvgMnPBspJCvrDU"
+        ],
+        "ok": true,
+        "refund_pending": false
+      },
+      {
+        "route": "R7",
+        "deposit_address": "5aL21WLVQXgscPQPTeLsMsLLGrRGfFAcLVKQhXw9Jt1K",
+        "public_balance_before_raw": "10768814",
+        "deposit_tx": "4Rz6wHT7ocZZVF4Wvs4iGLTjrGmyhgdcAJnmk8nicGB8Xby2SsPhTkF1D1r8eS53Fg1WxkhLsDk6oDMVZcziCs2Y",
+        "status": "SUCCESS",
+        "public_gain_raw": "9999948",
+        "amount_out_raw": "9999816",
+        "amount_in_sent_raw": "10000000",
+        "refunded_amount": "0",
+        "spread_usd": 0.00018389180799971427,
+        "minutes": 0.6098666666666667,
+        "near_tx_hashes": [
+          "B1xBHWN7K6yuCmkCUwnq24ytdfsmH7gXhLivPGf38N3S",
+          "29fmtsyxMXSzx3Nz41stKmaJc53SZ9CUK8zpAs9SoetD"
+        ],
+        "ok": true,
+        "refund_pending": false
+      },
+      {
+        "route": "R8",
+        "deposit_address": "edb55bc55d08c1136a1448953e5f521acb3a8156c2a0229fcd3a13501d76e3e6",
+        "public_balance_before_raw": "20768762",
+        "deposit_tx": "4j4F2CtxBdK6q7QtV14EUNND5JrHfLpUQcKbjCo7xHYB",
+        "status": "SUCCESS",
+        "public_gain_raw": "10000000",
+        "amount_out_raw": "10000000",
+        "amount_in_sent_raw": "10000000",
+        "refunded_amount": "0",
+        "spread_usd": 0,
+        "minutes": 0.3894666666666667,
+        "near_tx_hashes": [
+          "B3TsHWLQQHrQ9jCsXuRhNPjnNesK7Qt3vm4QxzFYayAH",
+          "BPbagcAxr8SGFQTxkG5Tw68bUiC6ga2stzfbsiJLAv29"
+        ],
+        "ok": true,
+        "refund_pending": false
+      },
+      {
+        "route": "R10",
+        "deposit_address": "0x2D7009c9347FFceA77Ee52A5B1dA0242E63e04E0",
+        "public_balance_before_raw": "30768762",
+        "deposit_tx": "0x479b1760e966e48ff2ef7c848c4d459bb51b1b970d470961c2a0c33674eb2a43",
+        "status": "SUCCESS",
+        "public_gain_raw": "10000000",
+        "amount_out_raw": "10000000",
+        "amount_in_sent_raw": "4392189773309502",
+        "refunded_amount": "36874734335304",
+        "spread_usd": 0.1355290398769995,
+        "minutes": 0.6228666666666667,
+        "near_tx_hashes": [
+          "F6HGH3L9RerKShjRLLzgHcQp3v3dnCw8NEdQ1e4KPPk8",
+          "6WbeizwcPipjGMpSvTfZjQ5jYfFgGF3d4dPLWXyUzj2E"
+        ],
+        "ok": true,
+        "refund_pending": false
+      },
+      {
+        "route": "R11",
+        "deposit_address": "0x8e982FC7B30fA8704beAc176771bC5E4aD02b1D7",
+        "public_balance_before_raw": "40768762",
+        "deposit_tx": "0x99a18a7e097ce5c2526872847a38bf08256aedd90d56f8902a950da8f2ba3173",
+        "status": "SUCCESS",
+        "public_gain_raw": "10000000",
+        "amount_out_raw": "10000000",
+        "amount_in_sent_raw": "4389830305022960",
+        "refunded_amount": "40620423636572",
+        "spread_usd": 0.12859088677699937,
+        "minutes": 0.28891666666666665,
+        "near_tx_hashes": [
+          "9Ak4dj6D8DNw6Y4NeYPncS4rt4411C6A2uMSRmk3tXE9",
+          "vu8tJEquyTr4eTi4Du846MWpEU9D5tZw6mebgVwHpqG"
+        ],
+        "ok": true,
+        "refund_pending": false
+      },
+      {
+        "route": "R12",
+        "deposit_address": "0xCA4dBA0fd4FD185318C61B3320A92A507b90e59b",
+        "public_balance_before_raw": "50768762",
+        "deposit_tx": "0x6b6be425f55d8883002e8d292b0d8b59574133b993216bdae3a0300ad29a07fe",
+        "status": "SUCCESS",
+        "public_gain_raw": "10000000",
+        "amount_out_raw": "10000000",
+        "amount_in_sent_raw": "4391149098837708",
+        "refunded_amount": "43964760186806",
+        "spread_usd": 0.13163199893799948,
+        "minutes": 1.1819,
+        "near_tx_hashes": [
+          "BNg6tiG7n6SKHFBL51AMTCvZ9PWi3UK8KpBfk1vyeqKc",
+          "3WGNwEJcFAyRDRN3DQ7A3R58aaa6NS6w2YRX7nDY1ybd"
+        ],
+        "ok": true,
+        "refund_pending": false
+      },
+      {
+        "route": "R13",
+        "deposit_address": "3Bq3accqtxpvn8SKA11Z6evB9hNEd6QRQMday6BxSpGo",
+        "public_balance_before_raw": "60768762",
+        "deposit_tx": "61Acbz9DgApttemMM9ZXtLCsGdZMWqxy5q2JHXXGKpzGAmKkuDhJaGdFmSWZQenNVKRHfEoDrKvzn6wsYQooYa3r",
+        "status": "SUCCESS",
+        "public_gain_raw": "10000000",
+        "amount_out_raw": "10000000",
+        "amount_in_sent_raw": "101473434",
+        "refunded_amount": "926210",
+        "spread_usd": 0.12340610414000075,
+        "minutes": 0.8803666666666666,
+        "near_tx_hashes": [
+          "Gm9wKsYk1HwDxiwpYXkyeBkn6eUH1E4tjkMbpsw6JHHx",
+          "7j66uEfMop8S3c6VyBnTHMAwey8MZjwSJyskjKPBcu2V"
+        ],
+        "ok": true,
+        "refund_pending": false
+      }
+    ]
+  },
+  "tx": [
+    {
+      "chain": "R4",
+      "hash": "0x9221ddf609771b4728cd64ba407e145b519586c8ebcf0d2f568f901e60eee194",
+      "purpose": "payer deposit"
+    },
+    {
+      "chain": "R7",
+      "hash": "4Rz6wHT7ocZZVF4Wvs4iGLTjrGmyhgdcAJnmk8nicGB8Xby2SsPhTkF1D1r8eS53Fg1WxkhLsDk6oDMVZcziCs2Y",
+      "purpose": "payer deposit"
+    },
+    {
+      "chain": "R8",
+      "hash": "4j4F2CtxBdK6q7QtV14EUNND5JrHfLpUQcKbjCo7xHYB",
+      "purpose": "payer deposit"
+    },
+    {
+      "chain": "R10",
+      "hash": "0x479b1760e966e48ff2ef7c848c4d459bb51b1b970d470961c2a0c33674eb2a43",
+      "purpose": "payer deposit"
+    },
+    {
+      "chain": "R11",
+      "hash": "0x99a18a7e097ce5c2526872847a38bf08256aedd90d56f8902a950da8f2ba3173",
+      "purpose": "payer deposit"
+    },
+    {
+      "chain": "R12",
+      "hash": "0x6b6be425f55d8883002e8d292b0d8b59574133b993216bdae3a0300ad29a07fe",
+      "purpose": "payer deposit"
+    },
+    {
+      "chain": "R13",
+      "hash": "61Acbz9DgApttemMM9ZXtLCsGdZMWqxy5q2JHXXGKpzGAmKkuDhJaGdFmSWZQenNVKRHfEoDrKvzn6wsYQooYa3r",
+      "purpose": "payer deposit"
+    }
+  ],
+  "observations": [
+    "public balance read from intents.near for the invoice account; destination asset per routes.json (default USDC on NEAR)",
+    "a failing route is dropped from routes.json (plan go/no-go); two or more failing ETH/SOL routes means volatile payments ship only on the routes that passed"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 70
+}

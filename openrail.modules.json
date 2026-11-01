@@ -1,0 +1,33 @@
+{
+  "_comment": "Modules in this build. Set enabled=false and the module disappears from the contract, app, CLI and docs.",
+  "modules": [
+    {
+      "id": "standing",
+      "enabled": true
+    },
+    {
+      "id": "checkout",
+      "enabled": true
+    },
+    {
+      "id": "advance",
+      "enabled": true
+    },
+    {
+      "id": "proof",
+      "enabled": true
+    },
+    {
+      "id": "agent",
+      "enabled": true
+    },
+    {
+      "id": "shopify",
+      "enabled": true
+    },
+    {
+      "id": "subscriptions",
+      "enabled": true
+    }
+  ]
+}

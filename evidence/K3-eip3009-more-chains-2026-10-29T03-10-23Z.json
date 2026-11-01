@@ -1,0 +1,119 @@
+{
+  "test_id": "K3-eip3009-more-chains",
+  "spec_ref": "owed_test_plan.md v1.1 K3 additions",
+  "tier": "T1",
+  "network": "mainnet",
+  "started_utc": "2026-10-29T03:10:23Z",
+  "finished_utc": "2026-10-29T03:10:23Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "optimism_and_polygon_eip3009": true,
+    "domain_separation": true,
+    "derived_address_same_on_every_evm_chain": true,
+    "bnb_and_ethereum": "informational"
+  },
+  "measurements": {
+    "derived_address": "0x1bfcc47d33dd3aec60c4f79acf760c64d5fea603",
+    "equals_base_derived_address": true,
+    "on_chain_domain_separators_differ_between_optimism_and_polygon": true,
+    "domain_separation_checks": [
+      {
+        "pair": "signed for optimism, checked on polygon",
+        "digestsDiffer": true,
+        "recoversWrongSigner": true
+      },
+      {
+        "pair": "signed for polygon, checked on optimism",
+        "digestsDiffer": true,
+        "recoversWrongSigner": true
+      }
+    ],
+    "failures": [],
+    "chains": [
+      {
+        "chain": "optimism",
+        "chain_id": 10,
+        "usdc": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        "rpc_host": "mainnet.optimism.io",
+        "rpc_source": "public fallback (read-only)",
+        "chain_id_onchain": 10,
+        "domain_separator_onchain": "0x26d9c34bb1a1c312f69c53b2d93b8be20faafba63af2438c6811713c9b1f933f",
+        "domain_separator_error": null,
+        "token_name": "USD Coin",
+        "domain_separator_computed": "0x26d9c34bb1a1c312f69c53b2d93b8be20faafba63af2438c6811713c9b1f933f",
+        "domain_separator_matches": true,
+        "authorization_state_answers": true,
+        "selector_probe": "RPC_ERROR: execution reverted: ECRecover: invalid signature",
+        "selector_recognised": true,
+        "eip3009": true
+      },
+      {
+        "chain": "polygon",
+        "chain_id": 137,
+        "usdc": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+        "rpc_host": "polygon-bor-rpc.publicnode.com",
+        "rpc_source": "public fallback (read-only)",
+        "chain_id_onchain": 137,
+        "domain_separator_onchain": "0xcaa2ce1a5703ccbe253a34eb3166df60a705c561b44b192061e28f2a985be2ca",
+        "domain_separator_error": null,
+        "token_name": "USD Coin",
+        "domain_separator_computed": "0xcaa2ce1a5703ccbe253a34eb3166df60a705c561b44b192061e28f2a985be2ca",
+        "domain_separator_matches": true,
+        "authorization_state_answers": true,
+        "selector_probe": "RPC_ERROR: execution reverted: ECRecover: invalid signature",
+        "selector_recognised": true,
+        "eip3009": true
+      },
+      {
+        "chain": "bnb",
+        "chain_id": 56,
+        "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+        "rpc_host": "bsc-dataseed.binance.org",
+        "rpc_source": "public fallback (read-only)",
+        "chain_id_onchain": 56,
+        "domain_separator_onchain": null,
+        "domain_separator_error": "RPC_ERROR: execution reverted: 0x",
+        "token_name": "USD Coin",
+        "domain_separator_computed": "0x0a6c73c8c20a9265f250c20d92222bcc3e9764a4c15052d7c6395843ada30917",
+        "domain_separator_matches": false,
+        "authorization_state_answers": false,
+        "selector_probe": "RPC_ERROR: execution reverted: 0x",
+        "selector_recognised": false,
+        "eip3009": false
+      },
+      {
+        "chain": "ethereum",
+        "chain_id": 1,
+        "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "rpc_host": "ethereum-rpc.publicnode.com",
+        "rpc_source": "public fallback (read-only)",
+        "chain_id_onchain": 1,
+        "domain_separator_onchain": "0x06c37168a7db5138defc7866392bb87a741f9b3d104deb5094588ce041cae335",
+        "domain_separator_error": null,
+        "token_name": "USD Coin",
+        "domain_separator_computed": "0x06c37168a7db5138defc7866392bb87a741f9b3d104deb5094588ce041cae335",
+        "domain_separator_matches": true,
+        "authorization_state_answers": true,
+        "selector_probe": "RPC_ERROR: execution reverted: ECRecover: invalid signature",
+        "selector_recognised": true,
+        "eip3009": true,
+        "gas_price_gwei": 0.068406662,
+        "estimated_sweep_gas": 80952,
+        "estimated_sweep_usd": 0.01278949365089144,
+        "eth_price_usd": 2309.55,
+        "breakeven_gas_price_gwei_for_0_20_usd": 1.0697321390082084,
+        "estimate_note": "gas = the 80,952 used by the real Base sweep (same token logic) times the current Ethereum gas price"
+      }
+    ]
+  },
+  "tx": [],
+  "observations": [
+    "EIP-3009 is judged by three read-only facts per chain: on-chain DOMAIN_SEPARATOR equals the one computed from that chain ID and contract, authorizationState answers, and the 9-argument transferWithAuthorization selector is recognised by an eth_call that reverts with a reason",
+    "a chain whose *_RPC_URL is not set uses a public read-only endpoint, recorded as rpc_source",
+    "BNB Chain (Binance-Peg USDC) and Ethereum are not Rail B chains: their rows are informational. Ethereum DOES implement EIP-3009 and, at today's very low gas price, a sweep would cost cents; the plan expected above $0.20 — it depends on gas price (breakeven recorded in the row), so the exclusion is a product decision, not a technical limit",
+    "the derivation does not depend on the chain: one EVM address per invoice account (path evm-1); the Optimism and Polygon sweeps (human, T2) will use it"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

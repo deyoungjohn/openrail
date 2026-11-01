@@ -1,0 +1,43 @@
+{
+  "test_id": "K4-sandbox",
+  "spec_ref": "owed_engine_v3.md §3.3, §4 reconcile_idempotent; plan K4",
+  "tier": "T0",
+  "network": "sandbox",
+  "started_utc": "2026-10-28T17:36:54Z",
+  "finished_utc": "2026-10-28T17:36:54Z",
+  "dry_run": true,
+  "result": "PASS",
+  "thresholds": {
+    "checks_expected": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "S6",
+      "S7"
+    ],
+    "fee_formula": "floor(payment * 25 / 10000)",
+    "random_payment_cases": 25,
+    "seed": 20261028
+  },
+  "measurements": {
+    "checks_total": 86,
+    "checks_failed": 0,
+    "incomplete_scenarios": [],
+    "failures": [],
+    "fee_floor_zero_case_ran": true,
+    "s8_fallback_record": {
+      "id": "S8",
+      "ok": true,
+      "detail": "lock=\"None\" value conserved=true; booked_total after failed transfer=0 (spec silent: SPEC_QUESTION)"
+    },
+    "transactions": 98
+  },
+  "tx": [],
+  "observations": [
+    "contract=dev-11638-66752.test.near mock=dev-10156-40416.test.near holder=k4-holder.test.near seed=20261028"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

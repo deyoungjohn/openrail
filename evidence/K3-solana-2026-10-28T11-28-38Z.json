@@ -1,0 +1,89 @@
+{
+  "test_id": "K3-solana",
+  "spec_ref": "owed_test_plan.md K3 T2 step 3 probe (line 173): compare MPC latency with blockhash validity window",
+  "tier": "T1",
+  "network": "solana-mainnet (read-only RPC)",
+  "started_utc": "2026-10-28T11:28:31Z",
+  "finished_utc": "2026-10-28T11:28:38Z",
+  "dry_run": true,
+  "result": "ERROR",
+  "thresholds": {
+    "rounds_completed": 5,
+    "nonzero_blockhash_window": true,
+    "mpc_sign_latency_leg": "pending — needs a v1.signer sign round trip (1 yoctoNEAR value move, human/T2)",
+    "expiry_decision": "cannot be issued until the mpc_sign_latency leg is measured"
+  },
+  "measurements": {
+    "rpc_host": "solana-mainnet.g.alchemy.com",
+    "rounds_completed": 5,
+    "slot_first": 462459470,
+    "slot_last": 462459493,
+    "slots_per_sec_measured": 3.402,
+    "latency_ms": {
+      "min": 157.11183399999936,
+      "median": 171.9089729999996,
+      "max": 198.24541399999998
+    },
+    "blockhash_window_blocks_min": 145,
+    "blockhash_window_sec_estimate": 42.6,
+    "violation_count": 0,
+    "violations": [],
+    "rounds": [
+      {
+        "round": 1,
+        "slot": 462459470,
+        "block_height": 440484041,
+        "blockhash": "V9AytNMYGoSuajxdU6VdK6BCAwa7bbqWXCWgLFEEwuo",
+        "last_valid_block_height": 440484186,
+        "remaining_blocks": 145,
+        "latency_ms": 198.2
+      },
+      {
+        "round": 2,
+        "slot": 462459476,
+        "block_height": 440484048,
+        "blockhash": "E5a8qnJqsR1UzAopszuQFSUDF6J6pc5qrNJX7sK6eJax",
+        "last_valid_block_height": 440484196,
+        "remaining_blocks": 148,
+        "latency_ms": 174.1
+      },
+      {
+        "round": 3,
+        "slot": 462459482,
+        "block_height": 440484053,
+        "blockhash": "6pLXQk1NAaQ1FxJidLbrxWDBVTEzckyPhfgDjBRZZ4z9",
+        "last_valid_block_height": 440484201,
+        "remaining_blocks": 148,
+        "latency_ms": 157.1
+      },
+      {
+        "round": 4,
+        "slot": 462459488,
+        "block_height": 440484059,
+        "blockhash": "ASV8PrLczvAGh1Vqe4WeET4XrUcFxnkGYSdjJqN5aC7F",
+        "last_valid_block_height": 440484207,
+        "remaining_blocks": 148,
+        "latency_ms": 158.4
+      },
+      {
+        "round": 5,
+        "slot": 462459493,
+        "block_height": 440484065,
+        "blockhash": "5zNrvkCGPgoLnUZqK2ELuQwqomYMPqNY9tB4nrcXw5ay",
+        "last_valid_block_height": 440484213,
+        "remaining_blocks": 148,
+        "latency_ms": 171.9
+      }
+    ]
+  },
+  "tx": [],
+  "observations": [
+    "window blocks = lastValidBlockHeight - current blockHeight at read time",
+    "window seconds estimated from this probe's own slot rate, not a constant; treat as an estimate",
+    "the plan compares this window against MPC signing latency before any spend — that latency is NOT measured here (would require a value-moving sign call); the expiry verdict stays pending",
+    "result=ERROR (incomplete), not PASS: the decisive MPC-signing-latency leg is unmeasured. Schema 0.6 allows PASS|FAIL|ERROR|SKIPPED only — no PENDING/PARTIAL — so ERROR carries the \"pending leg\" state; the RPC legs themselves are green (rounds, nonzero window, zero violations). ERROR would flip to PASS only after a human-run sign call records mpc_sign_latency_ms and it fits inside the window.",
+    "rpc host only; URL/path/key redacted by lib/env.ts (SOLANA_RPC_URL matches *_RPC_URL)"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

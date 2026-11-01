@@ -1,0 +1,61 @@
+{
+  "test_id": "K1",
+  "spec_ref": "owed_engine_v3.md §6; plan K1",
+  "tier": "T1",
+  "network": "testnet",
+  "started_utc": "2026-10-28T16:55:12Z",
+  "finished_utc": "2026-10-28T16:55:12Z",
+  "dry_run": false,
+  "result": "PASS",
+  "thresholds": {
+    "max_cost_near": 0.03,
+    "keys_count": 0,
+    "unauthorized_forward_panics": true,
+    "authorized_forward_passes": true
+  },
+  "measurements": {
+    "cost_near": 0.0178332884099205,
+    "keys_count": 0,
+    "unauthorized_forward_panics": true,
+    "authorized_forward_passes": true,
+    "code_hash": "3YBy8dfo5CtT5jaVEZHsTMHCWqwWHM68RfmYPRwXA1ha",
+    "vault_bytes": 6568,
+    "global_publish_burn_near": 0.6567999999999999,
+    "parent_account": "holder2-4947.testnet",
+    "invoice_account": "inv-1.holder2-4947.testnet"
+  },
+  "tx": [
+    {
+      "chain": "testnet",
+      "hash": "8oJYmSfwUJbdTTedfbcAGe39yudf33eXY5G8igfPaaEf",
+      "purpose": "deploy k1 factory"
+    },
+    {
+      "chain": "testnet",
+      "hash": "5e5wVC2RWv3Sink4xNNJoAszzXUzrVcv8avRSQndXKnV",
+      "purpose": "issue(1)"
+    },
+    {
+      "chain": "testnet",
+      "hash": "Ermna13WGk24KQ5Rqfff1MQDs25TD1BeMWBuLqqXorK",
+      "purpose": "create k1probe"
+    },
+    {
+      "chain": "testnet",
+      "hash": "7r5dkG4nemXBP5mas3gdVB3j1FQomyVT6Twvw877jcFt",
+      "purpose": "forward(parent, amount 0)"
+    }
+  ],
+  "observations": [
+    "Doc: https://docs.near.org/smart-contracts/global-contracts (global contract by hash, 10x storage)",
+    "vault 6568 bytes, factory 6304 bytes",
+    "vault already published by a previous run (code hash 3YBy8dfo5CtT5jaVEZHsTMHCWqwWHM68RfmYPRwXA1ha); not publishing (and burning) again",
+    "vault code hash on testnet: 3YBy8dfo5CtT5jaVEZHsTMHCWqwWHM68RfmYPRwXA1ha",
+    "issue(1) succeeded on attempt 1; cost = parent total-balance delta of the successful attempt, including the 0.01 NEAR transferred to inv-1.holder2-4947.testnet: 0.017833 NEAR",
+    "access keys of inv-1.holder2-4947.testnet: 0",
+    "forward from non-parent k1probe.holder2-4947.testnet: failed=true {\"index\":0,\"kind\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: Unauthorized: caller is not parent account\"}}}}",
+    "probe account k1probe.holder2-4947.testnet deleted, funds returned to parent"
+  ],
+  "fallback_triggered": null,
+  "spend_usd": 0
+}

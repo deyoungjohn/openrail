@@ -1,0 +1,16 @@
+node_modules/
+target/
+dist/
+.next/
+coverage/
+*.wasm
+.env
+.env.*
+!.env.example
+# Internal files must never enter this repo
+AGENTS.md
+CLAUDE.md
+blueprint/
+prompts/
+handoffs/
+evidence-full/
