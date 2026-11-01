@@ -19,11 +19,33 @@ function wasmExporting(name: string): Uint8Array {
   const n = new TextEncoder().encode(name);
   const exportBody = [1, n.length, ...n, 0x00, 0x00];
   return new Uint8Array([
-    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // magic, version
-    0x01, 0x04, 0x01, 0x60, 0x00, 0x00, // type: () -> ()
-    0x03, 0x02, 0x01, 0x00, // func 0 : type 0
-    0x07, exportBody.length, ...exportBody, // export
-    0x0a, 0x04, 0x01, 0x02, 0x00, 0x0b, // code
+    0x00,
+    0x61,
+    0x73,
+    0x6d,
+    0x01,
+    0x00,
+    0x00,
+    0x00, // magic, version
+    0x01,
+    0x04,
+    0x01,
+    0x60,
+    0x00,
+    0x00, // type: () -> ()
+    0x03,
+    0x02,
+    0x01,
+    0x00, // func 0 : type 0
+    0x07,
+    exportBody.length,
+    ...exportBody, // export
+    0x0a,
+    0x04,
+    0x01,
+    0x02,
+    0x00,
+    0x0b, // code
   ]);
 }
 
@@ -82,6 +104,11 @@ describe("runLeakCheck", () => {
 
   it("scans the web bundle when it exists", () => {
     write("services/web/.next/static/app.js", 'var x="/v1/zorp/y";');
+    expect(runLeakCheck(root, { LEAK_KEYWORDS_FILE: kw }).code).toBe(1);
+  });
+
+  it("scans the built CLI help output", () => {
+    write("services/cli/dist/index.js", 'console.log("usage: tool modules/zorp");');
     expect(runLeakCheck(root, { LEAK_KEYWORDS_FILE: kw }).code).toBe(1);
   });
 

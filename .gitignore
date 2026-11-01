@@ -16,3 +16,4 @@ handoffs/
 evidence-full/
 # Old spike code (read-only reference, never committed)
 spikes/
+docs/dist/
