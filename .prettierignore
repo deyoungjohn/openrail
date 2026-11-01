@@ -1,0 +1,11 @@
+node_modules/
+target/
+dist/
+.next/
+coverage/
+pnpm-lock.yaml
+Cargo.lock
+evidence/
+fixtures/
+README.md
+spikes/
