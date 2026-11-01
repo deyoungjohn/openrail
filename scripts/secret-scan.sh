@@ -26,8 +26,13 @@ scan() {
     IFS='|' read -r name flags re <<<"$r"
     # shellcheck disable=SC2086
     out=$(grep $flags -InH -e "$re" "${files[@]}" 2>/dev/null || true)
-    # Transaction signatures are also "ed25519:" + 88 base58 chars; they are public.
-    if [ "$name" = near-ed25519-secret-key ]; then out=$(printf '%s\n' "$out" | grep -viE 'signature' || true); fi
+    # Transaction signatures are also "ed25519:" + 88 base58 chars; they are public. Exempt only the
+    # JSON shape "signature": "ed25519:...", then re-test the rest of the line (a key elsewhere still fails).
+    if [ "$name" = near-ed25519-secret-key ] && [ -n "$out" ]; then
+      out=$(printf '%s\n' "$out" \
+        | sed -E 's/"signature"[[:space:]]*:[[:space:]]*"ed25519:[1-9A-HJ-NP-Za-km-z]{80,}"//g' \
+        | grep -E -e "$re" || true)
+    fi
     out=$(printf '%s\n' "$out" | cut -d: -f1,2 | sed '/^$/d')
     if [ -n "$out" ]; then
       while IFS= read -r l; do echo "SECRET-SCAN FAIL [$name]: $l"; done <<<"$out"
@@ -53,16 +58,19 @@ self_test() {
   scan "$d" >/dev/null || { echo "self-test FAIL: clean file flagged"; return 1; }
 
   local n=0 case_
-  for case_ in "k=ed25519:$b58" "t=$jwt" "api_key = \"$hex\"" "seed phrase: $words" "$words"; do
+  for case_ in "k=ed25519:$b58" "signature: ed25519:$b58" "{\"signature\": \"ed25519:$b58\", \"k\": \"ed25519:$b58\"}" "t=$jwt" "api_key = \"$hex\"" "seed phrase: $words" "$words"; do
     n=$((n + 1))
     printf '%s\n' "$case_" >"$d/bad$n.txt"
     if scan "$d" >"$d.out" 2>&1; then echo "self-test FAIL: case $n not detected"; rm -f "$d.out"; return 1; fi
     if grep -q -e "$b58" -e "$hex" -e "$jwt" -e "$words" "$d.out"; then echo "self-test FAIL: scanner printed a value"; rm -f "$d.out"; return 1; fi
     rm -f "$d/bad$n.txt" "$d.out"
   done
+  printf '{"signature": "ed25519:%s"}\n' "$b58" >"$d/sig.json"
+  scan "$d" >/dev/null || { echo "self-test FAIL: JSON signature shape wrongly flagged"; return 1; }
+  rm -f "$d/sig.json"
   rc=0; scan "$d" >/dev/null || rc=1
   [ "$rc" = 0 ] || { echo "self-test FAIL: not clean after cleanup"; return 1; }
-  echo "secret-scan self-test: OK (5 patterns detected, nothing printed, clean dir passes)"
+  echo "secret-scan self-test: OK (patterns detected incl. key on a signature line; JSON signature shape allowed; nothing printed)"
 }
 
 case "${1:-}" in
