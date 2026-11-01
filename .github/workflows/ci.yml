@@ -39,6 +39,7 @@ jobs:
       - run: cargo test --workspace
       - run: pnpm -r test
       - run: pnpm exec vitest run scripts
+      - run: pnpm exec tsx scripts/gen-modules.ts --check
       - run: pnpm -r exec tsc --noEmit
 
   each-module:
