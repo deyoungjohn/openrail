@@ -116,7 +116,10 @@ describe("run", () => {
     expect(run(root, { check: false }).ok).toBe(true);
     expect(existsSync(join(root, "services/api/src/enabled.ts"))).toBe(true);
     expect(run(root, { check: true }).ok).toBe(true);
-    write("services/api/src/enabled.ts", readFileSync(join(root, "services/api/src/enabled.ts"), "utf8") + "// edit\n");
+    write(
+      "services/api/src/enabled.ts",
+      readFileSync(join(root, "services/api/src/enabled.ts"), "utf8") + "// edit\n",
+    );
     const r = run(root, { check: true });
     expect(r.ok).toBe(false);
     expect(r.messages.join("\n")).toContain("services/api/src/enabled.ts");
