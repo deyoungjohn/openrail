@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
-# Stub owned by P0.1. Fill in; the Makefile only delegates here.
+# Lint everything: rustfmt check, clippy (-D warnings), eslint, prettier check.
 set -euo pipefail
-echo "TODO(P0.1): lint"
+cd "$(dirname "$0")/.."
+export PATH="$HOME/.cargo/bin:$PATH"
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+pnpm exec eslint .
+pnpm exec prettier --check .
