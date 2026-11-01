@@ -1,0 +1,154 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NEAR_VERSION: "0.22.0"
+
+jobs:
+  # Helper: reads module ids from openrail.modules.json for the each-module matrix.
+  modules:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ids
+        run: echo "ids=$(scripts/enabled-features --all | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  core-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - run: cargo test --workspace
+      - run: pnpm -r test
+      - run: pnpm -r exec tsc --noEmit
+
+  each-module:
+    needs: modules
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.modules.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Core plus one module
+        run: cargo test -p openrail --features "${{ matrix.module }}"
+
+  all-enabled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - name: Every enabled module
+        run: cargo test -p openrail --features "$(scripts/enabled-features)"
+
+  wasm-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache cargo-near binary
+        id: cargo-near-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-near
+          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
+      - name: Install cargo-near (pinned)
+        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
+      - run: make contract
+      - run: make wasm-check
+
+  abi-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache cargo-near binary
+        id: cargo-near-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-near
+          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
+      - name: Install cargo-near (pinned)
+        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
+      - run: make contract
+      - run: make abi-check
+
+  leak-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: make leak-check
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make secret-scan
+
+  docs-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: make docs
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "TODO owner I1, end-to-end suite"
