@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Prints the enabled module ids from openrail.modules.json, comma-separated (empty if none).
+# With --all prints every id (one per line, enabled or not) for CI matrices.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+node -e '
+const m = JSON.parse(require("fs").readFileSync("openrail.modules.json", "utf8")).modules;
+if (process.argv[1] === "--all") console.log(m.map((x) => x.id).join("\n"));
+else console.log(m.filter((x) => x.enabled).map((x) => x.id).join(","));
+' -- "${1:-}"
