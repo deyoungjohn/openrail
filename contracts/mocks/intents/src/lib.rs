@@ -7,6 +7,7 @@
 //! - `mt_transfer_call(receiver_id: AccountId, token_id: String, amount: U128, approval: Option<()>, memo: Option<String>, msg: String) -> Promise` (1 yocto)
 //! - `mt_resolve_transfer(sender_id: AccountId, receiver_id: AccountId, token_id: String, amount: U128) -> U128` (private callback)
 //! - `mt_mint(account_id: AccountId, token_id: String, amount: U128)` — test-only helper to credit any token ID.
+//! - `publish_vault(code: Base64VecU8) -> Base58CryptoHash` — test-only sandbox helper to publish vault code globally (Protocol 86); strictly sandbox-only and excluded from production `make contract`.
 //!
 //! Non-existent accounts return 0 (credits to uncreated accounts land, blueprint 1.5.9).
 
