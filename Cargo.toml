@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["contracts/openrail", "contracts/vault", "contracts/model"]
+members = [
+    "contracts/openrail",
+    "contracts/vault",
+    "contracts/model",
+    "contracts/mocks/signer",
+    "contracts/mocks/usdc",
+]
 
 [workspace.package]
 version = "0.1.0"
