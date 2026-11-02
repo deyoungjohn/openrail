@@ -1,0 +1,194 @@
+{
+  "_comment": "Pay-link route list (plan v1.1, 29 Oct). Destination is one of the four settlement assets (spec 2a-2); default USDC on NEAR. Origin asset IDs from GET 1click /v0/tokens on 29 Oct 2026. BNB Chain USDC has 18 decimals.",
+  "settlementAssets": [
+    "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+    "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+    "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near"
+  ],
+  "routes": [
+    {
+      "id": "R1",
+      "originChain": "base",
+      "payerAsset": "USDC",
+      "originAssetId": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+      "originDecimals": 6,
+      "originContract": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "swapType": "FLEX_INPUT",
+      "destinationAssetId": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+      "evmChainId": 8453,
+      "rpcVar": "BASE_RPC_URL",
+      "partB": true
+    },
+    {
+      "id": "R2",
+      "originChain": "arbitrum",
+      "payerAsset": "USDC",
+      "originAssetId": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+      "originDecimals": 6,
+      "originContract": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+      "swapType": "FLEX_INPUT",
+      "destinationAssetId": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+      "evmChainId": 42161,
+      "rpcVar": "ARB_RPC_URL",
+      "partB": true
+    },
+    {
+      "id": "R3",
+      "originChain": "ethereum",
+      "payerAsset": "USDC",
+      "originAssetId": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+      "originDecimals": 6,
+      "originContract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "swapType": "FLEX_INPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 1,
+      "rpcVar": "ETH_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R4",
+      "originChain": "optimism",
+      "payerAsset": "USDC",
+      "originAssetId": "nep245:v2_1.omni.hot.tg:10_A2ewyUyDp6qsue1jqZsGypkCxRJ",
+      "originDecimals": 6,
+      "originContract": "0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+      "swapType": "FLEX_INPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 10,
+      "rpcVar": "OP_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R5",
+      "originChain": "polygon",
+      "payerAsset": "USDC",
+      "originAssetId": "nep245:v2_1.omni.hot.tg:137_qiStmoQJDQPTebaPjgx5VBxZv6L",
+      "originDecimals": 6,
+      "originContract": "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+      "swapType": "FLEX_INPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 137,
+      "rpcVar": "POLYGON_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R6",
+      "originChain": "bnb",
+      "payerAsset": "USDC",
+      "originAssetId": "nep245:v2_1.omni.hot.tg:56_2w93GqMcEmQFDru84j3HZZWt557r",
+      "originDecimals": 18,
+      "originContract": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+      "swapType": "FLEX_INPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 56,
+      "rpcVar": "BNB_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R7",
+      "originChain": "solana",
+      "payerAsset": "USDC",
+      "originAssetId": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+      "originDecimals": 6,
+      "originContract": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "swapType": "FLEX_INPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": null,
+      "rpcVar": null,
+      "partB": false
+    },
+    {
+      "id": "R8",
+      "originChain": "near",
+      "payerAsset": "USDC",
+      "originAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "originDecimals": 6,
+      "originContract": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "swapType": "FLEX_INPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": null,
+      "rpcVar": null,
+      "partB": false
+    },
+    {
+      "id": "R9",
+      "originChain": "ethereum",
+      "payerAsset": "ETH",
+      "originAssetId": "nep141:eth.omft.near",
+      "originDecimals": 18,
+      "originContract": null,
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 1,
+      "rpcVar": "ETH_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R10",
+      "originChain": "base",
+      "payerAsset": "ETH",
+      "originAssetId": "nep141:base.omft.near",
+      "originDecimals": 18,
+      "originContract": null,
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 8453,
+      "rpcVar": "BASE_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R11",
+      "originChain": "arbitrum",
+      "payerAsset": "ETH",
+      "originAssetId": "nep141:arb.omft.near",
+      "originDecimals": 18,
+      "originContract": null,
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 42161,
+      "rpcVar": "ARB_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R12",
+      "originChain": "optimism",
+      "payerAsset": "ETH",
+      "originAssetId": "nep245:v2_1.omni.hot.tg:10_11111111111111111111",
+      "originDecimals": 18,
+      "originContract": null,
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 10,
+      "rpcVar": "OP_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R13",
+      "originChain": "solana",
+      "payerAsset": "SOL",
+      "originAssetId": "nep141:sol.omft.near",
+      "originDecimals": 9,
+      "originContract": null,
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": null,
+      "rpcVar": null,
+      "partB": false
+    }
+  ],
+  "railB": {
+    "chains": [
+      "base",
+      "arbitrum",
+      "optimism",
+      "polygon",
+      "solana"
+    ],
+    "excluded": [
+      "bnb",
+      "ethereum"
+    ]
+  },
+  "_source": "Data carried from spikes/data/routes.json (GET 1click /v0/tokens, 29 Oct 2026; route report evidence/K2prime-partA-routes-2026-10-29T03-08-53Z.json)."
+}

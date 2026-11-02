@@ -1,0 +1,21 @@
+{
+  "_source": "evidence/K8-real-2026-10-28T21-09-46Z.json (measurements.traces[2].canonical_json.sources.providerStatus; /v0/status fields live under swapDetails)",
+  "status": "SUCCESS",
+  "updatedAt": "2026-10-29T18:34:30Z",
+  "swapDetails": {
+    "status": "SUCCESS",
+    "amountOut": "10000000",
+    "depositedAmount": "10000000",
+    "originChainTxHashes": [
+      "0x619ec19fa4563339d2b51e4a810fdd069eeafa810664a9f0a5a6e3b12fc09402"
+    ],
+    "destinationChainTxHashes": [
+      "0x7d3c0d8b4c3f8f0bbf7395b2d1d1b8a1e1c3aa6d1e4c0f9a2b3c4d5e6f708192"
+    ],
+    "nearTxHashes": [
+      "8cDysV69qchx9emuEFBV2m4SWWMUKQjKtY7ZLDbJTu1J",
+      "AbQhhqYR2xXFXmUsKMTbUTnJ1Wgj2WxbTNPDDx3415Gk"
+    ],
+    "privateShardLeg": "provider-attested"
+  }
+}
