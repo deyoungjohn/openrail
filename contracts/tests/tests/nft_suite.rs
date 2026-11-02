@@ -135,7 +135,7 @@ async fn smoke_nft_stubs_return_not_implemented() -> Result<()> {
 /// - Emits NEP-297 `nft_mint` event conforming to schema
 /// - Oracle parity: `openrail-model` step_issue produces identical state
 #[tokio::test]
-#[ignore = "C1"]
+#[ignore = "C2"]
 async fn nft_mint_on_issue() -> Result<()> {
     let env = Env::new().await?;
 
@@ -796,7 +796,7 @@ async fn nft_transfer_call_keeps_locks() -> Result<()> {
 /// - `nft_transfer` event emitted on `nft_transfer` conforms to `nft_transfer.schema.json`
 /// - All standard fields (`standard == "nep171"`, `version == "1.0.0"`, `event`, `data`) validated
 #[tokio::test]
-#[ignore = "C1"]
+#[ignore = "C2"]
 async fn nft_events_nep297() -> Result<()> {
     let env = Env::new().await?;
 
@@ -807,7 +807,7 @@ async fn nft_events_nep297() -> Result<()> {
         .issue_claim_with_details(
             &env.alice,
             0,
-            None,
+            Some(Debtor::Near(env.bob.id().clone())),
             Hex32::default(),
             1_000_000,
             1_800_000_000,
