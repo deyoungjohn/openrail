@@ -114,6 +114,31 @@ fn mock_wasm() -> Result<Vec<u8>> {
     std::fs::read(&wasm).with_context(|| format!("read {}", wasm.display()))
 }
 
+/// The shared signer mock (P0.6b); the vault only needs its wasm.
+fn signer_wasm() -> Result<Vec<u8>> {
+    let root = workspace_root();
+    let target = root.join("target/sandbox-signer");
+    let manifest = root.join("contracts/mocks/signer/Cargo.toml");
+    let status = Command::new(env!("CARGO"))
+        .args([
+            "build",
+            "--release",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--manifest-path",
+            manifest.to_str().expect("utf8 path"),
+        ])
+        .env("CARGO_TARGET_DIR", &target)
+        .env("RUSTFLAGS", "--cfg near")
+        .status()
+        .context("run cargo build for the shared signer mock")?;
+    if !status.success() {
+        return Err(anyhow!("signer mock build failed: {status}"));
+    }
+    let wasm = target.join("wasm32-unknown-unknown/release/openrail_mock_signer.wasm");
+    std::fs::read(&wasm).with_context(|| format!("read {}", wasm.display()))
+}
+
 fn base64(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
@@ -197,7 +222,7 @@ async fn setup() -> Result<Fixture> {
 
     let helper = parent.deploy(&mock).await?.into_result()?;
     let intents = create_mock_account(&worker, "intents.near", &mock).await?;
-    let signer = create_mock_account(&worker, "v1.signer", &mock).await?;
+    let signer = create_mock_account(&worker, "v1.signer", &signer_wasm()?).await?;
 
     let vault_hash: String = helper
         .call("publish_vault")
@@ -523,12 +548,19 @@ async fn sign_relays_the_request_and_returns_the_result() -> Result<()> {
         .await?
         .json()?;
 
-    assert_eq!(out["signature"], "mock-signature");
-    assert_eq!(out["request"]["payload_v2"], json!({ "Ecdsa": "00ff" }));
-    assert_eq!(out["request"]["path"], "evm-1");
-    assert_eq!(out["request"]["domain_id"], 0);
+    assert_eq!(out["scheme"], "Secp256k1");
+    let point = out["big_r"]["affine_point"]
+        .as_str()
+        .expect("affine_point string");
+    assert_eq!(point.len(), 66, "compressed secp256k1 point is 33 bytes");
+    assert!(point.starts_with("02"));
+    assert_eq!(out["s"]["scalar"].as_str().expect("scalar").len(), 64);
+    assert_eq!(out["recovery_id"], 1);
 
-    let last: Option<String> = f.signer.view("last_call").await?.json()?;
-    assert!(last.expect("signer mock was called").contains("sign"));
+    let requests: Vec<Value> = f.signer.view("signed_requests").await?.json()?;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["payload_v2"], json!({ "Ecdsa": "00ff" }));
+    assert_eq!(requests[0]["path"], "evm-1");
+    assert_eq!(requests[0]["domain_id"], 0);
     Ok(())
 }

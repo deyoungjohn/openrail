@@ -1,10 +1,10 @@
 //! Sandbox fixture only. Never deployed by the product.
 //!
-//! One wasm is deployed three times by the sandbox tests:
+//! One wasm is deployed twice by the sandbox tests:
 //! - on the root account: publishes the vault as a global contract and creates keyless accounts
 //!   that use it by hash (the K1 flow);
-//! - at `intents.near`: records and echoes `mt_transfer` calls;
-//! - at `v1.signer`: records and echoes `sign` calls.
+//! - at `intents.near`: records and echoes `mt_transfer` calls.
+//! The shared `v1.signer` mock lives in `contracts/mocks/signer` (P0.6b).
 
 use near_sdk::json_types::{Base58CryptoHash, Base64VecU8};
 use near_sdk::serde_json::{json, Value};
@@ -67,15 +67,6 @@ impl Mock {
             "token_id": token_id,
             "amount": amount,
         })
-    }
-
-    /// MPC-signer-like receiver. Echoes the request so the caller can assert it.
-    #[payable]
-    pub fn sign(&mut self, request: Value) -> Value {
-        self.last_call = Some(
-            json!({ "method": "sign", "request": request }).to_string(),
-        );
-        json!({ "signature": "mock-signature", "request": request })
     }
 
     pub fn last_call(&self) -> Option<String> {
