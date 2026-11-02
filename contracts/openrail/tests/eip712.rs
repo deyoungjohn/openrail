@@ -13,10 +13,16 @@ use openrail::eip712::{
 };
 use openrail::types::{Hex20, Hex32, HexBytes};
 use serde::Deserialize;
+use std::collections::{BTreeMap, BTreeSet};
 
 const K14: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../fixtures/vectors/K14-vectors.json"
+));
+
+const ACK_V1: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../fixtures/vectors/ack-v1.json"
 ));
 
 #[derive(Deserialize)]
@@ -353,58 +359,253 @@ fn ack_contract_wallet_refused() {
     );
 }
 
-/// Generated independently with viem (`hashTypedData`/`signTypedData`, viem 2.57.14).
-#[test]
-fn openrail_ack_and_cancel_match_viem() {
-    setup();
-    let terms_hash = bytes32("0xcbb8fbc762aa06e92b83fedd378924eb383ca2447513ac6dd84fee4292e09541");
-    let debtor = address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
-    let chain_id = 8453;
-    let root = "openrail.near";
-    let token = "c-1";
+#[derive(Deserialize)]
+struct AckV1Fixture {
+    ack: Vec<OpenrailAckVector>,
+    cancel: Vec<OpenrailCancelVector>,
+    tamper_ack: Vec<TamperAck>,
+    tamper_cancel: Vec<TamperCancel>,
+}
 
-    let ack = ack_digest(
+#[derive(Deserialize)]
+struct OpenrailAckVector {
+    name: String,
+    chain_id: u64,
+    root_contract: String,
+    token_id: String,
+    terms_hash: String,
+    amount_due: String,
+    due_date: u64,
+    digest: String,
+    signer: String,
+    signature: String,
+}
+
+#[derive(Deserialize)]
+struct OpenrailCancelVector {
+    name: String,
+    chain_id: u64,
+    root_contract: String,
+    token_id: String,
+    digest: String,
+    signer: String,
+    signature: String,
+}
+
+#[derive(Deserialize)]
+struct TamperAck {
+    base: String,
+    chain_id: u64,
+    root_contract: String,
+    token_id: String,
+    terms_hash: String,
+    amount_due: String,
+    due_date: u64,
+    digest: String,
+}
+
+#[derive(Deserialize)]
+struct TamperCancel {
+    base: String,
+    chain_id: u64,
+    root_contract: String,
+    token_id: String,
+    digest: String,
+}
+
+fn ack_v1() -> AckV1Fixture {
+    near_sdk::serde_json::from_str(ACK_V1).expect("ack-v1.json parses")
+}
+
+fn ack_amount(vector: &OpenrailAckVector) -> u128 {
+    vector.amount_due.parse().expect("amount is u128")
+}
+
+fn ack_digest_for(vector: &OpenrailAckVector) -> [u8; 32] {
+    ack_digest(
         OPENRAIL_ACK,
-        chain_id,
-        root,
-        token,
-        &terms_hash,
-        1_000_000,
-        1_800_000_000,
-    );
-    assert_eq!(
-        hex(&ack),
-        "0xb7b6c78f0d99620397b9e1098dcff95a5d36c3861ad74f1a06e25a4c5e75c413"
-    );
-    let ack_sig = signature(
-        "0xe7deb4311d7536ac25dd077fe2c6addc583947e44b8db3a1c5095dc2411d393678741c6be2b1ff7907546d4c5d856319182f22ae8cbe88c886a387e206bdaec91c",
-    );
-    assert_eq!(
-        verify_ack(
-            &K256Recover,
-            OPENRAIL_ACK,
-            chain_id,
-            root,
-            token,
-            &terms_hash,
-            1_000_000,
-            1_800_000_000,
-            &debtor,
-            &ack_sig,
-        ),
-        Ok(debtor)
-    );
+        vector.chain_id,
+        &vector.root_contract,
+        &vector.token_id,
+        &bytes32(&vector.terms_hash),
+        ack_amount(vector),
+        vector.due_date,
+    )
+}
 
-    let cancel = cancel_digest(chain_id, root, token);
-    assert_eq!(
-        hex(&cancel),
-        "0xdf186bae0014191b3e016694ac594a1d88529ba19668508041635bfc22da92ce"
-    );
-    let cancel_sig = signature(
-        "0x3846529d247512e9b32bc4023b0be90ed0dabf8963c26ff15cc8ed084e9d8b043a7c00da28ac8719573281d28536e98a9c4a44474d49f823afd958925bcbff501b",
-    );
-    assert_eq!(
-        verify_cancel(&K256Recover, chain_id, root, token, &debtor, &cancel_sig),
-        Ok(debtor)
-    );
+#[test]
+fn openrail_ack_vectors_match_viem() {
+    setup();
+    let fixture = ack_v1();
+    assert!(fixture.ack.len() >= 10, "at least 10 ack vectors");
+
+    let chains: BTreeSet<u64> = fixture.ack.iter().map(|vector| vector.chain_id).collect();
+    for chain in [1u64, 8453, 42161, 10, 137, 56] {
+        assert!(
+            chains.contains(&chain),
+            "ack vectors must cover chain {chain}"
+        );
+    }
+
+    for vector in &fixture.ack {
+        let digest = ack_digest_for(vector);
+        assert_eq!(
+            hex(&digest),
+            vector.digest,
+            "{}: Rust digest must equal viem's",
+            vector.name
+        );
+        let signer = address(&vector.signer);
+        assert_eq!(
+            recover_address(&K256Recover, &digest, &signature(&vector.signature)),
+            Ok(signer),
+            "{}: recovered signer",
+            vector.name
+        );
+        assert_eq!(
+            verify_ack(
+                &K256Recover,
+                OPENRAIL_ACK,
+                vector.chain_id,
+                &vector.root_contract,
+                &vector.token_id,
+                &bytes32(&vector.terms_hash),
+                ack_amount(vector),
+                vector.due_date,
+                &signer,
+                &signature(&vector.signature),
+            ),
+            Ok(signer),
+            "{}: verify_ack",
+            vector.name
+        );
+    }
+}
+
+#[test]
+fn openrail_cancel_vectors_match_viem() {
+    setup();
+    let fixture = ack_v1();
+    assert!(fixture.cancel.len() >= 4, "at least 4 cancel vectors");
+
+    let chains: BTreeSet<u64> = fixture
+        .cancel
+        .iter()
+        .map(|vector| vector.chain_id)
+        .collect();
+    for chain in [1u64, 8453, 42161, 10, 137, 56] {
+        assert!(
+            chains.contains(&chain),
+            "cancel vectors must cover chain {chain}"
+        );
+    }
+
+    for vector in &fixture.cancel {
+        let digest = cancel_digest(vector.chain_id, &vector.root_contract, &vector.token_id);
+        assert_eq!(
+            hex(&digest),
+            vector.digest,
+            "{}: Rust digest must equal viem's",
+            vector.name
+        );
+        let signer = address(&vector.signer);
+        assert_eq!(
+            recover_address(&K256Recover, &digest, &signature(&vector.signature)),
+            Ok(signer),
+            "{}: recovered signer",
+            vector.name
+        );
+        assert_eq!(
+            verify_cancel(
+                &K256Recover,
+                vector.chain_id,
+                &vector.root_contract,
+                &vector.token_id,
+                &signer,
+                &signature(&vector.signature),
+            ),
+            Ok(signer),
+            "{}: verify_cancel",
+            vector.name
+        );
+    }
+}
+
+#[test]
+fn openrail_tamper_vectors_are_detected() {
+    setup();
+    let fixture = ack_v1();
+    let ack_by_name: BTreeMap<&str, &OpenrailAckVector> = fixture
+        .ack
+        .iter()
+        .map(|vector| (vector.name.as_str(), vector))
+        .collect();
+    let cancel_by_name: BTreeMap<&str, &OpenrailCancelVector> = fixture
+        .cancel
+        .iter()
+        .map(|vector| (vector.name.as_str(), vector))
+        .collect();
+
+    assert!(!fixture.tamper_ack.is_empty());
+    for tamper in &fixture.tamper_ack {
+        let base = ack_by_name
+            .get(tamper.base.as_str())
+            .unwrap_or_else(|| panic!("unknown base {}", tamper.base));
+        let tampered = ack_digest(
+            OPENRAIL_ACK,
+            tamper.chain_id,
+            &tamper.root_contract,
+            &tamper.token_id,
+            &bytes32(&tamper.terms_hash),
+            tamper.amount_due.parse().expect("amount"),
+            tamper.due_date,
+        );
+        assert_eq!(hex(&tampered), tamper.digest);
+        assert_ne!(tampered, ack_digest_for(base));
+
+        let debtor = address(&base.signer);
+        assert_eq!(
+            verify_ack(
+                &K256Recover,
+                OPENRAIL_ACK,
+                tamper.chain_id,
+                &tamper.root_contract,
+                &tamper.token_id,
+                &bytes32(&tamper.terms_hash),
+                tamper.amount_due.parse().expect("amount"),
+                tamper.due_date,
+                &debtor,
+                &signature(&base.signature),
+            ),
+            Err(AckError::WrongSigner),
+            "{}: base signature must not verify the tampered message",
+            tamper.base
+        );
+    }
+
+    assert!(!fixture.tamper_cancel.is_empty());
+    for tamper in &fixture.tamper_cancel {
+        let base = cancel_by_name
+            .get(tamper.base.as_str())
+            .unwrap_or_else(|| panic!("unknown base {}", tamper.base));
+        let tampered = cancel_digest(tamper.chain_id, &tamper.root_contract, &tamper.token_id);
+        assert_eq!(hex(&tampered), tamper.digest);
+        assert_ne!(
+            tampered,
+            cancel_digest(base.chain_id, &base.root_contract, &base.token_id)
+        );
+        assert_eq!(
+            verify_cancel(
+                &K256Recover,
+                tamper.chain_id,
+                &tamper.root_contract,
+                &tamper.token_id,
+                &address(&base.signer),
+                &signature(&base.signature),
+            ),
+            Err(AckError::WrongSigner),
+            "{}: base signature must not verify the tampered cancel",
+            tamper.base
+        );
+    }
 }

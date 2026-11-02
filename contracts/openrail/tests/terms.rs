@@ -142,3 +142,84 @@ fn terms_hash_is_sha256_of_the_canonical_string() {
     let digest = terms_hash(&vector.input).expect("hash");
     assert_eq!(hex(&digest), vector.expected_sha256);
 }
+
+#[test]
+fn terms_reject_malformed_hashes() {
+    let mut vector = fixture().vectors.remove(0);
+    let valid = vector.input.line_items_sha256.clone();
+    for bad in [
+        valid.trim_start_matches("0x").to_string(), // no 0x prefix
+        format!("0X{}", &valid[2..]),               // uppercase prefix
+        valid[..valid.len() - 1].to_string(),       // 63 hex chars
+        format!("{valid}0"),                        // 65 hex chars
+        format!("0x{}", "A".repeat(64)),            // uppercase hex
+        format!("0x{}", "g".repeat(64)),            // not hex
+        "0x".to_string(),
+        String::new(),
+    ] {
+        vector.input.line_items_sha256 = bad;
+        assert!(
+            canonical_json(&vector.input).is_err(),
+            "line_items_sha256 must reject {:?}",
+            vector.input.line_items_sha256
+        );
+    }
+
+    vector.input.line_items_sha256 = valid;
+    for bad in [
+        "0x1234".to_string(),
+        format!("0x{}", "A".repeat(64)),
+        format!("0x{}", "1".repeat(63)),
+    ] {
+        vector.input.assignment_agreement_sha256 = Some(bad);
+        assert!(
+            canonical_json(&vector.input).is_err(),
+            "assignment_agreement_sha256 must reject a malformed hash"
+        );
+    }
+    vector.input.assignment_agreement_sha256 = None;
+    assert!(canonical_json(&vector.input).is_ok());
+}
+
+#[test]
+fn terms_reject_malformed_due_dates() {
+    let mut vector = fixture().vectors.remove(0);
+    for bad in [
+        "2027-01-15",
+        "2027-01-15T00:00:00",
+        "2027-01-15T00:00:00+00:00",
+        "2027-01-15T00:00:00.000Z",
+        "2027-13-01T00:00:00Z",
+        "2027-00-01T00:00:00Z",
+        "2027-02-29T00:00:00Z",
+        "2027-01-32T00:00:00Z",
+        "2027-01-15T24:00:00Z",
+        "2027-01-15T00:60:00Z",
+        "2027-01-15T00:00:60Z",
+        "２０２７-01-15T00:00:00Z",
+    ] {
+        vector.input.due_date = bad.to_string();
+        assert!(
+            canonical_json(&vector.input).is_err(),
+            "due_date must reject {bad:?}"
+        );
+    }
+}
+
+#[test]
+fn terms_accept_valid_edge_dates() {
+    let mut vector = fixture().vectors.remove(0);
+    for good in [
+        "2024-02-29T00:00:00Z",
+        "2000-02-29T23:59:59Z",
+        "1970-01-01T00:00:00Z",
+        "9999-12-31T23:59:59Z",
+        "2027-01-15T00:00:00Z",
+    ] {
+        vector.input.due_date = good.to_string();
+        assert!(
+            canonical_json(&vector.input).is_ok(),
+            "due_date must accept {good:?}"
+        );
+    }
+}
