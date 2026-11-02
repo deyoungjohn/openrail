@@ -190,7 +190,15 @@ export class AuthStore {
     };
   }
 
+  private pruneChallenges(): void {
+    const now = this.clock();
+    for (const [nonce, challenge] of this.challenges) {
+      if (challenge.expiresAt <= now) this.challenges.delete(nonce);
+    }
+  }
+
   challenge(accountId: string, recipient: string): Challenge {
+    this.pruneChallenges();
     const nonce = randomBytes(32).toString("base64");
     const challenge: Challenge = {
       nonce,
@@ -208,6 +216,7 @@ export class AuthStore {
     verifier: Nep413Verifier,
     accessKey: AccessKeyLookup,
   ): Promise<{ sessionToken: string; accountId: string; expiresAt: string }> {
+    this.pruneChallenges();
     const challenge = this.challenges.get(input.nonce);
     if (challenge === undefined || challenge.expiresAt <= this.clock()) {
       throw new AuthError(401, "challenge_expired");

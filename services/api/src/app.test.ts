@@ -127,6 +127,25 @@ describe("invoice route", () => {
     expect((conflict.body as { error: { code: string } }).error.code).toBe("idempotency_key_reuse");
   });
 
+  it("requires a valid origin-chain refund address for a pay session", async () => {
+    const { app, secret } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    const missing = await app.handle(
+      request("POST", "/v1/pay/sessions", { token_id: "c-1", route_id: "R1" }, secret),
+    );
+    expect(missing.status).toBe(400);
+    expect((missing.body as { error: { code: string } }).error.code).toBe("invalid_refund_address");
+    const bad = await app.handle(
+      request(
+        "POST",
+        "/v1/pay/sessions",
+        { token_id: "c-1", route_id: "R1", refund_to: "0x123" },
+        secret,
+      ),
+    );
+    expect(bad.status).toBe(400);
+  });
+
   it("adds kind_rules to the claim view", async () => {
     const { app, secret } = harness();
     await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
@@ -160,7 +179,7 @@ describe("pay session route", () => {
       request(
         "POST",
         "/v1/pay/sessions",
-        { token_id: "c-1", route_id: "R1", refund_to: "0xpayer" },
+        { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) },
         secret,
       ),
     );

@@ -71,7 +71,11 @@ describe("quote service", () => {
       },
     });
 
-    const session = await instance.createSession({ tokenId: "c-1", routeId: "R1" });
+    const session = await instance.createSession({
+      tokenId: "c-1",
+      routeId: "R1",
+      refundTo: "0x" + "e".repeat(40),
+    });
     order.push("returned");
 
     expect(order).toEqual(["provider", "log_quote", "returned"]);
@@ -84,7 +88,7 @@ describe("quote service", () => {
       logger: { logQuote: async () => Promise.reject(new Error("chain")) },
     });
     const result = instance
-      .createSession({ tokenId: "c-1", routeId: "R1" })
+      .createSession({ tokenId: "c-1", routeId: "R1", refundTo: "0x" + "e".repeat(40) })
       .catch((error: unknown) => error);
     await expect(result).resolves.toBeInstanceOf(Error);
     expect((await result) as Error).toHaveProperty("message", "chain");
@@ -92,7 +96,9 @@ describe("quote service", () => {
 
   it("refuses an unknown route", async () => {
     const { instance } = service();
-    await expect(instance.createSession({ tokenId: "c-1", routeId: "R99" })).rejects.toMatchObject({
+    await expect(
+      instance.createSession({ tokenId: "c-1", routeId: "R99", refundTo: "0x" + "e".repeat(40) }),
+    ).rejects.toMatchObject({
       code: "unknown_route",
       status: 400,
     });
@@ -100,8 +106,18 @@ describe("quote service", () => {
 
   it("uses 30 bps for EXACT_OUTPUT and the origin decimals for FLEX_INPUT", async () => {
     const { instance, quote } = service();
-    await instance.createSession({ tokenId: "c-1", routeId: "R9", amountUsd: "12.50" });
-    await instance.createSession({ tokenId: "c-1", routeId: "R1", amountUsd: "12.50" });
+    await instance.createSession({
+      tokenId: "c-1",
+      routeId: "R9",
+      amountUsd: "12.50",
+      refundTo: "0x" + "e".repeat(40),
+    });
+    await instance.createSession({
+      tokenId: "c-1",
+      routeId: "R1",
+      amountUsd: "12.50",
+      refundTo: "0x" + "e".repeat(40),
+    });
     const [exact, flex] = quote.mock.calls;
     expect(exact?.[0].swapType).toBe("EXACT_OUTPUT");
     expect(exact?.[0].slippageTolerance).toBe(30);
@@ -114,6 +130,30 @@ describe("quote service", () => {
   it("never reuses an expired quote", () => {
     expect(isQuoteExpired("2026-11-02T09:59:59Z", clock())).toBe(true);
     expect(isQuoteExpired("2026-11-02T10:00:01Z", clock())).toBe(false);
+  });
+
+  it("carries exact outstanding base units and never floors to cents", async () => {
+    const subCent = { ...claim, outstanding: "1234567" };
+    const { instance, quote } = service({ claim: async () => subCent });
+    const session = await instance.createSession({
+      tokenId: "c-1",
+      routeId: "R1",
+      refundTo: "0x" + "e".repeat(40),
+    });
+    expect(quote.mock.calls[0]?.[0].amount).toBe("1234567");
+    expect(session.amount_in).toBe("1234567");
+    expect(session.amount_usd).toBe("1.23");
+  });
+
+  it("scales outstanding exactly for an 18-decimal USDC origin", async () => {
+    const subCent = { ...claim, outstanding: "1234567" };
+    const { instance, quote } = service({ claim: async () => subCent });
+    await instance.createSession({
+      tokenId: "c-1",
+      routeId: "R6",
+      refundTo: "0x" + "e".repeat(40),
+    });
+    expect(quote.mock.calls[0]?.[0].amount).toBe("1234567000000000000");
   });
 
   it("carries the quote error type", () => {

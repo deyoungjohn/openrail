@@ -1,6 +1,13 @@
 /** Core API implementation (S1b). Dependencies are ports so tests stay offline. */
 import { randomBytes } from "node:crypto";
-import { allowedRoutes, loadRoutes, usdToBaseUnits, type RouteFile } from "@openrail/shared";
+import {
+  allowedRoutes,
+  getRoute,
+  loadRoutes,
+  usdToBaseUnits,
+  type RouteFile,
+} from "@openrail/shared";
+import { AddressError, validateRefundAddress } from "./addresses.js";
 import {
   AuthError,
   AuthStore,
@@ -614,6 +621,15 @@ export class ApiApp {
         if (body.token_id === undefined || body.route_id === undefined) {
           throw new ApiError(400, "invalid_request", "token_id and route_id required");
         }
+        if (body.refund_to === undefined || body.refund_to === "") {
+          throw new ApiError(400, "invalid_refund_address");
+        }
+        try {
+          validateRefundAddress(getRoute(body.route_id, this.routes).originChain, body.refund_to);
+        } catch (error) {
+          if (error instanceof AddressError) throw new ApiError(400, error.code, error.message);
+          throw new ApiError(400, "unknown_route");
+        }
         const session = await this.quotes.createSession({
           tokenId: body.token_id,
           routeId: body.route_id,
@@ -628,7 +644,7 @@ export class ApiApp {
           deposit_address: session.deposit_address,
           deadline_requested: session.deadline_requested,
           deadline: session.deadline,
-          refund_to: body.refund_to ?? "",
+          refund_to: body.refund_to,
           route_id: session.route_id,
           expired: false,
         });

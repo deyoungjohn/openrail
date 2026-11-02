@@ -1,5 +1,6 @@
 /** Pay-session quotes: allow-list, 1Click quote, then log_quote before the address. */
-import { assertAllowedRoute, usdToBaseUnits, type RouteFile } from "@openrail/shared";
+import { randomBytes } from "node:crypto";
+import { assertAllowedRoute, type RouteFile } from "@openrail/shared";
 
 export interface KindRules {
   ack_required_for_sale: boolean;
@@ -56,7 +57,7 @@ export interface PaySessionInput {
   tokenId: string;
   routeId: string;
   amountUsd?: string;
-  refundTo?: string;
+  refundTo: string;
   deadlineSeconds?: number;
 }
 
@@ -88,14 +89,34 @@ export interface QuoteServiceDeps {
 }
 
 function id(prefix: string): string {
-  return `${prefix}_${Math.random().toString(36).slice(2, 12)}`;
+  return `${prefix}_${randomBytes(9).toString("hex")}`;
 }
 
-function money(amount: string): string {
-  const value = BigInt(amount);
-  const whole = value / 1_000_000n;
-  const fraction = (value % 1_000_000n).toString().padStart(6, "0").slice(0, 2);
-  return `${whole}.${fraction}`;
+/** Parse a USD string to base units without floating point. */
+export function parseUsdToBaseUnits(value: string, decimals: number): bigint {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
+  if (match === null)
+    throw new QuoteError(400, "invalid_amount", "amount must be a decimal string");
+  const whole = BigInt(match[1] ?? "0");
+  const fractionText = match[2] ?? "";
+  if (fractionText.length > decimals) {
+    throw new QuoteError(400, "invalid_amount", "too many decimal places");
+  }
+  const fraction = BigInt((fractionText + "0".repeat(decimals)).slice(0, decimals) || "0");
+  return whole * 10n ** BigInt(decimals) + fraction;
+}
+
+/** Display-only USD from 6-decimal base units; value math never uses this. */
+export function formatUsdFromBaseUnits(baseUnits: bigint): string {
+  const whole = baseUnits / 1_000_000n;
+  const fraction = (baseUnits % 1_000_000n) / 10_000n;
+  return `${whole}.${fraction.toString().padStart(2, "0")}`;
+}
+
+/** Outstanding is USDC (6 decimals); convert exactly to an origin asset's decimals. */
+export function usdcToOriginBaseUnits(outstanding: bigint, originDecimals: number): bigint {
+  if (originDecimals >= 6) return outstanding * 10n ** BigInt(originDecimals - 6);
+  return outstanding / 10n ** BigInt(6 - originDecimals);
 }
 
 export class QuoteError extends Error {
@@ -130,24 +151,32 @@ export class QuoteService {
     } catch {
       throw new QuoteError(400, "unknown_route", `route ${input.routeId} is not allow-listed`);
     }
+    if (input.refundTo === "") throw new QuoteError(400, "invalid_refund_address");
     const claim = await this.deps.claim(input.tokenId);
     const now = this.clock();
     const deadlineSeconds = input.deadlineSeconds ?? claim.kindRules.quote_deadline ?? 3600;
     const deadlineRequested = Math.floor(now.getTime() / 1000) + deadlineSeconds;
     const requestedDeadline = new Date(deadlineRequested * 1000).toISOString();
 
-    const amountUsd = input.amountUsd ?? money(claim.outstanding);
-    const amount = usdToBaseUnits(
-      Number(amountUsd),
-      route.swapType === "EXACT_OUTPUT" ? 6 : route.originDecimals,
-    );
+    const decimals = route.swapType === "EXACT_OUTPUT" ? 6 : route.originDecimals;
+    const outstanding = BigInt(claim.outstanding);
+    const amountBaseUnits =
+      input.amountUsd !== undefined
+        ? parseUsdToBaseUnits(input.amountUsd, decimals)
+        : route.swapType === "EXACT_OUTPUT"
+          ? outstanding
+          : usdcToOriginBaseUnits(outstanding, route.originDecimals);
+    const amountUsd =
+      input.amountUsd !== undefined
+        ? formatUsdFromBaseUnits(parseUsdToBaseUnits(input.amountUsd, 6))
+        : formatUsdFromBaseUnits(outstanding);
     const provider = await this.deps.provider.quote({
       originAsset: route.originAssetId,
       destinationAsset: route.destinationAssetId,
-      amount: amount.toString(),
+      amount: amountBaseUnits.toString(),
       swapType: route.swapType,
       slippageTolerance: route.swapType === "EXACT_OUTPUT" ? 30 : 0,
-      refundTo: input.refundTo ?? "",
+      refundTo: input.refundTo,
       recipient: claim.claimAccount,
       deadline: requestedDeadline,
     });
@@ -162,7 +191,7 @@ export class QuoteService {
       quoteId,
       depositAddress: provider.depositAddress,
       deadlineRequested,
-      refundTo: input.refundTo ?? "",
+      refundTo: input.refundTo,
       routeId: route.id,
     });
 
