@@ -11,11 +11,14 @@ for (const scheme of ["light", "dark"] as const) {
     for (const [slug, path] of [
       ["app", "/app"],
       ["gallery", "/_dev/components"],
+      ["ack", "/ack/c-2"],
+      ["transfer", "/app/invoices/c-3/transfer"],
     ] as const) {
       test(`${slug} ${scheme} ${name}`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme: scheme });
         await page.goto(path);
+        await page.getByRole("heading", { level: 1 }).waitFor(); // fixture data has loaded
         await page.waitForTimeout(600); // theme toggle mounts and transitions settle
         await page.screenshot({
           path: `.next/e2e-screenshots/${slug}-${scheme}-${name}.png`,
