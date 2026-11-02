@@ -8,6 +8,7 @@ test.skip(!process.env.SCREENSHOTS, "set SCREENSHOTS=1");
 const DETAIL = fixture("invoices.get");
 const handlers = {
   "GET /v1/business": { body: fixture("business.get") },
+  "GET /v1/business/storage_credit": { body: fixture("business.storage_credit") },
   "GET /v1/invoices": { body: fixture("invoices.list") },
   "GET /v1/invoices/{id}": {
     body: {

@@ -9,10 +9,14 @@ import { ApiError } from "@openrail/api-client";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { formatUsd } from "@/lib/format";
+import { formatNear, storageCreditLow } from "@/lib/near-amount";
+import { useActions } from "@/wallet/actions";
 import { invoiceTotalCents, lineCents, validateIssue, type IssueForm } from "@/lib/invoice-model";
 import { useAsync } from "@/lib/use-async";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import { Skeleton } from "../ui/state";
 import { Input, Select } from "../ui/input";
 import { Modal } from "../ui/modal";
 
@@ -63,6 +67,67 @@ function Preview({
         <p className="caption">{t.previewPay}</p>
       </div>
     </section>
+  );
+}
+
+function StorageCredit() {
+  const t = copy.issue;
+  const actions = useActions();
+  const [credit, reload] = useAsync(() => dashClient.business.storageCredit(), []);
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  const balance = credit.state === "ready" ? BigInt(credit.data.balance) : null;
+  const low = balance !== null && storageCreditLow(balance);
+
+  return (
+    <Card title={t.creditTitle} className="space-y-3">
+      {credit.state === "loading" ? (
+        <Skeleton className="h-6 w-32" />
+      ) : credit.state === "error" ? (
+        <p className="caption">{t.creditUnknown}</p>
+      ) : (
+        <>
+          <p className="tabular text-[20px] leading-7 font-bold">{formatNear(balance!)} NEAR</p>
+          <p className="caption">{t.creditHelp}</p>
+          {low ? (
+            <p role="status" className="text-warning text-[14px]">
+              {t.creditLow}
+            </p>
+          ) : null}
+          {low || state === "sent" ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={state === "sending"}
+                onClick={async () => {
+                  if (credit.state !== "ready") return;
+                  setState("sending");
+                  try {
+                    await actions.depositStorageCredit(credit.data.contract_id, credit.data.amount);
+                    setState("sent");
+                    reload();
+                  } catch {
+                    setState("failed");
+                  }
+                }}
+              >
+                {t.creditDeposit}
+              </Button>
+              {state === "sent" ? (
+                <span role="status" className="text-[14px]">
+                  {t.creditSent}
+                </span>
+              ) : null}
+              {state === "failed" ? (
+                <span role="alert" className="text-danger-text text-[14px]">
+                  {t.creditFailed}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -370,7 +435,10 @@ export function IssueScreen() {
           </Button>
         </form>
 
-        <Preview form={form} issuer={issuer} total={total} />
+        <div className="space-y-6">
+          <StorageCredit />
+          <Preview form={form} issuer={issuer} total={total} />
+        </div>
       </div>
 
       <Modal

@@ -264,12 +264,12 @@ test.describe("issue form", () => {
     await page.goto("/app/invoices/new");
     const credit = page.getByRole("region", { name: "Storage credit" });
     await expect(credit).toContainText("0 NEAR");
-    await expect(credit).toContainText("not enough storage credit");
+    await expect(credit).toContainText("don't have enough storage credit");
     balance = fixture("business.storage_credit").amount;
     await credit.getByRole("button", { name: "Deposit storage credit" }).click();
     await expect(credit.getByText("Deposit sent")).toBeVisible();
     await expect(credit).toContainText("1 NEAR");
-    await expect(credit).not.toContainText("not enough storage credit");
+    await expect(credit).not.toContainText("don't have enough storage credit");
   });
 
   test("an unreadable credit does not block the form", async ({ page }) => {
