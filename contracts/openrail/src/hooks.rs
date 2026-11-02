@@ -313,7 +313,7 @@ pub fn dispatch_kind_rules_with(hooks: &[&dyn Hook], kind: u8) -> KindRules {
 /// Coordinates with ag1's `gen-modules.ts` which will emit `pub fn registered() -> Vec<&'static dyn Hook>`
 /// in `modules/mod.rs`.
 pub fn registered_hooks() -> Vec<&'static dyn Hook> {
-    Vec::new()
+    crate::modules::registered()
 }
 
 pub fn dispatch_check_transfer(claim: &Claim, receiver: &AccountId) -> Result<(), Refusal> {

@@ -77,6 +77,7 @@ function serviceFile(svc: string, ids: string[]): string {
 function modRs(ids: string[]): string {
   const mods = ids.flatMap((id) => [`#[cfg(feature = "${id}")]`, `pub mod ${id};`]);
   const items = ids.flatMap((id) => [`    #[cfg(feature = "${id}")]`, `    "${id}",`]);
+  const hookItems = ids.flatMap((id) => [`    #[cfg(feature = "${id}")]`, `    &${id}::HOOK,`]);
   return [
     `// ${HEADER}`,
     ...mods,
@@ -85,6 +86,17 @@ function modRs(ids: string[]): string {
     ...(items.length === 0
       ? ["pub const ENABLED: &[&str] = &[];"]
       : ["pub const ENABLED: &[&str] = &[", ...items, "];"]),
+    "",
+    "/// Registered hook implementations for enabled modules.",
+    ...(hookItems.length === 0
+      ? ["pub fn registered() -> Vec<&'static dyn crate::hooks::Hook> {", "    Vec::new()", "}"]
+      : [
+          "pub fn registered() -> Vec<&'static dyn crate::hooks::Hook> {",
+          "    vec![",
+          ...hookItems,
+          "    ]",
+          "}",
+        ]),
     "",
   ].join("\n");
 }

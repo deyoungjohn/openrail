@@ -67,15 +67,19 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-function trackedFiles(root: string): string[] {
+function trackedFiles(root: string): { ok: boolean; files: string[]; error?: string } {
   const r = spawnSync("git", ["ls-files"], { cwd: root, encoding: "utf8" });
   if (r.status === 0 && typeof r.stdout === "string") {
-    return r.stdout
-      .split("\n")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    return {
+      ok: true,
+      files: r.stdout
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+    };
   }
-  return [];
+  const err = r.error ? r.error.message : r.stderr?.trim() || `exit code ${r.status}`;
+  return { ok: false, files: [], error: err };
 }
 
 function isBinaryFile(p: string): boolean {
@@ -126,18 +130,35 @@ export function runLeakCheck(
   if (terms.length === 0) return missing("the keyword file has no terms");
   const matchers = terms.map(matcher);
 
-  const messages: string[] = [];
+  const warnings: string[] = [];
+  const leaks: string[] = [];
   const scan = (label: string, lines: string[], withLine: boolean) => {
     lines.forEach((l, i) => {
       if (matchers.some((m) => m(l))) {
-        messages.push(`leak: ${label}${withLine ? `:${i + 1}` : ""}`);
+        leaks.push(`leak: ${label}${withLine ? `:${i + 1}` : ""}`);
       }
     });
   };
 
   const scanned = new Set<string>();
 
-  const tracked = trackedFiles(root);
+  const trackedResult = trackedFiles(root);
+  if (!trackedResult.ok) {
+    if (ci) {
+      return {
+        code: 1,
+        messages: [
+          `leak-check FAILED (fail closed in CI): git ls-files failed: ${trackedResult.error ?? "unknown error"}`,
+        ],
+      };
+    } else {
+      warnings.push(
+        `leak-check: warning: git ls-files failed: ${trackedResult.error ?? "unknown error"}`,
+      );
+    }
+  }
+  const tracked = trackedResult.files;
+
   for (const rel of tracked) {
     if (rel === "pnpm-lock.yaml" || rel.startsWith("scripts/__tests__/")) {
       continue;
@@ -175,13 +196,17 @@ export function runLeakCheck(
     scan("services/cli (--help output)", `${r.stdout ?? ""}\n${r.stderr ?? ""}`.split("\n"), true);
   }
 
-  if (messages.length > 0) {
+  if (leaks.length > 0) {
     return {
       code: 1,
-      messages: [...messages, `leak-check FAILED: ${messages.length} hit(s) (terms not shown)`],
+      messages: [
+        ...warnings,
+        ...leaks,
+        `leak-check FAILED: ${leaks.length} hit(s) (terms not shown)`,
+      ],
     };
   }
-  return { code: 0, messages: ["leak-check: OK"] };
+  return { code: 0, messages: [...warnings, "leak-check: OK"] };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
