@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatUsd, middleTruncate, usdParts } from "./format";
+import { formatDate, formatUsd, formatUsdc, middleTruncate, usdParts } from "./format";
 
 describe("formatUsd", () => {
   it("groups thousands and always shows two decimals", () => {
@@ -30,5 +30,16 @@ describe("middleTruncate", () => {
 
   it("leaves short values alone", () => {
     expect(middleTruncate("alice.near")).toBe("alice.near");
+  });
+});
+
+describe("formatUsdc and formatDate", () => {
+  it("shows whole cents as dollars and never hides sub-cent USDC", () => {
+    expect(formatUsdc(1_250_000_000n)).toBe("$1,250.00");
+    expect(formatUsdc(1_000_137n)).toBe("$1.000137");
+  });
+
+  it("formats unix seconds in UTC", () => {
+    expect(formatDate(1_800_086_400)).toBe("Jan 16, 2027");
   });
 });
