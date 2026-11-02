@@ -6,6 +6,8 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto("/_dev/components");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    // Let the 200 ms theme and entrance transitions finish so axe reads settled colours.
+    await page.waitForTimeout(400);
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
       .analyze();

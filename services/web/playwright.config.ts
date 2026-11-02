@@ -4,12 +4,15 @@ const PORT = 3100;
 
 export default defineConfig({
   testDir: "e2e",
-  outputDir: "test-results",
+  // Under .next so git, eslint and prettier already ignore it.
+  outputDir: ".next/e2e-results",
   fullyParallel: true,
   reporter: [["list"]],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     viewport: { width: 360, height: 800 },
+    // The pre-installed browser is full Chromium, not the headless shell.
+    channel: "chromium",
   },
   webServer: {
     command: `next start -p ${PORT}`,

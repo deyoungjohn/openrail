@@ -1,6 +1,6 @@
 import { test } from "@playwright/test";
 
-// Run with SCREENSHOTS=1 to write the PR images to screenshots/.
+// Run with SCREENSHOTS=1 to write the PR images to .next/e2e-screenshots/.
 test.skip(!process.env.SCREENSHOTS, "set SCREENSHOTS=1");
 
 for (const scheme of ["light", "dark"] as const) {
@@ -17,7 +17,7 @@ for (const scheme of ["light", "dark"] as const) {
         await page.emulateMedia({ colorScheme: scheme });
         await page.goto(path);
         await page.screenshot({
-          path: `screenshots/${slug}-${scheme}-${name}.png`,
+          path: `.next/e2e-screenshots/${slug}-${scheme}-${name}.png`,
           fullPage: true,
         });
       });

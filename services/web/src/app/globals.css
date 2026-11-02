@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/* Tokens: DESIGN.md sections 2 to 5. Light is :root, dark is [data-theme="dark"]. */
+:root {
+  color-scheme: light;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f7;
+  --sidebar: #ffffff;
+  --border: #e4e7ee;
+  --text: #0f172a;
+  /* DESIGN.md says #64748B (4.76:1 on white), but that is 4.28:1 on --surface-2 and 4.48:1 on --bg. */
+  --text-muted: #5b6b82;
+  --accent: #3f46fe;
+  --accent-hover: #2e35e0;
+  --accent-soft: #ecedff;
+  --on-accent: #ffffff;
+  --mint: #9ffada;
+  --on-mint: #0b0d17;
+  --success: #0e9f6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  /* Text-safe variants of success and danger on tinted chip backgrounds (>= 4.5:1 on --surface-2). */
+  --success-text: #047857;
+  --danger-text: #b91c1c;
+  --on-danger: #ffffff;
+  --info: #2563eb;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-pop: 0 12px 32px rgb(15 23 42 / 0.12);
+  --card-highlight: 0 0 #0000;
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 320ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0d17;
+  --surface: #12152a;
+  --surface-2: #181c35;
+  --sidebar: #0e1124;
+  --border: #262b4a;
+  --text: #e8eaf6;
+  --text-muted: #94a3b8;
+  --accent: #7c82ff;
+  --accent-hover: #959aff;
+  --accent-soft: #1d2150;
+  --on-accent: #0b0d17;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --success-text: #34d399;
+  --danger-text: #f87171;
+  --on-danger: #0b0d17;
+  --info: #60a5fa;
+  --shadow-card: 0 0 #0000;
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.5);
+  --card-highlight: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sidebar: var(--sidebar);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-mint: var(--mint);
+  --color-on-mint: var(--on-mint);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-success-text: var(--success-text);
+  --color-danger-text: var(--danger-text);
+  --color-on-danger: var(--on-danger);
+  --color-info: var(--info);
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --radius-control: 10px;
+  --radius-card: 16px;
+  --radius-feature: 24px;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 24px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Caption: weight 300, muted, 13px minimum in dark (DESIGN.md section 3). */
+.caption {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 300;
+  color: var(--text-muted);
+}
+[data-theme="dark"] .caption {
+  font-size: 13px;
+}
+
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card), var(--card-highlight);
+  transition:
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+@keyframes skeleton {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+.skeleton {
+  background: var(--surface-2);
+  border-radius: 8px;
+  animation: skeleton 1.4s var(--ease) infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.route-rise {
+  animation: rise var(--dur-slow) var(--ease) both;
+}
+
+dialog.overlay {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+}
+dialog.overlay::backdrop {
+  background: rgb(11 13 23 / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
