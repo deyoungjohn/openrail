@@ -6,5 +6,8 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "vitest run --config ../../vitest.config.ts --root ."
+  },
+  "dependencies": {
+    "near-api-js": "7.4.0"
   }
 }
