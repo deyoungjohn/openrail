@@ -297,7 +297,7 @@ export interface PaySessionRequest {
   token_id: string;
   route_id: string;
   amount_usd?: string;
-  refund_to: string;
+  refund_to?: string;
   deadline_seconds?: number;
 }
 

@@ -1183,7 +1183,7 @@
       },
       "PaySessionRequest": {
         "type": "object",
-        "required": ["token_id", "route_id", "refund_to"],
+        "required": ["token_id", "route_id"],
         "properties": {
           "token_id": {
             "type": "string"
@@ -1197,7 +1197,7 @@
           },
           "refund_to": {
             "type": "string",
-            "description": "Payer refund address on the route's origin chain; validated per chain."
+            "description": "Payer refund address on the route's origin chain; the server requires and validates it per chain (EVM checksum, Solana 32-byte base58, NEAR account)."
           },
           "deadline_seconds": {
             "type": "integer",
