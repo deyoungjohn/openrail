@@ -46,6 +46,7 @@ impl Mock {
     }
 
     /// NEP-141-like receiver. Echoes the arguments so the caller can assert them.
+    #[payable]
     pub fn mt_transfer(
         &mut self,
         receiver_id: AccountId,
@@ -69,6 +70,7 @@ impl Mock {
     }
 
     /// MPC-signer-like receiver. Echoes the request so the caller can assert it.
+    #[payable]
     pub fn sign(&mut self, request: Value) -> Value {
         self.last_call = Some(
             json!({ "method": "sign", "request": request }).to_string(),
