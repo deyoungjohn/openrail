@@ -229,4 +229,13 @@ export const copy = {
     refundNote: (a: string) => `If anything goes wrong, your money is returned to ${a}.`,
     refundNone: "Connect the wallet you pay from so any refund goes back to it.",
   },
+  auth: {
+    title: "Sign in to Openrail",
+    body: "Sign in with your NEAR account. You sign one message in your wallet. It costs nothing, and you stay signed in on this device for a week.",
+    failed: "We couldn't sign you in. Nothing was changed. Check your wallet and try again.",
+    errorTitle: "We couldn't check your sign-in",
+    errorBody:
+      "We can't reach the server right now. Your session is not lost. Try again in a moment.",
+    signedInAs: "Signed in as",
+  },
 } as const;

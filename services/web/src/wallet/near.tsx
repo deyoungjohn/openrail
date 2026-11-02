@@ -8,6 +8,7 @@ import {
 import { setupModal, type WalletSelectorModal } from "@near-wallet-selector/modal-ui";
 import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import "@near-wallet-selector/modal-ui/styles.css";
+import type { ChallengeToSign, SignedChallenge } from "../lib/auth";
 import {
   createContext,
   useCallback,
@@ -27,6 +28,8 @@ interface NearState {
   signOut: () => Promise<void>;
   /** One FunctionCall transaction, signed by the connected NEAR wallet. */
   call: (c: NearCall) => Promise<void>;
+  /** NEP-413 signature of the sign-in challenge. Not every wallet supports it. */
+  signMessage: (c: ChallengeToSign) => Promise<SignedChallenge>;
 }
 
 export interface NearCall {
@@ -100,9 +103,28 @@ export function NearProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const signMessage = useCallback(async (c: ChallengeToSign): Promise<SignedChallenge> => {
+    const s = selector.current;
+    if (!s) throw new Error("WALLET_NOT_READY");
+    const wallet = await s.wallet();
+    const nonce = Uint8Array.from(atob(c.nonce), (ch) => ch.charCodeAt(0));
+    const signed = await wallet.signMessage({
+      message: c.message,
+      recipient: c.recipient,
+      nonce: nonce as unknown as Buffer,
+    });
+    // Browser wallets that redirect for the signature return nothing here.
+    if (!signed) throw new Error("WALLET_NO_SIGNATURE");
+    return {
+      accountId: signed.accountId,
+      publicKey: signed.publicKey,
+      signature: signed.signature,
+    };
+  }, []);
+
   const value = useMemo(
-    () => ({ accountId, ready, error, signIn, signOut, call }),
-    [accountId, ready, error, signIn, signOut, call],
+    () => ({ accountId, ready, error, signIn, signOut, call, signMessage }),
+    [accountId, ready, error, signIn, signOut, call, signMessage],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
