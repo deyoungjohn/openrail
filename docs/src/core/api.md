@@ -22,8 +22,9 @@ contract only.
 ## Auth and idempotency
 
 - `Authorization: Bearer or_sk_live_...` is the server secret key.
-- `Authorization: Bearer or_pk_live_...` is the browser key: pay-session creation
-  and `GET /v1/routes` only.
+- `Authorization: Bearer or_pk_live_...` is the browser key: pay-session creation only.
+- `Authorization: Bearer or_sess_...` is a **dashboard session** from NEP-413 sign-in
+  (12 h, scoped to one business account).
 - Every `POST` accepts `Idempotency-Key`. The same key with the same body returns
   the first response; the same key with another body returns `409`.
 - Public hosted-page reads (`/v1/pay/sessions/{id}`, `/v1/pay/claims/{token_id}`,
@@ -56,6 +57,35 @@ The fixtures for `400`, `401`, `404` and `409` are in `fixtures/api/`.
 | `POST` | `/v1/webhook_endpoints`      | Register a webhook (secret shown once).                       |
 | `GET`  | `/v1/events`                 | Indexed events.                                               |
 | `GET`  | `/v1/routes`                 | Allow-listed chains and assets.                               |
+
+## Dashboard sign-in
+
+1. `POST /v1/auth/challenge {account_id}` → `{nonce, message, recipient}`.
+2. The NEAR wallet signs the NEP-413 `message` with that account's key.
+3. `POST /v1/auth/verify {account_id, public_key, signature, nonce}` →
+   `{session_token: "or_sess_...", account_id, expires_at}`.
+
+→ send the session token as `Authorization: Bearer or_sess_...` on dashboard calls.
+The server checks the signature and that the public key belongs to the account.
+
+## Developers, business and reporting
+
+| Method       | Path                                     | Purpose                                                                                    |
+| ------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `GET`/`POST` | `/v1/api_keys`                           | List keys, or create one (secret shown once).                                              |
+| `POST`       | `/v1/api_keys/{id}/rotate`               | Rotate; the old key stops working.                                                         |
+| `DELETE`     | `/v1/api_keys/{id}`                      | Revoke a key.                                                                              |
+| `GET`/`POST` | `/v1/webhook_endpoints`                  | List endpoints or create one (secret shown once).                                          |
+| `DELETE`     | `/v1/webhook_endpoints/{id}`             | Delete an endpoint.                                                                        |
+| `POST`       | `/v1/webhook_endpoints/{id}/test`        | Send a test event.                                                                         |
+| `GET`        | `/v1/webhook_endpoints/{id}/deliveries`  | Delivery log with attempts and status codes.                                               |
+| `GET`/`PUT`  | `/v1/business`                           | Business profile: legal name, payout account, contact.                                     |
+| `GET`        | `/v1/business/storage_credit`            | Contract balance plus the account and amount for the user's `deposit_storage_credit` call. |
+| `GET`        | `/v1/statements?from&to&format=csv\|pdf` | Statement as a base64 envelope; totals reconcile with `claim()`.                           |
+| `GET`        | `/v1/invoices/{id}/pdf`                  | Invoice PDF as a base64 envelope.                                                          |
+| `GET`        | `/v1/invoices/{id}/open_quotes`          | Open quotes from the payment log; never reuse an expired one.                              |
+| `POST`       | `/v1/cashout/quote`                      | Route cost and the 1Click deposit address for the holder's `mt_transfer`.                  |
+| `GET`        | `/v1/receipts/{booking_tx_hash}`         | Public receipt built from the `booked` event (no key).                                     |
 
 ## Hosted-page routes
 
