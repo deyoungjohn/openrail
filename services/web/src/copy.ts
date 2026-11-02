@@ -74,6 +74,18 @@ export const copy = {
   },
   countdown: { expired: "Expired", left: "left" },
   qr: { copy: "Copy address", amount: "Amount", address: "Send to" },
+  transfer: {
+    // Plain words for the contract's transfer rules (blueprint 2.4). The number stays visible.
+    rules: {
+      1: "This invoice is busy because a payment is being processed. Try again in a minute.",
+      2: "Only invoices that are unpaid or partly paid can be sold.",
+      3: "The client hasn't accepted this invoice yet, so it can't be sold.",
+      4: "Attach the signed assignment document. Its fingerprint is saved with the sale.",
+      5: "You can't sell an invoice to its own payment account.",
+      7: "This kind of invoice can't be sold.",
+      badAccount: "Enter a valid NEAR account, like buyer.near.",
+    },
+  },
   toast: { dismiss: "Dismiss" },
   modal: { close: "Close" },
 } as const;
