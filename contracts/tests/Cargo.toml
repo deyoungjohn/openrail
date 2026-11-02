@@ -1,0 +1,20 @@
+[package]
+name = "openrail-tests"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+near-workspaces = "=0.24.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+near-sdk = { version = "=5.30.0", features = ["unstable", "unit-testing"] }
+openrail = { path = "../openrail" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
