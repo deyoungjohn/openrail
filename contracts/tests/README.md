@@ -62,6 +62,12 @@ async fn example_flow() -> Result<()> {
 }
 ```
 
+## Reconcile Gas Budget (Blueprint 2.5)
+
+Calling `reconcile(token_id)` requires the caller to attach at least 250 Tgas (the watcher attaches 250 Tgas by default). This covers:
+- `intents.near.mt_batch_balance_of`: 10 Tgas.
+- `on_balances` callback: 220 Tgas, which performs balance delta arithmetic, anomaly detection, hook dispatching, up to 6 keyless vault forwards (`forward(token_id, amount, receiver_id, gas_tgas)` at 16 Tgas outer / 12 Tgas inner each), and `on_distributed` (10 Tgas).
+
 ## Running Tests
 
 ```bash

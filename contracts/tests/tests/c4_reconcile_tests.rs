@@ -689,3 +689,219 @@ async fn test_c4_mutation_break_5_falling_balance_anomaly_delta_zero() -> Result
 
     Ok(())
 }
+
+/// 13. Multi-asset leg allocation (60/40 split):
+/// Tests payment spread across two settlement assets (60 USDC on Asset A, 40 USDC on Asset B).
+/// Verifies that legs are allocated by largest delta first, splitting legs across assets
+/// as capacity runs out, so that neither forward exceeds the asset's available delta.
+#[tokio::test]
+async fn test_c4_multi_asset_split_legs_60_40() -> Result<()> {
+    let env = Env::new().await?;
+
+    let asset_a = USDC_TOKEN_ID;
+    let asset_b = "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near";
+
+    let amount_due = 100_000_000u128; // $100.00
+    let issue_res = env
+        .issue_claim(&env.alice, 0, amount_due, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+
+    // Deposit 60 on Asset A and 40 on Asset B
+    let _ = env.fund_claim("c-1", 60_000_000, Some(asset_a)).await?;
+    let _ = env.fund_claim("c-1", 40_000_000, Some(asset_b)).await?;
+
+    let rec_res = env
+        .watcher
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_res.is_success(), "Reconcile must succeed");
+
+    let cv_opt: Option<ClaimView> = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    let cv = cv_opt.expect("claim c-1 must exist");
+
+    assert_eq!(cv.status, Status::Paid, "Claim must transition to Paid");
+    assert_eq!(cv.booked_total.0, 100_000_000, "Booked total must be 100");
+    assert_eq!(
+        cv.fee_total.0, 250_000,
+        "Fee total must be 250,000 (25 bps)"
+    );
+    assert_eq!(
+        cv.distributed_total.0, 99_750_000,
+        "Distributed total must be 99,750,000"
+    );
+    assert!(
+        cv.undistributed.is_empty(),
+        "All legs forwarded successfully without getting stuck in undistributed"
+    );
+
+    let events = openrail_tests::decode_events(&rec_res);
+    let booked_event = events
+        .iter()
+        .find(|e| e.get("event").and_then(|v| v.as_str()) == Some("booked"))
+        .expect("booked event must be emitted");
+    let data = &booked_event["data"][0];
+    let legs = data["legs"].as_array().expect("legs array");
+
+    // 3 split legs:
+    // 1. holder, 60_000_000, Asset A
+    // 2. holder, 39_750_000, Asset B
+    // 3. fee, 250_000, Asset B
+    assert_eq!(legs.len(), 3, "Legs must be split into 3 concrete legs");
+    let leg0 = legs[0].get("Pay").unwrap_or(&legs[0]);
+    let leg1 = legs[1].get("Pay").unwrap_or(&legs[1]);
+    let leg2 = legs[2].get("Pay").unwrap_or(&legs[2]);
+    assert_eq!(leg0["asset"], asset_a);
+    assert_eq!(leg0["amount"], "60000000");
+    assert_eq!(leg1["asset"], asset_b);
+    assert_eq!(leg1["amount"], "39750000");
+    assert_eq!(leg2["asset"], asset_b);
+    assert_eq!(leg2["amount"], "250000");
+
+    Ok(())
+}
+
+/// 14. Multi-asset leg allocation (40/60 split):
+/// Tests payment spread with larger delta on Asset B (40 on Asset A, 60 on Asset B).
+/// Verifies that Asset B is allocated first (largest delta first) and split correctly.
+#[tokio::test]
+async fn test_c4_multi_asset_split_legs_40_60() -> Result<()> {
+    let env = Env::new().await?;
+
+    let asset_a = USDC_TOKEN_ID;
+    let asset_b = "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near";
+
+    let amount_due = 100_000_000u128; // $100.00
+    let issue_res = env
+        .issue_claim(&env.alice, 0, amount_due, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+
+    // Deposit 40 on Asset A and 60 on Asset B
+    let _ = env.fund_claim("c-1", 40_000_000, Some(asset_a)).await?;
+    let _ = env.fund_claim("c-1", 60_000_000, Some(asset_b)).await?;
+
+    let rec_res = env
+        .watcher
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_res.is_success(), "Reconcile must succeed");
+
+    let cv_opt: Option<ClaimView> = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    let cv = cv_opt.expect("claim c-1 must exist");
+
+    assert_eq!(cv.status, Status::Paid, "Claim must transition to Paid");
+    assert_eq!(cv.booked_total.0, 100_000_000, "Booked total must be 100");
+    assert_eq!(
+        cv.fee_total.0, 250_000,
+        "Fee total must be 250,000 (25 bps)"
+    );
+    assert_eq!(
+        cv.distributed_total.0, 99_750_000,
+        "Distributed total must be 99,750,000"
+    );
+    assert!(
+        cv.undistributed.is_empty(),
+        "All legs forwarded successfully without getting stuck in undistributed"
+    );
+
+    let events = openrail_tests::decode_events(&rec_res);
+    let booked_event = events
+        .iter()
+        .find(|e| e.get("event").and_then(|v| v.as_str()) == Some("booked"))
+        .expect("booked event must be emitted");
+    let data = &booked_event["data"][0];
+    let legs = data["legs"].as_array().expect("legs array");
+
+    // Asset B had largest delta (60), so it is allocated first:
+    // 1. holder, 60_000_000, Asset B
+    // 2. holder, 39_750_000, Asset A
+    // 3. fee, 250_000, Asset A
+    assert_eq!(legs.len(), 3, "Legs must be split into 3 concrete legs");
+    let leg0 = legs[0].get("Pay").unwrap_or(&legs[0]);
+    let leg1 = legs[1].get("Pay").unwrap_or(&legs[1]);
+    let leg2 = legs[2].get("Pay").unwrap_or(&legs[2]);
+    assert_eq!(leg0["asset"], asset_b);
+    assert_eq!(leg0["amount"], "60000000");
+    assert_eq!(leg1["asset"], asset_a);
+    assert_eq!(leg1["amount"], "39750000");
+    assert_eq!(leg2["asset"], asset_a);
+    assert_eq!(leg2["amount"], "250000");
+
+    Ok(())
+}
+
+/// 15. Stale callback double-book prevention:
+/// Verifies that if `clear_stale_lock` or another action clears the lock, an old callback
+/// landing with an outdated `since` value cleanly no-ops, emits `reconcile_failed` with
+/// reason `stale_callback`, and does not alter `last_seen` or double-book.
+#[tokio::test]
+async fn test_c4_stale_callback_double_book_prevented() -> Result<()> {
+    let env = Env::new().await?;
+
+    let amount_due = 1_000_000u128;
+    let _ = env
+        .issue_claim(&env.alice, 0, amount_due, 1_800_000_000)
+        .await?;
+
+    // Initial claim view: lock is Lock::None
+    let cv_before: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(cv_before.lock, Lock::None);
+
+    // Call on_balances directly as root with a stale `since: 10`
+    // Since claim.lock is Lock::None, this callback is stale
+    let res = env
+        .root
+        .call("on_balances")
+        .args_json(json!({
+            "token_id": "c-1",
+            "prev_lock": Lock::None,
+            "since": 10u64,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
+
+    // Verify reconcile_failed event with reason "stale_callback"
+    let events = openrail_tests::decode_events(&res);
+    let failed_event = events
+        .iter()
+        .find(|e| e.get("event").and_then(|v| v.as_str()) == Some("reconcile_failed"))
+        .expect("reconcile_failed event must be emitted");
+    assert_eq!(failed_event["data"][0]["reason"], "stale_callback");
+
+    // Verify claim state remains completely unchanged
+    let cv_after: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(cv_after.lock, Lock::None);
+    assert_eq!(cv_after.booked_total.0, 0);
+    assert_eq!(cv_after.status, Status::Issued);
+
+    Ok(())
+}

@@ -36,6 +36,7 @@ pub const GAS_FOR_ON_DISTRIBUTED: Gas = Gas::from_tgas(10);
 pub struct OnBalancesArgs {
     pub token_id: String,
     pub prev_lock: Lock,
+    pub since: u64,
 }
 
 /// Payload for distribution callback.
@@ -45,6 +46,7 @@ pub struct OnDistributedArgs {
     pub token_id: String,
     pub legs: Vec<Leg>,
     pub prev_lock: Lock,
+    pub since: u64,
     pub is_retry: bool,
 }
 
@@ -75,6 +77,10 @@ fn restore_lock(claim: &mut Claim, prev_lock: Lock) {
 
 impl Contract {
     /// Permissionlessly initiates balance reconciliation for a claim (Blueprint 2.5).
+    ///
+    /// Attached gas: At least 250 Tgas required (caller attaches 250 Tgas, e.g. the watcher)
+    /// to cover `mt_batch_balance_of` (10 Tgas) and `on_balances` callback (220 Tgas),
+    /// which forwards up to 6 legs at 12 Tgas inner each.
     pub(crate) fn internal_reconcile(&mut self, token_id: String) {
         let claim = self
             .claims
@@ -87,8 +93,9 @@ impl Contract {
         );
 
         let prev_lock = claim.lock.clone();
+        let current_block = env::block_height();
         claim.lock = Lock::Reconciling {
-            since: env::block_height(),
+            since: current_block,
         };
 
         let intents_id: AccountId = INTENTS_ACCOUNT_ID.parse().expect("valid intents account");
@@ -110,6 +117,7 @@ impl Contract {
         let callback_args = OnBalancesArgs {
             token_id,
             prev_lock,
+            since: current_block,
         };
         let callback_bytes =
             near_sdk::serde_json::to_vec(&callback_args).expect("serialize callback args");
@@ -127,17 +135,42 @@ impl Contract {
     }
 
     /// Callback after balance query on `intents.near` resolves (Blueprint 2.5).
-    pub(crate) fn handle_on_balances(&mut self, token_id: String, prev_lock: Lock) {
+    pub(crate) fn handle_on_balances(&mut self, token_id: String, prev_lock: Lock, since: u64) {
+        let claim = self
+            .claims
+            .get_mut(&token_id)
+            .unwrap_or_else(|| env::panic_str("claim not found"));
+
+        // Stale callback check: lock must strictly equal Reconciling { since }
+        if claim.lock != (Lock::Reconciling { since }) {
+            ReconcileFailedEvent {
+                token_id,
+                reason: "stale_callback".to_string(),
+            }
+            .emit();
+            return;
+        }
+
         let results_count = env::promise_results_count();
         if results_count == 0 {
-            self.fail_reconcile(&token_id, prev_lock, "no promise results");
+            restore_lock(claim, prev_lock);
+            ReconcileFailedEvent {
+                token_id,
+                reason: "no promise results".to_string(),
+            }
+            .emit();
             return;
         }
 
         let balances_bytes = match env::promise_result_checked(0, 4096) {
             Ok(bytes) => bytes,
             Err(_) => {
-                self.fail_reconcile(&token_id, prev_lock, "mt_batch_balance_of failed");
+                restore_lock(claim, prev_lock);
+                ReconcileFailedEvent {
+                    token_id,
+                    reason: "mt_batch_balance_of failed".to_string(),
+                }
+                .emit();
                 return;
             }
         };
@@ -145,16 +178,17 @@ impl Contract {
         let balances: Vec<U128> = match near_sdk::serde_json::from_slice(&balances_bytes) {
             Ok(b) => b,
             Err(_) => {
-                self.fail_reconcile(&token_id, prev_lock, "failed to deserialize balances");
+                restore_lock(claim, prev_lock);
+                ReconcileFailedEvent {
+                    token_id,
+                    reason: "failed to deserialize balances".to_string(),
+                }
+                .emit();
                 return;
             }
         };
 
         let fee_account = self.config.fee_account.clone();
-        let claim = self
-            .claims
-            .get_mut(&token_id)
-            .unwrap_or_else(|| env::panic_str("claim not found"));
 
         let mut deltas: Vec<(TokenId, u128, u128)> = Vec::new();
         let mut total_delta: u128 = 0;
@@ -209,14 +243,17 @@ impl Contract {
         };
 
         let surplus_part = total_delta.saturating_sub(payment);
-        let fee = (payment * crate::FEE_BPS) / 10_000;
+        let fee = payment
+            .checked_mul(crate::FEE_BPS)
+            .unwrap_or_else(|| env::panic_str("fee calculation overflow"))
+            / 10_000;
         let net = payment.saturating_sub(fee);
 
-        let mut legs = crate::hooks::dispatch_split_distribution(claim, U128(net));
+        let mut raw_legs = crate::hooks::dispatch_split_distribution(claim, U128(net));
         if fee > 0 {
-            legs.push(Leg::pay(fee_account, U128(fee)));
+            raw_legs.push(Leg::pay(fee_account, U128(fee)));
         }
-        legs.retain(|leg| leg.amount().0 > 0);
+        raw_legs.retain(|leg| leg.amount().0 > 0);
 
         // Update claim booking counters
         claim.booked_total = U128(claim.booked_total.0.saturating_add(total_delta));
@@ -229,26 +266,67 @@ impl Contract {
         }
         claim.update_status_paid_rule();
 
-        // Assign settlement assets to legs (largest delta first)
-        deltas.sort_by_key(|a| std::cmp::Reverse(a.1));
-        let mut asset_idx = 0;
+        // Blueprint 2.5: Allocate legs to assets in order of largest d_i first,
+        // splitting a leg across assets as capacity runs out.
+        // Track remaining capacity per asset (d_i is the available spendable capacity for new legs).
+        struct AssetCapacity {
+            asset: TokenId,
+            capacity: u128,
+        }
+
+        let mut sorted_capacities: Vec<AssetCapacity> = deltas
+            .iter()
+            .filter(|(_, d_i, _)| *d_i > 0)
+            .map(|(asset, d_i, _)| AssetCapacity {
+                asset: asset.clone(),
+                capacity: *d_i,
+            })
+            .collect();
+        sorted_capacities.sort_by_key(|a| std::cmp::Reverse(a.capacity));
+
         let mut forwarded_per_asset: HashMap<TokenId, u128> = HashMap::new();
-        let mut legs_to_forward: Vec<Leg> = Vec::new();
+        let mut final_legs: Vec<Leg> = Vec::new();
+        let mut current_cap_idx = 0;
 
-        for leg in &mut legs {
-            while asset_idx < deltas.len() && deltas[asset_idx].1 == 0 {
-                asset_idx += 1;
-            }
-            let chosen_asset = if asset_idx < deltas.len() {
-                deltas[asset_idx].0.clone()
-            } else {
-                claim.settlement_assets[0].clone()
-            };
-            leg.set_asset(chosen_asset.clone());
+        for leg in raw_legs {
+            match leg {
+                Leg::Pay {
+                    receiver, amount, ..
+                } => {
+                    let mut remaining_needed = amount.0;
+                    while remaining_needed > 0 {
+                        while current_cap_idx < sorted_capacities.len()
+                            && sorted_capacities[current_cap_idx].capacity == 0
+                        {
+                            current_cap_idx += 1;
+                        }
 
-            if let Leg::Pay { amount, .. } = leg {
-                *forwarded_per_asset.entry(chosen_asset).or_default() += amount.0;
-                legs_to_forward.push(leg.clone());
+                        if current_cap_idx >= sorted_capacities.len() {
+                            env::panic_str("insufficient asset capacity for distribution leg");
+                        }
+
+                        let cap = &mut sorted_capacities[current_cap_idx];
+                        let take = remaining_needed.min(cap.capacity);
+                        cap.capacity = cap.capacity.saturating_sub(take);
+                        remaining_needed = remaining_needed.saturating_sub(take);
+
+                        *forwarded_per_asset.entry(cap.asset.clone()).or_default() += take;
+
+                        final_legs.push(Leg::Pay {
+                            receiver: receiver.clone(),
+                            amount: U128(take),
+                            asset: Some(cap.asset.clone()),
+                        });
+
+                        if cap.capacity == 0 {
+                            current_cap_idx += 1;
+                        }
+                    }
+                }
+                Leg::Hold { .. } => {
+                    // Hold legs stay in the claim account, not forwarded
+                    final_legs.push(leg);
+                }
             }
         }
 
@@ -268,7 +346,7 @@ impl Contract {
             surplus: U128(surplus_part),
             fee: U128(fee),
             credit: U128(credit),
-            legs: legs.clone(),
+            legs: final_legs.clone(),
         }
         .emit();
 
@@ -278,9 +356,14 @@ impl Contract {
             surplus: U128(surplus_part),
             fee: U128(fee),
             credit: U128(credit),
-            legs: legs.clone(),
+            legs: final_legs.clone(),
         };
         crate::hooks::dispatch_on_booked(claim, &booking);
+
+        let legs_to_forward: Vec<Leg> = final_legs
+            .into_iter()
+            .filter(|l| matches!(l, Leg::Pay { .. }))
+            .collect();
 
         if legs_to_forward.is_empty() {
             restore_lock(claim, prev_lock);
@@ -293,6 +376,7 @@ impl Contract {
             claim_account,
             legs_to_forward,
             prev_lock,
+            since,
             false,
         );
     }
@@ -304,6 +388,7 @@ impl Contract {
         claim_account: AccountId,
         legs: Vec<Leg>,
         prev_lock: Lock,
+        since: u64,
         is_retry: bool,
     ) {
         let mut forward_promises = Vec::with_capacity(legs.len());
@@ -315,7 +400,9 @@ impl Contract {
                 asset,
             } = leg
             {
-                let asset_str = asset.as_deref().unwrap_or("nep141:usdc.omft.near");
+                let asset_str = asset
+                    .as_deref()
+                    .unwrap_or_else(|| env::panic_str("leg without asset"));
                 let forward_args = VaultForwardArgs {
                     token_id: asset_str.to_string(),
                     amount: amount.0.to_string(),
@@ -341,7 +428,9 @@ impl Contract {
                 .claims
                 .get_mut(token_id)
                 .unwrap_or_else(|| env::panic_str("claim not found"));
-            restore_lock(claim, prev_lock);
+            if !is_retry {
+                restore_lock(claim, prev_lock);
+            }
             return;
         }
 
@@ -355,6 +444,7 @@ impl Contract {
             token_id: token_id.to_string(),
             legs,
             prev_lock,
+            since,
             is_retry,
         };
         let callback_bytes =
@@ -378,24 +468,38 @@ impl Contract {
         token_id: String,
         legs: Vec<Leg>,
         prev_lock: Lock,
+        since: u64,
         is_retry: bool,
     ) {
+        let claim = self
+            .claims
+            .get_mut(&token_id)
+            .unwrap_or_else(|| env::panic_str("claim not found"));
+
+        if !is_retry && claim.lock != (Lock::Reconciling { since }) {
+            ReconcileFailedEvent {
+                token_id,
+                reason: "stale_callback".to_string(),
+            }
+            .emit();
+            return;
+        }
+
         let results_count = env::promise_results_count();
 
         for (idx, leg) in legs.into_iter().enumerate() {
             let succeeded = idx < results_count as usize
                 && env::promise_result_checked(idx as u64, 4096).is_ok();
 
+            let asset = leg
+                .asset()
+                .cloned()
+                .unwrap_or_else(|| env::panic_str("leg without asset"));
+
             if succeeded {
                 if is_retry {
-                    if let Some(asset) = leg.asset() {
-                        let claim = self
-                            .claims
-                            .get_mut(&token_id)
-                            .unwrap_or_else(|| env::panic_str("claim not found"));
-                        if let Some(ls) = claim.last_seen_balance.get_mut(asset) {
-                            *ls = U128(ls.0.saturating_sub(leg.amount().0));
-                        }
+                    if let Some(ls) = claim.last_seen_balance.get_mut(&asset) {
+                        *ls = U128(ls.0.saturating_sub(leg.amount().0));
                     }
                 }
                 DistributedEvent {
@@ -414,21 +518,15 @@ impl Contract {
                 self.undistributed.insert(token_id.clone(), und);
 
                 if !is_retry {
-                    if let Some(asset) = leg.asset() {
-                        let claim = self
-                            .claims
-                            .get_mut(&token_id)
-                            .unwrap_or_else(|| env::panic_str("claim not found"));
-                        let cur = claim
-                            .last_seen_balance
-                            .get(asset)
-                            .copied()
-                            .unwrap_or(U128(0))
-                            .0;
-                        claim
-                            .last_seen_balance
-                            .insert(asset.clone(), U128(cur.saturating_add(leg.amount().0)));
-                    }
+                    let cur = claim
+                        .last_seen_balance
+                        .get(&asset)
+                        .copied()
+                        .unwrap_or(U128(0))
+                        .0;
+                    claim
+                        .last_seen_balance
+                        .insert(asset.clone(), U128(cur.saturating_add(leg.amount().0)));
                 }
 
                 DistributionFailedEvent {
@@ -440,11 +538,9 @@ impl Contract {
             }
         }
 
-        let claim = self
-            .claims
-            .get_mut(&token_id)
-            .unwrap_or_else(|| env::panic_str("claim not found"));
-        restore_lock(claim, prev_lock);
+        if !is_retry {
+            restore_lock(claim, prev_lock);
+        }
     }
 
     /// Retries failed distribution legs to their originally recorded receivers (D-S8).
@@ -464,6 +560,7 @@ impl Contract {
             claim_account,
             undistributed,
             Lock::None,
+            0,
             true,
         );
     }
@@ -491,19 +588,6 @@ impl Contract {
         LockClearedEvent {
             token_id,
             cleared_lock,
-        }
-        .emit();
-    }
-
-    fn fail_reconcile(&mut self, token_id: &str, prev_lock: Lock, reason: &str) {
-        let claim = self
-            .claims
-            .get_mut(token_id)
-            .unwrap_or_else(|| env::panic_str("claim not found"));
-        claim.lock = prev_lock;
-        ReconcileFailedEvent {
-            token_id: token_id.to_string(),
-            reason: reason.to_string(),
         }
         .emit();
     }

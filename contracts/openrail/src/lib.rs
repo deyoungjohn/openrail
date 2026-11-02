@@ -213,6 +213,7 @@ impl Contract {
     ///
     /// Caller: Anyone (permissionless; watcher pumps periodically).
     /// Deposit: None.
+    /// Attached gas: At least 250 Tgas required (GAS_FOR_ON_BALANCES = 220 Tgas + GAS_FOR_MT_BATCH_BALANCE_OF = 10 Tgas).
     /// Effect: Acquires `Reconciling` lock, reads `mt_batch_balance_of` on `intents.near`,
     ///         books payment/credit, and starts distribution forwards.
     pub fn reconcile(&mut self, token_id: String) {
@@ -221,8 +222,8 @@ impl Contract {
 
     /// Private callback executed after balance query resolves (Blueprint 2.5).
     #[private]
-    pub fn on_balances(&mut self, token_id: String, prev_lock: Lock) {
-        self.handle_on_balances(token_id, prev_lock);
+    pub fn on_balances(&mut self, token_id: String, prev_lock: Lock, since: u64) {
+        self.handle_on_balances(token_id, prev_lock, since);
     }
 
     /// Private callback executed after distribution forwards resolve (Blueprint 2.5).
@@ -232,9 +233,10 @@ impl Contract {
         token_id: String,
         legs: Vec<Leg>,
         prev_lock: Lock,
+        since: u64,
         is_retry: bool,
     ) {
-        self.handle_on_distributed(token_id, legs, prev_lock, is_retry);
+        self.handle_on_distributed(token_id, legs, prev_lock, since, is_retry);
     }
 
     /// Retries failed distribution legs to their originally recorded receivers.
