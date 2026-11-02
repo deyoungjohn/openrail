@@ -1,0 +1,147 @@
+{
+  "schema": "openrail.terms.v1",
+  "description": "Canonical terms vectors for blueprint 2.6. Rust (contracts/openrail/src/terms.rs) and TypeScript (services/api) must reproduce every expected_canonical and expected_sha256 byte for byte.",
+  "canonicalization": "JSON object whose keys are sorted at every level, UTF-8, no whitespace. Strings use JSON escaping (quote, backslash, short escapes for \\b \\f \\n \\r \\t, \\u00XX for other control characters); non-ASCII is emitted as UTF-8, not \\u escapes. sha256 is over the canonical UTF-8 bytes.",
+  "notes": [
+    "amount_usd is always a JSON string with exactly two decimals (blueprint 2.6: integer money as strings).",
+    "assignment_agreement_sha256 is omitted from the canonical JSON when the input field is absent; it is never null.",
+    "clauses keep the input order: core clauses first, then module clauses.",
+    "schema is the literal openrail.terms.v1."
+  ],
+  "vectors": [
+    {
+      "name": "minimal_ascii",
+      "input": {
+        "schema": "openrail.terms.v1",
+        "invoice_number": "INV-0001",
+        "issuer_legal_name": "Acme Ltd.",
+        "issuer_account": "acme.near",
+        "debtor_legal_name": "Globex Inc.",
+        "debtor_key": "0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf",
+        "amount_usd": "1234.50",
+        "due_date": "2027-01-15T00:00:00Z",
+        "line_items_sha256": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "claim_account": "c-1.acme.near",
+        "pay_link": "https://pay.openrail.dev/c-1.acme.near",
+        "clauses": [
+          "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+          "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
+        ]
+      },
+      "expected_canonical": "{\"amount_usd\":\"1234.50\",\"claim_account\":\"c-1.acme.near\",\"clauses\":[\"Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.\",\"The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment.\"],\"debtor_key\":\"0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf\",\"debtor_legal_name\":\"Globex Inc.\",\"due_date\":\"2027-01-15T00:00:00Z\",\"invoice_number\":\"INV-0001\",\"issuer_account\":\"acme.near\",\"issuer_legal_name\":\"Acme Ltd.\",\"line_items_sha256\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"pay_link\":\"https://pay.openrail.dev/c-1.acme.near\",\"schema\":\"openrail.terms.v1\"}",
+      "expected_sha256": "0xd111439f4eca39a6a6104bbc82e3e11613c7234252e4b541399f82e4aa3680b6"
+    },
+    {
+      "name": "unicode_names",
+      "input": {
+        "schema": "openrail.terms.v1",
+        "invoice_number": "INV-2027-0042",
+        "issuer_legal_name": "Café — Société Générale",
+        "issuer_account": "acme.near",
+        "debtor_legal_name": "株式会社オープンレール",
+        "debtor_key": "счёт.near",
+        "amount_usd": "1234.50",
+        "due_date": "2027-01-15T00:00:00Z",
+        "line_items_sha256": "0xabababababababababababababababababababababababababababababababab",
+        "claim_account": "c-42.café.near",
+        "pay_link": "https://pay.openrail.dev/c-42.café.near?ref=請求書",
+        "clauses": [
+          "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+          "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
+        ]
+      },
+      "expected_canonical": "{\"amount_usd\":\"1234.50\",\"claim_account\":\"c-42.café.near\",\"clauses\":[\"Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.\",\"The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment.\"],\"debtor_key\":\"счёт.near\",\"debtor_legal_name\":\"株式会社オープンレール\",\"due_date\":\"2027-01-15T00:00:00Z\",\"invoice_number\":\"INV-2027-0042\",\"issuer_account\":\"acme.near\",\"issuer_legal_name\":\"Café — Société Générale\",\"line_items_sha256\":\"0xabababababababababababababababababababababababababababababababab\",\"pay_link\":\"https://pay.openrail.dev/c-42.café.near?ref=請求書\",\"schema\":\"openrail.terms.v1\"}",
+      "expected_sha256": "0x1b15a586fce9adf3c03e8b80f86b0074bbf8bf63fc0b46419ab98080ab01d973"
+    },
+    {
+      "name": "escapes_and_control",
+      "input": {
+        "schema": "openrail.terms.v1",
+        "invoice_number": "INV-\"42\"\\path\tline",
+        "issuer_legal_name": "A & B <Ltd> \"quoted\"",
+        "issuer_account": "acme.near",
+        "debtor_legal_name": "O'Brien\nSecond line",
+        "debtor_key": "0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf",
+        "amount_usd": "1234.50",
+        "due_date": "2027-01-15T00:00:00Z",
+        "line_items_sha256": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "claim_account": "c-1.acme.near",
+        "pay_link": "https://pay.openrail.dev/c-1?x=1&y=\"2\"",
+        "clauses": [
+          "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent. \"quoted\" \\ backslash",
+          "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment.\nsecond line"
+        ]
+      },
+      "expected_canonical": "{\"amount_usd\":\"1234.50\",\"claim_account\":\"c-1.acme.near\",\"clauses\":[\"Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent. \\\"quoted\\\" \\\\ backslash\",\"The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment.\\nsecond line\"],\"debtor_key\":\"0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf\",\"debtor_legal_name\":\"O'Brien\\nSecond line\",\"due_date\":\"2027-01-15T00:00:00Z\",\"invoice_number\":\"INV-\\\"42\\\"\\\\path\\tline\",\"issuer_account\":\"acme.near\",\"issuer_legal_name\":\"A & B <Ltd> \\\"quoted\\\"\",\"line_items_sha256\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"pay_link\":\"https://pay.openrail.dev/c-1?x=1&y=\\\"2\\\"\",\"schema\":\"openrail.terms.v1\"}",
+      "expected_sha256": "0xdc3cb6125eabcb5b56100e00ec0cefde96f1a43630aca5c6326b15aed29da610"
+    },
+    {
+      "name": "zero_amount",
+      "input": {
+        "schema": "openrail.terms.v1",
+        "invoice_number": "INV-0000",
+        "issuer_legal_name": "Acme Ltd.",
+        "issuer_account": "acme.near",
+        "debtor_legal_name": "Globex Inc.",
+        "debtor_key": "0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf",
+        "amount_usd": "0.00",
+        "due_date": "2027-01-15T00:00:00Z",
+        "line_items_sha256": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "claim_account": "c-1.acme.near",
+        "pay_link": "https://pay.openrail.dev/c-1.acme.near",
+        "clauses": [
+          "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+          "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
+        ]
+      },
+      "expected_canonical": "{\"amount_usd\":\"0.00\",\"claim_account\":\"c-1.acme.near\",\"clauses\":[\"Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.\",\"The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment.\"],\"debtor_key\":\"0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf\",\"debtor_legal_name\":\"Globex Inc.\",\"due_date\":\"2027-01-15T00:00:00Z\",\"invoice_number\":\"INV-0000\",\"issuer_account\":\"acme.near\",\"issuer_legal_name\":\"Acme Ltd.\",\"line_items_sha256\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"pay_link\":\"https://pay.openrail.dev/c-1.acme.near\",\"schema\":\"openrail.terms.v1\"}",
+      "expected_sha256": "0xe9b30fde5cf62091237504de2b5d9a760091457c3778a8e57abce28d580ee830"
+    },
+    {
+      "name": "large_amount",
+      "input": {
+        "schema": "openrail.terms.v1",
+        "invoice_number": "INV-9999",
+        "issuer_legal_name": "Acme Ltd.",
+        "issuer_account": "acme.near",
+        "debtor_legal_name": "Globex Inc.",
+        "debtor_key": "0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf",
+        "amount_usd": "1234567890.99",
+        "due_date": "2027-01-15T00:00:00Z",
+        "line_items_sha256": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "claim_account": "c-1.acme.near",
+        "pay_link": "https://pay.openrail.dev/c-1.acme.near",
+        "clauses": [
+          "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+          "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
+        ]
+      },
+      "expected_canonical": "{\"amount_usd\":\"1234567890.99\",\"claim_account\":\"c-1.acme.near\",\"clauses\":[\"Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.\",\"The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment.\"],\"debtor_key\":\"0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf\",\"debtor_legal_name\":\"Globex Inc.\",\"due_date\":\"2027-01-15T00:00:00Z\",\"invoice_number\":\"INV-9999\",\"issuer_account\":\"acme.near\",\"issuer_legal_name\":\"Acme Ltd.\",\"line_items_sha256\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"pay_link\":\"https://pay.openrail.dev/c-1.acme.near\",\"schema\":\"openrail.terms.v1\"}",
+      "expected_sha256": "0x1b21609d47a1dffd8af2a9632214e597624deb53c80a66ff91893afd848d6287"
+    },
+    {
+      "name": "with_assignment_and_module_clause",
+      "input": {
+        "schema": "openrail.terms.v1",
+        "invoice_number": "INV-0500",
+        "issuer_legal_name": "Acme Ltd.",
+        "issuer_account": "acme.near",
+        "debtor_legal_name": "Globex Inc.",
+        "debtor_key": "0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf",
+        "amount_usd": "1234.50",
+        "due_date": "2027-01-15T00:00:00Z",
+        "line_items_sha256": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "claim_account": "c-1.acme.near",
+        "pay_link": "https://pay.openrail.dev/c-1.acme.near",
+        "clauses": [
+          "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+          "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment.",
+          "Module clause: checkout module adds no extra terms."
+        ],
+        "assignment_agreement_sha256": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      },
+      "expected_canonical": "{\"amount_usd\":\"1234.50\",\"assignment_agreement_sha256\":\"0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"claim_account\":\"c-1.acme.near\",\"clauses\":[\"Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.\",\"The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment.\",\"Module clause: checkout module adds no extra terms.\"],\"debtor_key\":\"0xf3d1f1f8d9e1e005c8a0da978252fe5a12552bdf\",\"debtor_legal_name\":\"Globex Inc.\",\"due_date\":\"2027-01-15T00:00:00Z\",\"invoice_number\":\"INV-0500\",\"issuer_account\":\"acme.near\",\"issuer_legal_name\":\"Acme Ltd.\",\"line_items_sha256\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"pay_link\":\"https://pay.openrail.dev/c-1.acme.near\",\"schema\":\"openrail.terms.v1\"}",
+      "expected_sha256": "0xfbb8c87287ab52d4041c7221c3a807f7506e6a6217c2df419704560132c6048f"
+    }
+  ]
+}

@@ -7,9 +7,12 @@
 
 #![allow(clippy::too_many_arguments)]
 
+pub mod eip712;
 pub mod events;
 pub mod hooks;
 pub mod modules;
+pub mod svg;
+pub mod terms;
 pub mod types;
 
 use near_sdk::json_types::U128;
