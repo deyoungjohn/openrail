@@ -213,7 +213,6 @@ importers:
       '@openrail/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-    devDependencies:
       near-api-js:
         specifier: 7.4.0
         version: 7.4.0

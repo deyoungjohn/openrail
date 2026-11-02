@@ -1,8 +1,8 @@
 /**
  * Local-only HTTP surface for the API (`IssuerPort`, PR #27).
  *
- * Auth is a constant-time comparison of `ISSUER_SERVICE_KEY`. The API sends `x-issuer-key`;
- * `Authorization: Bearer <key>` is also accepted. The service binds 127.0.0.1.
+ * Auth is a constant-time comparison of `ISSUER_SERVICE_KEY` from
+ * `Authorization: Bearer <key>` only. The service binds 127.0.0.1.
  */
 import type { Logger } from "@openrail/shared";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -31,6 +31,8 @@ export interface IssuerAppDeps {
   service: IssuerService;
   serviceKey: string;
   logger: Logger;
+  /** Optional process health (key allowances) served unauthenticated on GET /health. */
+  health?: () => Promise<Record<string, unknown>>;
 }
 
 function header(headers: HttpRequestHeaders, name: string): string | undefined {
@@ -46,8 +48,7 @@ function header(headers: HttpRequestHeaders, name: string): string | undefined {
 export function isAuthorized(headers: HttpRequestHeaders, serviceKey: string): boolean {
   if (serviceKey === "") return false;
   const authorization = header(headers, "authorization");
-  const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
-  const provided = bearer ?? header(headers, "x-issuer-key");
+  const provided = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (provided === undefined || provided === "") return false;
   const expectedHash = createHash("sha256").update(serviceKey).digest();
   const providedHash = createHash("sha256").update(provided).digest();
@@ -122,6 +123,20 @@ export function createIssuerApp(deps: IssuerAppDeps): IssuerApp {
   return {
     async handle(method, url, headers, body): Promise<HttpResponse> {
       const path = url.split("?")[0] ?? url;
+      if (method === "GET" && path === "/health") {
+        if (deps.health === undefined) {
+          return { status: 404, body: { error: { code: "not_found" } } };
+        }
+        try {
+          return { status: 200, body: { ok: true, ...(await deps.health()) } };
+        } catch (error) {
+          deps.logger.error(
+            "health check failed",
+            error instanceof Error ? error.message : String(error),
+          );
+          return { status: 503, body: { ok: false, error: "health_unavailable" } };
+        }
+      }
       if (!isAuthorized(headers, deps.serviceKey)) {
         return { status: 401, body: { error: { code: "unauthorized" } } };
       }

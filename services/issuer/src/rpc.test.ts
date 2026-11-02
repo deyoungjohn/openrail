@@ -5,19 +5,16 @@
 import { NearClient, createLogger } from "@openrail/shared";
 import { KeyPair } from "near-api-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FetchLike } from "./chain.js";
 import { IssuerService, REQUIRED_ISSUE_DEPOSIT_YOCTO } from "./service.js";
-import type { FetchLike } from "./state.js";
-import type { AccountChecker, AckEvmRequest, IssuerStateReader } from "./types.js";
+import type { AccountChecker, AckEvmRequest, StorageCreditReader } from "./types.js";
 
 const ROOT = "openrail.near";
 const ZERO_HASH = "1".repeat(32);
 const logger = createLogger("issuer-rpc-test", () => {});
 
-class State implements IssuerStateReader {
-  async nextTokenId(): Promise<number> {
-    return 5;
-  }
-  async storageCredit(): Promise<bigint> {
+class Credit implements StorageCreditReader {
+  async storageCreditOf(): Promise<bigint> {
     return 0n;
   }
 }
@@ -109,13 +106,12 @@ function service(fetchImpl: FetchLike): IssuerService {
   return new IssuerService({
     issuerNear: client(fetchImpl, "ISSUER_TEST_ACCOUNT", "ISSUER_TEST_KEY"),
     relayNear: client(fetchImpl, "RELAY_TEST_ACCOUNT", "RELAY_TEST_KEY"),
-    state: new State(),
+    credit: new Credit(),
     accounts: new Accounts(),
     logger,
     config: {
       rootAccount: ROOT,
       requiredDepositYocto: REQUIRED_ISSUE_DEPOSIT_YOCTO,
-      reservationTtlMs: 60_000,
       accountWaitMs: 2,
       accountPollMs: 1,
       now: () => 1_800_000_000_000,
@@ -125,10 +121,9 @@ function service(fetchImpl: FetchLike): IssuerService {
 }
 
 describe("issuer with the shared near client and a fake RPC", () => {
-  it("signs issue_for with the issuer key and returns the token id", async () => {
+  it("signs issue_for with the issuer key and derives the claim account", async () => {
     const { fetchImpl, broadcasts } = makeFetch(true);
     const issuer = service(fetchImpl);
-    await issuer.prepareIssue("acme.near");
 
     const result = await issuer.issueFor({
       business: "acme.near",
@@ -139,7 +134,11 @@ describe("issuer with the shared near client and a fake RPC", () => {
       dueDate: 1_800_000_000,
     });
 
-    expect(result).toEqual({ txHash: "tx-1", tokenId: "c-5" });
+    expect(result).toEqual({
+      txHash: "tx-1",
+      tokenId: "c-5",
+      claimAccount: "c-5.openrail.near",
+    });
     expect(broadcasts).toHaveLength(1);
     expect(Buffer.from(broadcasts[0] ?? "", "base64").toString("latin1")).toContain("issue_for");
     expect(signedBy(broadcasts[0] ?? "", "issuer.test.near")).toBe(true);

@@ -3,18 +3,25 @@
  *
  * Environment:
  *   NEAR_ROOT_ACCOUNT, NEAR_RPC_URL, NEAR_RPC_URL_FALLBACK
- *   ISSUER_SERVICE_KEY                      (API bearer / x-issuer-key)
+ *   ISSUER_SERVICE_KEY                      (API bearer token)
  *   ISSUER_ACCOUNT_ID + ISSUER_PRIVATE_KEY  (function-call key: issue_for, log_quote)
  *   RELAY_PRIVATE_KEY                       (function-call key: acknowledge_evm only)
- *   ISSUER_PORT (8787), ISSUER_RESERVATION_TTL_MS (60000),
- *   ISSUER_ACCOUNT_WAIT_MS (15000), ISSUER_ACCOUNT_POLL_MS (250)
+ *   ISSUER_PORT (8787), ISSUER_ACCOUNT_WAIT_MS (15000), ISSUER_ACCOUNT_POLL_MS (250)
  */
 import { createLogger, getEnv, nearClientFromEnv, requireEnv } from "@openrail/shared";
+import { KeyPair } from "near-api-js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  ContractStorageCreditReader,
+  RpcAccountChecker,
+  RpcKeyInspector,
+  nearRpcUrls,
+} from "./chain.js";
 import { IssuerError } from "./errors.js";
 import { createIssuerApp } from "./http.js";
+import { checkKeyPermissions } from "./keys.js";
 import { IssuerService, REQUIRED_ISSUE_DEPOSIT_YOCTO } from "./service.js";
-import { RpcAccountChecker, RpcStateReader, nearRpcUrls } from "./state.js";
+import type { KeyInfo } from "./types.js";
 
 const MAX_BODY_BYTES = 1_048_576;
 
@@ -24,6 +31,16 @@ function numberEnv(name: string, fallback: number): number {
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) throw new Error(`ENV_INVALID: ${name}`);
   return value;
+}
+
+function keySummary(info: KeyInfo): unknown {
+  const allowanceYocto = info.allowance;
+  return {
+    kind: info.kind,
+    methods: info.methods,
+    allowance_yocto: allowanceYocto,
+    allowance_near: allowanceYocto === null ? null : Number(BigInt(allowanceYocto)) / 1e24,
+  };
 }
 
 async function readBody(request: IncomingMessage): Promise<string> {
@@ -41,9 +58,9 @@ async function readBody(request: IncomingMessage): Promise<string> {
 async function main(): Promise<void> {
   const rootAccount = requireEnv("NEAR_ROOT_ACCOUNT");
   const serviceKey = requireEnv("ISSUER_SERVICE_KEY");
-  requireEnv("ISSUER_ACCOUNT_ID");
-  requireEnv("ISSUER_PRIVATE_KEY");
-  requireEnv("RELAY_PRIVATE_KEY");
+  const issuerAccount = requireEnv("ISSUER_ACCOUNT_ID");
+  const issuerSecret = requireEnv("ISSUER_PRIVATE_KEY");
+  const relaySecret = requireEnv("RELAY_PRIVATE_KEY");
 
   const logger = createLogger("issuer");
   const issuerNear = nearClientFromEnv({
@@ -60,21 +77,56 @@ async function main(): Promise<void> {
   });
 
   const rpcUrls = nearRpcUrls();
+  const inspector = new RpcKeyInspector(rpcUrls);
+  const issuerPublicKey = KeyPair.fromString(issuerSecret as never)
+    .getPublicKey()
+    .toString();
+  const relayPublicKey = KeyPair.fromString(relaySecret as never)
+    .getPublicKey()
+    .toString();
+
+  const permissions = await checkKeyPermissions(
+    inspector,
+    issuerAccount,
+    issuerPublicKey,
+    relayPublicKey,
+  );
+  if (!permissions.ok) {
+    for (const error of permissions.errors) logger.error("key self-check failed", error);
+    throw new Error("ISSUER_KEY_SELF_CHECK_FAILED");
+  }
+  logger.info("key self-check passed", {
+    account: issuerAccount,
+    issuerMethods: permissions.issuer?.methods,
+    relayMethods: permissions.relay?.methods,
+  });
+
   const service = new IssuerService({
     issuerNear,
     relayNear,
-    state: new RpcStateReader(rootAccount, rpcUrls),
+    credit: new ContractStorageCreditReader(issuerNear, rootAccount),
     accounts: new RpcAccountChecker(rpcUrls),
     logger,
     config: {
       rootAccount,
       requiredDepositYocto: REQUIRED_ISSUE_DEPOSIT_YOCTO,
-      reservationTtlMs: numberEnv("ISSUER_RESERVATION_TTL_MS", 60_000),
       accountWaitMs: numberEnv("ISSUER_ACCOUNT_WAIT_MS", 15_000),
       accountPollMs: numberEnv("ISSUER_ACCOUNT_POLL_MS", 250),
     },
   });
-  const app = createIssuerApp({ service, serviceKey, logger });
+
+  const app = createIssuerApp({
+    service,
+    serviceKey,
+    logger,
+    health: async () => {
+      const [issuer, relay] = await Promise.all([
+        inspector.keyInfo(issuerAccount, issuerPublicKey),
+        inspector.keyInfo(issuerAccount, relayPublicKey),
+      ]);
+      return { issuer_key: keySummary(issuer), relay_key: keySummary(relay) };
+    },
+  });
 
   const server = createServer((request, response) => {
     void (async () => {
@@ -108,8 +160,8 @@ async function main(): Promise<void> {
   });
   logger.info("issuer service started", {
     root: rootAccount,
-    account: process.env.ISSUER_ACCOUNT_ID,
-    health: `http://127.0.0.1:${port}`,
+    account: issuerAccount,
+    health: `http://127.0.0.1:${port}/health`,
   });
 
   const shutdown = (signal: string): void => {

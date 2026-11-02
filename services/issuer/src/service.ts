@@ -1,10 +1,10 @@
 /**
  * Issuer service core (blueprint 1.6 issuer row, 0.2 "who signs what").
  *
- * The API calls `prepareIssue` then `issueFor` for an invoice. The claim account is part of the
- * immutable terms hash, so the token id must be exact: `prepareIssue` reads the contract's
- * `next_token_id` from state and reserves it; `issueFor` verifies the chain still agrees before
- * signing `issue_for`, then waits for `c-<n>.<root>` to exist (blueprint 1.5.4).
+ * The claim account is part of the immutable terms hash, so the API must not guess it.
+ * `issueFor` reads the token id from the `issue_for` receipt result, derives `c-<n>.<root>`
+ * and waits for that account to exist (blueprint 1.5.4). `prepareIssue` only reports the
+ * storage credit and the NEAR account/amount the business should top up.
  *
  * Two keys on `ISSUER_ACCOUNT_ID`: `ISSUER_PRIVATE_KEY` signs `issue_for`/`log_quote`;
  * `RELAY_PRIVATE_KEY` signs `acknowledge_evm` only.
@@ -14,25 +14,31 @@ import { IssuerError } from "./errors.js";
 import type {
   AccountChecker,
   AckEvmRequest,
-  IssuerStateReader,
   IssueForRequest,
   LogQuoteRequest,
   NearClientLike,
   PrepareIssueResult,
+  StorageCreditReader,
 } from "./types.js";
 
 export const REQUIRED_ISSUE_DEPOSIT_YOCTO = 20_000_000_000_000_000_000_000n; // 0.02 NEAR
-const ISSUE_GAS = 250_000_000_000_000n;
-const LOG_QUOTE_GAS = 50_000_000_000_000n;
-const ACK_GAS = 50_000_000_000_000n;
-const DEFAULT_RESERVATION_TTL_MS = 60_000;
+
+/**
+ * Measured on the C1 sandbox (2026-11-02): `issue_for` burned 14.0 Tgas in total (0.32 Tgas
+ * in the call itself; the rest in the account creation and the 30 Tgas callback). 60 Tgas is
+ * a 4x headroom and keeps a 2 NEAR key allowance good for ~330 issues.
+ */
+const ISSUE_GAS = 60_000_000_000_000n;
+/** Measured on the C1 sandbox: `log_quote` burned 2.5 Tgas in total. */
+const LOG_QUOTE_GAS = 10_000_000_000_000n;
+/** K14 mainnet: `acknowledge_evm` burned 2.57 Tgas (ecrecover + storage). */
+const ACK_GAS = 10_000_000_000_000n;
 const DEFAULT_ACCOUNT_WAIT_MS = 15_000;
 const DEFAULT_ACCOUNT_POLL_MS = 250;
 
 export interface IssuerServiceConfig {
   rootAccount: string;
   requiredDepositYocto: bigint;
-  reservationTtlMs: number;
   accountWaitMs: number;
   accountPollMs: number;
   now: () => number;
@@ -42,21 +48,13 @@ export interface IssuerServiceConfig {
 export interface IssuerServiceDeps {
   issuerNear: NearClientLike;
   relayNear: NearClientLike;
-  state: IssuerStateReader;
+  credit: StorageCreditReader;
   accounts: AccountChecker;
   config?: Partial<IssuerServiceConfig>;
   logger: Logger;
 }
 
-interface Reservation {
-  business: string;
-  tokenNumber: number;
-  tokenId: string;
-  claimAccount: string;
-  expiresAt: number;
-}
-
-/** A tiny promise-chain mutex; keeps nonce use, reservations and state checks serial. */
+/** A tiny promise-chain mutex; keeps nonce use and account waits serial. */
 class Mutex {
   private tail: Promise<void> = Promise.resolve();
 
@@ -119,23 +117,21 @@ function errorMessage(error: unknown): string {
 export class IssuerService {
   private readonly issuerNear: NearClientLike;
   private readonly relayNear: NearClientLike;
-  private readonly state: IssuerStateReader;
+  private readonly credit: StorageCreditReader;
   private readonly accounts: AccountChecker;
   private readonly config: IssuerServiceConfig;
   private readonly logger: Logger;
   private readonly mutex = new Mutex();
-  private reservation: Reservation | null = null;
 
   constructor(deps: IssuerServiceDeps) {
     this.issuerNear = deps.issuerNear;
     this.relayNear = deps.relayNear;
-    this.state = deps.state;
+    this.credit = deps.credit;
     this.accounts = deps.accounts;
     this.logger = deps.logger;
     this.config = {
       rootAccount: deps.config?.rootAccount ?? "",
       requiredDepositYocto: deps.config?.requiredDepositYocto ?? REQUIRED_ISSUE_DEPOSIT_YOCTO,
-      reservationTtlMs: deps.config?.reservationTtlMs ?? DEFAULT_RESERVATION_TTL_MS,
       accountWaitMs: deps.config?.accountWaitMs ?? DEFAULT_ACCOUNT_WAIT_MS,
       accountPollMs: deps.config?.accountPollMs ?? DEFAULT_ACCOUNT_POLL_MS,
       now: deps.config?.now ?? Date.now,
@@ -144,32 +140,14 @@ export class IssuerService {
   }
 
   /**
-   * Returns the exact next token id / claim account for the terms hash, plus the account and
-   * amount the business must deposit as storage credit.
+   * Reports the business's storage credit and the account/amount to top up. The token id is
+   * deliberately not predicted; it comes from the `issue_for` result.
    */
   async prepareIssue(business: string): Promise<PrepareIssueResult> {
     return this.mutex.run(async () => {
-      const now = this.config.now();
-      if (this.reservation !== null && this.reservation.expiresAt > now) {
-        throw new IssuerError(409, "ISSUE_IN_FLIGHT");
-      }
-      this.reservation = null;
-
-      const next = await this.state.nextTokenId();
-      const credit = await this.state.storageCredit(business);
-      const tokenId = `c-${next}`;
-      const claimAccount = `${tokenId}.${this.config.rootAccount}`;
-      this.reservation = {
-        business,
-        tokenNumber: next,
-        tokenId,
-        claimAccount,
-        expiresAt: now + this.config.reservationTtlMs,
-      };
-      this.logger.info("prepared issue", tokenId, business);
+      const credit = await this.credit.storageCreditOf(business);
+      this.logger.info("prepared issue", business);
       return {
-        tokenId,
-        claimAccount,
         account: this.config.rootAccount,
         amount: this.config.requiredDepositYocto.toString(),
         storageCredit: credit.toString(),
@@ -177,55 +155,37 @@ export class IssuerService {
     });
   }
 
-  /** Signs `issue_for` with the issuer key and waits for the claim account to exist. */
-  async issueFor(request: IssueForRequest): Promise<{ txHash: string; tokenId: string }> {
+  /** Signs `issue_for`, derives the claim account from its result and waits for it. */
+  async issueFor(
+    request: IssueForRequest,
+  ): Promise<{ txHash: string; tokenId: string; claimAccount: string }> {
     return this.mutex.run(async () => {
-      const now = this.config.now();
-      const reservation = this.reservation;
-      if (
-        reservation === null ||
-        reservation.business !== request.business ||
-        reservation.expiresAt <= now
-      ) {
-        this.reservation = null;
-        throw new IssuerError(409, "NO_PREPARED_ISSUE");
+      const result = await this.issuerNear.sendFunctionCall({
+        receiverId: this.config.rootAccount,
+        methodName: "issue_for",
+        args: {
+          business: request.business,
+          kind: request.kind,
+          debtor: request.debtor,
+          terms_hash: request.termsHash,
+          amount_due: request.amountDue,
+          due_date: request.dueDate,
+          metadata: request.metadata ?? null,
+        },
+        gas: ISSUE_GAS,
+        deposit: 0n,
+        feature: "issuer.issue_for",
+      });
+      assertSuccess(result);
+
+      const tokenId = returnStringOf(result);
+      if (!/^c-\d+$/.test(tokenId)) {
+        throw new IssuerError(502, "NEAR_RETURN_INVALID");
       }
-
-      try {
-        const onChain = await this.state.nextTokenId();
-        if (onChain !== reservation.tokenNumber) {
-          throw new IssuerError(409, "TOKEN_ID_RACE");
-        }
-
-        const result = await this.issuerNear.sendFunctionCall({
-          receiverId: this.config.rootAccount,
-          methodName: "issue_for",
-          args: {
-            business: request.business,
-            kind: request.kind,
-            debtor: request.debtor,
-            terms_hash: request.termsHash,
-            amount_due: request.amountDue,
-            due_date: request.dueDate,
-            metadata: request.metadata ?? null,
-          },
-          gas: ISSUE_GAS,
-          deposit: 0n,
-          feature: "issuer.issue_for",
-        });
-        assertSuccess(result);
-
-        const returned = returnStringOf(result);
-        if (returned !== reservation.tokenId) {
-          throw new IssuerError(502, "ISSUE_ID_MISMATCH");
-        }
-
-        await this.waitForAccount(reservation.claimAccount);
-        this.logger.info("issued", returned, request.business);
-        return { txHash: txHashOf(result), tokenId: returned };
-      } finally {
-        this.reservation = null;
-      }
+      const claimAccount = `${tokenId}.${this.config.rootAccount}`;
+      await this.waitForAccount(claimAccount);
+      this.logger.info("issued", tokenId, request.business);
+      return { txHash: txHashOf(result), tokenId, claimAccount };
     });
   }
 

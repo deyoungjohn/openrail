@@ -1,7 +1,6 @@
 import type { FunctionCallRequest, ViewRequest } from "@openrail/shared";
 import { createLogger } from "@openrail/shared";
 import { describe, expect, it } from "vitest";
-import { IssuerError } from "./errors.js";
 import {
   IssuerService,
   REQUIRED_ISSUE_DEPOSIT_YOCTO,
@@ -11,9 +10,9 @@ import type {
   AccountChecker,
   AckEvmRequest,
   IssueForRequest,
-  IssuerStateReader,
   LogQuoteRequest,
   NearClientLike,
+  StorageCreditReader,
 } from "./types.js";
 
 const ROOT = "openrail.near";
@@ -49,15 +48,9 @@ class FakeNear implements NearClientLike {
   }
 }
 
-class FakeState implements IssuerStateReader {
-  next = 5;
+class FakeCredit implements StorageCreditReader {
   credit = 2n * 10n ** 22n;
-
-  async nextTokenId(): Promise<number> {
-    return this.next;
-  }
-
-  async storageCredit(): Promise<bigint> {
+  async storageCreditOf(): Promise<bigint> {
     return this.credit;
   }
 }
@@ -76,9 +69,8 @@ interface Fixture {
   service: IssuerService;
   issuer: FakeNear;
   relay: FakeNear;
-  state: FakeState;
+  credit: FakeCredit;
   accounts: FakeAccounts;
-  advance: (ms: number) => void;
   config: IssuerServiceConfig;
 }
 
@@ -89,29 +81,27 @@ function fixture(
     claim?: unknown;
   } = {},
 ): Fixture {
-  let now = 1_800_000_000_000;
   const config: IssuerServiceConfig = {
     rootAccount: ROOT,
     requiredDepositYocto: REQUIRED_ISSUE_DEPOSIT_YOCTO,
-    reservationTtlMs: 60_000,
     accountWaitMs: 3,
     accountPollMs: 1,
-    now: () => now,
+    now: () => 1_800_000_000_000,
     sleep: async () => {},
   };
   const issuer = new FakeNear(options.issuerResult, options.claim);
   const relay = new FakeNear();
-  const state = new FakeState();
+  const credit = new FakeCredit();
   const accounts = new FakeAccounts(options.accounts ?? [true]);
   const service = new IssuerService({
     issuerNear: issuer,
     relayNear: relay,
-    state,
+    credit,
     accounts,
     config,
     logger,
   });
-  return { service, issuer, relay, state, accounts, advance: (ms) => (now += ms), config };
+  return { service, issuer, relay, credit, accounts, config };
 }
 
 const ISSUE: IssueForRequest = {
@@ -139,46 +129,38 @@ const ACK: AckEvmRequest = {
 };
 
 describe("issuer prepareIssue", () => {
-  it("reserves the exact next token id and reads storage credit", async () => {
+  it("reports the storage credit and the top-up account/amount", async () => {
     const { service } = fixture();
-    const result = await service.prepareIssue("acme.near");
-    expect(result.tokenId).toBe("c-5");
-    expect(result.claimAccount).toBe("c-5.openrail.near");
-    expect(result.account).toBe(ROOT);
-    expect(result.amount).toBe(REQUIRED_ISSUE_DEPOSIT_YOCTO.toString());
-    expect(result.storageCredit).toBe((2n * 10n ** 22n).toString());
-  });
-
-  it("refuses a second prepare while one is in flight", async () => {
-    const { service } = fixture();
-    await service.prepareIssue("acme.near");
-    await expect(service.prepareIssue("other.near")).rejects.toMatchObject({
-      status: 409,
-      code: "ISSUE_IN_FLIGHT",
+    await expect(service.prepareIssue("acme.near")).resolves.toEqual({
+      account: ROOT,
+      amount: REQUIRED_ISSUE_DEPOSIT_YOCTO.toString(),
+      storageCredit: (2n * 10n ** 22n).toString(),
     });
   });
 
-  it("allows a new prepare after the reservation expires", async () => {
-    const { service, advance, config } = fixture();
-    await service.prepareIssue("acme.near");
-    advance(config.reservationTtlMs + 1);
-    await expect(service.prepareIssue("acme.near")).resolves.toMatchObject({
-      tokenId: "c-5",
-    });
+  it("surfaces an unavailable storage_credit_of view", async () => {
+    const { service, credit } = fixture();
+    credit.storageCreditOf = async () => {
+      throw new Error("Method storage_credit_of is not found");
+    };
+    await expect(service.prepareIssue("acme.near")).rejects.toThrow("storage_credit_of");
   });
 });
 
 describe("issuer issueFor", () => {
-  it("signs issue_for with the issuer key, maps the args and returns the tx", async () => {
+  it("takes the token id from the receipt, derives the claim account and maps the args", async () => {
     const { service, issuer } = fixture({ issuerResult: () => ok("c-5") });
-    await service.prepareIssue("acme.near");
 
     const result = await service.issueFor(ISSUE);
 
-    expect(result).toEqual({ txHash: "tx-1", tokenId: "c-5" });
+    expect(result).toEqual({
+      txHash: "tx-1",
+      tokenId: "c-5",
+      claimAccount: "c-5.openrail.near",
+    });
     expect(issuer.calls).toHaveLength(1);
     expect(issuer.calls[0]?.methodName).toBe("issue_for");
-    expect(issuer.calls[0]?.gas).toBe(250_000_000_000_000n);
+    expect(issuer.calls[0]?.gas).toBe(60_000_000_000_000n);
     expect(issuer.calls[0]?.args).toEqual({
       business: "acme.near",
       kind: 0,
@@ -190,32 +172,11 @@ describe("issuer issueFor", () => {
     });
   });
 
-  it("refuses an issue without a prepared reservation", async () => {
-    const { service, issuer } = fixture();
-    await expect(service.issueFor(ISSUE)).rejects.toMatchObject({
-      status: 409,
-      code: "NO_PREPARED_ISSUE",
-    });
-    expect(issuer.calls).toHaveLength(0);
-  });
-
-  it("refuses when the chain token id moved after prepare", async () => {
-    const { service, issuer, state } = fixture();
-    await service.prepareIssue("acme.near");
-    state.next = 6;
-    await expect(service.issueFor(ISSUE)).rejects.toMatchObject({
-      status: 409,
-      code: "TOKEN_ID_RACE",
-    });
-    expect(issuer.calls).toHaveLength(0);
-  });
-
   it("waits for the claim account to exist", async () => {
     const { service, accounts } = fixture({
       issuerResult: () => ok("c-5"),
       accounts: [false, false, true],
     });
-    await service.prepareIssue("acme.near");
     await service.issueFor(ISSUE);
     expect(accounts.calls).toEqual(["c-5.openrail.near", "c-5.openrail.near", "c-5.openrail.near"]);
   });
@@ -225,7 +186,6 @@ describe("issuer issueFor", () => {
       issuerResult: () => ok("c-5"),
       accounts: [false, false, false],
     });
-    await service.prepareIssue("acme.near");
     await expect(service.issueFor(ISSUE)).rejects.toMatchObject({
       status: 504,
       code: "CLAIM_ACCOUNT_NOT_READY",
@@ -234,10 +194,17 @@ describe("issuer issueFor", () => {
 
   it("surfaces a failed transaction", async () => {
     const { service } = fixture({ issuerResult: () => failed() });
-    await service.prepareIssue("acme.near");
     await expect(service.issueFor(ISSUE)).rejects.toMatchObject({
       status: 502,
       code: "NEAR_CALL_FAILED",
+    });
+  });
+
+  it("rejects a non-token-id return value", async () => {
+    const { service } = fixture({ issuerResult: () => ok(42) });
+    await expect(service.issueFor(ISSUE)).rejects.toMatchObject({
+      status: 502,
+      code: "NEAR_RETURN_INVALID",
     });
   });
 });
@@ -248,6 +215,7 @@ describe("issuer logQuote and acknowledgeEvm", () => {
     const result = await service.logQuote(QUOTE);
     expect(result).toEqual({ txHash: "tx-1" });
     expect(issuer.calls[0]?.methodName).toBe("log_quote");
+    expect(issuer.calls[0]?.gas).toBe(10_000_000_000_000n);
     expect(issuer.calls[0]?.args).toEqual({
       token_id: "c-5",
       quote: {
@@ -267,6 +235,7 @@ describe("issuer logQuote and acknowledgeEvm", () => {
     expect(result).toEqual({ txHash: "tx-1", ack });
     expect(relay.calls).toHaveLength(1);
     expect(relay.calls[0]?.methodName).toBe("acknowledge_evm");
+    expect(relay.calls[0]?.gas).toBe(10_000_000_000_000n);
     expect(relay.calls[0]?.args).toEqual({
       token_id: "c-5",
       chain_id: 8453,
@@ -279,12 +248,11 @@ describe("issuer logQuote and acknowledgeEvm", () => {
     const failing = new IssuerService({
       issuerNear: new FakeNear(),
       relayNear: new FakeNear(() => failed()),
-      state: new FakeState(),
+      credit: new FakeCredit(),
       accounts: new FakeAccounts([true]),
       config: {
         rootAccount: ROOT,
         requiredDepositYocto: REQUIRED_ISSUE_DEPOSIT_YOCTO,
-        reservationTtlMs: 60_000,
         accountWaitMs: 1,
         accountPollMs: 1,
         now: () => 0,
@@ -296,16 +264,5 @@ describe("issuer logQuote and acknowledgeEvm", () => {
       status: 502,
       code: "NEAR_CALL_FAILED",
     });
-  });
-});
-
-describe("issuer reservation isolation", () => {
-  it("does not let another business consume a reservation", async () => {
-    const { service, issuer } = fixture();
-    await service.prepareIssue("acme.near");
-    await expect(service.issueFor({ ...ISSUE, business: "other.near" })).rejects.toBeInstanceOf(
-      IssuerError,
-    );
-    expect(issuer.calls).toHaveLength(0);
   });
 });

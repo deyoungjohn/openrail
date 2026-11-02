@@ -10,20 +10,22 @@ const logger = createLogger("issuer-http-test", () => {});
 function fakeService() {
   return {
     prepareIssue: vi.fn(async () => ({
-      tokenId: "c-5",
-      claimAccount: "c-5.openrail.near",
       account: "openrail.near",
       amount: "20000000000000000000000",
       storageCredit: "0",
     })),
-    issueFor: vi.fn(async () => ({ txHash: "tx-issue", tokenId: "c-5" })),
+    issueFor: vi.fn(async () => ({
+      txHash: "tx-issue",
+      tokenId: "c-5",
+      claimAccount: "c-5.openrail.near",
+    })),
     logQuote: vi.fn(async () => ({ txHash: "tx-quote" })),
     acknowledgeEvm: vi.fn(async () => ({ txHash: "tx-ack", ack: null })),
   } as unknown as IssuerService;
 }
 
-function app(service = fakeService()) {
-  return { app: createIssuerApp({ service, serviceKey: KEY, logger }), service };
+function app(service = fakeService(), health?: () => Promise<Record<string, unknown>>) {
+  return { app: createIssuerApp({ service, serviceKey: KEY, logger, health }), service };
 }
 
 const ISSUE_BODY = JSON.stringify({
@@ -36,9 +38,9 @@ const ISSUE_BODY = JSON.stringify({
 });
 
 describe("issuer HTTP auth", () => {
-  it("rejects a missing or wrong key", async () => {
+  it("rejects a missing, wrong or non-bearer key", async () => {
     const { app: issuer } = app();
-    for (const headers of [{}, { "x-issuer-key": "wrong" }, { authorization: "Bearer wrong" }]) {
+    for (const headers of [{}, { authorization: "Bearer wrong" }, { "x-issuer-key": KEY }]) {
       const response = await issuer.handle(
         "POST",
         "/issue/prepare",
@@ -49,46 +51,57 @@ describe("issuer HTTP auth", () => {
     }
   });
 
-  it("accepts the API's x-issuer-key and a bearer token", async () => {
+  it("accepts only Authorization: Bearer", async () => {
     const { app: issuer, service } = app();
-    for (const headers of [{ "x-issuer-key": KEY }, { authorization: `Bearer ${KEY}` }]) {
-      const response = await issuer.handle(
-        "POST",
-        "/issue/prepare",
-        headers,
-        JSON.stringify({ account_id: "acme.near" }),
-      );
-      expect(response.status).toBe(200);
-    }
-    expect(service.prepareIssue).toHaveBeenCalledTimes(2);
+    const response = await issuer.handle(
+      "POST",
+      "/issue/prepare",
+      { authorization: `Bearer ${KEY}` },
+      JSON.stringify({ account_id: "acme.near" }),
+    );
+    expect(response.status).toBe(200);
+    expect(service.prepareIssue).toHaveBeenCalledWith("acme.near");
   });
 
   it("compares keys without short-circuiting on length", () => {
-    expect(isAuthorized({ "x-issuer-key": KEY }, KEY)).toBe(true);
-    expect(isAuthorized({ "x-issuer-key": `${KEY}x` }, KEY)).toBe(false);
+    expect(isAuthorized({ authorization: `Bearer ${KEY}` }, KEY)).toBe(true);
+    expect(isAuthorized({ authorization: `Bearer ${KEY}x` }, KEY)).toBe(false);
     expect(isAuthorized({}, KEY)).toBe(false);
   });
 });
 
 describe("issuer HTTP routes", () => {
-  it("prepares an issue", async () => {
+  it("prepares an issue with the storage credit response", async () => {
     const { app: issuer, service } = app();
     const response = await issuer.handle(
       "POST",
       "/issue/prepare",
-      { "x-issuer-key": KEY },
+      { authorization: `Bearer ${KEY}` },
       JSON.stringify({ account_id: "acme.near" }),
     );
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ tokenId: "c-5", claimAccount: "c-5.openrail.near" });
+    expect(response.body).toEqual({
+      account: "openrail.near",
+      amount: "20000000000000000000000",
+      storageCredit: "0",
+    });
     expect(service.prepareIssue).toHaveBeenCalledWith("acme.near");
   });
 
   it("issues with the port's camelCase fields", async () => {
     const { app: issuer, service } = app();
-    const response = await issuer.handle("POST", "/issue", { "x-issuer-key": KEY }, ISSUE_BODY);
+    const response = await issuer.handle(
+      "POST",
+      "/issue",
+      { authorization: `Bearer ${KEY}` },
+      ISSUE_BODY,
+    );
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ txHash: "tx-issue", tokenId: "c-5" });
+    expect(response.body).toEqual({
+      txHash: "tx-issue",
+      tokenId: "c-5",
+      claimAccount: "c-5.openrail.near",
+    });
     expect(service.issueFor).toHaveBeenCalledWith({
       business: "acme.near",
       kind: 0,
@@ -104,7 +117,7 @@ describe("issuer HTTP routes", () => {
     const response = await issuer.handle(
       "POST",
       "/log_quote",
-      { "x-issuer-key": KEY },
+      { authorization: `Bearer ${KEY}` },
       JSON.stringify({
         tokenId: "c-5",
         quoteId: "q-1",
@@ -130,7 +143,7 @@ describe("issuer HTTP routes", () => {
     const response = await issuer.handle(
       "POST",
       "/ack/evm",
-      { "x-issuer-key": KEY },
+      { authorization: `Bearer ${KEY}` },
       JSON.stringify({ tokenId: "c-5", chainId: 8453, signature: "0x" + "33".repeat(65) }),
     );
     expect(response.status).toBe(200);
@@ -151,17 +164,36 @@ describe("issuer HTTP routes", () => {
       ["/ack/evm", JSON.stringify({ tokenId: "c-5", chainId: "8453", signature: "0x00" })],
     ] as const;
     for (const [path, body] of bad) {
-      const response = await issuer.handle("POST", path, { "x-issuer-key": KEY }, body);
+      const response = await issuer.handle("POST", path, { authorization: `Bearer ${KEY}` }, body);
       expect(response.status, path).toBe(400);
     }
   });
 
   it("returns 404 for unknown paths and 405 for the wrong method", async () => {
     const { app: issuer } = app();
-    const missing = await issuer.handle("POST", "/nope", { "x-issuer-key": KEY }, "{}");
+    const missing = await issuer.handle("POST", "/nope", { authorization: `Bearer ${KEY}` }, "{}");
     expect(missing.status).toBe(404);
-    const wrong = await issuer.handle("GET", "/issue/prepare", { "x-issuer-key": KEY }, "");
+    const wrong = await issuer.handle(
+      "GET",
+      "/issue/prepare",
+      { authorization: `Bearer ${KEY}` },
+      "",
+    );
     expect(wrong.status).toBe(405);
+  });
+
+  it("serves /health without auth", async () => {
+    const { app: issuer } = app(fakeService(), async () => ({
+      issuer_key: { allowance_near: 1.5 },
+      relay_key: { allowance_near: 0.5 },
+    }));
+    const response = await issuer.handle("GET", "/health", {}, "");
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ok: true,
+      issuer_key: { allowance_near: 1.5 },
+      relay_key: { allowance_near: 0.5 },
+    });
   });
 
   it("maps service errors", async () => {
@@ -173,7 +205,7 @@ describe("issuer HTTP routes", () => {
     const conflict = await issuer.handle(
       "POST",
       "/issue/prepare",
-      { "x-issuer-key": KEY },
+      { authorization: `Bearer ${KEY}` },
       JSON.stringify({ account_id: "acme.near" }),
     );
     expect(conflict.status).toBe(409);
@@ -187,7 +219,7 @@ describe("issuer HTTP routes", () => {
     const upstream = await issuer.handle(
       "POST",
       "/issue/prepare",
-      { "x-issuer-key": KEY },
+      { authorization: `Bearer ${KEY}` },
       JSON.stringify({ account_id: "acme.near" }),
     );
     expect(upstream.status).toBe(502);

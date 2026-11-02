@@ -1,4 +1,4 @@
-/** Port shapes from `services/api/src/app.ts` (`IssuerPort`, PR #27). */
+/** Port shapes from `services/api/src/app.ts` (`IssuerPort`). */
 import type { FunctionCallRequest, ViewRequest } from "@openrail/shared";
 
 export interface NearClientLike {
@@ -34,13 +34,11 @@ export interface AckEvmRequest {
 }
 
 export interface PrepareIssueResult {
-  /** `{ tokenId, claimAccount }` is what the API consumes. */
-  tokenId: string;
-  claimAccount: string;
-  /** The business deposits this NEAR storage credit to this account. */
+  /** The business deposits NEAR storage credit to this account. */
   account: string;
+  /** Required deposit in yoctoNEAR (0.02 NEAR today). */
   amount: string;
-  /** Current `storage_credit[business]` in yoctoNEAR. */
+  /** Current `storage_credit_of(business)` in yoctoNEAR. */
   storageCredit: string;
 }
 
@@ -48,15 +46,23 @@ export interface PrepareIssueBody {
   account_id: string;
 }
 
-/** Reads the two values the public ABI does not expose. */
-export interface IssuerStateReader {
-  /** Contract `next_token_id` (the state's last Borsh field). */
-  nextTokenId(): Promise<number>;
-  /** `storage_credit[business]` in yoctoNEAR. */
-  storageCredit(business: string): Promise<bigint>;
+/** Reads the business's storage credit through the `storage_credit_of` view. */
+export interface StorageCreditReader {
+  storageCreditOf(business: string): Promise<bigint>;
 }
 
 /** Polls whether a claim account exists (blueprint 1.5.4). */
 export interface AccountChecker {
   exists(accountId: string): Promise<boolean>;
+}
+
+export interface KeyInfo {
+  kind: "FullAccess" | "FunctionCall";
+  methods: string[];
+  allowance: string | null;
+}
+
+/** Reads a key's permission/allowance for the startup self-check and `/health`. */
+export interface KeyInspector {
+  keyInfo(accountId: string, publicKey: string): Promise<KeyInfo>;
 }
