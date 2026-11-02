@@ -5,7 +5,8 @@
  * within MAX_SPEND_USD, and the typed confirmation `YES`. The agent never sets
  * the mainnet flag; the human-run T2 script does.
  */
-import { confirmMainnet, isDryRun } from "../env/index.js";
+import { createInterface } from "node:readline";
+import { confirmMainnet, isDryRun, requireEnv } from "../env/index.js";
 
 const DEFAULT_CAP_USD = 5;
 
@@ -23,15 +24,24 @@ export interface SpendRunResult<T> {
   value?: T;
 }
 
-/** Throws SPEND_CAP_INVALID when MAX_SPEND_USD is not a non-negative number. */
-export function maxSpendUsd(): number {
-  const raw = process.env.MAX_SPEND_USD;
-  if (raw === undefined || raw.trim() === "") return DEFAULT_CAP_USD;
+function parseCap(raw: string): number {
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) {
     throw new Error("SPEND_CAP_INVALID: MAX_SPEND_USD must be a non-negative number");
   }
   return value;
+}
+
+/**
+ * The cap. Dry runs may use the spike default; a live run fails closed when
+ * MAX_SPEND_USD is missing (`MISSING_ENV: MAX_SPEND_USD`).
+ */
+export function maxSpendUsd(): number {
+  const raw = process.env.MAX_SPEND_USD;
+  if (raw === undefined || raw.trim() === "") {
+    return isDryRun() ? DEFAULT_CAP_USD : parseCap(requireEnv("MAX_SPEND_USD"));
+  }
+  return parseCap(raw);
 }
 
 export class SpendGuard {
@@ -40,11 +50,6 @@ export class SpendGuard {
   /** Running total of planned value in USD. */
   totalUsd(): number {
     return this.total;
-  }
-
-  /** Clear the running total between scenarios. */
-  reset(): void {
-    this.total = 0;
   }
 
   /** True unless DRY_RUN is explicitly no/false/0. */
@@ -95,5 +100,29 @@ export class SpendGuard {
     }
     const value = await request.execute();
     return { status: "SENT", totalUsd, value };
+  }
+}
+
+export interface PromptStreams {
+  input: NodeJS.ReadableStream & { isTTY?: boolean };
+  output: NodeJS.WritableStream & { isTTY?: boolean };
+}
+
+/** Ask for the typed confirmation on a real terminal; never in CI or a pipe. */
+export async function promptYes(
+  question: string,
+  streams: PromptStreams = { input: process.stdin, output: process.stdout },
+): Promise<string> {
+  if (streams.input.isTTY !== true || streams.output.isTTY !== true) {
+    throw new Error("PROMPT_NOT_A_TTY: refusing to ask for YES without a terminal");
+  }
+  const readline = createInterface({ input: streams.input, output: streams.output });
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      readline.question(`${question} `, (answer) => resolve(answer.trim()));
+      readline.once("error", reject);
+    });
+  } finally {
+    readline.close();
   }
 }
