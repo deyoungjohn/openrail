@@ -2662,6 +2662,7 @@ dependencies = [
  "near-workspaces",
  "openrail",
  "openrail-model",
+ "proptest",
  "serde",
  "serde_json",
  "tokio",
