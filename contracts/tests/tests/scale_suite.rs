@@ -23,18 +23,23 @@ use serde_json::json;
 async fn smoke_scale_stubs_return_not_implemented() -> Result<()> {
     let env = Env::new().await?;
 
-    let rec_res = env
+    // Note: reconcile is implemented in C4; test C2 stub
+    let res = env
         .alice
-        .call(env.root.id(), "reconcile")
-        .args_json(json!({ "token_id": "c-1" }))
+        .call(env.root.id(), "nft_transfer")
+        .args_json(json!({
+            "receiver_id": env.bob.id(),
+            "token_id": "c-1"
+        }))
+        .deposit(near_workspaces::types::NearToken::from_yoctonear(1))
         .max_gas()
         .transact()
         .await?;
-    assert!(rec_res.is_failure());
-    let failure = format!("{:?} {}", rec_res.failures(), rec_res.logs().join(" "));
+    assert!(res.is_failure());
+    let failure = format!("{:?} {}", res.failures(), res.logs().join(" "));
     assert!(
         failure.contains("NOT_IMPLEMENTED"),
-        "reconcile must fail with NOT_IMPLEMENTED, got: {failure}"
+        "nft_transfer must fail with NOT_IMPLEMENTED, got: {failure}"
     );
 
     Ok(())
@@ -165,7 +170,6 @@ async fn scale_storage_per_claim_constant() -> Result<()> {
 
 /// Reconcile gas is constant O(1) independent of total claims on the contract (Blueprint 2.11 & K16).
 #[tokio::test]
-#[ignore = "C4"]
 async fn scale_reconcile_gas_constant() -> Result<()> {
     let env = Env::new().await?;
 

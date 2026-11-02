@@ -22,26 +22,8 @@ use serde_json::json;
 
 #[tokio::test]
 async fn smoke_ds8_stubs_return_not_implemented() -> Result<()> {
-    let env = Env::new().await?;
-
-    let res = env
-        .alice
-        .call(env.root.id(), "retry_distribution")
-        .args_json(json!({ "token_id": "c-1" }))
-        .max_gas()
-        .transact()
-        .await?;
-
-    assert!(
-        res.is_failure(),
-        "retry_distribution stub must fail before C4 lands"
-    );
-    let failure_text = format!("{:?}", res.into_result().unwrap_err());
-    assert!(
-        failure_text.contains("NOT_IMPLEMENTED"),
-        "Expected NOT_IMPLEMENTED, got: {failure_text}"
-    );
-
+    // Before C4: retry_distribution returned NOT_IMPLEMENTED.
+    // In C4: retry_distribution is fully implemented.
     Ok(())
 }
 

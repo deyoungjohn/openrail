@@ -483,7 +483,9 @@ impl Contract {
             Lock::None => false,
         };
 
-        require!(is_stale, "lock is not stale");
+        if !is_stale {
+            return;
+        }
 
         let cleared_lock = std::mem::replace(&mut claim.lock, Lock::None);
         LockClearedEvent {

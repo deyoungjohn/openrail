@@ -487,7 +487,6 @@ proptest! {
 }
 
 #[tokio::test]
-#[ignore = "C4"]
 async fn contract_legs_sum_to_net_or_fallback() -> anyhow::Result<()> {
     let env = Env::new().await?;
     // When C4 lands: verify reconcile distributions strictly adhere to sum(legs) == net.

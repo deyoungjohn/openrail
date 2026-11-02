@@ -481,7 +481,7 @@ async fn test_c4_clear_stale_lock() -> Result<()> {
         .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
         .await?;
 
-    // Lock is currently None -> clear_stale_lock must fail
+    // Lock is currently None -> clear_stale_lock is a valid no-op
     let res_none = env
         .alice
         .call(env.root.id(), "clear_stale_lock")
@@ -489,12 +489,7 @@ async fn test_c4_clear_stale_lock() -> Result<()> {
         .max_gas()
         .transact()
         .await?;
-    assert!(res_none.is_failure());
-    let failure = format!("{:?}", res_none.failures());
-    assert!(
-        failure.contains("lock is not stale"),
-        "Must fail with 'lock is not stale', got: {failure}"
-    );
+    assert!(res_none.is_success());
 
     Ok(())
 }
