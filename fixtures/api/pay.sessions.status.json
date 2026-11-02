@@ -1,0 +1,20 @@
+{
+  "id": "ps_01J00000000000000000000000",
+  "status": "success",
+  "swap_details": {
+    "status": "SUCCESS",
+    "amount_out": "12500000",
+    "deposited_amount": "12500000",
+    "origin_chain_tx_hashes": [
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    ],
+    "destination_chain_tx_hashes": [
+      "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    ],
+    "near_tx_hashes": [
+      "8cDysV69qchx9emuEFBV2m4SWWMUKQjKtY7ZLDbJTu1J",
+      "AbQhhqYR2xXFXmUsKMTbUTnJ1Wgj2WxbTNPDDx3415Gk"
+    ]
+  },
+  "updated_at": "2026-11-02T10:01:35Z"
+}

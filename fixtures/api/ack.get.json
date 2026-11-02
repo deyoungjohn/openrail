@@ -1,0 +1,52 @@
+{
+  "token_id": "c-1",
+  "invoice_number": "INV-2026-001",
+  "claim_account": "c-1.openrail.near",
+  "debtor": {
+    "Near": "debtor.openrail.near"
+  },
+  "terms_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "amount_due": "12500000",
+  "amount_usd": "12.50",
+  "due_date": 1764547200,
+  "status": "Issued",
+  "terms": {
+    "schema": "openrail.terms.v1",
+    "invoice_number": "INV-2026-001",
+    "issuer_legal_name": "Acme Ltd",
+    "issuer_account": "acme.openrail.near",
+    "debtor_legal_name": "Debtor Co",
+    "debtor_key": "debtor.openrail.near",
+    "amount_usd": "12.50",
+    "due_date": "2026-12-01",
+    "line_items_sha256": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "claim_account": "c-1.openrail.near",
+    "pay_link": "https://pay.openrail.near/c-1",
+    "clauses": {
+      "payment_instruction_v1": "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+      "assignment_consent_v1": "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
+    }
+  },
+  "domain": {
+    "name": "Openrail",
+    "version": "1",
+    "chain_ids": [
+      1,
+      8453,
+      42161,
+      10,
+      137,
+      56
+    ],
+    "verifying_contract": "0x0000000000000000000000000000000000000000"
+  },
+  "primary_type": "Acknowledge",
+  "message": {
+    "kind": "OPENRAIL_ACK_V1",
+    "root_contract": "openrail.near",
+    "token_id": "c-1",
+    "terms_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "amount_due": "12500000",
+    "due_date": 1764547200
+  }
+}

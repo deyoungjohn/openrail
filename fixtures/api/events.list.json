@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "id": "evt_01J00000000000000000000000",
+      "type": "invoice.paid",
+      "created": 1762070495,
+      "data": {
+        "invoice_id": "inv_01J00000000000000000000000",
+        "token_id": "c-1",
+        "amount_due": "12500000"
+      }
+    }
+  ],
+  "next_cursor": null
+}

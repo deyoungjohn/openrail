@@ -1,0 +1,13 @@
+{
+  "amount": "2000000",
+  "source_asset": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+  "destination_chain": "base",
+  "destination_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "amount_out": "1998000",
+  "route_cost_usd": "0.30",
+  "deposit_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "deposit_type": "INTENTS",
+  "swap_type": "EXACT_OUTPUT",
+  "route_id": "R1",
+  "deadline": "2026-11-02T11:00:00Z"
+}

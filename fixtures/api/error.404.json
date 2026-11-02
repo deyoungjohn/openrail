@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "invoice_not_found",
+    "message": "Invoice not found"
+  }
+}

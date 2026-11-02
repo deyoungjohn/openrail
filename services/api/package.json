@@ -5,6 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
+    "start": "tsx src/server.ts",
+    "mock": "MOCK=1 tsx src/server.ts",
     "test": "vitest run --config ../../vitest.config.ts --root ."
   }
 }
