@@ -145,15 +145,15 @@ async fn ft_transfer_rules() -> Result<()> {
     let bob = worker.dev_create_account().await?;
     mint(&usdc, &alice, 1000).await?;
 
-    let no_yocto = usdc
-        .call("ft_transfer")
+    let no_yocto = alice
+        .call(usdc.id(), "ft_transfer")
         .args_json(json!({ "receiver_id": bob.id(), "amount": "400" }))
         .transact()
         .await?;
     assert!(no_yocto.is_failure(), "ft_transfer needs exactly 1 yocto");
 
-    let unregistered = usdc
-        .call("ft_transfer")
+    let unregistered = alice
+        .call(usdc.id(), "ft_transfer")
         .args_json(json!({ "receiver_id": bob.id(), "amount": "400" }))
         .deposit(NearToken::from_yoctonear(1))
         .transact()
@@ -164,7 +164,8 @@ async fn ft_transfer_rules() -> Result<()> {
     );
 
     register(&usdc, &bob).await?;
-    usdc.call("ft_transfer")
+    alice
+        .call(usdc.id(), "ft_transfer")
         .args_json(json!({ "receiver_id": bob.id(), "amount": "400", "memo": "test" }))
         .deposit(NearToken::from_yoctonear(1))
         .transact()
@@ -175,8 +176,8 @@ async fn ft_transfer_rules() -> Result<()> {
     assert_eq!(balance(&usdc, &bob).await?, 400);
     assert_eq!(total_supply(&usdc).await?, 1000);
 
-    let too_much = usdc
-        .call("ft_transfer")
+    let too_much = alice
+        .call(usdc.id(), "ft_transfer")
         .args_json(json!({ "receiver_id": bob.id(), "amount": "1000" }))
         .deposit(NearToken::from_yoctonear(1))
         .transact()
@@ -194,7 +195,8 @@ async fn ft_transfer_call_uses_and_refunds() -> Result<()> {
     mint(&usdc, &alice, 1000).await?;
     register(&usdc, &receiver.as_account().clone()).await?;
 
-    usdc.call("ft_transfer_call")
+    alice
+        .call(usdc.id(), "ft_transfer_call")
         .args_json(json!({
             "receiver_id": receiver.id(),
             "amount": "300",
@@ -209,7 +211,8 @@ async fn ft_transfer_call_uses_and_refunds() -> Result<()> {
     assert_eq!(balance(&usdc, &alice).await?, 700);
     assert_eq!(balance(&usdc, &receiver.as_account().clone()).await?, 300);
 
-    usdc.call("ft_transfer_call")
+    alice
+        .call(usdc.id(), "ft_transfer_call")
         .args_json(json!({
             "receiver_id": receiver.id(),
             "amount": "200",
