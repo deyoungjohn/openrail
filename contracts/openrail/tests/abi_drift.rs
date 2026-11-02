@@ -99,18 +99,16 @@ fn test_core_abi_format_and_events() {
 fn test_built_abi_drift() {
     let built_abi_path = Path::new("../../target/near/openrail/openrail_abi.json");
     let fallback_built_path = Path::new("target/near/openrail/openrail_abi.json");
-    let has_near_target = Path::new("../../target/near").exists()
-        || Path::new("target/near").exists()
-        || std::env::var("REQUIRE_BUILT_ABI").is_ok();
-
+    // The `abi-check` CI job builds the contract and compares its ABI (that is the enforcing
+    // gate). This unit test only compares when a full build exists; a partial `target/near`
+    // restored by the CI cache (harness wasms without `openrail_abi.json`) must never fail it.
+    // Set REQUIRE_BUILT_ABI=1 to make a missing ABI an error.
     let built_path = if built_abi_path.exists() {
         built_abi_path
     } else if fallback_built_path.exists() {
         fallback_built_path
-    } else if has_near_target && std::env::var("CI").is_ok() {
-        panic!(
-            "target/near exists, but openrail_abi.json was not found in CI; failing drift check"
-        );
+    } else if std::env::var("REQUIRE_BUILT_ABI").is_ok() {
+        panic!("REQUIRE_BUILT_ABI is set, but openrail_abi.json was not found");
     } else {
         println!("openrail_abi.json not built in this environment; skipping drift check");
         return;
