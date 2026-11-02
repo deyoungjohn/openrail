@@ -1,0 +1,103 @@
+{
+  "run": "P0.4H-vault-sign-gas",
+  "at": "2026-11-02T10:15:06.577Z",
+  "network": "mainnet",
+  "signer": "v1.signer",
+  "account": "openrail.near",
+  "request": {
+    "request": {
+      "payload_v2": {
+        "Ecdsa": "447e039f40c34055df22a25066d1b6968b39837d5d0605b5993b651375ba913c"
+      },
+      "path": "evm-1",
+      "domain_id": 0
+    }
+  },
+  "levels_tgas": [
+    100,
+    150,
+    250
+  ],
+  "results": [
+    {
+      "gas_tgas": 100,
+      "command": [
+        "near",
+        "contract",
+        "call-function",
+        "as-transaction",
+        "v1.signer",
+        "sign",
+        "json-args",
+        "{\"request\":{\"payload_v2\":{\"Ecdsa\":\"447e039f40c34055df22a25066d1b6968b39837d5d0605b5993b651375ba913c\"},\"path\":\"evm-1\",\"domain_id\":0}}",
+        "prepaid-gas",
+        "100 Tgas",
+        "attached-deposit",
+        "1 yoctoNEAR",
+        "sign-as",
+        "openrail.near",
+        "network-config",
+        "mainnet",
+        "sign-with-keychain",
+        "send"
+      ],
+      "exit_code": 0,
+      "success": true,
+      "at": "2026-11-02T10:14:38.715Z"
+    },
+    {
+      "gas_tgas": 150,
+      "command": [
+        "near",
+        "contract",
+        "call-function",
+        "as-transaction",
+        "v1.signer",
+        "sign",
+        "json-args",
+        "{\"request\":{\"payload_v2\":{\"Ecdsa\":\"447e039f40c34055df22a25066d1b6968b39837d5d0605b5993b651375ba913c\"},\"path\":\"evm-1\",\"domain_id\":0}}",
+        "prepaid-gas",
+        "150 Tgas",
+        "attached-deposit",
+        "1 yoctoNEAR",
+        "sign-as",
+        "openrail.near",
+        "network-config",
+        "mainnet",
+        "sign-with-keychain",
+        "send"
+      ],
+      "exit_code": 0,
+      "success": true,
+      "at": "2026-11-02T10:14:53.639Z"
+    },
+    {
+      "gas_tgas": 250,
+      "command": [
+        "near",
+        "contract",
+        "call-function",
+        "as-transaction",
+        "v1.signer",
+        "sign",
+        "json-args",
+        "{\"request\":{\"payload_v2\":{\"Ecdsa\":\"447e039f40c34055df22a25066d1b6968b39837d5d0605b5993b651375ba913c\"},\"path\":\"evm-1\",\"domain_id\":0}}",
+        "prepaid-gas",
+        "250 Tgas",
+        "attached-deposit",
+        "1 yoctoNEAR",
+        "sign-as",
+        "openrail.near",
+        "network-config",
+        "mainnet",
+        "sign-with-keychain",
+        "send"
+      ],
+      "exit_code": 0,
+      "success": true,
+      "at": "2026-11-02T10:15:06.572Z"
+    }
+  ],
+  "minimum_working_tgas": 100,
+  "rule": "minimum = smallest Tgas level whose transaction succeeded; null means none did"
+}
