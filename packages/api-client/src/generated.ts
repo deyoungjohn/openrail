@@ -93,7 +93,7 @@ export interface Terms {
   claim_account: string;
   pay_link: string;
   assignment_agreement_sha256?: Hex32;
-  clauses: Record<string, string>;
+  clauses: string[];
 }
 
 export interface LineItem {
@@ -126,6 +126,7 @@ export interface ClaimView {
   undistributed: Leg[];
   assignment_doc_hash: Hex32 | null;
   created_block: number;
+  kind_rules: KindRules;
 }
 
 export interface Invoice {
@@ -172,7 +173,7 @@ export interface CreateInvoiceRequest {
   line_items_sha256?: Hex32;
   pay_link?: string;
   assignment_agreement_sha256?: Hex32;
-  clauses?: Record<string, string>;
+  clauses?: string[];
 }
 
 export interface SendInvoiceRequest {
@@ -315,6 +316,7 @@ export interface PaySession {
   terms_hash: Hex32;
   status: PaymentStatus;
   created_at: string;
+  deadline_requested: number;
 }
 
 export interface PaySessionStatus {
@@ -505,6 +507,7 @@ export interface OpenQuote {
   refund_to: string;
   route_id: string;
   expired: boolean;
+  deadline: string;
 }
 
 export interface OpenQuoteList {
@@ -535,6 +538,24 @@ export interface PublicReceipt {
   receipt: Receipt;
   verify_url: string;
   claim_account: string;
+}
+
+export interface KindRules {
+  ack_required_for_sale: boolean;
+  sellable: boolean;
+  quote_deadline: number;
+  debtor_optional: boolean;
+}
+
+export interface AckEvmRequest {
+  chain_id: number;
+  signature: string;
+}
+
+export interface AckEvmResponse {
+  token_id: string;
+  ack: Ack;
+  tx_hash: string;
 }
 
 export interface operations {
@@ -933,6 +954,24 @@ export interface operations {
     responses: {
       "200": PublicReceipt;
       "404": Error;
+    };
+  };
+  acknowledgeEvm: {
+    parameters: {
+      path: {
+        token_id: string;
+      };
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    requestBody: AckEvmRequest;
+    responses: {
+      "200": AckEvmResponse;
+      "400": Error;
+      "404": Error;
+      "409": Error;
+      "422": Error;
     };
   };
 }

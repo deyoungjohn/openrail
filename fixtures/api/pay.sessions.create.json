@@ -12,5 +12,6 @@
   "claim_account": "c-1.openrail.near",
   "terms_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "status": "pending_deposit",
-  "created_at": "2026-11-02T10:00:00Z"
+  "created_at": "2026-11-02T10:00:00Z",
+  "deadline_requested": 1762074000
 }

@@ -6,7 +6,8 @@
       "deadline_requested": 1762074000,
       "refund_to": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
       "route_id": "R1",
-      "expired": false
+      "expired": false,
+      "deadline": "2026-11-03T11:00:00Z"
     }
   ]
 }

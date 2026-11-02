@@ -147,6 +147,23 @@ describe("typed client", () => {
     expect(url.searchParams.get("format")).toBe("csv");
   });
 
+  it("relays an EVM acknowledgement", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(fixture("ack.evm.json")));
+    const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });
+
+    const result = await client.ack.evm(
+      "c-1",
+      { chain_id: 8453, signature: "0xsig" },
+      { idempotencyKey: "ack-key-0001" },
+    );
+
+    expect(result.tx_hash).toBeDefined();
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.openrail.near/v1/ack/c-1/evm");
+    expect(headersOf(fetchImpl.mock.calls[0]?.[1] as RequestInit)["Idempotency-Key"]).toBe(
+      "ack-key-0001",
+    );
+  });
+
   it("serves the OpenAPI document", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ openapi: "3.1.0" }));
     const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });

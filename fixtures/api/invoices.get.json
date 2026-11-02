@@ -32,10 +32,10 @@
       "line_items_sha256": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "claim_account": "c-1.openrail.near",
       "pay_link": "https://pay.openrail.near/c-1",
-      "clauses": {
-        "payment_instruction_v1": "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
-        "assignment_consent_v1": "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
-      }
+      "clauses": [
+        "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+        "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
+      ]
     }
   },
   "claim": {
@@ -67,6 +67,12 @@
     },
     "undistributed": [],
     "assignment_doc_hash": null,
-    "created_block": 123456
+    "created_block": 123456,
+    "kind_rules": {
+      "ack_required_for_sale": true,
+      "sellable": true,
+      "quote_deadline": 3600,
+      "debtor_optional": false
+    }
   }
 }
