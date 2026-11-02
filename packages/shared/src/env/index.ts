@@ -17,7 +17,10 @@ const SECRET_NAME_RE =
 
 const JWT_RE = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
 const ED25519_RE = /\bed25519:[1-9A-HJ-NP-Za-km-z]{40,}\b/g;
-const LONG_HEX_RE = /(?<![0-9A-Za-z])(?:0x)?[0-9a-fA-F]{64,}(?![0-9A-Za-z])/g;
+const SECRET_KEY_CONTEXT_RE = /(key|secret|seed|private|mnemonic|token)/i;
+const HEX_64_RE = /^(?:0x)?[0-9a-fA-F]{64}$/;
+const INLINE_SECRET_HEX_RE =
+  /\b(key|secret|private_key|private|token|seed|mnemonic)\s*[:=]\s*(["']?)((?:0x)?[0-9a-fA-F]{64})\2/gi;
 
 interface SecretEntry {
   name: string;
@@ -66,9 +69,11 @@ export function resetSecretsForTests(): void {
 
 function redactPatterns(input: string): string {
   return input
+    .replace(INLINE_SECRET_HEX_RE, (match, _prefix, _quote, hex: string) =>
+      match.replace(hex, REDACTED),
+    )
     .replace(JWT_RE, REDACTED)
-    .replace(ED25519_RE, REDACTED)
-    .replace(LONG_HEX_RE, REDACTED);
+    .replace(ED25519_RE, REDACTED);
 }
 
 /** Mask registered secret values and every key-shaped token in a string. */
@@ -127,7 +132,11 @@ export function redactDeep<T>(input: T, seen: WeakSet<object> = new WeakSet()): 
   if (Array.isArray(input)) return input.map((entry) => redactDeep(entry, seen)) as unknown as T;
   const output: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    output[redactString(key)] = redactDeep(value, seen);
+    const redactedKey = redactString(key);
+    output[redactedKey] =
+      SECRET_KEY_CONTEXT_RE.test(key) && typeof value === "string" && HEX_64_RE.test(value)
+        ? REDACTED
+        : redactDeep(value, seen);
   }
   return output as unknown as T;
 }
