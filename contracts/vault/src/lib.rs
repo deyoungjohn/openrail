@@ -13,6 +13,8 @@
 //!
 //! Feature `testnet` selects `v1.signer-prod.testnet` instead of `v1.signer`.
 #![cfg_attr(target_arch = "wasm32", no_std)]
+// Host builds only run the pure-function unit tests; the host-call constants are wasm-only.
+#![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
 #[cfg(feature = "testnet")]
 const SIGNER: &[u8] = b"v1.signer-prod.testnet";
@@ -180,9 +182,7 @@ fn is_account_id(value: &[u8]) -> bool {
 
 /// Intent token ids are not account ids: `nep141:usdc.omft.near`, `nep245:v2_1.omni.hot.tg:…`.
 fn is_token_id(value: &[u8]) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value.iter().all(|&c| (0x21..=0x7e).contains(&c))
+    !value.is_empty() && value.len() <= 128 && value.iter().all(|&c| (0x21..=0x7e).contains(&c))
 }
 
 fn decimal_u64(mut value: u64, buf: &mut [u8; 20]) -> &[u8] {
@@ -377,7 +377,10 @@ mod tests {
     #[test]
     fn nested_keys_do_not_shadow_top_level_fields() {
         let j = br#"{"payload":{"domain_id":9,"payload":{"x":1}},"path":"evm-1","domain_id":0,"gas_tgas":100}"#;
-        assert_eq!(object_field(j, b"payload"), Some(&br#"{"domain_id":9,"payload":{"x":1}}"#[..]));
+        assert_eq!(
+            object_field(j, b"payload"),
+            Some(&br#"{"domain_id":9,"payload":{"x":1}}"#[..])
+        );
         assert_eq!(u64_field(j, b"domain_id"), Some(0));
         assert_eq!(str_field(j, b"path"), Some(&b"evm-1"[..]));
         assert_eq!(u64_field(j, b"gas_tgas"), Some(100));

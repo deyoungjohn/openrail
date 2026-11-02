@@ -12,9 +12,7 @@ use anyhow::{anyhow, Context, Result};
 use near_workspaces::network::Sandbox;
 use near_workspaces::result::ExecutionFinalResult;
 use near_workspaces::types::{KeyType, NearToken, SecretKey};
-use near_workspaces::{
-    Account, AccountDetailsPatch, AccountId, Contract, ContractState, Worker,
-};
+use near_workspaces::{Account, AccountDetailsPatch, AccountId, Contract, ContractState, Worker};
 use serde_json::{json, Value};
 
 const FORWARD_MIN_TGAS: u64 = 8;
@@ -50,10 +48,7 @@ fn vault_wasm() -> Result<Vec<u8>> {
     let root = workspace_root();
     let target = root.join("target/sandbox-vault");
     let is_newer_than = |wasm: &Path| -> bool {
-        let built = wasm
-            .metadata()
-            .and_then(|m| m.modified())
-            .ok();
+        let built = wasm.metadata().and_then(|m| m.modified()).ok();
         let src = root
             .join("contracts/vault/src/lib.rs")
             .metadata()
@@ -117,11 +112,14 @@ fn mock_wasm() -> Result<Vec<u8>> {
 }
 
 fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         out.push(ALPHABET[(b[0] >> 2) as usize] as char);
         out.push(ALPHABET[(((b[0] & 0b11) << 4) | (b[1] >> 4)) as usize] as char);
         out.push(if chunk.len() > 1 {
@@ -154,11 +152,7 @@ async fn create_mock_account(worker: &Worker<Sandbox>, id: &str, wasm: &[u8]) ->
         .transact()
         .await
         .with_context(|| format!("patch mock at {id}"))?;
-    Ok(Contract::from_secret_key(
-        account_id,
-        seeded(id),
-        worker,
-    ))
+    Ok(Contract::from_secret_key(account_id, seeded(id), worker))
 }
 
 async fn create_invoice(
@@ -492,7 +486,8 @@ async fn forward_moves_tokens_through_the_receiver() -> Result<()> {
 
     let last: Option<String> = f.intents.view("last_call").await?.json()?;
     assert!(
-        last.expect("intents mock was called").contains("mt_transfer"),
+        last.expect("intents mock was called")
+            .contains("mt_transfer"),
         "forward must call mt_transfer"
     );
     Ok(())
