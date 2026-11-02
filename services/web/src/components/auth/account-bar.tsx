@@ -1,6 +1,7 @@
 "use client";
 
 import { copy } from "@/copy";
+import { AccountId } from "../ui/account-id";
 import { Button } from "../ui/button";
 import { useAuth } from "./auth-provider";
 
@@ -11,7 +12,7 @@ export function AccountBar() {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="caption">{copy.auth.signedInAs}</span>
-      <code className="font-mono text-[13px]">{state.accountId}</code>
+      <AccountId value={state.accountId} />
       <Button variant="secondary" size="sm" onClick={() => void signOut()}>
         {copy.wallet.signOut}
       </Button>

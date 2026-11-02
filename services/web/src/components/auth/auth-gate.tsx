@@ -26,7 +26,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <p className="text-[15px]">{copy.auth.body}</p>
         {state.failed ? (
           <p role="alert" className="text-danger-text text-[14px]">
-            {copy.auth.failed}
+            {state.failed === "unsupported" ? copy.auth.unsupported : copy.auth.failed}
           </p>
         ) : null}
         <Button

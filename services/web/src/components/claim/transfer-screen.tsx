@@ -2,6 +2,7 @@
 
 import { CheckCircle2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { AccountId } from "../ui/account-id";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
 import { Card, type ViewState } from "../ui/card";
@@ -217,7 +218,13 @@ function SaleForm({ claim }: { claim: Claim }) {
         {!owner ? (
           <div className="space-y-2">
             <p className="text-[14px]">
-              {near.accountId ? s.notOwner(claim.ownerId) : s.signInFirst}
+              {near.accountId ? (
+                <>
+                  {s.notOwnerLead} <AccountId value={claim.ownerId} full />
+                </>
+              ) : (
+                s.signInFirst
+              )}
             </p>
             <NearWalletView {...near} />
           </div>
