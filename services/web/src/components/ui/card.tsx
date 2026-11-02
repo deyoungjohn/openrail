@@ -10,6 +10,7 @@ export function Card({
   info,
   action,
   state = "ready",
+  emptyTitle,
   emptyBody,
   errorBody = "We couldn't load this. Check your connection and try again.",
   onRetry,
@@ -20,6 +21,7 @@ export function Card({
   info?: string;
   action?: ReactNode;
   state?: ViewState;
+  emptyTitle?: string;
   emptyBody?: string;
   errorBody?: string;
   onRetry?: () => void;
@@ -27,7 +29,7 @@ export function Card({
   children?: ReactNode;
 }) {
   return (
-    <section className={cn("surface-card p-6", className)}>
+    <section aria-label={title || undefined} className={cn("surface-card p-6", className)}>
       {title ? (
         <header className="mb-4 flex items-center gap-2">
           <h3 className="text-[18px] leading-[26px] font-semibold">{title}</h3>
@@ -46,7 +48,7 @@ export function Card({
           <Skeleton className="h-5 w-1/2" />
         </div>
       ) : state === "empty" ? (
-        <EmptyState body={emptyBody} />
+        <EmptyState title={emptyTitle} body={emptyBody} />
       ) : state === "error" ? (
         <ErrorState body={errorBody} onRetry={onRetry} />
       ) : (

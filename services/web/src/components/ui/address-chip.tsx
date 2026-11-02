@@ -35,7 +35,7 @@ export function AddressChip({
   return (
     <span className="inline-flex max-w-full items-center gap-1.5 align-middle">
       {chain ? <ChainIcon chain={chain} size={18} /> : null}
-      <code title={value} className="font-mono text-[13px] leading-5 font-normal">
+      <code title={value} className="font-mono text-[13px] leading-5 font-normal break-all">
         {middleTruncate(value, head, tail)}
       </code>
       <button
