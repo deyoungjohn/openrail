@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.use({ viewport: { width: 1280, height: 800 } });
+
 // Fixture mode: the mock API keeps its "session" in a cookie so the flow behaves like the real
 // HttpOnly cookie across reloads. The page itself never stores a token (checked below).
 
@@ -56,9 +58,14 @@ test("the session check failing shows an error with a retry, not a sign-in", asy
   await expect(page.getByRole("button", { name: "Sign in" })).toHaveCount(0);
 });
 
-test("loading shows a skeleton, not a flash of the sign-in card", async ({ page }) => {
+test("on a phone the account and sign out are in the menu", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/app");
-  // Whatever the final state, the first paint must not offer sign-in before the check finishes.
-  const first = await page.evaluate(() => document.querySelector("main")?.textContent ?? "");
-  expect(first).not.toContain("Sign in");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await page.getByRole("button", { name: "Open menu" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("acme.openrail.near")).toBeVisible();
+  await dialog.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 });

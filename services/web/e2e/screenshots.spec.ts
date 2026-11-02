@@ -1,4 +1,5 @@
 import { test } from "@playwright/test";
+import { signIn } from "./helpers";
 
 // Run with SCREENSHOTS=1 to write the PR images to .next/e2e-screenshots/.
 test.skip(!process.env.SCREENSHOTS, "set SCREENSHOTS=1");
@@ -14,7 +15,8 @@ for (const scheme of ["light", "dark"] as const) {
       ["ack", "/ack/c-2"],
       ["transfer", "/app/invoices/c-3/transfer"],
     ] as const) {
-      test(`${slug} ${scheme} ${name}`, async ({ page }) => {
+      test(`${slug} ${scheme} ${name}`, async ({ page, context }) => {
+        await signIn(context);
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme: scheme });
         await page.goto(path);

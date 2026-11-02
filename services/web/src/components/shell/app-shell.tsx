@@ -20,7 +20,9 @@ import { cn } from "@/lib/cn";
 import { readStored, writeStored } from "@/lib/storage";
 import { Modal } from "../ui/modal";
 import { ThemeToggle } from "../ui/theme-toggle";
-import { EvmWalletButton, NearWalletButton } from "../wallet-buttons";
+import { AccountBar } from "../auth/account-bar";
+import { AuthGate } from "../auth/auth-gate";
+import { useAuth } from "../auth/auth-provider";
 
 interface NavItem {
   href: string;
@@ -94,7 +96,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
 
   useEffect(() => setCollapsed(readStored(KEY) === "collapsed"), []);
-  useEffect(() => setMenu(false), [path]);
+  const { state: authState } = useAuth();
+  useEffect(() => setMenu(false), [path, authState.status]);
 
   const toggle = () => {
     setCollapsed((c) => {
@@ -159,21 +162,20 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           <span className="text-[16px] font-semibold md:hidden">{copy.brand}</span>
           <div className="ml-auto hidden items-center gap-3 sm:flex">
-            <NearWalletButton />
+            <AccountBar />
           </div>
           <ThemeToggle className="md:hidden" />
         </header>
 
         <main id="content" className="route-rise mx-auto w-full max-w-[1280px] px-4 py-6 md:px-6">
-          {children}
+          <AuthGate>{children}</AuthGate>
         </main>
       </div>
 
       <Modal open={menu} onClose={() => setMenu(false)} title={copy.brand} variant="drawer">
         <NavList collapsed={false} onNavigate={() => setMenu(false)} />
         <div className="mt-6 space-y-3 border-t border-border pt-4">
-          <NearWalletButton />
-          <EvmWalletButton />
+          <AccountBar />
         </div>
       </Modal>
     </div>
