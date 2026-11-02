@@ -163,6 +163,18 @@ fn dummy_model_claim(token_id: &str) -> ModelClaim {
     }
 }
 
+fn proptest_config() -> ProptestConfig {
+    let cases = std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(30);
+    ProptestConfig {
+        cases,
+        failure_persistence: None,
+        ..ProptestConfig::default()
+    }
+}
+
 // ──────────────────────────────────────────────
 // Law 1: hooks_default_is_identity
 // ──────────────────────────────────────────────
@@ -286,25 +298,6 @@ fn credit_single_source() {
     );
 }
 
-#[tokio::test]
-#[ignore = "C4"]
-async fn contract_credit_single_source_enforced() -> anyhow::Result<()> {
-    let env = Env::new().await?;
-    // When C4 lands: verify calling apply_credit with a conflicting source fails on chain.
-    let outcome = env
-        .parent
-        .call(env.root.id(), "apply_credit")
-        .args_json(serde_json::json!({
-            "token_id": "1",
-            "amount": "100",
-            "source": 2
-        }))
-        .transact()
-        .await?;
-    assert!(outcome.is_failure());
-    Ok(())
-}
-
 // ──────────────────────────────────────────────
 // Law 3: credit_never_exceeds_outstanding
 // ──────────────────────────────────────────────
@@ -341,11 +334,7 @@ fn credit_never_exceeds_outstanding() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 30,
-        failure_persistence: None,
-        ..ProptestConfig::default()
-    })]
+    #![proptest_config(proptest_config())]
     #[test]
     fn prop_credit_never_exceeds_outstanding(
         delta in 0u128..=10_000_000,
@@ -370,23 +359,38 @@ proptest! {
     }
 }
 
-#[tokio::test]
-#[ignore = "C4"]
-async fn contract_credit_never_exceeds_outstanding() -> anyhow::Result<()> {
-    let env = Env::new().await?;
-    // When C4 lands: verify reconcile cannot grant credit beyond claim amount_due.
-    let outcome = env
-        .parent
-        .call(env.root.id(), "apply_credit")
-        .args_json(serde_json::json!({
-            "token_id": "1",
-            "amount": "999999999999",
-            "source": 1
-        }))
-        .transact()
-        .await?;
-    assert!(outcome.is_failure());
-    Ok(())
+/// SQ-1 combined rule: payment + credit <= outstanding.
+///
+/// Marked #[ignore = "SQ-1"] pending Phase 3 specification decision on SQ-1.
+#[test]
+#[ignore = "SQ-1"]
+fn payment_plus_credit_never_exceeds_outstanding() {
+    let claim = dummy_claim("claim-1", None);
+    let outstanding = 500_000u128;
+    let delta = 300_000u128;
+
+    // Hostile hook attempts to return payment = 300k and credit = 300k (sum 600k > 500k)
+    let hostile = HostileHook {
+        excessive_credit: Some(300_000),
+        custom_payment: Some(delta),
+        ..Default::default()
+    };
+    let hooks: Vec<&dyn Hook> = vec![&hostile];
+
+    let input = BookingInput {
+        delta: delta.into(),
+        outstanding: outstanding.into(),
+        now: 1_700_000_000,
+    };
+    let adjusted = hooks::dispatch_adjust_booking_with(&hooks, &claim, input);
+
+    assert!(
+        adjusted.payment.0 + adjusted.credit.0 <= outstanding,
+        "payment ({}) + credit ({}) exceeded outstanding ({})",
+        adjusted.payment.0,
+        adjusted.credit.0,
+        outstanding
+    );
 }
 
 // ──────────────────────────────────────────────
@@ -451,11 +455,7 @@ fn legs_sum_to_net() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 30,
-        failure_persistence: None,
-        ..ProptestConfig::default()
-    })]
+    #![proptest_config(proptest_config())]
     #[test]
     fn prop_legs_sum_to_net_or_fallback(
         net in 1u128..=10_000_000,
@@ -555,11 +555,7 @@ fn module_cannot_permit_core_refusal() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 30,
-        failure_persistence: None,
-        ..ProptestConfig::default()
-    })]
+    #![proptest_config(proptest_config())]
     #[test]
     fn prop_module_cannot_permit_refusal(
         refuse_idx in 0usize..5,
