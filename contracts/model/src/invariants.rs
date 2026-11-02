@@ -300,3 +300,155 @@ pub fn check_undistributed_payee_fixed_at_booking(
 
     Ok(())
 }
+
+/// 8. `no_transfer_under_lock`: claims under active lock cannot be transferred (Blueprint 2.4 rule 1, 2.11).
+pub fn check_no_transfer_under_lock(pre_transfer: &Claim) -> Result<(), InvariantViolation> {
+    if !pre_transfer.lock.allows_transfer() {
+        return Err(InvariantViolation {
+            invariant_name: "no_transfer_under_lock",
+            message: format!("transfer occurred under lock: {:?}", pre_transfer.lock),
+        });
+    }
+    Ok(())
+}
+
+/// 9. `no_transfer_when_settled`: settled claims cannot be transferred (Blueprint 2.4 rule 2, 2.11).
+pub fn check_no_transfer_when_settled(pre_transfer: &Claim) -> Result<(), InvariantViolation> {
+    if matches!(
+        pre_transfer.status,
+        Status::Paid | Status::Cancelled | Status::Closed
+    ) {
+        return Err(InvariantViolation {
+            invariant_name: "no_transfer_when_settled",
+            message: format!(
+                "transfer occurred when settled with status: {:?}",
+                pre_transfer.status
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// 10. `cancel_only_unpaid`: claim can only be cancelled when completely unpaid and uncredited (Blueprint 2.2 line 65, 2.11).
+pub fn check_cancel_only_unpaid(claim: &Claim) -> Result<(), InvariantViolation> {
+    if claim.status == Status::Cancelled
+        && (claim.distributed_total != 0 || claim.fee_total != 0 || claim.credit_total != 0)
+    {
+        return Err(InvariantViolation {
+            invariant_name: "cancel_only_unpaid",
+            message: format!(
+                "Cancelled claim must have distributed=0, fee=0, credit=0 (got distributed={}, fee={}, credit={})",
+                claim.distributed_total, claim.fee_total, claim.credit_total
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// 11. `transitions_enforced`: all lifecycle status transitions strictly obey Blueprint 2.3.
+pub fn check_transitions_enforced(prev: Status, curr: Status) -> Result<(), InvariantViolation> {
+    if prev == curr {
+        return Ok(());
+    }
+    let valid = match prev {
+        Status::Issued => matches!(
+            curr,
+            Status::PartiallyPaid | Status::Paid | Status::Cancelled
+        ),
+        Status::PartiallyPaid => matches!(curr, Status::Paid | Status::Closed),
+        Status::Paid => matches!(curr, Status::Closed),
+        Status::Cancelled | Status::Closed => false,
+    };
+    if !valid {
+        return Err(InvariantViolation {
+            invariant_name: "transitions_enforced",
+            message: format!("invalid status transition from {:?} to {:?}", prev, curr),
+        });
+    }
+    Ok(())
+}
+
+/// 12. `only_settlement_assets_count`: only assets in settlement_assets appear in last_seen_balance (Blueprint 2.11).
+pub fn check_only_settlement_assets_count(claim: &Claim) -> Result<(), InvariantViolation> {
+    for asset in claim.last_seen_balance.keys() {
+        if !claim.settlement_assets.contains(asset) {
+            return Err(InvariantViolation {
+                invariant_name: "only_settlement_assets_count",
+                message: format!(
+                    "non-settlement asset recorded in last_seen_balance: {}",
+                    asset
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// 13. `stale_reconcile_lock_clears`: reconciling lock older than 100 blocks must clear to None (Blueprint 2.3, 2.11).
+pub fn check_stale_reconcile_lock_clears(
+    prev_lock: &crate::types::Lock,
+    curr_lock: &crate::types::Lock,
+    current_block: u64,
+) -> Result<(), InvariantViolation> {
+    if let crate::types::Lock::Reconciling { since } = prev_lock {
+        if current_block >= since + 100 && !curr_lock.is_none() {
+            return Err(InvariantViolation {
+                invariant_name: "stale_reconcile_lock_clears",
+                message: format!(
+                    "stale reconciling lock (since {}, block {}) was not cleared to None (got {:?})",
+                    since, current_block, curr_lock
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// 14. `closed_addresses_stay_live`: stray payments to terminal claims land in surplus (Blueprint 2.3, 2.11).
+pub fn check_closed_addresses_stay_live(
+    pre: &Claim,
+    post: &Claim,
+    delta: u128,
+) -> Result<(), InvariantViolation> {
+    if pre.status.is_terminal() && delta > 0 {
+        if post.surplus < pre.surplus.saturating_add(delta) {
+            return Err(InvariantViolation {
+                invariant_name: "closed_addresses_stay_live",
+                message: format!(
+                    "stray payment of {} to {:?} claim did not land in surplus (expected at least {}, got {})",
+                    delta, pre.status, pre.surplus + delta, post.surplus
+                ),
+            });
+        }
+        if post.fee_total != pre.fee_total {
+            return Err(InvariantViolation {
+                invariant_name: "closed_addresses_stay_live",
+                message: "fee charged on stray payment to terminal claim".into(),
+            });
+        }
+        if post.status != pre.status {
+            return Err(InvariantViolation {
+                invariant_name: "closed_addresses_stay_live",
+                message: format!(
+                    "terminal status mutated from {:?} to {:?}",
+                    pre.status, post.status
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// 15. `no_self_ownership`: claim account cannot own itself (Blueprint 2.4 rule 5, 2.11).
+pub fn check_no_self_ownership(claim: &Claim) -> Result<(), InvariantViolation> {
+    if claim.owner_id == claim.claim_account {
+        return Err(InvariantViolation {
+            invariant_name: "no_self_ownership",
+            message: format!(
+                "self-ownership violation: owner_id equals claim_account ({})",
+                claim.owner_id
+            ),
+        });
+    }
+    Ok(())
+}

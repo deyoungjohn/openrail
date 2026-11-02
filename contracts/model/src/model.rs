@@ -32,6 +32,7 @@ pub struct Model {
     /// External Intents token balances for claim sub-accounts `(token_id, asset) -> balance`.
     pub intents_balances: HashMap<(String, TokenId), u128>,
     pub released_surplus: HashMap<String, u128>,
+    pub pending_reconciles: HashMap<String, Lock>,
     pub hook: Box<dyn Hook>,
     pub mutations: Mutations,
 }
@@ -51,6 +52,7 @@ impl Model {
             payment_log: HashMap::new(),
             intents_balances: HashMap::new(),
             released_surplus: HashMap::new(),
+            pending_reconciles: HashMap::new(),
             hook,
             mutations: Mutations::default(),
         }
@@ -216,6 +218,20 @@ impl Model {
                 Ok(Vec::new())
             }
 
+            Action::DrainIntentsBalance {
+                token_id,
+                asset,
+                amount,
+            } => {
+                if !self.claims.contains_key(&token_id) {
+                    return Err(ModelError::ClaimNotFound(token_id));
+                }
+                if let Some(bal) = self.intents_balances.get_mut(&(token_id, asset)) {
+                    *bal = bal.saturating_sub(amount);
+                }
+                Ok(Vec::new())
+            }
+
             Action::LogQuote {
                 caller,
                 token_id,
@@ -374,6 +390,14 @@ impl Model {
                     new_owner,
                 }])
             }
+
+            Action::ReconcileStart { token_id } => self.step_reconcile_start(token_id, block),
+
+            Action::ReconcileCallback {
+                token_id,
+                leg_failures,
+                callback_ok,
+            } => self.step_reconcile_callback(token_id, leg_failures, callback_ok, block),
 
             Action::Reconcile {
                 token_id,
@@ -664,30 +688,65 @@ impl Model {
         }])
     }
 
-    fn step_reconcile(
+    pub fn step_reconcile_start(
+        &mut self,
+        token_id: String,
+        block: u64,
+    ) -> Result<Vec<Event>, ModelError> {
+        let claim = self
+            .claims
+            .get_mut(&token_id)
+            .ok_or_else(|| ModelError::ClaimNotFound(token_id.clone()))?;
+
+        if !claim.lock.allows_transfer() {
+            return Err(ModelError::ClaimLocked(
+                "reconcile requires None or TransferWindow lock".into(),
+            ));
+        }
+
+        let prev_lock = claim.lock.clone();
+        self.pending_reconciles.insert(token_id.clone(), prev_lock);
+        claim.lock = Lock::Reconciling { since: block };
+
+        Ok(vec![Event::ReconcileStarted { token_id }])
+    }
+
+    pub fn step_reconcile_callback(
         &mut self,
         token_id: String,
         leg_failures: Vec<bool>,
+        callback_ok: bool,
         block: u64,
     ) -> Result<Vec<Event>, ModelError> {
-        // First check claim exists and lock allows reconcile
-        let (prev_lock, settlement_assets, last_seens, status, outstanding) = {
-            let claim = self
-                .claims
-                .get(&token_id)
-                .ok_or_else(|| ModelError::ClaimNotFound(token_id.clone()))?;
-            if !claim.lock.allows_transfer() {
-                return Err(ModelError::ClaimLocked(
-                    "reconcile requires None or TransferWindow lock".into(),
-                ));
-            }
+        let claim = self
+            .claims
+            .get(&token_id)
+            .ok_or_else(|| ModelError::ClaimNotFound(token_id.clone()))?;
+
+        if !matches!(claim.lock, Lock::Reconciling { .. }) {
+            return Err(ModelError::NotReconciling);
+        }
+
+        let prev_lock = self
+            .pending_reconciles
+            .remove(&token_id)
+            .unwrap_or(Lock::None);
+
+        if !callback_ok {
+            let claim = self.claims.get_mut(&token_id).unwrap();
+            claim.lock = prev_lock;
+            return Ok(vec![Event::ReconcileFailed { token_id }]);
+        }
+
+        let mut events = Vec::new();
+
+        let (settlement_assets, last_seens, status, outstanding) = {
             let mut last_seens = HashMap::new();
             for asset in &claim.settlement_assets {
                 let ls = claim.last_seen_balance.get(asset).copied().unwrap_or(0);
                 last_seens.insert(asset.clone(), ls);
             }
             (
-                claim.lock.clone(),
                 claim.settlement_assets.clone(),
                 last_seens,
                 claim.status,
@@ -696,6 +755,7 @@ impl Model {
         };
 
         // Calculate delta across settlement assets
+        // Spec 2.5: d_i = balance_i - last_seen_i. If d_i < 0: emit anomaly, treat as 0, set last_seen_i = balance_i
         let mut deltas: Vec<(TokenId, u128, u128)> = Vec::new();
         let mut total_delta: u128 = 0;
 
@@ -706,16 +766,33 @@ impl Model {
                 .copied()
                 .unwrap_or(0);
             let last_seen = last_seens.get(asset).copied().unwrap_or(0);
-            let d_i = curr_balance.saturating_sub(last_seen);
+
+            let d_i = if curr_balance < last_seen {
+                events.push(Event::Anomaly {
+                    token_id: token_id.clone(),
+                    asset: asset.clone(),
+                    balance: curr_balance,
+                    last_seen,
+                });
+                let claim = self.claims.get_mut(&token_id).unwrap();
+                claim.last_seen_balance.insert(asset.clone(), curr_balance);
+                0
+            } else {
+                curr_balance - last_seen
+            };
+
             total_delta += d_i;
             deltas.push((asset.clone(), d_i, curr_balance));
         }
 
-        // Idempotent: zero delta changes no state
+        // Idempotent: zero delta changes no state (beyond any anomaly last_seen reset)
         if total_delta == 0 {
             let claim = self.claims.get_mut(&token_id).unwrap();
-            claim.lock = prev_lock;
-            return Ok(Vec::new());
+            claim.lock = match prev_lock {
+                Lock::TransferWindow { until } if block < until => Lock::TransferWindow { until },
+                _ => Lock::None,
+            };
+            return Ok(events);
         }
 
         // Booking calculation
@@ -767,14 +844,14 @@ impl Model {
             claim.update_status_paid_rule();
         }
 
-        let mut events = vec![Event::Booked {
+        events.push(Event::Booked {
             token_id: token_id.clone(),
             payment,
             surplus_part,
             fee,
             credit,
             legs: legs.clone(),
-        }];
+        });
 
         // Assign legs to settlement assets (largest delta first)
         deltas.sort_by_key(|a| std::cmp::Reverse(a.1));
@@ -849,6 +926,18 @@ impl Model {
             };
         }
 
+        Ok(events)
+    }
+
+    pub fn step_reconcile(
+        &mut self,
+        token_id: String,
+        leg_failures: Vec<bool>,
+        block: u64,
+    ) -> Result<Vec<Event>, ModelError> {
+        let mut events = self.step_reconcile_start(token_id.clone(), block)?;
+        let callback_events = self.step_reconcile_callback(token_id, leg_failures, true, block)?;
+        events.extend(callback_events);
         Ok(events)
     }
 

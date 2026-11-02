@@ -407,3 +407,286 @@ fn test_ds8_failed_distribution_and_retry() {
 
     assert!(model.get_claim(&token_id).unwrap().undistributed.is_empty());
 }
+
+#[test]
+fn test_anomaly_drain_balance_and_reset_last_seen() {
+    let mut model = Model::new();
+    let token_id = "c-anomaly".to_string();
+    let asset = "nep141:usdc.near".to_string();
+
+    model
+        .step(
+            Action::Issue {
+                token_id: token_id.clone(),
+                kind: 0,
+                issuer_id: "issuer.near".to_string(),
+                debtor: Some(Debtor::Near("debtor.near".to_string())),
+                terms_hash: Hex32::default(),
+                amount_due: 1_000_000,
+                due_date: 1_800_000_000,
+            },
+            100,
+        )
+        .unwrap();
+
+    model
+        .step(
+            Action::AcknowledgeNear {
+                token_id: token_id.clone(),
+                caller: "debtor.near".to_string(),
+            },
+            100,
+        )
+        .unwrap();
+
+    // Deposit 500_000
+    model
+        .step(
+            Action::DepositIntentsBalance {
+                token_id: token_id.clone(),
+                asset: asset.clone(),
+                amount: 500_000,
+            },
+            101,
+        )
+        .unwrap();
+
+    // Reconcile with failed distribution: books 500_000, funds stay in sub-account so last_seen = 500_000
+    model
+        .step(
+            Action::Reconcile {
+                token_id: token_id.clone(),
+                leg_failures: vec![true, true],
+            },
+            102,
+        )
+        .unwrap();
+
+    let claim = model.get_claim(&token_id).unwrap();
+    assert_eq!(claim.booked_total, 500_000);
+    assert_eq!(*claim.last_seen_balance.get(&asset).unwrap(), 500_000);
+
+    // Balance anomaly: intents balance drained by 200_000 (curr_balance = 300_000 < last_seen 500_000)
+    model
+        .step(
+            Action::DrainIntentsBalance {
+                token_id: token_id.clone(),
+                asset: asset.clone(),
+                amount: 200_000,
+            },
+            103,
+        )
+        .unwrap();
+
+    // Reconcile detects anomaly: emits Event::Anomaly, treats delta as 0, resets last_seen to 300_000
+    let events = model
+        .step(
+            Action::Reconcile {
+                token_id: token_id.clone(),
+                leg_failures: vec![true, true],
+            },
+            104,
+        )
+        .unwrap();
+
+    let found_anomaly = events.iter().any(|e| matches!(e, Event::Anomaly { .. }));
+    assert!(
+        found_anomaly,
+        "Reconcile must emit Event::Anomaly when balance falls below last_seen"
+    );
+
+    let claim_after_anomaly = model.get_claim(&token_id).unwrap();
+    assert_eq!(
+        claim_after_anomaly.booked_total, 500_000,
+        "anomaly delta must be 0"
+    );
+    assert_eq!(
+        *claim_after_anomaly.last_seen_balance.get(&asset).unwrap(),
+        300_000,
+        "last_seen must be reset to curr_balance"
+    );
+
+    // Next deposit of 400_000 (balance goes from 300_000 to 700_000)
+    model
+        .step(
+            Action::DepositIntentsBalance {
+                token_id: token_id.clone(),
+                asset: asset.clone(),
+                amount: 400_000,
+            },
+            105,
+        )
+        .unwrap();
+
+    // Reconcile books delta = 700_000 - 300_000 = 400_000
+    model
+        .step(
+            Action::Reconcile {
+                token_id: token_id.clone(),
+                leg_failures: vec![true, true],
+            },
+            106,
+        )
+        .unwrap();
+
+    let claim_after_deposit = model.get_claim(&token_id).unwrap();
+    assert_eq!(
+        claim_after_deposit.booked_total, 900_000,
+        "only new deposit amount should be booked after anomaly"
+    );
+    assert_eq!(
+        *claim_after_deposit.last_seen_balance.get(&asset).unwrap(),
+        700_000
+    );
+}
+
+#[test]
+fn test_reconcile_start_interleaving_and_callback_failure() {
+    let mut model = Model::new();
+    let token_id = "c-two-phase".to_string();
+    let asset = "nep141:usdc.near".to_string();
+
+    model
+        .step(
+            Action::Issue {
+                token_id: token_id.clone(),
+                kind: 0,
+                issuer_id: "issuer.near".to_string(),
+                debtor: Some(Debtor::Near("debtor.near".to_string())),
+                terms_hash: Hex32::default(),
+                amount_due: 1_000_000,
+                due_date: 1_800_000_000,
+            },
+            100,
+        )
+        .unwrap();
+
+    model
+        .step(
+            Action::AcknowledgeNear {
+                token_id: token_id.clone(),
+                caller: "debtor.near".to_string(),
+            },
+            100,
+        )
+        .unwrap();
+
+    model
+        .step(
+            Action::DepositIntentsBalance {
+                token_id: token_id.clone(),
+                asset: asset.clone(),
+                amount: 300_000,
+            },
+            101,
+        )
+        .unwrap();
+
+    // Start reconcile
+    let start_events = model
+        .step(
+            Action::ReconcileStart {
+                token_id: token_id.clone(),
+            },
+            102,
+        )
+        .unwrap();
+
+    assert_eq!(
+        start_events,
+        vec![Event::ReconcileStarted {
+            token_id: token_id.clone()
+        }]
+    );
+    assert!(matches!(
+        model.get_claim(&token_id).unwrap().lock,
+        Lock::Reconciling { since: 102 }
+    ));
+
+    // Transfer fails under Reconciling lock (Transfer rule 1)
+    let transfer_err = model
+        .step(
+            Action::Transfer {
+                caller: "issuer.near".to_string(),
+                token_id: token_id.clone(),
+                new_owner: "buyer.near".to_string(),
+                memo_assignment_doc_hash: None,
+                attached_yocto: 1,
+            },
+            103,
+        )
+        .unwrap_err();
+    assert_eq!(
+        transfer_err,
+        ModelError::TransferRuleViolation(1, "lock must be None or TransferWindow".to_string())
+    );
+
+    // Cancel fails under Reconciling lock
+    let cancel_err = model
+        .step(
+            Action::Cancel {
+                caller: "issuer.near".to_string(),
+                token_id: token_id.clone(),
+                debtor_cosig: None,
+            },
+            103,
+        )
+        .unwrap_err();
+    assert_eq!(cancel_err, ModelError::CancelDisallowed);
+
+    // Second ReconcileStart fails under Reconciling lock
+    let second_start_err = model
+        .step(
+            Action::ReconcileStart {
+                token_id: token_id.clone(),
+            },
+            103,
+        )
+        .unwrap_err();
+    assert!(matches!(second_start_err, ModelError::ClaimLocked(_)));
+
+    // Callback fails: callback_ok = false
+    let cb_events = model
+        .step(
+            Action::ReconcileCallback {
+                token_id: token_id.clone(),
+                leg_failures: vec![],
+                callback_ok: false,
+            },
+            104,
+        )
+        .unwrap();
+
+    assert_eq!(
+        cb_events,
+        vec![Event::ReconcileFailed {
+            token_id: token_id.clone()
+        }]
+    );
+    let claim_after_failure = model.get_claim(&token_id).unwrap();
+    assert_eq!(
+        claim_after_failure.lock,
+        Lock::None,
+        "lock must be restored to previous lock"
+    );
+    assert_eq!(
+        claim_after_failure.booked_total, 0,
+        "no payment booked on failed callback"
+    );
+
+    // After failure restores lock, transfer succeeds!
+    let transfer_events = model
+        .step(
+            Action::Transfer {
+                caller: "issuer.near".to_string(),
+                token_id: token_id.clone(),
+                new_owner: "buyer.near".to_string(),
+                memo_assignment_doc_hash: Some(Hex32::default()),
+                attached_yocto: 1,
+            },
+            105,
+        )
+        .unwrap();
+    assert_eq!(transfer_events.len(), 1);
+    assert_eq!(model.get_claim(&token_id).unwrap().owner_id, "buyer.near");
+}

@@ -41,6 +41,9 @@ pub fn arb_action_for_token(token_id: String) -> impl Strategy<Value = Action> {
     let t10 = token_id.clone();
     let t11 = token_id.clone();
     let t12 = token_id.clone();
+    let t13 = token_id.clone();
+    let t14 = token_id.clone();
+    let t15 = token_id.clone();
 
     let assets = vec![
         "nep141:usdc.near".to_string(),
@@ -64,10 +67,21 @@ pub fn arb_action_for_token(token_id: String) -> impl Strategy<Value = Action> {
         // Deposit balance (1..=2_000_000 USDC base units)
         (
             Just(t3),
-            prop::sample::select(assets),
+            prop::sample::select(assets.clone()),
             1u128..=2_000_000u128
         )
             .prop_map(|(id, asset, amount)| Action::DepositIntentsBalance {
+                token_id: id,
+                asset,
+                amount,
+            }),
+        // Drain balance (simulates anomaly: balance drops below last seen)
+        (
+            Just(t13),
+            prop::sample::select(assets),
+            1u128..=1_000_000u128
+        )
+            .prop_map(|(id, asset, amount)| Action::DrainIntentsBalance {
                 token_id: id,
                 asset,
                 amount,
@@ -95,7 +109,22 @@ pub fn arb_action_for_token(token_id: String) -> impl Strategy<Value = Action> {
                 memo_assignment_doc_hash: memo,
                 attached_yocto,
             }),
-        // Reconcile with random leg outcomes
+        // Reconcile start (sets Reconciling lock without callback)
+        Just(t14).prop_map(|id| Action::ReconcileStart { token_id: id }),
+        // Reconcile callback (with random leg outcomes and callback_ok)
+        (
+            Just(t15),
+            prop::collection::vec(any::<bool>(), 0..=3),
+            prop::sample::select(vec![true, true, true, false])
+        )
+            .prop_map(
+                |(id, leg_failures, callback_ok)| Action::ReconcileCallback {
+                    token_id: id,
+                    leg_failures,
+                    callback_ok,
+                }
+            ),
+        // Convenience atomic reconcile
         (Just(t6), prop::collection::vec(any::<bool>(), 0..=3)).prop_map(|(id, leg_failures)| {
             Action::Reconcile {
                 token_id: id,

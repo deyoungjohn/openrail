@@ -45,6 +45,12 @@ pub enum Action {
         asset: TokenId,
         amount: u128,
     },
+    /// Drain/decrease balance on claim sub-account in Intents (simulates balance anomaly, Blueprint 2.5).
+    DrainIntentsBalance {
+        token_id: String,
+        asset: TokenId,
+        amount: u128,
+    },
     /// Authorized quote writer logs quote before payment (Blueprint 2.1, 2.2).
     LogQuote {
         caller: AccountId,
@@ -61,7 +67,15 @@ pub enum Action {
         memo_assignment_doc_hash: Option<Hex32>,
         attached_yocto: u128,
     },
-    /// Reconcile claim balances and book payment (Blueprint 2.2, 2.5).
+    /// Reconcile start: sets lock to Reconciling{since: block} without snapshotting (Blueprint 2.5).
+    ReconcileStart { token_id: String },
+    /// Reconcile callback: receives balance results, executes booking and distribution (Blueprint 2.5).
+    ReconcileCallback {
+        token_id: String,
+        leg_failures: Vec<bool>,
+        callback_ok: bool,
+    },
+    /// Convenience atomic reconcile: ReconcileStart followed by successful ReconcileCallback.
     Reconcile {
         token_id: String,
         /// Optional outcome flags for each distribution leg: `true` = failed, `false` = succeeded.
@@ -160,6 +174,18 @@ pub enum Event {
         amount: u128,
         source: u8,
     },
+    Anomaly {
+        token_id: String,
+        asset: TokenId,
+        balance: u128,
+        last_seen: u128,
+    },
+    ReconcileStarted {
+        token_id: String,
+    },
+    ReconcileFailed {
+        token_id: String,
+    },
 }
 
 /// Errors raised when an action violates state machine invariants or rules.
@@ -176,6 +202,7 @@ pub enum ModelError {
     InvalidSigner,
     DuplicateQuote(String),
     ClaimLocked(String),
+    NotReconciling,
     LockNotStale,
     NoLock,
     /// Transfer rule violation with rule number 1–8.
@@ -206,6 +233,7 @@ impl std::fmt::Display for ModelError {
             Self::InvalidSigner => write!(f, "signer does not match debtor"),
             Self::DuplicateQuote(id) => write!(f, "duplicate quote id: {}", id),
             Self::ClaimLocked(msg) => write!(f, "claim is locked: {}", msg),
+            Self::NotReconciling => write!(f, "claim is not currently reconciling"),
             Self::LockNotStale => write!(f, "lock is not stale"),
             Self::NoLock => write!(f, "claim has no lock"),
             Self::TransferRuleViolation(rule, msg) => {

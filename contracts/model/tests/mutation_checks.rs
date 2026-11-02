@@ -2,7 +2,7 @@
 
 use openrail_model::*;
 
-/// Mutant 1: Wrong protocol fee calculation (e.g. 20 bps instead of 25 bps).
+/// Mutant 1: Off-by-one protocol fee calculation exceeding 25 bps ceiling (Blueprint 3.1 item 4).
 /// Proves that `check_fee_bounded` catches incorrect fee calculation.
 #[test]
 fn test_mutation_1_wrong_fee_rate_caught_by_fee_bounded() {
