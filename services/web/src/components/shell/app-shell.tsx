@@ -60,7 +60,9 @@ function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: (
                 className={cn(
                   "flex h-11 items-center gap-3 rounded-[10px] px-3 text-[14px] leading-5 font-medium",
                   "transition-colors duration-[var(--dur-fast)] ease-[var(--ease)]",
-                  active ? "bg-accent-soft text-accent" : "text-text hover:bg-surface-2",
+                  active
+                    ? "bg-accent-soft text-accent shadow-[inset_2px_0_0_var(--nav-bar)]"
+                    : "text-text hover:bg-surface-2",
                   collapsed && "justify-center px-0",
                 )}
               >

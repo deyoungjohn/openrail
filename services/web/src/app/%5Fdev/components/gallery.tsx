@@ -17,13 +17,14 @@ import { Tabs } from "@/components/ui/tabs";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Timeline } from "@/components/ui/timeline";
 import { useToast } from "@/components/ui/toast";
-import { EvmWalletButton, NearWalletButton } from "@/components/wallet-buttons";
+import { EvmWalletView, NearWalletView } from "@/components/wallet-buttons";
 import { formatUsd } from "@/lib/format";
 
 // Fixed values so screenshots are stable. The hash and address are made up for display.
 const HASH = "0x1bfc8f2d4e6a90b7c3d5e1f8a2b4c6d8e0f1a3b5c7d9e2f4a6b8c0d2e4f6a603";
 const ADDR = "0x9A4e0B3c5D7f1E2a4B6c8D0e2F4a6B8c0D2e4F6a";
 const NOW = 1_800_000_000_000;
+const noop = () => {};
 
 const statuses: Status[] = [
   { kind: "draft" },
@@ -111,13 +112,13 @@ export function Gallery() {
       </Section>
 
       <Section title="Cards and KPI tiles">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiTile label="Outstanding" cents={780050n} deltaPct={1.5} />
           <KpiTile label="Overdue" cents={12000n} deltaPct={-4.2} />
           <KpiTile label="Collected" state="loading" />
           <KpiTile label="Average time to get paid" state="error" />
         </div>
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid items-start gap-4 md:grid-cols-4">
           <Card title="Ready" info="What this card shows">
             Content
           </Card>
@@ -238,9 +239,27 @@ export function Gallery() {
       </Section>
 
       <Section title="Wallets">
-        <div className="flex flex-wrap gap-6">
-          <NearWalletButton />
-          <EvmWalletButton />
+        <div className="grid items-start gap-6 md:grid-cols-3">
+          <NearWalletView accountId={null} ready error={false} signIn={noop} signOut={noop} />
+          <NearWalletView
+            accountId={null}
+            ready={false}
+            error={false}
+            signIn={noop}
+            signOut={noop}
+          />
+          <NearWalletView accountId={null} ready={false} error signIn={noop} signOut={noop} />
+          <NearWalletView accountId="acme.near" ready error={false} signIn={noop} signOut={noop} />
+          <EvmWalletView address={null} available error={false} connect={noop} disconnect={noop} />
+          <EvmWalletView
+            address={null}
+            available={false}
+            error={false}
+            connect={noop}
+            disconnect={noop}
+          />
+          <EvmWalletView address={null} available error connect={noop} disconnect={noop} />
+          <EvmWalletView address={ADDR} available error={false} connect={noop} disconnect={noop} />
         </div>
       </Section>
 

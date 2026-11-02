@@ -27,7 +27,7 @@ function Frame({
       <div className="relative">
         <label
           htmlFor={id}
-          className="absolute -top-2.5 left-3 z-10 bg-surface px-1 text-[12px] leading-5 font-medium text-muted"
+          className="absolute -top-2.5 left-3 z-10 bg-surface px-1 text-[12px] dark:bg-surface-2 leading-5 font-medium text-muted"
         >
           {label}
         </label>
@@ -53,7 +53,7 @@ function Frame({
 }
 
 const field =
-  "h-11 w-full rounded-[10px] border bg-surface px-3 text-[15px] text-text " +
+  "h-11 w-full rounded-[10px] border bg-surface px-3 dark:bg-surface-2 text-[15px] text-text " +
   "transition-[border-color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease)] " +
   "placeholder:text-muted focus-visible:border-accent focus-visible:outline-none " +
   "focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60";

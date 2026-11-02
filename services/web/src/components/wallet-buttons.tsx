@@ -7,7 +7,23 @@ import { AddressChip } from "./ui/address-chip";
 import { Button } from "./ui/button";
 
 export function NearWalletButton() {
-  const { accountId, ready, error, signIn, signOut } = useNear();
+  return <NearWalletView {...useNear()} />;
+}
+
+/** Presentational half, so the gallery can show every state without a live selector. */
+export function NearWalletView({
+  accountId,
+  ready,
+  error,
+  signIn,
+  signOut,
+}: {
+  accountId: string | null;
+  ready: boolean;
+  error: boolean;
+  signIn: () => void;
+  signOut: () => Promise<void> | void;
+}) {
   if (accountId)
     return (
       <div className="flex flex-wrap items-center gap-2">
@@ -29,7 +45,22 @@ export function NearWalletButton() {
 }
 
 export function EvmWalletButton() {
-  const { address, available, error, connect, disconnect } = useEvm();
+  return <EvmWalletView {...useEvm()} />;
+}
+
+export function EvmWalletView({
+  address,
+  available,
+  error,
+  connect,
+  disconnect,
+}: {
+  address: string | null;
+  available: boolean;
+  error: boolean;
+  connect: () => Promise<void> | void;
+  disconnect: () => void;
+}) {
   if (address)
     return (
       <div className="flex flex-wrap items-center gap-2">

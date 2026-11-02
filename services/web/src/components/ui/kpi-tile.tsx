@@ -1,8 +1,9 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
 import { usdParts } from "@/lib/format";
 import type { ViewState } from "./card";
-import { ErrorState, Skeleton } from "./state";
+import { Skeleton } from "./state";
 
 export function KpiTile({
   label,
@@ -26,7 +27,10 @@ export function KpiTile({
           <Skeleton className="h-5 w-16" />
         </div>
       ) : state === "error" ? (
-        <ErrorState title="Couldn't load" body="Try again in a moment." />
+        <p role="alert" className="mt-2 text-[14px] leading-5">
+          <span className="font-medium">{copy.states.errorTitle}.</span>{" "}
+          <span className="caption">Try again in a moment.</span>
+        </p>
       ) : state === "empty" || !parts ? (
         <p className="tabular mt-2 text-[32px] leading-[1.1] font-bold">
           $0<span className="text-[0.6em] text-muted">.00</span>
