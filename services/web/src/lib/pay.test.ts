@@ -6,6 +6,7 @@ import {
   formatToken,
   payStage,
   payTimeline,
+  refundAddressProblem,
   spreadLabel,
   type RouteLike,
 } from "./pay";
@@ -111,5 +112,33 @@ describe("payTimeline", () => {
 describe("formatDueDate", () => {
   it("formats an API date in UTC", () => {
     expect(formatDueDate("2026-12-01")).toBe("Dec 1, 2026");
+  });
+});
+
+describe("refundAddressProblem (the API now requires refund_to, validated per chain)", () => {
+  const evm = "0x53C5D39A5828BaDf817E40f22d75d96D731f8239";
+  it("accepts a 0x address on every EVM chain", () => {
+    for (const c of ["ethereum", "base", "arbitrum", "optimism", "polygon", "bnb"] as const)
+      expect(refundAddressProblem(c, evm)).toBeNull();
+  });
+  it("refuses a short, long or non-hex EVM address", () => {
+    expect(refundAddressProblem("base", "")).not.toBeNull();
+    expect(refundAddressProblem("base", "0x123")).not.toBeNull();
+    expect(refundAddressProblem("base", `${evm}0`)).not.toBeNull();
+    expect(refundAddressProblem("base", `0x${"z".repeat(40)}`)).not.toBeNull();
+  });
+  it("accepts a Solana address and refuses an EVM one", () => {
+    expect(
+      refundAddressProblem("solana", "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"),
+    ).toBeNull();
+    expect(refundAddressProblem("solana", evm)).not.toBeNull();
+  });
+  it("accepts NEAR named and implicit (64 hex) accounts", () => {
+    expect(refundAddressProblem("near", "payer.near")).toBeNull();
+    expect(refundAddressProblem("near", "a".repeat(64))).toBeNull();
+    expect(refundAddressProblem("near", "Not An Account")).not.toBeNull();
+  });
+  it("never accepts a value when the chain has no rule", () => {
+    expect(refundAddressProblem(null, evm)).not.toBeNull();
   });
 });

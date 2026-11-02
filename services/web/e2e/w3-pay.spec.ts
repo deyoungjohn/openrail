@@ -30,6 +30,15 @@ const ETH_ROUTE = {
 
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 
+const REFUND = "0x53C5D39A5828BaDf817E40f22d75d96D731f8239";
+
+/** Picks a chain, gives the refund address and asks for the price. */
+async function pick(page: Page, name = "Base", nth = 0, refund = REFUND) {
+  await page.getByRole("button", { name }).nth(nth).click();
+  await page.getByLabel("Refund address").fill(refund);
+  await page.getByRole("button", { name: "Get price" }).click();
+}
+
 interface Setup {
   claim?: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   claimStatus?: number;
@@ -93,14 +102,14 @@ test("USDC route: exact amount, then the address, and the locked amount comes fi
 }) => {
   const calls = await mockApi(page);
   await page.goto("/pay/c-1");
-  await page.getByRole("button", { name: "Base" }).first().click();
+  await pick(page);
   const quote = page.getByRole("region", { name: "Your price" });
   await expect(quote).toContainText("You send exactly");
   await expect(quote).toContainText("12.50 USDC");
   await expect(quote).toContainText("on Base");
   await expect(quote).toContainText("The invoice receives");
   await expect(quote).not.toContainText("Price protection margin");
-  expect(calls.posts).toEqual([{ token_id: "c-1", route_id: "R1" }]);
+  expect(calls.posts).toEqual([{ token_id: "c-1", route_id: "R1", refund_to: REFUND }]);
 
   const address = page.locator("code", { hasText: "0xeeeeee" });
   await expect(address).toBeVisible();
@@ -123,7 +132,7 @@ test("ETH route: 'you pay up to', every digit, and the margin explained", async 
     ],
   });
   await page.goto("/pay/c-1");
-  await page.getByRole("button", { name: "Base" }).nth(1).click();
+  await pick(page, "Base", 1);
   const quote = page.getByRole("region", { name: "Your price" });
   await expect(quote).toContainText("You pay up to");
   await expect(quote).toContainText("3.812345678901234 ETH");
@@ -139,7 +148,7 @@ test("follows the payment to Paid and shows the proof", async ({ page }) => {
     ],
   });
   await page.goto("/pay/c-1");
-  await page.getByRole("button", { name: "Base" }).first().click();
+  await pick(page);
   await expect(page.getByText("Your payment arrived")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Proof" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Paid", { exact: true }).first()).toBeVisible();
@@ -159,7 +168,7 @@ test("an expired price is never reused: a new one is requested", async ({ page }
     ],
   });
   await page.goto("/pay/c-1");
-  await page.getByRole("button", { name: "Base" }).first().click();
+  await pick(page);
   await expect(page.getByText("This price expired")).toBeVisible();
   await expect(page.getByRole("region", { name: "Your price" })).toHaveCount(0);
   await page.getByRole("button", { name: "Get a new price" }).click();
@@ -170,7 +179,7 @@ test("an expired price is never reused: a new one is requested", async ({ page }
 test("refunded and failed payments say what happens next", async ({ page }) => {
   await mockApi(page, { statuses: [{ ...fixture("pay.sessions.status"), status: "refunded" }] });
   await page.goto("/pay/c-1");
-  await page.getByRole("button", { name: "Base" }).first().click();
+  await pick(page);
   await expect(page.getByText("Your payment is on its way back")).toBeVisible({ timeout: 15_000 });
 });
 
@@ -197,7 +206,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await mockApi(page);
     await page.goto("/pay/c-1");
-    await page.getByRole("button", { name: "Base" }).first().click();
+    await pick(page);
     await expect(page.getByRole("region", { name: "Your price" })).toBeVisible();
     await page.waitForTimeout(500);
     const overflow = await page.evaluate(
@@ -220,7 +229,7 @@ for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       await mockApi(page);
       await page.goto("/pay/c-1");
-      await page.getByRole("button", { name: "Base" }).first().click();
+      await pick(page);
       await expect(page.getByRole("region", { name: "Your price" })).toBeVisible();
       await page.waitForTimeout(800);
       await page.screenshot({
@@ -230,3 +239,28 @@ for (const scheme of ["light", "dark"] as const) {
     });
   }
 }
+
+test("the refund address is checked before any price is requested", async ({ page }) => {
+  const calls = await mockApi(page);
+  await page.goto("/pay/c-1");
+  await page.getByRole("button", { name: "Base" }).first().click();
+  await page.getByLabel("Refund address").fill("0x123");
+  await page.getByRole("button", { name: "Get price" }).click();
+  await expect(page.getByText("starts with 0x")).toBeVisible();
+  expect(calls.posts).toHaveLength(0);
+});
+
+test("a connected wallet fills in the refund address", async ({ page }) => {
+  await page.addInitScript((account) => {
+    (window as unknown as { ethereum: unknown }).ethereum = {
+      request: async ({ method }: { method: string }) =>
+        method === "eth_accounts" || method === "eth_requestAccounts" ? [account] : null,
+      on: () => {},
+      removeListener: () => {},
+    };
+  }, REFUND);
+  await mockApi(page);
+  await page.goto("/pay/c-1");
+  await page.getByRole("button", { name: "Base" }).first().click();
+  await expect(page.getByLabel("Refund address")).toHaveValue(REFUND);
+});
