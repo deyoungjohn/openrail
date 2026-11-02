@@ -18,3 +18,4 @@ openrail = { path = "../openrail" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+openrail-model = { path = "../model" }
