@@ -4,6 +4,7 @@ import {
   OneClickClient,
   OneClickRequestError,
   createOneClickClientFromEnv,
+  type OneClickFetchLike,
   type OneClickQuoteResponse,
 } from "./index.js";
 
@@ -37,7 +38,7 @@ afterEach(() => {
 
 describe("oneclick auth", () => {
   it("sends Authorization: Bearer first and records that it worked", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(quoteFixture(), 201));
+    const fetchImpl = vi.fn<OneClickFetchLike>(async () => jsonResponse(quoteFixture(), 201));
     const client = new OneClickClient({
       baseUrl: "https://1click.test",
       apiKey: API_KEY,
@@ -79,7 +80,7 @@ describe("oneclick auth", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const fetchImpl = vi.fn(async () => jsonResponse(quoteFixture(), 201));
+    const fetchImpl = vi.fn<OneClickFetchLike>(async () => jsonResponse(quoteFixture(), 201));
     const client = new OneClickClient({
       baseUrl: "https://1click.test",
       apiKey: API_KEY,
@@ -94,7 +95,9 @@ describe("oneclick auth", () => {
   });
 
   it("raises a typed error that does not contain the key", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(fixture("deposit-submit-error.json"), 500));
+    const fetchImpl = vi.fn<OneClickFetchLike>(async () =>
+      jsonResponse(fixture("deposit-submit-error.json"), 500),
+    );
     const client = new OneClickClient({
       baseUrl: "https://1click.test",
       apiKey: API_KEY,
@@ -122,7 +125,7 @@ describe("oneclick auth", () => {
 
 describe("oneclick endpoints", () => {
   it("posts a quote request and returns the recorded response", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(quoteFixture(), 201));
+    const fetchImpl = vi.fn<OneClickFetchLike>(async () => jsonResponse(quoteFixture(), 201));
     const client = new OneClickClient({
       baseUrl: "https://1click.test/",
       apiKey: API_KEY,
@@ -143,7 +146,9 @@ describe("oneclick endpoints", () => {
   });
 
   it("reads status fields from swapDetails", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(fixture("status-response.json")));
+    const fetchImpl = vi.fn<OneClickFetchLike>(async () =>
+      jsonResponse(fixture("status-response.json")),
+    );
     const client = new OneClickClient({
       baseUrl: "https://1click.test",
       apiKey: API_KEY,
@@ -152,14 +157,16 @@ describe("oneclick endpoints", () => {
 
     const status = await client.status("0xdeposit");
 
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://1click.test/v0/status?depositAddress=0xdeposit");
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "https://1click.test/v0/status?depositAddress=0xdeposit",
+    );
     expect(status.status).toBe("SUCCESS");
     expect(status.swapDetails.amountOut).toBe("10000000");
     expect(status.swapDetails.nearTxHashes).toHaveLength(2);
   });
 
   it("submits a deposit transaction hash", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ status: "OK" }, 200));
+    const fetchImpl = vi.fn<OneClickFetchLike>(async () => jsonResponse({ status: "OK" }, 200));
     const client = new OneClickClient({
       baseUrl: "https://1click.test",
       apiKey: API_KEY,
