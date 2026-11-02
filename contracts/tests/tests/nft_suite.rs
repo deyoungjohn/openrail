@@ -24,18 +24,7 @@ use serde_json::json;
 async fn smoke_nft_stubs_return_not_implemented() -> Result<()> {
     let env = Env::new().await?;
 
-    // 1. issue returns NOT_IMPLEMENTED
-    let issue_res = env
-        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
-        .await?;
-    assert!(issue_res.is_failure());
-    let failure = format!("{:?} {}", issue_res.failures(), issue_res.logs().join(" "));
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "issue must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    // 2. nft_transfer returns NOT_IMPLEMENTED
+    // 1. nft_transfer returns NOT_IMPLEMENTED
     let transfer_res = env
         .alice
         .call(env.root.id(), "nft_transfer")
@@ -43,7 +32,7 @@ async fn smoke_nft_stubs_return_not_implemented() -> Result<()> {
             "receiver_id": env.bob.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": "assignment:0000000000000000000000000000000000000000000000000000000000000000",
+            "memo": "0000000000000000000000000000000000000000000000000000000000000000",
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -396,7 +385,7 @@ async fn nft_transfer_only_owner_or_approved() -> Result<()> {
             "receiver_id": env.carol.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": format!("assignment:{memo_hash}"),
+            "memo": memo_hash,
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -442,7 +431,7 @@ async fn nft_transfer_only_owner_or_approved() -> Result<()> {
             "receiver_id": env.carol.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": format!("assignment:{memo_hash}"),
+            "memo": memo_hash,
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -486,7 +475,7 @@ async fn nft_transfer_only_owner_or_approved() -> Result<()> {
             "receiver_id": env.bob.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": format!("assignment:{memo_hash}"),
+            "memo": memo_hash,
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -536,7 +525,7 @@ async fn nft_transfer_rules_enforced() -> Result<()> {
             "receiver_id": env.carol.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": "assignment:2222222222222222222222222222222222222222222222222222222222222222",
+            "memo": "2222222222222222222222222222222222222222222222222222222222222222",
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -589,7 +578,7 @@ async fn nft_transfer_rules_enforced() -> Result<()> {
             "receiver_id": claim_account_id,
             "token_id": "c-1",
             "approval_id": null,
-            "memo": "assignment:2222222222222222222222222222222222222222222222222222222222222222",
+            "memo": "2222222222222222222222222222222222222222222222222222222222222222",
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -708,7 +697,7 @@ async fn nft_transfer_call_refund_restores_owner() -> Result<()> {
             "receiver_id": env.bob.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": format!("assignment:{memo_hash}"),
+            "memo": memo_hash,
             "msg": "reject_and_refund",
         }))
         .deposit(NearToken::from_yoctonear(1))
@@ -779,7 +768,7 @@ async fn nft_transfer_call_keeps_locks() -> Result<()> {
             "receiver_id": env.bob.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": "assignment:4444444444444444444444444444444444444444444444444444444444444444",
+            "memo": "4444444444444444444444444444444444444444444444444444444444444444",
             "msg": "refund",
         }))
         .deposit(NearToken::from_yoctonear(1))
@@ -841,7 +830,7 @@ async fn nft_events_nep297() -> Result<()> {
             "receiver_id": env.bob.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": format!("assignment:{memo_hash}"),
+            "memo": memo_hash,
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -921,7 +910,7 @@ async fn payee_follows_token_real() -> Result<()> {
             "receiver_id": env.carol.id(),
             "token_id": "c-1",
             "approval_id": null,
-            "memo": format!("assignment:{memo_hash}"),
+            "memo": memo_hash,
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
