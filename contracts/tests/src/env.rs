@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use near_workspaces::network::Sandbox;
-use near_workspaces::types::{CryptoHash, KeyType, NearToken, SecretKey};
+use near_workspaces::types::{AccessKey, CryptoHash, KeyType, NearToken, SecretKey};
 use near_workspaces::{Account, AccountDetailsPatch, AccountId, Contract, Worker};
 use openrail::types::{Config, Hex32, TokenId};
 use serde_json::json;
@@ -91,34 +91,40 @@ impl Env {
 
         // 2. Deploy mocks at reserved top-level accounts via state patching
         let intents_id: AccountId = "intents.near".parse().unwrap();
+        let intents_key = seeded_key("intents.near");
         worker
             .patch(&intents_id)
             .account(AccountDetailsPatch::default().balance(NearToken::from_near(100)))
+            .access_key(intents_key.public_key(), AccessKey::full_access())
             .code(&intents_wasm)
             .transact()
             .await
             .context("patch intents.near")?;
-        let intents = Contract::from_secret_key(intents_id, seeded_key("intents.near"), &worker);
+        let intents = Contract::from_secret_key(intents_id, intents_key, &worker);
 
         let signer_id: AccountId = "v1.signer".parse().unwrap();
+        let signer_key = seeded_key("v1.signer");
         worker
             .patch(&signer_id)
             .account(AccountDetailsPatch::default().balance(NearToken::from_near(100)))
+            .access_key(signer_key.public_key(), AccessKey::full_access())
             .code(&signer_wasm)
             .transact()
             .await
             .context("patch v1.signer")?;
-        let signer = Contract::from_secret_key(signer_id, seeded_key("v1.signer"), &worker);
+        let signer = Contract::from_secret_key(signer_id, signer_key, &worker);
 
         let usdc_id: AccountId = "usdc.near".parse().unwrap();
+        let usdc_key = seeded_key("usdc.near");
         worker
             .patch(&usdc_id)
             .account(AccountDetailsPatch::default().balance(NearToken::from_near(100)))
+            .access_key(usdc_key.public_key(), AccessKey::full_access())
             .code(&usdc_wasm)
             .transact()
             .await
             .context("patch usdc.near")?;
-        let usdc = Contract::from_secret_key(usdc_id, seeded_key("usdc.near"), &worker);
+        let usdc = Contract::from_secret_key(usdc_id, usdc_key, &worker);
 
         // 3. Publish the vault as a global contract via a helper publisher account
         let parent = worker.root_account()?;
@@ -196,14 +202,16 @@ impl Env {
 
         // 5. Deploy root contract at openrail.near and initialize with Config
         let root_id: AccountId = "openrail.near".parse().unwrap();
+        let root_key = seeded_key("openrail.near");
         worker
             .patch(&root_id)
             .account(AccountDetailsPatch::default().balance(NearToken::from_near(100)))
+            .access_key(root_key.public_key(), AccessKey::full_access())
             .code(&root_wasm)
             .transact()
             .await
             .context("patch openrail.near")?;
-        let root = Contract::from_secret_key(root_id, seeded_key("openrail.near"), &worker);
+        let root = Contract::from_secret_key(root_id, root_key, &worker);
 
         let settlement_assets: Vec<TokenId> = vec![
             "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1".to_string(),

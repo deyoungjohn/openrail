@@ -28,7 +28,7 @@ impl Env {
         self.issue_claim_with_details(
             caller,
             kind,
-            None,
+            Some(Debtor::Near(caller.id().clone())),
             Hex32::new([0u8; 32]),
             amount_due,
             due_date,

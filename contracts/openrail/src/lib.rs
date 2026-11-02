@@ -7,13 +7,16 @@
 
 #![allow(clippy::too_many_arguments)]
 
+pub mod claims;
 pub mod eip712;
 pub mod events;
 pub mod hooks;
+pub mod issue;
 pub mod modules;
 pub mod svg;
 pub mod terms;
 pub mod types;
+pub mod views;
 
 use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
@@ -118,8 +121,7 @@ impl Contract {
         due_date: u64,
         metadata: Option<TokenMetadata>,
     ) -> String {
-        let _ = (kind, debtor, terms_hash, amount_due, due_date, metadata);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_issue(kind, debtor, terms_hash, amount_due, due_date, metadata)
     }
 
     /// Issues a new claim on behalf of a registered business using prepaid storage credits.
@@ -137,10 +139,9 @@ impl Contract {
         due_date: u64,
         metadata: Option<TokenMetadata>,
     ) -> String {
-        let _ = (
+        self.internal_issue_for(
             business, kind, debtor, terms_hash, amount_due, due_date, metadata,
-        );
-        env::panic_str("NOT_IMPLEMENTED");
+        )
     }
 
     /// Prepays storage credit for API invoice issuance.
@@ -149,7 +150,7 @@ impl Contract {
     /// Deposit: Attached NEAR deposit credited to `storage_credit[predecessor]`.
     #[payable]
     pub fn deposit_storage_credit(&mut self) {
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_deposit_storage_credit()
     }
 
     /// Withdraws unused prepaid storage credit.
@@ -157,8 +158,7 @@ impl Contract {
     /// Caller: The business account.
     /// Deposit: None. Refunds requested amount from `storage_credit[predecessor]` to caller.
     pub fn withdraw_storage_credit(&mut self, amount: U128) {
-        let _ = amount;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_withdraw_storage_credit(amount)
     }
 
     // ──────────────────────────────────────────
@@ -427,8 +427,7 @@ impl Contract {
     ///
     /// Caller: Allow-listed `quote_writer`. Duplicate `quote_id` panics.
     pub fn log_quote(&mut self, token_id: String, quote: Quote) {
-        let _ = (token_id, quote);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_log_quote(token_id, quote)
     }
 
     /// Updates administrative contract parameters.
@@ -444,7 +443,7 @@ impl Contract {
         quote_writers: Option<Vec<AccountId>>,
         issuers: Option<Vec<AccountId>>,
     ) {
-        let _ = (
+        self.internal_set_config(
             settlement_assets,
             vault_code_hash,
             fee_account,
@@ -452,16 +451,14 @@ impl Contract {
             watchers,
             quote_writers,
             issuers,
-        );
-        env::panic_str("NOT_IMPLEMENTED");
+        )
     }
 
     /// Pauses or unpauses claim issuance.
     ///
     /// Caller: Root account `<root>` only. Emits `config_changed`.
     pub fn pause_issue(&mut self, paused: bool) {
-        let _ = paused;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_pause_issue(paused)
     }
 
     // ──────────────────────────────────────────
@@ -470,8 +467,7 @@ impl Contract {
 
     /// Returns the full Claim record along with undistributed legs by `token_id`.
     pub fn claim(&self, token_id: String) -> Option<ClaimView> {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_claim(&token_id)
     }
 
     /// Returns claims issued by the given account, paginated.
@@ -481,14 +477,12 @@ impl Contract {
         from: Option<u64>,
         limit: Option<u64>,
     ) -> Vec<ClaimView> {
-        let _ = (account, from, limit);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_claims_by_issuer(account, from, limit)
     }
 
     /// Returns outstanding amount due on the claim in USDC base units.
     pub fn outstanding(&self, token_id: String) -> Option<U128> {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_outstanding(&token_id)
     }
 
     /// Returns payment log quotes for the given claim, paginated.
@@ -498,13 +492,12 @@ impl Contract {
         from: Option<u64>,
         limit: Option<u64>,
     ) -> Vec<Quote> {
-        let _ = (token_id, from, limit);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_payment_log(&token_id, from, limit)
     }
 
     /// Returns global contract configuration.
     pub fn config(&self) -> Config {
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_config()
     }
 }
 
