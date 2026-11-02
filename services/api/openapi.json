@@ -73,7 +73,13 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "or_sess_...",
-        "description": "Dashboard session from POST /v1/auth/verify; 12 h; scoped to one business account."
+        "description": "Dashboard session from POST /v1/auth/verify or the or_sess cookie; 7 days sliding, capped at 30 days; scoped to one business account."
+      },
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "or_sess",
+        "description": "HttpOnly, Secure, SameSite=Lax dashboard session cookie; 7 days sliding, capped at 30 days."
       }
     },
     "parameters": {
@@ -1529,7 +1535,7 @@
           "expires_at": {
             "type": "string",
             "format": "date-time",
-            "description": "12 h session."
+            "description": "7 days sliding, capped at 30 days."
           }
         }
       },
@@ -2065,6 +2071,29 @@
           },
           "tx_hash": {
             "type": "string"
+          }
+        }
+      },
+      "AuthSessionInfo": {
+        "type": "object",
+        "required": ["account_id", "expires_at"],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
           }
         }
       }
@@ -4154,6 +4183,68 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/session": {
+      "get": {
+        "operationId": "getAuthSession",
+        "summary": "Read the current dashboard session",
+        "tags": ["Auth"],
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Clear the dashboard session",
+        "tags": ["Auth"],
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session cleared (idempotent).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
                 }
               }
             }

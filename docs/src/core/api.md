@@ -26,10 +26,11 @@ pnpm --filter @openrail/api start
 ```
 
 The real server needs `NEAR_ROOT_ACCOUNT`, `NEAR_RPC_URL`, `ISSUER_URL` and the
-1Click names already listed in `.env.example`. `API_RECIPIENT`, `PAY_BASE_URL`,
+1Click names already listed in `.env.example`. `DATABASE_URL` (SQLite path),
+`API_RECIPIENT`, `PAY_BASE_URL`, `WEB_ORIGIN`, `COOKIE_DOMAIN`,
 `ISSUER_SERVICE_KEY`, `STORAGE_CREDIT_BALANCE` and `STORAGE_CREDIT_AMOUNT` are
-optional. The API process holds **no NEAR key**: `ISSUER_URL` points at the
-separate issuer service, which holds the restricted function-call key.
+also in `.env.example`. The API process holds **no NEAR key**: `ISSUER_URL`
+points at the separate issuer service, which holds the restricted function-call key.
 
 S1b implements:
 
@@ -49,7 +50,17 @@ S1b implements:
 - `Idempotency-Key` storage (same body returns the first response, another body 409);
 - API keys stored as sha256 with scopes, rotated and revoked once;
 - HMAC-SHA256 webhooks (`Openrail-Signature`), delivered only from indexed events;
-- NEP-413 dashboard sessions (`or_sess_...`, 12 h).
+- NEP-413 dashboard sessions: `POST /v1/auth/verify` sets the `or_sess` cookie
+  (`HttpOnly`, `Secure`, `SameSite=Lax`, `Domain=$COOKIE_DOMAIN`); 7 days sliding,
+  capped at 30 days, stored as a sha256 hash so restarts keep it;
+  `GET /v1/auth/session` and `POST /v1/auth/logout`.
+- SQLite stores (`DATABASE_URL`, `node:sqlite`, schema_migrations): API keys,
+  sessions, challenges, idempotency (24 h expiry), webhook endpoints/deliveries,
+  business profiles, and the invoice/payment/receipt cache behind the indexer port.
+- CORS: exact `WEB_ORIGIN` with credentials, never `*`; cookie-authenticated
+  state-changing requests require `Origin` and `Content-Type: application/json`.
+- `@openrail/api-client` is bundler-friendly (extensionless imports,
+  `moduleResolution: "Bundler"`) and sends `credentials: "include"`.
 
 The mock stays available with `MOCK=1 pnpm --filter @openrail/api start` for UI work.
 
@@ -58,7 +69,7 @@ The mock stays available with `MOCK=1 pnpm --filter @openrail/api start` for UI 
 - `Authorization: Bearer or_sk_live_...` is the server secret key.
 - `Authorization: Bearer or_pk_live_...` is the browser key: pay-session creation only.
 - `Authorization: Bearer or_sess_...` is a **dashboard session** from NEP-413 sign-in
-  (12 h, scoped to one business account).
+  (7 days sliding, capped at 30 days, scoped to one business account).
 - Every `POST` accepts `Idempotency-Key`. The same key with the same body returns
   the first response; the same key with another body returns `409`.
 - Public hosted-page reads (`/v1/pay/sessions/{id}`, `/v1/pay/claims/{token_id}`,
