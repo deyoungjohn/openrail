@@ -176,6 +176,7 @@ export const copy = {
     title: (issuer: string) => `Pay ${issuer}`,
     invoice: (n: string) => `Invoice ${n}`,
     due: (d: string) => `Due ${d}`,
+    routeLabel: (asset: string, chain: string) => `${asset} on ${chain}`,
     pickTitle: "Choose how you pay",
     pickUsdc: "Pay with USDC",
     pickVolatile: "Pay with ETH or SOL",

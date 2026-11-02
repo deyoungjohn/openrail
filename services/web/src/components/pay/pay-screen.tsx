@@ -338,6 +338,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
               <ChainBadge
                 key={r.id}
                 chain={chain}
+                label={p.routeLabel(r.payer_asset, CHAINS[chain])}
                 selected={routeId === r.id}
                 onSelect={() => pickRoute(r.id)}
               />
@@ -347,84 +348,88 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
       </div>
     );
 
-  return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <p className="caption">{p.invoice(c.invoice_number)}</p>
-        <h1 className="text-[28px] leading-9 font-bold">{p.title(c.issuer_legal_name)}</h1>
-        <p className="tabular text-[36px] leading-[1.1] font-bold">${c.amount_usd}</p>
-        <p className="caption">{p.due(formatDueDate(c.due_date))}</p>
-        {c.status === "PartiallyPaid" ? (
-          <p className="text-[14px] font-medium">
-            {p.partial(`$${formatToken(c.outstanding, 6)}`)}
-          </p>
-        ) : null}
-      </header>
-
-      {!open ? (
-        <div role="status" className="surface-card p-6 text-[15px]">
-          {c.status === "Paid" ? p.alreadyPaid : p.closed}
-        </div>
-      ) : routes.length === 0 ? (
+  const session_ =
+    open && routeId ? (
+      starting ? (
+        <Card title={p.getting} state="loading" />
+      ) : sessionError === "failed" ? (
         <div className="surface-card">
-          <EmptyState title={p.noRoutes} />
+          <ErrorState body={p.sessionError} onRetry={() => void start(routeId, refund)} />
         </div>
-      ) : (
-        <Card title={p.pickTitle}>
-          <p className="caption mb-4">{p.pickHelp}</p>
-          <div className="space-y-4">
-            {picker(p.pickUsdc, usdc)}
-            {picker(p.pickVolatile, volatile)}
-          </div>
-          {route ? (
-            <form
-              noValidate
-              className="mt-6 space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                setRefundShown(true);
-                if (refundProblem === null) void start(route.id, refund);
-              }}
-            >
-              <Input
-                label={p.refundLabel}
-                helper={p.refundHelp}
-                value={refund}
-                autoCapitalize="none"
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(e) => setRefund(e.target.value.trim())}
-                error={
-                  (refundShown && refundProblem) ||
-                  (sessionError === "refund" ? p.refundRejected : undefined) ||
-                  undefined
-                }
-              />
-              <Button type="submit" loading={starting}>
-                {p.getPrice}
-              </Button>
-            </form>
-          ) : null}
-        </Card>
-      )}
+      ) : session && route ? (
+        <SessionView
+          key={session.id}
+          session={session}
+          route={route}
+          onNewQuote={() => void start(route.id, refund)}
+          starting={starting}
+        />
+      ) : null
+    ) : null;
 
-      {open && routeId ? (
-        starting ? (
-          <Card title={p.getting} state="loading" />
-        ) : sessionError === "failed" ? (
-          <div className="surface-card">
-            <ErrorState body={p.sessionError} onRetry={() => void start(routeId, refund)} />
+  return (
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
+      <div className="space-y-6">
+        <header className="space-y-1">
+          <p className="caption">{p.invoice(c.invoice_number)}</p>
+          <h1 className="text-[28px] leading-9 font-bold">{p.title(c.issuer_legal_name)}</h1>
+          <p className="tabular text-[36px] leading-[1.1] font-bold">${c.amount_usd}</p>
+          <p className="caption">{p.due(formatDueDate(c.due_date))}</p>
+          {c.status === "PartiallyPaid" ? (
+            <p className="text-[14px] font-medium">
+              {p.partial(`$${formatToken(c.outstanding, 6)}`)}
+            </p>
+          ) : null}
+        </header>
+
+        {!open ? (
+          <div role="status" className="surface-card p-6 text-[15px]">
+            {c.status === "Paid" ? p.alreadyPaid : p.closed}
           </div>
-        ) : session && route ? (
-          <SessionView
-            key={session.id}
-            session={session}
-            route={route}
-            onNewQuote={() => void start(route.id, refund)}
-            starting={starting}
-          />
-        ) : null
-      ) : null}
+        ) : routes.length === 0 ? (
+          <div className="surface-card">
+            <EmptyState title={p.noRoutes} />
+          </div>
+        ) : (
+          <Card title={p.pickTitle}>
+            <p className="caption mb-4">{p.pickHelp}</p>
+            <div className="space-y-4">
+              {picker(p.pickUsdc, usdc)}
+              {picker(p.pickVolatile, volatile)}
+            </div>
+            {route ? (
+              <form
+                noValidate
+                className="mt-6 space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setRefundShown(true);
+                  if (refundProblem === null) void start(route.id, refund);
+                }}
+              >
+                <Input
+                  label={p.refundLabel}
+                  helper={p.refundHelp}
+                  value={refund}
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(e) => setRefund(e.target.value.trim())}
+                  error={
+                    (refundShown && refundProblem) ||
+                    (sessionError === "refund" ? p.refundRejected : undefined) ||
+                    undefined
+                  }
+                />
+                <Button type="submit" loading={starting}>
+                  {p.getPrice}
+                </Button>
+              </form>
+            ) : null}
+          </Card>
+        )}
+      </div>
+      <div className="space-y-6">{session_}</div>
     </div>
   );
 }
