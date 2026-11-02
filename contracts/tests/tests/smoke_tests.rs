@@ -167,22 +167,16 @@ async fn smoke_end_to_end_wiring() -> Result<()> {
     // Advance blocks helper verification
     env.advance_blocks(5).await?;
 
-    // Call issue stub on root contract - MUST fail with NOT_IMPLEMENTED,
-    // which proves the entire fixture is wired and executing real root WASM code.
+    // Call issue on root contract - succeeds and creates claim token c-1
     let res = env
         .issue_claim(&env.alice, 0, 10_000_000, 1_700_000_000)
         .await?;
 
     assert!(
-        res.is_failure(),
-        "Issue call on frozen interface stub must fail with NOT_IMPLEMENTED"
-    );
-
-    let logs = res.logs().join("\n");
-    let failure_details = format!("{:?}", res.failures());
-    assert!(
-        logs.contains("NOT_IMPLEMENTED") || failure_details.contains("NOT_IMPLEMENTED"),
-        "Failure must be NOT_IMPLEMENTED, got logs: '{logs}', failures: '{failure_details}'"
+        res.is_success(),
+        "Issue call on root contract must succeed, got logs: '{:?}', failures: '{:?}'",
+        res.logs(),
+        res.failures()
     );
 
     let gas = env.gas_report(&res);
