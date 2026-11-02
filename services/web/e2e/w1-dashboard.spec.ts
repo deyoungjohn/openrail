@@ -3,7 +3,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { fixture, mockApi } from "./api-mock";
 import { signIn } from "./helpers";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 test.beforeEach(async ({ context }) => {
   await signIn(context);
 });
@@ -179,8 +178,8 @@ test.describe("claim detail", () => {
     const v = (k: string) => page.locator(`[data-counter="${k}"]`);
     await expect(v("amount_due")).toHaveText("$12.50");
     await expect(v("booked_total")).toHaveText("$5.00");
-    await expect(v("distributed_total")).toHaveText("$4.9875");
-    await expect(v("fee_total")).toHaveText("$0.0125");
+    await expect(v("distributed_total")).toHaveText("$4.987500");
+    await expect(v("fee_total")).toHaveText("$0.012500");
     await expect(v("surplus")).toHaveText("$0.00");
     await expect(v("outstanding")).toHaveText("$7.50");
     await expect(page.getByText("Partially paid · $7.50 due")).toBeVisible();
