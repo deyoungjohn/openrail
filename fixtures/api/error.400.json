@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "amount_usd must have two decimals"
+  }
+}

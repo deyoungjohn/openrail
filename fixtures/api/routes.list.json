@@ -1,0 +1,30 @@
+{
+  "data": [
+    {
+      "id": "R1",
+      "origin_chain": "base",
+      "payer_asset": "USDC",
+      "origin_asset_id": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+      "origin_decimals": 6,
+      "origin_contract": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "swap_type": "FLEX_INPUT",
+      "destination_asset_id": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+      "evm_chain_id": 8453,
+      "rpc_var": "BASE_RPC_URL",
+      "part_b": true
+    },
+    {
+      "id": "R6",
+      "origin_chain": "bnb",
+      "payer_asset": "USDC",
+      "origin_asset_id": "nep245:v2_1.omni.hot.tg:56_2w93GqMcEmQFDru84j3HZZWt557r",
+      "origin_decimals": 18,
+      "origin_contract": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+      "swap_type": "FLEX_INPUT",
+      "destination_asset_id": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evm_chain_id": 56,
+      "rpc_var": "BNB_RPC_URL",
+      "part_b": false
+    }
+  ]
+}

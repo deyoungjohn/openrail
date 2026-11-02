@@ -1,0 +1,72 @@
+{
+  "invoice": {
+    "id": "inv_01J00000000000000000000000",
+    "token_id": "c-1",
+    "claim_account": "c-1.openrail.near",
+    "status": "Issued",
+    "issuer_id": "acme.openrail.near",
+    "owner_id": "acme.openrail.near",
+    "debtor": {
+      "Near": "debtor.openrail.near"
+    },
+    "terms_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "amount_due": "12500000",
+    "amount_usd": "12.50",
+    "due_date": "2026-12-01",
+    "invoice_number": "INV-2026-001",
+    "issuer_legal_name": "Acme Ltd",
+    "debtor_legal_name": "Debtor Co",
+    "pay_link": "https://pay.openrail.near/c-1",
+    "ack_url": "https://pay.openrail.near/ack/c-1",
+    "created_at": "2026-11-02T10:00:00Z",
+    "created_block": 123456,
+    "terms": {
+      "schema": "openrail.terms.v1",
+      "invoice_number": "INV-2026-001",
+      "issuer_legal_name": "Acme Ltd",
+      "issuer_account": "acme.openrail.near",
+      "debtor_legal_name": "Debtor Co",
+      "debtor_key": "debtor.openrail.near",
+      "amount_usd": "12.50",
+      "due_date": "2026-12-01",
+      "line_items_sha256": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "claim_account": "c-1.openrail.near",
+      "pay_link": "https://pay.openrail.near/c-1",
+      "clauses": {
+        "payment_instruction_v1": "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+        "assignment_consent_v1": "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
+      }
+    }
+  },
+  "claim": {
+    "token_id": "c-1",
+    "kind": 0,
+    "issuer_id": "acme.openrail.near",
+    "owner_id": "acme.openrail.near",
+    "claim_account": "c-1.openrail.near",
+    "debtor": {
+      "Near": "debtor.openrail.near"
+    },
+    "terms_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "amount_due": "12500000",
+    "due_date": 1764547200,
+    "ack": null,
+    "status": "Issued",
+    "lock": "None",
+    "settlement_assets": [
+      "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+    ],
+    "booked_total": "0",
+    "distributed_total": "0",
+    "fee_total": "0",
+    "surplus": "0",
+    "credit_total": "0",
+    "credit_source": null,
+    "last_seen_balance": {
+      "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1": "0"
+    },
+    "undistributed": [],
+    "assignment_doc_hash": null,
+    "created_block": 123456
+  }
+}

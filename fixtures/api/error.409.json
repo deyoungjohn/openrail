@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "idempotency_key_reuse",
+    "message": "Idempotency-Key was reused with a different body",
+    "rule": "Same key with another body returns 409."
+  }
+}

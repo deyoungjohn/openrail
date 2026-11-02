@@ -1,0 +1,141 @@
+{
+  "_comment": "Fixture -> OpenAPI operation mapping. Contract tests validate every entry against components.schemas[schema]. Mock mode serves entries with mock:true.",
+  "fixtures": [
+    {
+      "file": "invoices.create.json",
+      "method": "POST",
+      "path": "/v1/invoices",
+      "status": 201,
+      "schema": "Invoice",
+      "mock": true
+    },
+    {
+      "file": "invoices.list.json",
+      "method": "GET",
+      "path": "/v1/invoices",
+      "status": 200,
+      "schema": "InvoiceList",
+      "mock": true
+    },
+    {
+      "file": "invoices.get.json",
+      "method": "GET",
+      "path": "/v1/invoices/{id}",
+      "status": 200,
+      "schema": "InvoiceDetail",
+      "mock": true
+    },
+    {
+      "file": "invoices.send.json",
+      "method": "POST",
+      "path": "/v1/invoices/{id}/send",
+      "status": 200,
+      "schema": "SendInvoiceResponse",
+      "mock": true
+    },
+    {
+      "file": "invoices.receipts.json",
+      "method": "GET",
+      "path": "/v1/invoices/{id}/receipts",
+      "status": 200,
+      "schema": "ReceiptList",
+      "mock": true
+    },
+    {
+      "file": "payments.get.json",
+      "method": "GET",
+      "path": "/v1/payments/{id}",
+      "status": 200,
+      "schema": "Payment",
+      "mock": true
+    },
+    {
+      "file": "webhook_endpoints.create.json",
+      "method": "POST",
+      "path": "/v1/webhook_endpoints",
+      "status": 201,
+      "schema": "WebhookEndpoint",
+      "mock": true
+    },
+    {
+      "file": "events.list.json",
+      "method": "GET",
+      "path": "/v1/events",
+      "status": 200,
+      "schema": "WebhookEventList",
+      "mock": true
+    },
+    {
+      "file": "routes.list.json",
+      "method": "GET",
+      "path": "/v1/routes",
+      "status": 200,
+      "schema": "RouteList",
+      "mock": true
+    },
+    {
+      "file": "pay.sessions.create.json",
+      "method": "POST",
+      "path": "/v1/pay/sessions",
+      "status": 201,
+      "schema": "PaySession",
+      "mock": true
+    },
+    {
+      "file": "pay.sessions.status.json",
+      "method": "GET",
+      "path": "/v1/pay/sessions/{id}",
+      "status": 200,
+      "schema": "PaySessionStatus",
+      "mock": true
+    },
+    {
+      "file": "pay.claims.get.json",
+      "method": "GET",
+      "path": "/v1/pay/claims/{token_id}",
+      "status": 200,
+      "schema": "PublicClaim",
+      "mock": true
+    },
+    {
+      "file": "ack.get.json",
+      "method": "GET",
+      "path": "/v1/ack/{token_id}",
+      "status": 200,
+      "schema": "AckData",
+      "mock": true
+    },
+    {
+      "file": "error.400.json",
+      "method": "POST",
+      "path": "/v1/invoices",
+      "status": 400,
+      "schema": "Error",
+      "mock": false
+    },
+    {
+      "file": "error.401.json",
+      "method": "GET",
+      "path": "/v1/invoices",
+      "status": 401,
+      "schema": "Error",
+      "mock": false
+    },
+    {
+      "file": "error.404.json",
+      "method": "GET",
+      "path": "/v1/invoices/{id}",
+      "status": 404,
+      "schema": "Error",
+      "mock": false
+    },
+    {
+      "file": "error.409.json",
+      "method": "POST",
+      "path": "/v1/invoices",
+      "status": 409,
+      "schema": "Error",
+      "mock": false
+    }
+  ]
+}

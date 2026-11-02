@@ -1,0 +1,2293 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Openrail API",
+    "version": "1.0.0",
+    "description": "Core Openrail API (blueprint 1.7) plus the hosted pay, acknowledgement and claim views. JSON only. Errors are `{error:{code,message,rule?}}`."
+  },
+  "servers": [
+    {
+      "url": "https://api.openrail.near",
+      "description": "Production"
+    }
+  ],
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "tags": [
+    {
+      "name": "Invoices"
+    },
+    {
+      "name": "Payments"
+    },
+    {
+      "name": "Receipts"
+    },
+    {
+      "name": "Webhooks"
+    },
+    {
+      "name": "Routes"
+    },
+    {
+      "name": "Pay"
+    },
+    {
+      "name": "Acknowledgement"
+    },
+    {
+      "name": "Meta"
+    }
+  ],
+  "security": [
+    {
+      "secretKey": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "secretKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "or_sk_live_...",
+        "description": "Server-only secret key. Stored as sha256, scoped to one business, shown once."
+      },
+      "publishableKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "or_pk_live_...",
+        "description": "Browser key for creating pay sessions and reading routes only."
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Same key and body within 24 h returns the first response; same key with another body returns 409.",
+        "schema": {
+          "type": "string",
+          "minLength": 8
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "description": "Opaque pagination cursor returned by the previous page.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "description": "Page size, 1-100.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "InvoiceStatus": {
+        "name": "status",
+        "in": "query",
+        "required": false,
+        "description": "Filter by lifecycle status.",
+        "schema": {
+          "$ref": "#/components/schemas/Status"
+        }
+      },
+      "EventType": {
+        "name": "type",
+        "in": "query",
+        "required": false,
+        "description": "Filter by event type.",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookEventType"
+        }
+      }
+    },
+    "schemas": {
+      "U128": {
+        "type": "string",
+        "pattern": "^[0-9]+$",
+        "description": "Unsigned 128-bit integer as a decimal string."
+      },
+      "Hex32": {
+        "type": "string",
+        "pattern": "^0x[0-9a-fA-F]{64}$",
+        "description": "0x-prefixed 32-byte hex value."
+      },
+      "Hex20": {
+        "type": "string",
+        "pattern": "^0x[0-9a-fA-F]{40}$",
+        "description": "0x-prefixed 20-byte EVM address."
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable code, e.g. invoice_not_found."
+          },
+          "message": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string",
+            "description": "Contract rule number in plain words, when applicable."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        }
+      },
+      "Debtor": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["Evm"],
+            "properties": {
+              "Evm": {
+                "$ref": "#/components/schemas/Hex20"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Near"],
+            "properties": {
+              "Near": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "AckScheme": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["Evm"],
+            "properties": {
+              "Evm": {
+                "type": "object",
+                "required": ["chain_id", "signer"],
+                "properties": {
+                  "chain_id": {
+                    "type": "integer"
+                  },
+                  "signer": {
+                    "$ref": "#/components/schemas/Hex20"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Near"],
+            "properties": {
+              "Near": {
+                "type": "object",
+                "required": ["account"],
+                "properties": {
+                  "account": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Ack": {
+        "type": "object",
+        "required": ["scheme", "block"],
+        "properties": {
+          "scheme": {
+            "$ref": "#/components/schemas/AckScheme"
+          },
+          "block": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "Status": {
+        "type": "string",
+        "enum": ["Issued", "PartiallyPaid", "Paid", "Cancelled", "Closed"]
+      },
+      "Lock": {
+        "oneOf": [
+          {
+            "const": "None"
+          },
+          {
+            "type": "object",
+            "required": ["Reconciling"],
+            "properties": {
+              "Reconciling": {
+                "type": "object",
+                "required": ["since"],
+                "properties": {
+                  "since": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["TransferWindow"],
+            "properties": {
+              "TransferWindow": {
+                "type": "object",
+                "required": ["until"],
+                "properties": {
+                  "until": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Module"],
+            "properties": {
+              "Module": {
+                "type": "object",
+                "required": ["id", "until"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "until": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Leg": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["Pay"],
+            "properties": {
+              "Pay": {
+                "type": "object",
+                "required": ["receiver", "amount"],
+                "properties": {
+                  "receiver": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "$ref": "#/components/schemas/U128"
+                  },
+                  "asset": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Hold"],
+            "properties": {
+              "Hold": {
+                "type": "object",
+                "required": ["module_id", "amount"],
+                "properties": {
+                  "module_id": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "$ref": "#/components/schemas/U128"
+                  },
+                  "asset": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Terms": {
+        "type": "object",
+        "required": [
+          "schema",
+          "invoice_number",
+          "issuer_legal_name",
+          "issuer_account",
+          "debtor_legal_name",
+          "debtor_key",
+          "amount_usd",
+          "due_date",
+          "line_items_sha256",
+          "claim_account",
+          "pay_link",
+          "clauses"
+        ],
+        "properties": {
+          "schema": {
+            "const": "openrail.terms.v1"
+          },
+          "invoice_number": {
+            "type": "string"
+          },
+          "issuer_legal_name": {
+            "type": "string"
+          },
+          "issuer_account": {
+            "type": "string"
+          },
+          "debtor_legal_name": {
+            "type": "string"
+          },
+          "debtor_key": {
+            "type": "string"
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "line_items_sha256": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "claim_account": {
+            "type": "string"
+          },
+          "pay_link": {
+            "type": "string",
+            "format": "uri"
+          },
+          "assignment_agreement_sha256": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "clauses": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "LineItem": {
+        "type": "object",
+        "required": ["description", "quantity", "unit_amount_usd"],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unit_amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          }
+        }
+      },
+      "ClaimView": {
+        "type": "object",
+        "required": [
+          "token_id",
+          "kind",
+          "issuer_id",
+          "owner_id",
+          "claim_account",
+          "debtor",
+          "terms_hash",
+          "amount_due",
+          "due_date",
+          "ack",
+          "status",
+          "lock",
+          "settlement_assets",
+          "booked_total",
+          "distributed_total",
+          "fee_total",
+          "surplus",
+          "credit_total",
+          "credit_source",
+          "last_seen_balance",
+          "undistributed",
+          "assignment_doc_hash",
+          "created_block"
+        ],
+        "properties": {
+          "token_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "issuer_id": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "string"
+          },
+          "claim_account": {
+            "type": "string"
+          },
+          "debtor": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Debtor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "terms_hash": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "amount_due": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "due_date": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ack": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Ack"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "lock": {
+            "$ref": "#/components/schemas/Lock"
+          },
+          "settlement_assets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "booked_total": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "distributed_total": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "fee_total": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "surplus": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "credit_total": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "credit_source": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_seen_balance": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/U128"
+            }
+          },
+          "undistributed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Leg"
+            }
+          },
+          "assignment_doc_hash": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Hex32"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_block": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "required": [
+          "id",
+          "token_id",
+          "claim_account",
+          "status",
+          "issuer_id",
+          "owner_id",
+          "debtor",
+          "terms_hash",
+          "amount_due",
+          "amount_usd",
+          "due_date",
+          "invoice_number",
+          "issuer_legal_name",
+          "debtor_legal_name",
+          "pay_link",
+          "ack_url",
+          "created_at",
+          "created_block",
+          "terms"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "token_id": {
+            "type": "string"
+          },
+          "claim_account": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "issuer_id": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "string"
+          },
+          "debtor": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Debtor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "terms_hash": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "amount_due": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "invoice_number": {
+            "type": "string"
+          },
+          "issuer_legal_name": {
+            "type": "string"
+          },
+          "debtor_legal_name": {
+            "type": "string"
+          },
+          "pay_link": {
+            "type": "string",
+            "format": "uri"
+          },
+          "ack_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_block": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "terms": {
+            "$ref": "#/components/schemas/Terms"
+          }
+        }
+      },
+      "InvoiceList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Invoice"
+            }
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "InvoiceDetail": {
+        "type": "object",
+        "required": ["invoice", "claim"],
+        "properties": {
+          "invoice": {
+            "$ref": "#/components/schemas/Invoice"
+          },
+          "claim": {
+            "$ref": "#/components/schemas/ClaimView"
+          }
+        }
+      },
+      "CreateInvoiceRequest": {
+        "type": "object",
+        "required": [
+          "invoice_number",
+          "issuer_legal_name",
+          "debtor_legal_name",
+          "debtor_key",
+          "amount_usd",
+          "due_date",
+          "line_items"
+        ],
+        "properties": {
+          "invoice_number": {
+            "type": "string"
+          },
+          "issuer_legal_name": {
+            "type": "string"
+          },
+          "debtor_legal_name": {
+            "type": "string"
+          },
+          "debtor_key": {
+            "type": "string"
+          },
+          "debtor_type": {
+            "type": "string",
+            "enum": ["evm", "near"]
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "line_items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/LineItem"
+            }
+          },
+          "line_items_sha256": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "pay_link": {
+            "type": "string",
+            "format": "uri"
+          },
+          "assignment_agreement_sha256": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "clauses": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SendInvoiceRequest": {
+        "type": "object",
+        "required": ["to"],
+        "properties": {
+          "to": {
+            "type": "string",
+            "format": "email"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "SendInvoiceResponse": {
+        "type": "object",
+        "required": ["sent", "to", "message_id"],
+        "properties": {
+          "sent": {
+            "type": "boolean",
+            "const": true
+          },
+          "to": {
+            "type": "string",
+            "format": "email"
+          },
+          "message_id": {
+            "type": "string"
+          }
+        }
+      },
+      "Receipt": {
+        "type": "object",
+        "required": [
+          "id",
+          "invoice_id",
+          "token_id",
+          "amount",
+          "asset",
+          "time",
+          "claim_number",
+          "terms_hash",
+          "payment_instruction_v1",
+          "origin_tx",
+          "near_tx_hashes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "invoice_id": {
+            "type": "string"
+          },
+          "token_id": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "claim_number": {
+            "type": "string"
+          },
+          "terms_hash": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "payment_instruction_v1": {
+            "type": "string"
+          },
+          "origin_tx": {
+            "type": "object",
+            "required": ["chain", "hash"],
+            "properties": {
+              "chain": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              },
+              "sender": {
+                "type": "string"
+              },
+              "amount": {
+                "$ref": "#/components/schemas/U128"
+              }
+            }
+          },
+          "near_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ReceiptList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Receipt"
+            }
+          }
+        }
+      },
+      "PaymentStatus": {
+        "type": "string",
+        "enum": ["pending_deposit", "processing", "success", "refunded", "failed"]
+      },
+      "SwapDetails": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "amount_out": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "deposited_amount": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "origin_chain_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "destination_chain_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "near_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "required": [
+          "id",
+          "invoice_id",
+          "token_id",
+          "status",
+          "route_id",
+          "amount_usd",
+          "amount_in",
+          "amount_out",
+          "asset",
+          "deposit_address",
+          "origin_tx_hash",
+          "destination_tx_hash",
+          "near_tx_hashes",
+          "created_at",
+          "updated_at",
+          "swap_details"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "invoice_id": {
+            "type": "string"
+          },
+          "token_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "amount_in": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "amount_out": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "deposit_address": {
+            "type": "string"
+          },
+          "origin_tx_hash": {
+            "type": "string"
+          },
+          "destination_tx_hash": {
+            "type": "string"
+          },
+          "near_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "swap_details": {
+            "$ref": "#/components/schemas/SwapDetails"
+          }
+        }
+      },
+      "WebhookEventType": {
+        "type": "string",
+        "enum": [
+          "invoice.created",
+          "invoice.accepted",
+          "invoice.partially_paid",
+          "invoice.paid",
+          "payment.late",
+          "payout.failed",
+          "invoice.closed"
+        ]
+      },
+      "CreateWebhookEndpointRequest": {
+        "type": "object",
+        "required": ["url", "events"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "description": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/WebhookEventType"
+            }
+          }
+        }
+      },
+      "WebhookEndpoint": {
+        "type": "object",
+        "required": ["id", "url", "secret", "events", "created_at"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "secret": {
+            "type": "string",
+            "description": "Shown once on creation."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEventType"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookEvent": {
+        "type": "object",
+        "required": ["id", "type", "created", "data"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/WebhookEventType"
+          },
+          "created": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "WebhookEventList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEvent"
+            }
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Route": {
+        "type": "object",
+        "required": [
+          "id",
+          "origin_chain",
+          "payer_asset",
+          "origin_asset_id",
+          "origin_decimals",
+          "origin_contract",
+          "swap_type",
+          "destination_asset_id",
+          "evm_chain_id",
+          "rpc_var",
+          "part_b"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "origin_chain": {
+            "type": "string"
+          },
+          "payer_asset": {
+            "type": "string"
+          },
+          "origin_asset_id": {
+            "type": "string"
+          },
+          "origin_decimals": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "origin_contract": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "swap_type": {
+            "type": "string",
+            "enum": ["FLEX_INPUT", "EXACT_OUTPUT"]
+          },
+          "destination_asset_id": {
+            "type": "string"
+          },
+          "evm_chain_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rpc_var": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "part_b": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RouteList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            }
+          }
+        }
+      },
+      "PaySessionRequest": {
+        "type": "object",
+        "required": ["token_id", "route_id"],
+        "properties": {
+          "token_id": {
+            "type": "string"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "refund_to": {
+            "type": "string"
+          },
+          "deadline_seconds": {
+            "type": "integer",
+            "minimum": 60
+          }
+        }
+      },
+      "PaySession": {
+        "type": "object",
+        "required": [
+          "id",
+          "token_id",
+          "route_id",
+          "quote_id",
+          "deposit_address",
+          "deadline",
+          "amount_in",
+          "amount_out",
+          "amount_usd",
+          "spread_bps",
+          "claim_account",
+          "terms_hash",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "token_id": {
+            "type": "string"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "quote_id": {
+            "type": "string"
+          },
+          "deposit_address": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "amount_in": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "amount_out": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "spread_bps": {
+            "type": "number",
+            "minimum": 0
+          },
+          "claim_account": {
+            "type": "string"
+          },
+          "terms_hash": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaySessionStatus": {
+        "type": "object",
+        "required": ["id", "status", "swap_details", "updated_at"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "swap_details": {
+            "$ref": "#/components/schemas/SwapDetails"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PublicClaim": {
+        "type": "object",
+        "required": [
+          "token_id",
+          "invoice_number",
+          "issuer_legal_name",
+          "debtor_legal_name",
+          "claim_account",
+          "terms_hash",
+          "amount_due",
+          "amount_usd",
+          "outstanding",
+          "due_date",
+          "status",
+          "pay_link",
+          "terms",
+          "routes"
+        ],
+        "properties": {
+          "token_id": {
+            "type": "string"
+          },
+          "invoice_number": {
+            "type": "string"
+          },
+          "issuer_legal_name": {
+            "type": "string"
+          },
+          "debtor_legal_name": {
+            "type": "string"
+          },
+          "claim_account": {
+            "type": "string"
+          },
+          "terms_hash": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "amount_due": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "outstanding": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "pay_link": {
+            "type": "string",
+            "format": "uri"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/Terms"
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            }
+          }
+        }
+      },
+      "AckDomain": {
+        "type": "object",
+        "required": ["name", "version", "chain_ids", "verifying_contract"],
+        "properties": {
+          "name": {
+            "const": "Openrail"
+          },
+          "version": {
+            "const": "1"
+          },
+          "chain_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "verifying_contract": {
+            "$ref": "#/components/schemas/Hex20"
+          }
+        }
+      },
+      "AckMessage": {
+        "type": "object",
+        "required": ["kind", "root_contract", "token_id", "terms_hash", "amount_due", "due_date"],
+        "properties": {
+          "kind": {
+            "const": "OPENRAIL_ACK_V1"
+          },
+          "root_contract": {
+            "type": "string"
+          },
+          "token_id": {
+            "type": "string"
+          },
+          "terms_hash": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "amount_due": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "due_date": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AckData": {
+        "type": "object",
+        "required": [
+          "token_id",
+          "invoice_number",
+          "claim_account",
+          "debtor",
+          "terms_hash",
+          "amount_due",
+          "amount_usd",
+          "due_date",
+          "status",
+          "terms",
+          "domain",
+          "primary_type",
+          "message"
+        ],
+        "properties": {
+          "token_id": {
+            "type": "string"
+          },
+          "invoice_number": {
+            "type": "string"
+          },
+          "claim_account": {
+            "type": "string"
+          },
+          "debtor": {
+            "$ref": "#/components/schemas/Debtor"
+          },
+          "terms_hash": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "amount_due": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "due_date": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/Terms"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/AckDomain"
+          },
+          "primary_type": {
+            "const": "Acknowledge"
+          },
+          "message": {
+            "$ref": "#/components/schemas/AckMessage"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/invoices": {
+      "post": {
+        "operationId": "createInvoice",
+        "summary": "Create and issue an invoice",
+        "tags": ["Invoices"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invoice issued; the claim account exists and the pay link is live.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invoice"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listInvoices",
+        "summary": "List invoices for the authenticated business",
+        "tags": ["Invoices"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/InvoiceStatus"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of invoices.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invoices/{id}": {
+      "get": {
+        "operationId": "getInvoice",
+        "summary": "Get an invoice and its live claim view",
+        "tags": ["Invoices"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Invoice id or token id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invoice plus the on-chain ClaimView.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invoices/{id}/send": {
+      "post": {
+        "operationId": "sendInvoice",
+        "summary": "Email the pay link to the debtor",
+        "tags": ["Invoices"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Invoice id or token id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The email was accepted for delivery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendInvoiceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invoices/{id}/receipts": {
+      "get": {
+        "operationId": "listReceipts",
+        "summary": "List receipts rendered from booked events",
+        "tags": ["Receipts"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Invoice id or token id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Receipts; a receipt exists only for a booked event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/payments/{id}": {
+      "get": {
+        "operationId": "getPayment",
+        "summary": "Get a payment and its provider swap status",
+        "tags": ["Payments"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Payment id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment status; provider fields are under swap_details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhook_endpoints": {
+      "post": {
+        "operationId": "createWebhookEndpoint",
+        "summary": "Register a webhook endpoint",
+        "tags": ["Webhooks"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookEndpointRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Endpoint created; the signing secret is shown once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookEndpoint"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events": {
+      "get": {
+        "operationId": "listEvents",
+        "summary": "List indexed events",
+        "tags": ["Webhooks"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/EventType"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of events; webhooks fire only from indexed on-chain events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookEventList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/routes": {
+      "get": {
+        "operationId": "listRoutes",
+        "summary": "List chains and assets that can pay right now",
+        "tags": ["Routes"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Allow-listed pay routes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pay/sessions": {
+      "post": {
+        "operationId": "createPaySession",
+        "summary": "Create a pay session and its first quote",
+        "description": "The quote is written to the payment log before the deposit address is returned (quote_note_before_address_shown).",
+        "tags": ["Pay"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaySessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session created; deposit address and requested deadline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaySession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pay/sessions/{id}": {
+      "get": {
+        "operationId": "getPaySession",
+        "summary": "Poll a pay session",
+        "tags": ["Pay"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Pay session id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current status; provider fields are under swap_details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaySessionStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pay/claims/{token_id}": {
+      "get": {
+        "operationId": "getPublicClaim",
+        "summary": "Public claim view for the hosted pay page",
+        "tags": ["Pay"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "description": "Claim token id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public invoice and pay data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicClaim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ack/{token_id}": {
+      "get": {
+        "operationId": "getAckData",
+        "summary": "Everything the acknowledgement page renders",
+        "tags": ["Acknowledgement"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "description": "Claim token id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Terms, domain and EIP-712 message; render every field before calling the wallet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AckData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "summary": "This OpenAPI 3.1 document",
+        "tags": ["Meta"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OpenAPI document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
