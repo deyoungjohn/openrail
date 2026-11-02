@@ -114,6 +114,16 @@
       "kind": "call"
     },
     {
+      "name": "on_balances",
+      "kind": "call",
+      "internal": true
+    },
+    {
+      "name": "on_distributed",
+      "kind": "call",
+      "internal": true
+    },
+    {
       "name": "on_issue",
       "kind": "call",
       "internal": true

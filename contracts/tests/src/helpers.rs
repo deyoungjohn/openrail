@@ -97,6 +97,32 @@ impl Env {
         Ok(res)
     }
 
+    /// Burns tokens from a claim's vault on `intents.near` (simulating balance drop / anomaly).
+    pub async fn burn_claim_balance(
+        &self,
+        token_id: &str,
+        amount: u128,
+        asset: Option<&str>,
+    ) -> Result<ExecutionFinalResult> {
+        let claim_account_id = format!("{token_id}.{}", self.root.id());
+        let asset_id = asset.unwrap_or(DEFAULT_SETTLEMENT_ASSET);
+
+        let res = self
+            .parent
+            .call(self.intents.id(), "mt_burn")
+            .args_json(json!({
+                "account_id": claim_account_id,
+                "token_id": asset_id,
+                "amount": U128(amount),
+            }))
+            .max_gas()
+            .transact()
+            .await
+            .context("transact mt_burn")?;
+
+        Ok(res)
+    }
+
     /// Views the multi-token balance for a claim's vault account on `intents.near`.
     pub async fn claim_balance(&self, token_id: &str, asset: Option<&str>) -> Result<u128> {
         let claim_account_id = format!("{token_id}.{}", self.root.id());
