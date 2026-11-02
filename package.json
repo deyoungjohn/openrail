@@ -10,6 +10,7 @@
   "scripts": {
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
+    "gen:modules": "tsx scripts/gen-modules.ts",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "test": "pnpm -r test"
   },
