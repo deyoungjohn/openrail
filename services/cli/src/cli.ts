@@ -23,7 +23,7 @@ interface Parsed {
   flags: Flags;
 }
 
-const BOOLEAN_FLAGS = new Set(["json", "execute", "dry-run", "help", "version"]);
+const BOOLEAN_FLAGS = new Set(["json", "execute", "dry-run", "yes", "help", "version"]);
 
 function parse(argv: string[]): Parsed {
   const positional: string[] = [];
@@ -136,17 +136,18 @@ async function dispatch(
   const { positional, flags } = parsed;
   const resource = positional[0];
   const action = positional[1];
-  const dryRunDefault = !flags.execute;
   const idempotencyKey = stringFlag(flags, "idempotency-key");
+  const explicitDryRun = flags["dry-run"] === true;
 
   if (resource === "routes") return client.routes.list();
 
   if (resource === "auth" && action === "session") return client.auth.session();
+  if (resource === "whoami") return client.business.get();
 
   if (resource === "invoices") {
     if (action === "create") {
       const body = invoiceBody(flags);
-      if (dryRunDefault)
+      if (explicitDryRun)
         return { dry_run: true, request: writeRequest(flags, "POST", "/v1/invoices", body) };
       return client.invoices.create(body as never, { idempotencyKey });
     }
@@ -172,7 +173,7 @@ async function dispatch(
           ? {}
           : { message: stringFlag(flags, "message") }),
       };
-      if (dryRunDefault) {
+      if (explicitDryRun) {
         return {
           dry_run: true,
           request: writeRequest(flags, "POST", `/v1/invoices/${id}/send`, body),
@@ -203,7 +204,7 @@ async function dispatch(
                 .map((entry) => entry.trim())
                 .filter(Boolean),
       };
-      if (dryRunDefault) {
+      if (explicitDryRun) {
         return {
           dry_run: true,
           request: writeRequest(flags, "POST", "/v1/webhook_endpoints", body),
@@ -214,7 +215,7 @@ async function dispatch(
     if (action === "list") return client.webhookEndpoints.list();
     if (action === "test") {
       const id = requiredArg(positional, 2, "webhook id");
-      if (dryRunDefault) {
+      if (explicitDryRun) {
         return {
           dry_run: true,
           request: writeRequest(flags, "POST", `/v1/webhook_endpoints/${id}/test`),
@@ -235,7 +236,7 @@ async function dispatch(
           ? {}
           : { scopes: (stringFlag(flags, "scopes") ?? "").split(",") }),
       };
-      if (dryRunDefault) {
+      if (explicitDryRun) {
         return { dry_run: true, request: writeRequest(flags, "POST", "/v1/api_keys", body) };
       }
       return client.apiKeys.create(body as never, { idempotencyKey });
@@ -243,15 +244,23 @@ async function dispatch(
     if (action === "list") return client.apiKeys.list();
     if (action === "rotate") {
       const id = requiredArg(positional, 2, "key id");
-      if (dryRunDefault) {
-        return { dry_run: true, request: writeRequest(flags, "POST", `/v1/api_keys/${id}/rotate`) };
+      if (explicitDryRun || flags.yes !== true) {
+        return {
+          dry_run: true,
+          requires_yes: true,
+          request: writeRequest(flags, "POST", `/v1/api_keys/${id}/rotate`),
+        };
       }
       return client.apiKeys.rotate(id, { idempotencyKey });
     }
     if (action === "revoke") {
       const id = requiredArg(positional, 2, "key id");
-      if (dryRunDefault) {
-        return { dry_run: true, request: writeRequest(flags, "DELETE", `/v1/api_keys/${id}`) };
+      if (explicitDryRun || flags.yes !== true) {
+        return {
+          dry_run: true,
+          requires_yes: true,
+          request: writeRequest(flags, "DELETE", `/v1/api_keys/${id}`),
+        };
       }
       return client.apiKeys.delete(id);
     }
@@ -287,22 +296,23 @@ const HELP = `openrail ${VERSION}
 Usage: openrail [--json] [--api-url URL] [--execute] <resource> <action> [flags]
 
 Resources:
-  invoices create|get|list|send       Invoices (create/send dry-run by default)
+  invoices create|get|list|send       Invoices (create/send execute by default)
   payments get                        Payment status
   receipts list <invoice-id>          Receipts
   routes                              Allow-listed pay routes
   webhooks create|list|test|deliveries
-  keys create|list|rotate|revoke      API keys
+  keys create|list|rotate|revoke      API keys (rotate/revoke need --yes)
   statements [--from --to --format]   Statement envelope
   cashout quote --amount --destination-chain --address
   auth session                        Current dashboard session
+  whoami                              Business profile for the API key
 
 Global flags:
   --json                 Machine-readable JSON (also on errors)
   --api-url URL          Override OPENRAIL_API_URL
   --idempotency-key KEY  Idempotency-Key for writes
-  --execute              Send a write (default is dry-run)
-  --dry-run              Explicit dry-run
+  --dry-run              Preview a write (creates/sends execute by default)
+  --yes                  Required for destructive commands (keys rotate/revoke)
   --help, --version
 
 Env: OPENRAIL_API_URL, OPENRAIL_API_KEY (never printed), NEAR_ACCOUNT_ID (optional).

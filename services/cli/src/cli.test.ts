@@ -46,27 +46,27 @@ describe("openrail CLI", () => {
     expect(body.data[0]?.token_id).toBe("c-1");
   });
 
-  it("defaults writes to dry-run and only sends with --execute", async () => {
-    const dry = await runCli([
+  it("executes creates by default and previews with --dry-run", async () => {
+    const preview = await runCli([
       "invoices",
       "create",
       "--json",
+      "--dry-run",
       "--data",
       JSON.stringify({ invoice_number: "INV-1" }),
     ]);
-    expect(dry.exitCode).toBe(0);
-    const dryBody = JSON.parse(dry.stdout) as {
+    expect(preview.exitCode).toBe(0);
+    const previewBody = JSON.parse(preview.stdout) as {
       dry_run: boolean;
       request: { method: string; path: string };
     };
-    expect(dryBody.dry_run).toBe(true);
-    expect(dryBody.request).toMatchObject({ method: "POST", path: "/v1/invoices" });
+    expect(previewBody.dry_run).toBe(true);
+    expect(previewBody.request).toMatchObject({ method: "POST", path: "/v1/invoices" });
 
     const live = await runCli([
       "invoices",
       "create",
       "--json",
-      "--execute",
       "--data",
       JSON.stringify({
         invoice_number: "INV-1",
@@ -81,6 +81,24 @@ describe("openrail CLI", () => {
     expect(live.exitCode).toBe(0);
     const liveBody = JSON.parse(live.stdout) as { token_id: string };
     expect(liveBody.token_id).toBe("c-1");
+  });
+
+  it("requires --yes for a destructive key command", async () => {
+    const blocked = await runCli(["keys", "revoke", "key_1", "--json"]);
+    expect(blocked.exitCode).toBe(0);
+    expect(JSON.parse(blocked.stdout)).toMatchObject({ dry_run: true, requires_yes: true });
+
+    const confirmed = await runCli(["keys", "revoke", "key_1", "--json", "--yes"]);
+    expect(confirmed.exitCode).toBe(0);
+    expect(JSON.parse(confirmed.stdout)).toMatchObject({ deleted: true });
+  });
+
+  it("whoami uses the business profile for an API key", async () => {
+    const result = await runCli(["whoami", "--json"]);
+    expect(result.exitCode).toBe(0);
+    expect((JSON.parse(result.stdout) as { account_id: string }).account_id).toBe(
+      "acme.openrail.near",
+    );
   });
 
   it("never prints the env key", async () => {
