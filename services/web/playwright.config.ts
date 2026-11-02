@@ -7,6 +7,10 @@ export default defineConfig({
   // Under .next so git, eslint and prettier already ignore it.
   outputDir: ".next/e2e-results",
   fullyParallel: true,
+  // The gallery page is heavy; eight workers made axe and first paint time out on a laptop.
+  workers: 4,
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
   reporter: [["list"]],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
