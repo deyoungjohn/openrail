@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { MOCK_MODE } from "../lib/api";
 import { useNear } from "./near";
 
+const INTENTS_CONTRACT = process.env.NEXT_PUBLIC_INTENTS_CONTRACT ?? "intents.near";
 const TGAS = (n: number) => (BigInt(n) * 10n ** 12n).toString();
 
 export interface Actions {
@@ -12,6 +13,8 @@ export interface Actions {
   prepareTransfer(rootContract: string, tokenId: string): Promise<void>;
   /** Prepays storage for API issuance: `deposit_storage_credit` with the NEAR attached (blueprint 2.2). */
   depositStorageCredit(contractId: string, depositYocto: string): Promise<void>;
+  /** `mt_transfer` of the holder's own Intents USDC to a cash-out deposit address (blueprint 2.9). 1 yoctoNEAR. */
+  cashOut(a: { tokenId: string; depositAddress: string; amount: string }): Promise<void>;
   /** NEP-171 transfer. Exactly 1 yoctoNEAR; on a sale the memo carries the document hash. */
   nftTransfer(
     rootContract: string,
@@ -25,6 +28,7 @@ const mockActions: Actions = {
   acknowledgeNear: () => wait(800),
   prepareTransfer: () => wait(1000),
   depositStorageCredit: () => wait(800),
+  cashOut: () => wait(1000),
   nftTransfer: () => wait(1000),
 };
 
@@ -59,6 +63,13 @@ export function useActions(): Actions {
                 args: {},
                 gas: TGAS(30),
                 deposit: depositYocto,
+            cashOut: (a) =>
+              call({
+                receiverId: INTENTS_CONTRACT,
+                methodName: "mt_transfer",
+                args: { token_id: a.tokenId, receiver_id: a.depositAddress, amount: a.amount },
+                gas: TGAS(30),
+                deposit: "1",
               }),
             nftTransfer: (root, a) =>
               call({

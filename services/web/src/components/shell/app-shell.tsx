@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  Banknote,
   ChevronsLeft,
   ChevronsRight,
   CreditCard,
+  FileSpreadsheet,
   FileText,
   Code2,
   LayoutDashboard,
@@ -35,6 +37,8 @@ const coreNav: readonly NavItem[] = [
   { href: "/app", label: copy.nav.dashboard, Icon: LayoutDashboard },
   { href: "/app/invoices", label: copy.nav.invoices, Icon: FileText },
   { href: "/app/payments", label: copy.nav.payments, Icon: CreditCard },
+  { href: "/app/statements", label: copy.nav.statements, Icon: FileSpreadsheet },
+  { href: "/app/cashout", label: copy.nav.cashout, Icon: Banknote },
   { href: "/app/developers", label: copy.nav.developers, Icon: Code2 },
   { href: "/app/settings", label: copy.nav.settings, Icon: Settings },
 ];

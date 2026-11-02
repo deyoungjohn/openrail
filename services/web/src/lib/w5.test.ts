@@ -5,6 +5,7 @@ import {
   costShare,
   csvToTable,
   explorerTxUrl,
+  formatDateTimeUtc,
   parseUsdcInput,
   sha256OfBase64,
   statementFilename,
@@ -109,5 +110,12 @@ describe("statementFilename", () => {
     expect(statementFilename({ filename: "", format: "pdf" }, "2026-11-01", "2026-11-30")).toBe(
       "statement-2026-11-01-2026-11-30.pdf",
     );
+  });
+});
+
+describe("formatDateTimeUtc", () => {
+  it("prints the moment in UTC with a 24-hour clock", () => {
+    expect(formatDateTimeUtc("2026-11-02T10:01:35Z")).toBe("Nov 2, 2026, 10:01 UTC");
+    expect(formatDateTimeUtc("2026-11-02T00:05:00Z")).toBe("Nov 2, 2026, 00:05 UTC");
   });
 });

@@ -40,7 +40,7 @@ test.describe("receipt (public)", () => {
   }) => {
     await mockApi(page, handlers);
     await page.goto(`/r/${HASH}`);
-    await expect(page.getByRole("link", { name: /View on explorer: 0xcccccc/ })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: /View on explorer: 0xcccc…/ })).toHaveAttribute(
       "href",
       `https://basescan.org/tx/${HASH}`,
     );
@@ -111,14 +111,15 @@ test.describe("statements", () => {
   });
 
   async function request(page: Page, from = "2026-11-01", to = "2026-11-30") {
-    await page.getByLabel("From").fill(from);
-    await page.getByLabel("To").fill(to);
+    await page.getByLabel("From", { exact: true }).fill(from);
+    await page.getByLabel("To", { exact: true }).fill(to);
     await page.getByRole("button", { name: "Get statement" }).click();
   }
 
   test("asks for the period and format, previews the CSV and checks its fingerprint", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     const calls = await mockApi(page, { "GET /v1/statements": { body: statement() } });
     await page.goto("/app/statements");
     await request(page);
@@ -139,7 +140,7 @@ test.describe("statements", () => {
     });
     await page.goto("/app/statements");
     await request(page);
-    await expect(page.getByRole("alert")).toContainText("doesn't match");
+    await expect(page.locator("main [role=alert]")).toContainText("doesn't match");
   });
 
   test("a PDF has no preview but can be downloaded", async ({ page }) => {
@@ -176,8 +177,8 @@ test.describe("statements", () => {
       "GET /v1/statements": { status: 500, body: { error: { code: "internal", message: "x" } } },
     });
     await p2.goto("/app/statements");
-    await p2.getByLabel("From").fill("2026-11-01");
-    await p2.getByLabel("To").fill("2026-11-30");
+    await p2.getByLabel("From", { exact: true }).fill("2026-11-01");
+    await p2.getByLabel("To", { exact: true }).fill("2026-11-30");
     await p2.getByRole("button", { name: "Get statement" }).click();
     await expect(p2.locator("main [role=alert]")).toBeVisible();
   });
