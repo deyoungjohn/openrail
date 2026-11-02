@@ -10,7 +10,7 @@
 use anyhow::Result;
 use near_sdk::json_types::U128;
 use near_workspaces::types::NearToken;
-use openrail::types::{ClaimView, Debtor, Hex32};
+use openrail::types::{ClaimView, Debtor, Hex32, Status};
 use openrail_model::{
     check_cancel_only_unpaid, check_closed_addresses_stay_live, check_counters_monotonic,
     check_fee_bounded, check_no_transfer_under_lock, check_no_transfer_when_settled,
@@ -83,7 +83,6 @@ async fn smoke_core_stubs_return_not_implemented() -> Result<()> {
 /// - Issue creates sub-account `c-1.openrail.near`
 /// - Viewing access keys on `c-1.openrail.near` returns an empty array
 #[tokio::test]
-#[ignore = "C1"]
 async fn inv_account_has_no_keys() -> Result<()> {
     let env = Env::new().await?;
 
@@ -110,7 +109,6 @@ async fn inv_account_has_no_keys() -> Result<()> {
 /// - Sub-account `c-1.openrail.near` code hash matches `env.vault_code_hash`
 /// - Direct unprivileged calls to sub-account are rejected
 #[tokio::test]
-#[ignore = "C1"]
 async fn inv_account_obeys_only_owed() -> Result<()> {
     let env = Env::new().await?;
 
@@ -144,7 +142,6 @@ async fn inv_account_obeys_only_owed() -> Result<()> {
 /// - Claim 2 gets `c-2.openrail.near`
 /// - Accounts are distinct and independently addressable
 #[tokio::test]
-#[ignore = "C1"]
 async fn claim_account_unique_per_claim() -> Result<()> {
     let env = Env::new().await?;
 
@@ -166,13 +163,13 @@ async fn claim_account_unique_per_claim() -> Result<()> {
 
     let claim_view1: ClaimView = env
         .root
-        .view("get_claim")
+        .view("claim")
         .args_json(json!({ "token_id": token_1 }))
         .await?
         .json()?;
     let claim_view2: ClaimView = env
         .root
-        .view("get_claim")
+        .view("claim")
         .args_json(json!({ "token_id": token_2 }))
         .await?
         .json()?;
@@ -197,7 +194,6 @@ async fn claim_account_unique_per_claim() -> Result<()> {
 /// - No interface method permits modifying `terms_hash`
 /// - `terms_hash` remains identical across operations
 #[tokio::test]
-#[ignore = "C1"]
 async fn terms_immutable() -> Result<()> {
     let env = Env::new().await?;
 
@@ -206,7 +202,7 @@ async fn terms_immutable() -> Result<()> {
         .issue_claim_with_details(
             &env.alice,
             0,
-            None,
+            Some(Debtor::Near(env.bob.id().clone())),
             expected_hash,
             1_000_000,
             1_800_000_000,
@@ -217,7 +213,7 @@ async fn terms_immutable() -> Result<()> {
 
     let claim_view: ClaimView = env
         .root
-        .view("get_claim")
+        .view("claim")
         .args_json(json!({ "token_id": "c-1" }))
         .await?
         .json()?;
@@ -231,7 +227,7 @@ async fn terms_immutable() -> Result<()> {
                 token_id: "c-1".to_string(),
                 kind: 0,
                 issuer_id: env.alice.id().to_string(),
-                debtor: None,
+                debtor: Some(ModelDebtor::Near(env.bob.id().to_string())),
                 terms_hash: ModelHex32([77u8; 32]),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -626,7 +622,7 @@ async fn conservation_v3() -> Result<()> {
 
     let view: ClaimView = env
         .root
-        .view("get_claim")
+        .view("claim")
         .args_json(json!({ "token_id": "c-1" }))
         .await?
         .json()?;
@@ -645,14 +641,22 @@ async fn conservation_v3() -> Result<()> {
 #[tokio::test]
 #[ignore = "C4"]
 async fn counters_monotonic() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
     let mut model = Model::new();
     model
         .step(
             Action::Issue {
-                token_id: "c-1".to_string(),
+                token_id: token_id.clone(),
                 kind: 0,
-                issuer_id: "alice.near".to_string(),
-                debtor: None,
+                issuer_id: env.alice.id().to_string(),
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -661,12 +665,32 @@ async fn counters_monotonic() -> Result<()> {
         )
         .unwrap();
 
-    let pre = model.get_claim("c-1").unwrap().clone();
+    let pre_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    let model_pre = model.get_claim(&token_id).unwrap().clone();
+    assert_eq!(pre_view.booked_total.0, model_pre.booked_total);
+    assert_eq!(pre_view.distributed_total.0, model_pre.distributed_total);
+    assert_eq!(pre_view.fee_total.0, model_pre.fee_total);
+
+    let _ = env.fund_claim(&token_id, 500_000, None).await?;
+    let rec_res = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_res.is_success());
+
     model
         .step(
             Action::DepositIntentsBalance {
-                token_id: "c-1".to_string(),
-                asset: "nep141:usdc.near".to_string(),
+                token_id: token_id.clone(),
+                asset: DEFAULT_SETTLEMENT_ASSET.to_string(),
                 amount: 500_000,
             },
             101,
@@ -675,15 +699,30 @@ async fn counters_monotonic() -> Result<()> {
     model
         .step(
             Action::Reconcile {
-                token_id: "c-1".to_string(),
-                leg_failures: vec![false, false],
+                token_id: token_id.clone(),
+                leg_failures: vec![false],
             },
             102,
         )
         .unwrap();
 
-    let post = model.get_claim("c-1").unwrap();
-    assert!(check_counters_monotonic(&pre, post).is_ok());
+    let post_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    let model_post = model.get_claim(&token_id).unwrap();
+
+    assert_eq!(post_view.booked_total.0, model_post.booked_total);
+    assert_eq!(post_view.distributed_total.0, model_post.distributed_total);
+    assert_eq!(post_view.fee_total.0, model_post.fee_total);
+
+    assert!(post_view.booked_total.0 >= pre_view.booked_total.0);
+    assert!(post_view.distributed_total.0 >= pre_view.distributed_total.0);
+    assert!(post_view.fee_total.0 >= pre_view.fee_total.0);
+    assert!(post_view.credit_total.0 >= pre_view.credit_total.0);
+    assert!(check_counters_monotonic(&model_pre, model_post).is_ok());
 
     Ok(())
 }
@@ -695,14 +734,22 @@ async fn counters_monotonic() -> Result<()> {
 #[tokio::test]
 #[ignore = "C4"]
 async fn reconcile_idempotent() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
     let mut model = Model::new();
     model
         .step(
             Action::Issue {
-                token_id: "c-1".to_string(),
+                token_id: token_id.clone(),
                 kind: 0,
-                issuer_id: "alice.near".to_string(),
-                debtor: None,
+                issuer_id: env.alice.id().to_string(),
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -711,20 +758,50 @@ async fn reconcile_idempotent() -> Result<()> {
         )
         .unwrap();
 
-    let pre = model.get_claim("c-1").unwrap().clone();
+    let pre_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+
+    let rec_res = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_res.is_success());
+
+    let post_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+
+    assert_eq!(
+        pre_view, post_view,
+        "Zero-delta reconcile leaves contract state unchanged"
+    );
+
+    let model_pre = model.get_claim(&token_id).unwrap().clone();
     let events = model
         .step(
             Action::Reconcile {
-                token_id: "c-1".to_string(),
+                token_id: token_id.clone(),
                 leg_failures: vec![],
             },
             101,
         )
         .unwrap();
-
-    assert!(events.is_empty(), "Zero-delta reconcile emits no events");
-    let post = model.get_claim("c-1").unwrap();
-    assert!(check_reconcile_idempotent(&pre, post).is_ok());
+    assert!(
+        events.is_empty(),
+        "Zero-delta reconcile emits no events in model"
+    );
+    let model_post = model.get_claim(&token_id).unwrap();
+    assert!(check_reconcile_idempotent(&model_pre, model_post).is_ok());
 
     Ok(())
 }
@@ -734,7 +811,6 @@ async fn reconcile_idempotent() -> Result<()> {
 /// Asserts:
 /// - Only configured settlement assets appear in `last_seen_balance`
 #[tokio::test]
-#[ignore = "C1"]
 async fn only_settlement_assets_count() -> Result<()> {
     let env = Env::new().await?;
 
@@ -744,7 +820,7 @@ async fn only_settlement_assets_count() -> Result<()> {
 
     let view: ClaimView = env
         .root
-        .view("get_claim")
+        .view("claim")
         .args_json(json!({ "token_id": "c-1" }))
         .await?
         .json()?;
@@ -765,14 +841,39 @@ async fn only_settlement_assets_count() -> Result<()> {
 #[tokio::test]
 #[ignore = "C4"]
 async fn fee_bounded() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
+    let _ = env.fund_claim(&token_id, 400_000, None).await?;
+    let rec_res = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_res.is_success());
+
+    let claim_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+
     let mut model = Model::new();
     model
         .step(
             Action::Issue {
-                token_id: "c-1".to_string(),
+                token_id: token_id.clone(),
                 kind: 0,
-                issuer_id: "alice.near".to_string(),
-                debtor: None,
+                issuer_id: env.alice.id().to_string(),
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -784,8 +885,8 @@ async fn fee_bounded() -> Result<()> {
     model
         .step(
             Action::DepositIntentsBalance {
-                token_id: "c-1".to_string(),
-                asset: "nep141:usdc.near".to_string(),
+                token_id: token_id.clone(),
+                asset: DEFAULT_SETTLEMENT_ASSET.to_string(),
                 amount: 400_000,
             },
             101,
@@ -795,16 +896,18 @@ async fn fee_bounded() -> Result<()> {
     model
         .step(
             Action::Reconcile {
-                token_id: "c-1".to_string(),
-                leg_failures: vec![false, false],
+                token_id: token_id.clone(),
+                leg_failures: vec![false],
             },
             102,
         )
         .unwrap();
 
-    let claim = model.get_claim("c-1").unwrap();
-    assert_eq!(claim.fee_total, 1_000); // 400_000 * 25 / 10_000
-    assert!(check_fee_bounded(claim).is_ok());
+    let model_claim = model.get_claim(&token_id).unwrap();
+    assert_eq!(claim_view.fee_total.0, model_claim.fee_total);
+    assert_eq!(claim_view.fee_total.0, 1_000); // 400_000 * 25 / 10_000
+    assert!(claim_view.fee_total.0 <= (claim_view.booked_total.0 * 25) / 10_000);
+    assert!(check_fee_bounded(model_claim).is_ok());
 
     Ok(())
 }
@@ -818,14 +921,22 @@ async fn fee_bounded() -> Result<()> {
 #[tokio::test]
 #[ignore = "C4"]
 async fn status_matches_amounts_v3() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
     let mut model = Model::new();
     model
         .step(
             Action::Issue {
-                token_id: "c-1".to_string(),
+                token_id: token_id.clone(),
                 kind: 0,
-                issuer_id: "alice.near".to_string(),
-                debtor: None,
+                issuer_id: env.alice.id().to_string(),
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -833,14 +944,34 @@ async fn status_matches_amounts_v3() -> Result<()> {
             100,
         )
         .unwrap();
-    assert_eq!(model.get_claim("c-1").unwrap().status, ModelStatus::Issued);
-    assert!(check_status_matches_amounts_v3(model.get_claim("c-1").unwrap()).is_ok());
+
+    let view_issued: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(view_issued.status, Status::Issued);
+    assert_eq!(
+        model.get_claim(&token_id).unwrap().status,
+        ModelStatus::Issued
+    );
+
+    let _ = env.fund_claim(&token_id, 500_000, None).await?;
+    let rec1 = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec1.is_success());
 
     model
         .step(
             Action::DepositIntentsBalance {
-                token_id: "c-1".to_string(),
-                asset: "nep141:usdc.near".to_string(),
+                token_id: token_id.clone(),
+                asset: DEFAULT_SETTLEMENT_ASSET.to_string(),
                 amount: 500_000,
             },
             101,
@@ -849,23 +980,40 @@ async fn status_matches_amounts_v3() -> Result<()> {
     model
         .step(
             Action::Reconcile {
-                token_id: "c-1".to_string(),
-                leg_failures: vec![false, false],
+                token_id: token_id.clone(),
+                leg_failures: vec![false],
             },
             102,
         )
         .unwrap();
+
+    let view_partial: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(view_partial.status, Status::PartiallyPaid);
     assert_eq!(
-        model.get_claim("c-1").unwrap().status,
+        model.get_claim(&token_id).unwrap().status,
         ModelStatus::PartiallyPaid
     );
-    assert!(check_status_matches_amounts_v3(model.get_claim("c-1").unwrap()).is_ok());
+
+    let _ = env.fund_claim(&token_id, 500_000, None).await?;
+    let rec2 = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec2.is_success());
 
     model
         .step(
             Action::DepositIntentsBalance {
-                token_id: "c-1".to_string(),
-                asset: "nep141:usdc.near".to_string(),
+                token_id: token_id.clone(),
+                asset: DEFAULT_SETTLEMENT_ASSET.to_string(),
                 amount: 500_000,
             },
             103,
@@ -874,14 +1022,25 @@ async fn status_matches_amounts_v3() -> Result<()> {
     model
         .step(
             Action::Reconcile {
-                token_id: "c-1".to_string(),
-                leg_failures: vec![false, false],
+                token_id: token_id.clone(),
+                leg_failures: vec![false],
             },
             104,
         )
         .unwrap();
-    assert_eq!(model.get_claim("c-1").unwrap().status, ModelStatus::Paid);
-    assert!(check_status_matches_amounts_v3(model.get_claim("c-1").unwrap()).is_ok());
+
+    let view_paid: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(view_paid.status, Status::Paid);
+    assert_eq!(
+        model.get_claim(&token_id).unwrap().status,
+        ModelStatus::Paid
+    );
+    assert!(check_status_matches_amounts_v3(model.get_claim(&token_id).unwrap()).is_ok());
 
     Ok(())
 }
@@ -920,14 +1079,22 @@ async fn stale_reconcile_lock_clears() -> Result<()> {
 #[tokio::test]
 #[ignore = "C5"]
 async fn cancel_only_unpaid() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
     let mut model = Model::new();
     model
         .step(
             Action::Issue {
-                token_id: "c-1".to_string(),
+                token_id: token_id.clone(),
                 kind: 0,
-                issuer_id: "alice.near".to_string(),
-                debtor: None,
+                issuer_id: env.alice.id().to_string(),
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -936,19 +1103,37 @@ async fn cancel_only_unpaid() -> Result<()> {
         )
         .unwrap();
 
+    let cancel_res = env
+        .alice
+        .call(env.root.id(), "cancel")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(cancel_res.is_success());
+
     model
         .step(
             Action::Cancel {
-                caller: "alice.near".to_string(),
-                token_id: "c-1".to_string(),
+                caller: env.alice.id().to_string(),
+                token_id: token_id.clone(),
                 debtor_cosig: None,
             },
             101,
         )
         .unwrap();
-    let claim = model.get_claim("c-1").unwrap();
-    assert_eq!(claim.status, ModelStatus::Cancelled);
-    assert!(check_cancel_only_unpaid(claim).is_ok());
+
+    let view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+
+    let model_claim = model.get_claim(&token_id).unwrap();
+    assert_eq!(view.status, Status::Cancelled);
+    assert_eq!(model_claim.status, ModelStatus::Cancelled);
+    assert!(check_cancel_only_unpaid(model_claim).is_ok());
 
     Ok(())
 }
@@ -960,14 +1145,22 @@ async fn cancel_only_unpaid() -> Result<()> {
 #[tokio::test]
 #[ignore = "C5"]
 async fn closed_addresses_stay_live() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
     let mut model = Model::new();
     model
         .step(
             Action::Issue {
-                token_id: "c-1".to_string(),
+                token_id: token_id.clone(),
                 kind: 0,
-                issuer_id: "alice.near".to_string(),
-                debtor: None,
+                issuer_id: env.alice.id().to_string(),
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -976,11 +1169,21 @@ async fn closed_addresses_stay_live() -> Result<()> {
         )
         .unwrap();
 
+    let _ = env.fund_claim(&token_id, 1_000_000, None).await?;
+    let rec1 = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec1.is_success());
+
     model
         .step(
             Action::DepositIntentsBalance {
-                token_id: "c-1".to_string(),
-                asset: "nep141:usdc.near".to_string(),
+                token_id: token_id.clone(),
+                asset: DEFAULT_SETTLEMENT_ASSET.to_string(),
                 amount: 1_000_000,
             },
             101,
@@ -989,33 +1192,58 @@ async fn closed_addresses_stay_live() -> Result<()> {
     model
         .step(
             Action::Reconcile {
-                token_id: "c-1".to_string(),
-                leg_failures: vec![false, false],
+                token_id: token_id.clone(),
+                leg_failures: vec![false],
             },
             102,
         )
         .unwrap();
-    assert_eq!(model.get_claim("c-1").unwrap().status, ModelStatus::Paid);
+
+    let close_res = env
+        .alice
+        .call(env.root.id(), "close")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(close_res.is_success());
 
     model
         .step(
             Action::Close {
-                caller: "alice.near".to_string(),
-                token_id: "c-1".to_string(),
+                caller: env.alice.id().to_string(),
+                token_id: token_id.clone(),
             },
             103,
         )
         .unwrap();
-    assert_eq!(model.get_claim("c-1").unwrap().status, ModelStatus::Closed);
 
-    let pre_stray = model.get_claim("c-1").unwrap().clone();
+    let pre_stray_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    let pre_stray_model = model.get_claim(&token_id).unwrap().clone();
+    assert_eq!(pre_stray_view.status, Status::Closed);
+    assert_eq!(pre_stray_model.status, ModelStatus::Closed);
 
     // Stray payment of 200_000 arrives at Closed address
+    let _ = env.fund_claim(&token_id, 200_000, None).await?;
+    let rec_stray = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_stray.is_success());
+
     model
         .step(
             Action::DepositIntentsBalance {
-                token_id: "c-1".to_string(),
-                asset: "nep141:usdc.near".to_string(),
+                token_id: token_id.clone(),
+                asset: DEFAULT_SETTLEMENT_ASSET.to_string(),
                 amount: 200_000,
             },
             104,
@@ -1024,17 +1252,28 @@ async fn closed_addresses_stay_live() -> Result<()> {
     model
         .step(
             Action::Reconcile {
-                token_id: "c-1".to_string(),
+                token_id: token_id.clone(),
                 leg_failures: vec![],
             },
             105,
         )
         .unwrap();
 
-    let post_stray = model.get_claim("c-1").unwrap();
-    assert_eq!(post_stray.status, ModelStatus::Closed);
-    assert_eq!(post_stray.surplus, pre_stray.surplus + 200_000);
-    assert!(check_closed_addresses_stay_live(&pre_stray, post_stray, 200_000).is_ok());
+    let post_stray_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    let post_stray_model = model.get_claim(&token_id).unwrap();
+
+    assert_eq!(post_stray_view.status, Status::Closed);
+    assert_eq!(
+        post_stray_view.surplus.0,
+        pre_stray_view.surplus.0 + 200_000
+    );
+    assert_eq!(post_stray_view.surplus.0, post_stray_model.surplus);
+    assert!(check_closed_addresses_stay_live(&pre_stray_model, post_stray_model, 200_000).is_ok());
 
     Ok(())
 }
@@ -1046,15 +1285,42 @@ async fn closed_addresses_stay_live() -> Result<()> {
 #[tokio::test]
 #[ignore = "C5"]
 async fn transitions_enforced() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
+    let view_init: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(view_init.status, Status::Issued);
+
+    // Valid transitions in model oracle
     assert!(check_transitions_enforced(ModelStatus::Issued, ModelStatus::PartiallyPaid).is_ok());
     assert!(check_transitions_enforced(ModelStatus::PartiallyPaid, ModelStatus::Paid).is_ok());
     assert!(check_transitions_enforced(ModelStatus::Paid, ModelStatus::Closed).is_ok());
     assert!(check_transitions_enforced(ModelStatus::Issued, ModelStatus::Cancelled).is_ok());
 
-    // Illegal transitions rejected
+    // Illegal transitions rejected in model oracle
     assert!(check_transitions_enforced(ModelStatus::Paid, ModelStatus::Issued).is_err());
     assert!(check_transitions_enforced(ModelStatus::Cancelled, ModelStatus::Paid).is_err());
     assert!(check_transitions_enforced(ModelStatus::Closed, ModelStatus::PartiallyPaid).is_err());
+
+    // Illegal transition on contract: closing an unpaid/issued claim directly is forbidden
+    let close_unpaid = env
+        .alice
+        .call(env.root.id(), "close")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(close_unpaid.is_failure());
 
     Ok(())
 }
