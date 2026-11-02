@@ -34,7 +34,9 @@ describe("route registry data", () => {
     expect(isAllowedRoute("R1")).toBe(true);
     expect(isAllowedRoute("R99")).toBe(false);
     expect(() => assertAllowedRoute("R99")).toThrow(UnknownRouteError);
-    expect(allowedRoutes().map((route) => route.id)).toEqual(loadRoutes().routes.map((route) => route.id));
+    expect(allowedRoutes().map((route) => route.id)).toEqual(
+      loadRoutes().routes.map((route) => route.id),
+    );
   });
 });
 
@@ -48,7 +50,9 @@ describe("token ids, decimals and standards", () => {
 
   it("keeps BNB USDC at 18 decimals and the other USDC routes at 6", () => {
     expect(decimalsFor(getRoute("R6"))).toBe(18);
-    for (const route of loadRoutes().routes.filter((entry) => entry.payerAsset === "USDC" && entry.id !== "R6")) {
+    for (const route of loadRoutes().routes.filter(
+      (entry) => entry.payerAsset === "USDC" && entry.id !== "R6",
+    )) {
       expect(decimalsFor(route)).toBe(6);
     }
   });

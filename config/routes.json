@@ -178,17 +178,8 @@
     }
   ],
   "railB": {
-    "chains": [
-      "base",
-      "arbitrum",
-      "optimism",
-      "polygon",
-      "solana"
-    ],
-    "excluded": [
-      "bnb",
-      "ethereum"
-    ]
+    "chains": ["base", "arbitrum", "optimism", "polygon", "solana"],
+    "excluded": ["bnb", "ethereum"]
   },
   "_source": "Data carried from spikes/data/routes.json (GET 1click /v0/tokens, 29 Oct 2026; route report evidence/K2prime-partA-routes-2026-10-29T03-08-53Z.json)."
 }
