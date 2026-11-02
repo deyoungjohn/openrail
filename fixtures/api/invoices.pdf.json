@@ -1,0 +1,9 @@
+{
+  "invoice_id": "inv_01J00000000000000000000000",
+  "token_id": "c-1",
+  "filename": "INV-2026-001.pdf",
+  "content_type": "application/pdf",
+  "content_base64": "JVBERi0xLjQKJcTl8uXrp/Og0MTGCjEgMCBvYmoK",
+  "sha256": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "generated_at": "2026-11-02T10:10:00Z"
+}

@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "id": "whd_01J00000000000000000000000",
+      "endpoint_id": "whe_01J00000000000000000000000",
+      "event_id": "evt_01J00000000000000000000000",
+      "type": "invoice.paid",
+      "attempt": 1,
+      "status_code": 200,
+      "delivered_at": "2026-11-02T10:01:36Z",
+      "error": null
+    }
+  ]
+}

@@ -36,6 +36,18 @@
     },
     {
       "name": "Meta"
+    },
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Developers"
+    },
+    {
+      "name": "Business"
+    },
+    {
+      "name": "Statements"
     }
   ],
   "security": [
@@ -56,6 +68,12 @@
         "scheme": "bearer",
         "bearerFormat": "or_pk_live_...",
         "description": "Browser key for creating pay sessions and reading routes only."
+      },
+      "sessionAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "or_sess_...",
+        "description": "Dashboard session from POST /v1/auth/verify; 12 h; scoped to one business account."
       }
     },
     "parameters": {
@@ -998,7 +1016,7 @@
       },
       "WebhookEndpoint": {
         "type": "object",
-        "required": ["id", "url", "secret", "events", "created_at"],
+        "required": ["id", "url", "events", "created_at"],
         "properties": {
           "id": {
             "type": "string"
@@ -1435,6 +1453,552 @@
             "$ref": "#/components/schemas/AckMessage"
           }
         }
+      },
+      "AuthChallengeRequest": {
+        "type": "object",
+        "required": ["account_id"],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          }
+        }
+      },
+      "AuthChallenge": {
+        "type": "object",
+        "required": ["nonce", "message", "recipient"],
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "description": "Base64 NEP-413 nonce (32 bytes)."
+          },
+          "message": {
+            "type": "string",
+            "description": "The exact string the wallet signs."
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Must match the server recipient (the API origin)."
+          }
+        }
+      },
+      "AuthVerifyRequest": {
+        "type": "object",
+        "required": ["account_id", "public_key", "signature", "nonce"],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "public_key": {
+            "type": "string",
+            "description": "ed25519:<base58> key that signed the NEP-413 message."
+          },
+          "signature": {
+            "type": "string",
+            "description": "NEP-413 signature."
+          },
+          "nonce": {
+            "type": "string",
+            "description": "The nonce returned by /v1/auth/challenge."
+          }
+        }
+      },
+      "AuthSession": {
+        "type": "object",
+        "required": ["session_token", "account_id", "expires_at"],
+        "properties": {
+          "session_token": {
+            "type": "string",
+            "pattern": "^or_sess_"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "12 h session."
+          }
+        }
+      },
+      "ApiKey": {
+        "type": "object",
+        "required": ["id", "name", "prefix", "scopes", "created_at"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string",
+            "description": "First characters of the key, e.g. or_sk_live_ab12."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revoked_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ApiKeyList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiKey"
+            }
+          }
+        }
+      },
+      "CreateApiKeyRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ApiKeyCreated": {
+        "type": "object",
+        "required": ["id", "name", "prefix", "secret", "scopes", "created_at"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string",
+            "description": "Shown once on creation or rotation."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DeletedResource": {
+        "type": "object",
+        "required": ["id", "deleted"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "WebhookEndpointList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEndpoint"
+            }
+          }
+        }
+      },
+      "WebhookDelivery": {
+        "type": "object",
+        "required": ["id", "endpoint_id", "event_id", "type", "attempt", "status_code"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "endpoint_id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/WebhookEventType"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status_code": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "delivered_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WebhookDeliveryList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDelivery"
+            }
+          }
+        }
+      },
+      "WebhookTestResult": {
+        "type": "object",
+        "required": ["delivered", "status_code", "event_id"],
+        "properties": {
+          "delivered": {
+            "type": "boolean"
+          },
+          "status_code": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "event_id": {
+            "type": "string"
+          }
+        }
+      },
+      "Business": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "legal_name",
+          "payout_account",
+          "contact_email",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "legal_name": {
+            "type": "string"
+          },
+          "payout_account": {
+            "type": "string"
+          },
+          "contact_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UpdateBusinessRequest": {
+        "type": "object",
+        "properties": {
+          "legal_name": {
+            "type": "string"
+          },
+          "payout_account": {
+            "type": "string"
+          },
+          "contact_email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "StorageCredit": {
+        "type": "object",
+        "required": ["balance", "account_id", "contract_id", "amount", "method"],
+        "properties": {
+          "balance": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "contract_id": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "method": {
+            "const": "deposit_storage_credit"
+          }
+        }
+      },
+      "Statement": {
+        "type": "object",
+        "required": [
+          "format",
+          "filename",
+          "content_type",
+          "content_base64",
+          "sha256",
+          "generated_at"
+        ],
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": ["csv", "pdf"]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "content_base64": {
+            "type": "string"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "PdfDocument": {
+        "type": "object",
+        "required": [
+          "invoice_id",
+          "token_id",
+          "filename",
+          "content_type",
+          "content_base64",
+          "sha256",
+          "generated_at"
+        ],
+        "properties": {
+          "invoice_id": {
+            "type": "string"
+          },
+          "token_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "content_type": {
+            "const": "application/pdf"
+          },
+          "content_base64": {
+            "type": "string"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OpenQuote": {
+        "type": "object",
+        "required": [
+          "quote_id",
+          "deposit_address",
+          "deadline_requested",
+          "refund_to",
+          "route_id",
+          "expired"
+        ],
+        "properties": {
+          "quote_id": {
+            "type": "string"
+          },
+          "deposit_address": {
+            "type": "string"
+          },
+          "deadline_requested": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "refund_to": {
+            "type": "string"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "expired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OpenQuoteList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenQuote"
+            }
+          }
+        }
+      },
+      "CashoutQuoteRequest": {
+        "type": "object",
+        "required": ["amount", "destination_chain", "address"],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "destination_chain": {
+            "type": "string",
+            "enum": ["base", "arbitrum", "optimism", "polygon", "solana", "ethereum", "near"]
+          },
+          "address": {
+            "type": "string"
+          }
+        }
+      },
+      "CashoutQuote": {
+        "type": "object",
+        "required": [
+          "amount",
+          "source_asset",
+          "destination_chain",
+          "destination_address",
+          "amount_out",
+          "route_cost_usd",
+          "deposit_address",
+          "deposit_type",
+          "swap_type",
+          "route_id",
+          "deadline"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "source_asset": {
+            "type": "string"
+          },
+          "destination_chain": {
+            "type": "string"
+          },
+          "destination_address": {
+            "type": "string"
+          },
+          "amount_out": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "route_cost_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "deposit_address": {
+            "type": "string"
+          },
+          "deposit_type": {
+            "const": "INTENTS"
+          },
+          "swap_type": {
+            "const": "EXACT_OUTPUT"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PublicReceipt": {
+        "type": "object",
+        "required": ["receipt", "verify_url", "claim_account"],
+        "properties": {
+          "receipt": {
+            "$ref": "#/components/schemas/Receipt"
+          },
+          "verify_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "claim_account": {
+            "type": "string"
+          }
+        }
       }
     }
   },
@@ -1447,6 +2011,9 @@
         "security": [
           {
             "secretKey": []
+          },
+          {
+            "sessionAuth": []
           }
         ],
         "parameters": [
@@ -1514,6 +2081,9 @@
         "security": [
           {
             "secretKey": []
+          },
+          {
+            "sessionAuth": []
           }
         ],
         "parameters": [
@@ -1569,6 +2139,9 @@
         "security": [
           {
             "secretKey": []
+          },
+          {
+            "sessionAuth": []
           }
         ],
         "parameters": [
@@ -1634,6 +2207,9 @@
         "security": [
           {
             "secretKey": []
+          },
+          {
+            "sessionAuth": []
           }
         ],
         "parameters": [
@@ -1722,6 +2298,9 @@
         "security": [
           {
             "secretKey": []
+          },
+          {
+            "sessionAuth": []
           }
         ],
         "parameters": [
@@ -1787,6 +2366,9 @@
         "security": [
           {
             "secretKey": []
+          },
+          {
+            "sessionAuth": []
           }
         ],
         "parameters": [
@@ -1845,15 +2427,55 @@
       }
     },
     "/v1/webhook_endpoints": {
-      "post": {
-        "operationId": "createWebhookEndpoint",
-        "summary": "Register a webhook endpoint",
+      "get": {
+        "operationId": "listWebhookEndpoints",
+        "summary": "List webhook endpoints",
         "tags": ["Webhooks"],
         "security": [
           {
             "secretKey": []
+          },
+          {
+            "sessionAuth": []
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Endpoints for this business; secrets are not returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookEndpointList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWebhookEndpoint",
+        "summary": "Register a webhook endpoint",
+        "tags": ["Webhooks"],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1910,7 +2532,15 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ]
       }
     },
     "/v1/events": {
@@ -1921,6 +2551,9 @@
         "security": [
           {
             "secretKey": []
+          },
+          {
+            "sessionAuth": []
           }
         ],
         "parameters": [
@@ -2282,6 +2915,1092 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/challenge": {
+      "post": {
+        "operationId": "createAuthChallenge",
+        "summary": "Create a NEP-413 sign-in challenge",
+        "tags": ["Auth"],
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sign this message with the account's NEAR wallet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthChallenge"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/verify": {
+      "post": {
+        "operationId": "verifyAuthChallenge",
+        "summary": "Verify a NEP-413 signature and start a dashboard session",
+        "tags": ["Auth"],
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session token for dashboard calls; scoped to this business account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/api_keys": {
+      "get": {
+        "operationId": "listApiKeys",
+        "summary": "List API keys without their secrets",
+        "tags": ["Developers"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API keys for this business.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createApiKey",
+        "summary": "Create an API key; the secret is returned once",
+        "tags": ["Developers"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created; store the secret now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/api_keys/{id}/rotate": {
+      "post": {
+        "operationId": "rotateApiKey",
+        "summary": "Rotate an API key",
+        "tags": ["Developers"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "API key id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Replacement key; the old key stops working.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/api_keys/{id}": {
+      "delete": {
+        "operationId": "deleteApiKey",
+        "summary": "Revoke an API key",
+        "tags": ["Developers"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "API key id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedResource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhook_endpoints/{id}": {
+      "delete": {
+        "operationId": "deleteWebhookEndpoint",
+        "summary": "Delete a webhook endpoint",
+        "tags": ["Webhooks"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Endpoint id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedResource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhook_endpoints/{id}/test": {
+      "post": {
+        "operationId": "testWebhookEndpoint",
+        "summary": "Send a test event to an endpoint",
+        "tags": ["Webhooks"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Endpoint id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delivery attempt result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookTestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhook_endpoints/{id}/deliveries": {
+      "get": {
+        "operationId": "listWebhookDeliveries",
+        "summary": "Delivery log for an endpoint",
+        "tags": ["Webhooks"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Endpoint id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delivery attempts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/business": {
+      "get": {
+        "operationId": "getBusiness",
+        "summary": "Get the business profile",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Business profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Business"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateBusiness",
+        "summary": "Update legal name, payout account or contact",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBusinessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Business"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/business/storage_credit": {
+      "get": {
+        "operationId": "getStorageCredit",
+        "summary": "Storage credit balance and the user's deposit_storage_credit call",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balance read from the contract plus the account and amount to sign.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageCredit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/statements": {
+      "get": {
+        "operationId": "getStatement",
+        "summary": "Download a statement as CSV or PDF",
+        "tags": ["Statements"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "First day (inclusive).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Last day (inclusive).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "File format.",
+            "schema": {
+              "type": "string",
+              "enum": ["csv", "pdf"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Base64 file envelope; totals reconcile with claim().",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Statement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invoices/{id}/pdf": {
+      "get": {
+        "operationId": "getInvoicePdf",
+        "summary": "Invoice PDF as a base64 envelope",
+        "tags": ["Invoices"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Invoice id or token id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PdfDocument"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invoices/{id}/open_quotes": {
+      "get": {
+        "operationId": "listOpenQuotes",
+        "summary": "Open quotes from the payment log",
+        "tags": ["Pay"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Invoice id or token id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quotes; expired ones must not be reused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenQuoteList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cashout/quote": {
+      "post": {
+        "operationId": "createCashoutQuote",
+        "summary": "Quote a cash-out to another chain",
+        "tags": ["Pay"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CashoutQuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Route cost and the 1Click deposit address for the holder's mt_transfer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashoutQuote"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/receipts/{booking_tx_hash}": {
+      "get": {
+        "operationId": "getPublicReceipt",
+        "summary": "Public receipt for a booking transaction",
+        "tags": ["Receipts"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "booking_tx_hash",
+            "in": "path",
+            "required": true,
+            "description": "Booking transaction hash.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Receipt built from the booked event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicReceipt"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

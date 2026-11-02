@@ -136,6 +136,150 @@
       "status": 409,
       "schema": "Error",
       "mock": false
+    },
+    {
+      "file": "auth.challenge.json",
+      "method": "POST",
+      "path": "/v1/auth/challenge",
+      "status": 200,
+      "schema": "AuthChallenge",
+      "mock": true
+    },
+    {
+      "file": "auth.verify.json",
+      "method": "POST",
+      "path": "/v1/auth/verify",
+      "status": 200,
+      "schema": "AuthSession",
+      "mock": true
+    },
+    {
+      "file": "api_keys.list.json",
+      "method": "GET",
+      "path": "/v1/api_keys",
+      "status": 200,
+      "schema": "ApiKeyList",
+      "mock": true
+    },
+    {
+      "file": "api_keys.create.json",
+      "method": "POST",
+      "path": "/v1/api_keys",
+      "status": 201,
+      "schema": "ApiKeyCreated",
+      "mock": true
+    },
+    {
+      "file": "api_keys.rotate.json",
+      "method": "POST",
+      "path": "/v1/api_keys/{id}/rotate",
+      "status": 200,
+      "schema": "ApiKeyCreated",
+      "mock": true
+    },
+    {
+      "file": "api_keys.delete.json",
+      "method": "DELETE",
+      "path": "/v1/api_keys/{id}",
+      "status": 200,
+      "schema": "DeletedResource",
+      "mock": true
+    },
+    {
+      "file": "webhook_endpoints.list.json",
+      "method": "GET",
+      "path": "/v1/webhook_endpoints",
+      "status": 200,
+      "schema": "WebhookEndpointList",
+      "mock": true
+    },
+    {
+      "file": "webhook_endpoints.delete.json",
+      "method": "DELETE",
+      "path": "/v1/webhook_endpoints/{id}",
+      "status": 200,
+      "schema": "DeletedResource",
+      "mock": true
+    },
+    {
+      "file": "webhook_endpoints.test.json",
+      "method": "POST",
+      "path": "/v1/webhook_endpoints/{id}/test",
+      "status": 200,
+      "schema": "WebhookTestResult",
+      "mock": true
+    },
+    {
+      "file": "webhook_endpoints.deliveries.json",
+      "method": "GET",
+      "path": "/v1/webhook_endpoints/{id}/deliveries",
+      "status": 200,
+      "schema": "WebhookDeliveryList",
+      "mock": true
+    },
+    {
+      "file": "business.get.json",
+      "method": "GET",
+      "path": "/v1/business",
+      "status": 200,
+      "schema": "Business",
+      "mock": true
+    },
+    {
+      "file": "business.update.json",
+      "method": "PUT",
+      "path": "/v1/business",
+      "status": 200,
+      "schema": "Business",
+      "mock": true
+    },
+    {
+      "file": "business.storage_credit.json",
+      "method": "GET",
+      "path": "/v1/business/storage_credit",
+      "status": 200,
+      "schema": "StorageCredit",
+      "mock": true
+    },
+    {
+      "file": "statements.get.json",
+      "method": "GET",
+      "path": "/v1/statements",
+      "status": 200,
+      "schema": "Statement",
+      "mock": true
+    },
+    {
+      "file": "invoices.pdf.json",
+      "method": "GET",
+      "path": "/v1/invoices/{id}/pdf",
+      "status": 200,
+      "schema": "PdfDocument",
+      "mock": true
+    },
+    {
+      "file": "invoices.open_quotes.json",
+      "method": "GET",
+      "path": "/v1/invoices/{id}/open_quotes",
+      "status": 200,
+      "schema": "OpenQuoteList",
+      "mock": true
+    },
+    {
+      "file": "cashout.quote.json",
+      "method": "POST",
+      "path": "/v1/cashout/quote",
+      "status": 201,
+      "schema": "CashoutQuote",
+      "mock": true
+    },
+    {
+      "file": "receipts.get.json",
+      "method": "GET",
+      "path": "/v1/receipts/{booking_tx_hash}",
+      "status": 200,
+      "schema": "PublicReceipt",
+      "mock": true
     }
   ]
 }

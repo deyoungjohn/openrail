@@ -1,0 +1,11 @@
+{
+  "id": "key_01J00000000000000000000001",
+  "name": "Production",
+  "prefix": "or_sk_live_ab12",
+  "secret": "or_sk_live_example_rotated_once",
+  "scopes": [
+    "invoices:read",
+    "invoices:write"
+  ],
+  "created_at": "2026-11-02T10:00:00Z"
+}

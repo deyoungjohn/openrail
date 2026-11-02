@@ -1,0 +1,25 @@
+{
+  "receipt": {
+    "id": "rcpt_01J00000000000000000000000",
+    "invoice_id": "inv_01J00000000000000000000000",
+    "token_id": "c-1",
+    "amount": "12500000",
+    "asset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "time": "2026-11-02T10:01:35Z",
+    "claim_number": "c-1",
+    "terms_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payment_instruction_v1": "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
+    "origin_tx": {
+      "chain": "base",
+      "hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "sender": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "amount": "12500000"
+    },
+    "near_tx_hashes": [
+      "8cDysV69qchx9emuEFBV2m4SWWMUKQjKtY7ZLDbJTu1J",
+      "AbQhhqYR2xXFXmUsKMTbUTnJ1Wgj2WxbTNPDDx3415Gk"
+    ]
+  },
+  "verify_url": "https://pay.openrail.near/r/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "claim_account": "c-1.openrail.near"
+}

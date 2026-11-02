@@ -1,0 +1,7 @@
+{
+  "balance": "5000000000000000000000000",
+  "account_id": "acme.openrail.near",
+  "contract_id": "openrail.near",
+  "amount": "1000000000000000000000000",
+  "method": "deposit_storage_credit"
+}
