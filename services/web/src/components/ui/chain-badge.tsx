@@ -6,6 +6,7 @@ export const CHAINS = {
   arbitrum: "Arbitrum",
   optimism: "Optimism",
   polygon: "Polygon",
+  bnb: "BNB Chain",
   solana: "Solana",
   near: "NEAR",
 } as const;

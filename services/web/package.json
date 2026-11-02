@@ -5,8 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "test": "vitest run --config ../../vitest.config.ts --root . --exclude \"e2e/**\" --exclude \".next/**\" --exclude \"node_modules/**\"",
     "e2e": "playwright test"
@@ -17,6 +17,7 @@
     "@near-wallet-selector/core": "10.1.4",
     "@near-wallet-selector/modal-ui": "10.1.4",
     "@near-wallet-selector/my-near-wallet": "10.1.4",
+    "@openrail/api-client": "workspace:*",
     "clsx": "2.1.1",
     "lucide-react": "1.66.0",
     "next": "16.4.3",
