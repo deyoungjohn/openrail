@@ -77,9 +77,32 @@ pub fn openrail_wasm() -> Result<Vec<u8>> {
         return Ok(bytes);
     }
 
-    // If not pre-built, build using scripts/contract.sh or cargo near build
-    let status = Command::new("cargo")
-        .args([
+    // If not pre-built, build using scripts/contract.sh
+    let contract_script = root.join("scripts/contract.sh");
+    let status = if contract_script.exists() {
+        let mut cmd = Command::new(&contract_script);
+        if let Ok(home) = std::env::var("HOME") {
+            let cargo_bin = format!("{home}/.cargo/bin");
+            if let Ok(path) = std::env::var("PATH") {
+                if !path.split(':').any(|p| p == cargo_bin) {
+                    cmd.env("PATH", format!("{cargo_bin}:{path}"));
+                }
+            }
+        }
+        cmd.current_dir(&root)
+            .status()
+            .context("run scripts/contract.sh for openrail")?
+    } else {
+        let mut cmd = Command::new("cargo");
+        if let Ok(home) = std::env::var("HOME") {
+            let cargo_bin = format!("{home}/.cargo/bin");
+            if let Ok(path) = std::env::var("PATH") {
+                if !path.split(':').any(|p| p == cargo_bin) {
+                    cmd.env("PATH", format!("{cargo_bin}:{path}"));
+                }
+            }
+        }
+        cmd.args([
             "near",
             "build",
             "non-reproducible-wasm",
@@ -90,7 +113,8 @@ pub fn openrail_wasm() -> Result<Vec<u8>> {
         ])
         .current_dir(&root)
         .status()
-        .context("run cargo near build for openrail")?;
+        .context("run cargo near build for openrail")?
+    };
 
     if !status.success() {
         return Err(anyhow!("cargo near build failed: {status}"));
@@ -155,32 +179,19 @@ pub fn mock_signer_wasm() -> Result<Vec<u8>> {
     }
 
     let root = workspace_root();
-    let candidate = root.join("contracts/mocks/signer/Cargo.toml");
-    let fallback_worktree = root.join("../wt-ag3-vault/contracts/mocks/signer/Cargo.toml");
-    let vault_mock = root.join("contracts/vault/tests/mocks/Cargo.toml");
+    let manifest = root.join("contracts/mocks/signer/Cargo.toml");
+    if !manifest.exists() {
+        return Err(anyhow!(
+            "Cannot find mock signer crate at {}",
+            manifest.display()
+        ));
+    }
 
-    let bytes = if candidate.exists() {
-        compile_wasm(
-            &candidate,
-            "sandbox-mock-signer",
-            "openrail_mock_signer.wasm",
-        )?
-    } else if fallback_worktree.exists() {
-        compile_wasm(
-            &fallback_worktree,
-            "sandbox-mock-signer",
-            "openrail_mock_signer.wasm",
-        )?
-    } else if vault_mock.exists() {
-        compile_wasm(
-            &vault_mock,
-            "sandbox-mock-signer",
-            "openrail_vault_mock.wasm",
-        )?
-    } else {
-        return Err(anyhow!("Cannot find mock signer crate"));
-    };
-
+    let bytes = compile_wasm(
+        &manifest,
+        "sandbox-mock-signer",
+        "openrail_mock_signer.wasm",
+    )?;
     let _ = SIGNER_WASM_CACHE.set(bytes.clone());
     Ok(bytes)
 }
@@ -192,28 +203,15 @@ pub fn mock_usdc_wasm() -> Result<Vec<u8>> {
     }
 
     let root = workspace_root();
-    let candidate = root.join("contracts/mocks/usdc/Cargo.toml");
-    let fallback_worktree = root.join("../wt-ag3-vault/contracts/mocks/usdc/Cargo.toml");
-    let intents_mock = root.join("contracts/mocks/intents/Cargo.toml");
+    let manifest = root.join("contracts/mocks/usdc/Cargo.toml");
+    if !manifest.exists() {
+        return Err(anyhow!(
+            "Cannot find mock USDC crate at {}",
+            manifest.display()
+        ));
+    }
 
-    let bytes = if candidate.exists() {
-        compile_wasm(&candidate, "sandbox-mock-usdc", "openrail_mock_usdc.wasm")?
-    } else if fallback_worktree.exists() {
-        compile_wasm(
-            &fallback_worktree,
-            "sandbox-mock-usdc",
-            "openrail_mock_usdc.wasm",
-        )?
-    } else if intents_mock.exists() {
-        compile_wasm(
-            &intents_mock,
-            "sandbox-mock-usdc",
-            "openrail_mock_intents.wasm",
-        )?
-    } else {
-        return Err(anyhow!("Cannot find mock USDC crate"));
-    };
-
+    let bytes = compile_wasm(&manifest, "sandbox-mock-usdc", "openrail_mock_usdc.wasm")?;
     let _ = USDC_WASM_CACHE.set(bytes.clone());
     Ok(bytes)
 }

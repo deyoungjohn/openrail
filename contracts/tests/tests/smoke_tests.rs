@@ -136,7 +136,7 @@ async fn smoke_mock_signer() -> Result<()> {
 async fn smoke_mock_usdc() -> Result<()> {
     let env = Env::new().await?;
 
-    // Check USDC account lookup or mint
+    // Check USDC account mint and balance lookup
     let mint_res = env
         .parent
         .call(env.usdc.id(), "mint")
@@ -146,21 +146,16 @@ async fn smoke_mock_usdc() -> Result<()> {
         }))
         .max_gas()
         .transact()
-        .await;
+        .await?;
+    assert!(mint_res.is_success());
 
-    // The usdc mock may implement ft_balance_of
-    if mint_res.is_ok() {
-        let bal: Option<U128> = env
-            .usdc
-            .view("ft_balance_of")
-            .args_json(json!({ "account_id": env.alice.id() }))
-            .await?
-            .json()
-            .ok();
-        if let Some(b) = bal {
-            assert_eq!(b.0, 1_000_000_000);
-        }
-    }
+    let bal: U128 = env
+        .usdc
+        .view("ft_balance_of")
+        .args_json(json!({ "account_id": env.alice.id() }))
+        .await?
+        .json()?;
+    assert_eq!(bal.0, 1_000_000_000);
 
     Ok(())
 }
