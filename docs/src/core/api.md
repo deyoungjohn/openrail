@@ -19,6 +19,40 @@ MOCK=1 pnpm --filter @openrail/api start
 server can call it directly. Without `MOCK=1` the process stops: S1a ships the
 contract only.
 
+## Run the real API (S1b)
+
+```bash
+pnpm --filter @openrail/api start
+```
+
+The real server needs `NEAR_ROOT_ACCOUNT`, `NEAR_RPC_URL`, `ISSUER_URL` and the
+1Click names already listed in `.env.example`. `API_RECIPIENT`, `PAY_BASE_URL`,
+`ISSUER_SERVICE_KEY`, `STORAGE_CREDIT_BALANCE` and `STORAGE_CREDIT_AMOUNT` are
+optional. The API process holds **no NEAR key**: `ISSUER_URL` points at the
+separate issuer service, which holds the restricted function-call key.
+
+S1b implements:
+
+- canonical terms + `terms_hash` in TypeScript (reproduces
+  `fixtures/vectors/terms-v1.json` byte for byte; test `src/terms.test.ts`);
+- invoice creation through `issue_for` (the issuer port), with the claim account
+  allocated before the terms hash is signed;
+- pay sessions: route allow-list → 1Click quote → `log_quote` → deposit address
+  (`src/quote.test.ts` proves the order). Amounts are carried as exact base-unit
+  `bigint`/strings; `amount_usd` is display-only. `refund_to` is required and is
+  validated per origin chain (EVM checksum, Solana 32-byte base58, NEAR account);
+- claim views with `kind_rules`, `deadline_requested` (unix seconds) and the
+  provider `deadline`;
+- EVM acknowledgement relay through the issuer's restricted key
+  (`POST /v1/ack/{token_id}/evm`);
+- invoice PDF (`application/pdf` base64 envelope);
+- `Idempotency-Key` storage (same body returns the first response, another body 409);
+- API keys stored as sha256 with scopes, rotated and revoked once;
+- HMAC-SHA256 webhooks (`Openrail-Signature`), delivered only from indexed events;
+- NEP-413 dashboard sessions (`or_sess_...`, 12 h).
+
+The mock stays available with `MOCK=1 pnpm --filter @openrail/api start` for UI work.
+
 ## Auth and idempotency
 
 - `Authorization: Bearer or_sk_live_...` is the server secret key.

@@ -280,6 +280,14 @@
       "status": 200,
       "schema": "PublicReceipt",
       "mock": true
+    },
+    {
+      "file": "ack.evm.json",
+      "method": "POST",
+      "path": "/v1/ack/{token_id}/evm",
+      "status": 200,
+      "schema": "AckEvmResponse",
+      "mock": true
     }
   ]
 }

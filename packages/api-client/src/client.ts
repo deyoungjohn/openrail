@@ -195,6 +195,15 @@ export class OpenrailClient {
   ack = {
     get: (tokenId: string): Promise<SuccessBody<"getAckData">> =>
       this.call("GET", `/v1/ack/${encodeURIComponent(tokenId)}`),
+    evm: (
+      tokenId: string,
+      body: RequestBodyOf<"acknowledgeEvm">,
+      options: { idempotencyKey?: string } = {},
+    ): Promise<SuccessBody<"acknowledgeEvm">> =>
+      this.call("POST", `/v1/ack/${encodeURIComponent(tokenId)}/evm`, {
+        body,
+        idempotencyKey: options.idempotencyKey,
+      }),
   };
 
   auth = {

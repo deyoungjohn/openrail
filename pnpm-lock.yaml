@@ -202,7 +202,17 @@ importers:
         specifier: 7.4.0
         version: 7.4.0
 
-  services/api: {}
+  services/api:
+    dependencies:
+      '@openrail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      near-api-js:
+        specifier: 7.4.0
+        version: 7.4.0
+      viem:
+        specifier: 2.57.14
+        version: 2.57.14(typescript@6.0.3)
 
   services/cli: {}
 

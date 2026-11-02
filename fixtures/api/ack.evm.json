@@ -1,0 +1,13 @@
+{
+  "token_id": "c-1",
+  "ack": {
+    "scheme": {
+      "Evm": {
+        "chain_id": 8453,
+        "signer": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    },
+    "block": 123456
+  },
+  "tx_hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+}
