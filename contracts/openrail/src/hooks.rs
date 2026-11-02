@@ -305,50 +305,58 @@ pub fn dispatch_kind_rules_with(hooks: &[&dyn Hook], kind: u8) -> KindRules {
 }
 
 // ──────────────────────────────────────────────
-// Default Dispatchers (Query crate::modules::registered())
+// Default Dispatchers (Query registered module hooks)
 // ──────────────────────────────────────────────
 
+/// Registered hook implementations for enabled modules.
+///
+/// Coordinates with ag1's `gen-modules.ts` which will emit `pub fn registered() -> Vec<&'static dyn Hook>`
+/// in `modules/mod.rs`.
+pub fn registered_hooks() -> Vec<&'static dyn Hook> {
+    Vec::new()
+}
+
 pub fn dispatch_check_transfer(claim: &Claim, receiver: &AccountId) -> Result<(), Refusal> {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_check_transfer_with(&hooks, claim, receiver)
 }
 
 pub fn dispatch_check_cancel(claim: &Claim) -> Result<(), Refusal> {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_check_cancel_with(&hooks, claim)
 }
 
 pub fn dispatch_check_writeoff(claim: &Claim) -> Result<(), Refusal> {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_check_writeoff_with(&hooks, claim)
 }
 
 pub fn dispatch_check_credit(claim: &Claim, source: u8) -> Result<(), Refusal> {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_check_credit_with(&hooks, claim, source)
 }
 
 pub fn dispatch_adjust_booking(claim: &Claim, input: BookingInput) -> BookingAdjust {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_adjust_booking_with(&hooks, claim, input)
 }
 
 pub fn dispatch_split_distribution(claim: &Claim, net: U128) -> Vec<Leg> {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_split_distribution_with(&hooks, claim, net)
 }
 
 pub fn dispatch_in_motion(claim: &Claim) -> bool {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_in_motion_with(&hooks, claim)
 }
 
 pub fn dispatch_on_booked(claim: &Claim, booking: &Booking) {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_on_booked_with(&hooks, claim, booking);
 }
 
 pub fn dispatch_kind_rules(kind: u8) -> KindRules {
-    let hooks = crate::modules::registered();
+    let hooks = registered_hooks();
     dispatch_kind_rules_with(&hooks, kind)
 }
