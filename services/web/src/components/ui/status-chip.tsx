@@ -16,7 +16,7 @@ export type Status =
   | { kind: "draft" }
   | { kind: "sent" }
   | { kind: "acknowledged" }
-  | { kind: "partial"; due: string }
+  | { kind: "partial"; due?: string }
   | { kind: "paid" }
   | { kind: "overdue"; days: number }
   | { kind: "closed" }
@@ -43,7 +43,11 @@ function describe(s: Status): { label: string; tone: Tone; Icon: LucideIcon } {
     case "acknowledged":
       return { label: copy.status.acknowledged, tone: "accent", Icon: ThumbsUp };
     case "partial":
-      return { label: copy.status.partial(s.due), tone: "warning", Icon: PieChart };
+      return {
+        label: s.due ? copy.status.partial(s.due) : copy.status.partialNoAmount,
+        tone: "warning",
+        Icon: PieChart,
+      };
     case "paid":
       return { label: copy.status.paid, tone: "success", Icon: CheckCircle2 };
     case "overdue":
