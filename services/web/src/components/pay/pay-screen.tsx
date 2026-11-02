@@ -12,6 +12,7 @@ import {
   formatToken,
   payStage,
   payTimeline,
+  refundAddressProblem,
   spreadLabel,
   type PayStatus,
 } from "@/lib/pay";
@@ -21,6 +22,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { CHAINS, ChainBadge } from "../ui/chain-badge";
 import { Countdown } from "../ui/countdown";
+import { Input } from "../ui/input";
 import { QrPanel } from "../ui/qr-panel";
 import { EmptyState, ErrorState } from "../ui/state";
 import { Timeline } from "../ui/timeline";
@@ -240,7 +242,9 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   const [routeId, setRouteId] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [starting, setStarting] = useState(false);
-  const [sessionError, setSessionError] = useState(false);
+  const [sessionError, setSessionError] = useState<null | "failed" | "refund">(null);
+  const [refund, setRefund] = useState("");
+  const [refundShown, setRefundShown] = useState(false);
 
   useEffect(() => {
     let off = false;
@@ -266,28 +270,42 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   );
   const route = routes.find((r) => r.id === routeId) ?? null;
 
+  const refundProblem = refundAddressProblem(route ? chainOfRoute(route) : null, refund);
+
+  // Prefill the refund address from a connected wallet, once, for routes on an EVM chain.
+  useEffect(() => {
+    if (route && route.evm_chain_id !== null && evm.address && refund === "")
+      setRefund(evm.address);
+  }, [route, evm.address, refund]);
+
+  const pickRoute = (id: string) => {
+    setRouteId(id);
+    setSession(null);
+    setSessionError(null);
+    setRefundShown(false);
+  };
+
   const start = useCallback(
-    async (id: string) => {
-      setRouteId(id);
+    async (id: string, refundTo: string) => {
       setSession(null);
-      setSessionError(false);
+      setSessionError(null);
       setStarting(true);
-      const r = routes.find((x) => x.id === id);
       try {
         const s = await client.pay.createSession({
           token_id: tokenId,
           route_id: id,
-          // Refunds go back to the payer's own connected EVM address when there is one.
-          ...(r && r.evm_chain_id !== null && evm.address ? { refund_to: evm.address } : {}),
+          refund_to: refundTo.trim(),
         });
         setSession(s);
-      } catch {
-        setSessionError(true);
+      } catch (e) {
+        setSessionError(
+          e instanceof ApiError && e.code === "invalid_refund_address" ? "refund" : "failed",
+        );
       } finally {
         setStarting(false);
       }
     },
-    [routes, tokenId, evm.address],
+    [tokenId],
   );
 
   if (load.state === "loading") return <Card state="loading" />;
@@ -321,7 +339,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
                 key={r.id}
                 chain={chain}
                 selected={routeId === r.id}
-                onSelect={() => void start(r.id)}
+                onSelect={() => pickRoute(r.id)}
               />
             ) : null;
           })}
@@ -358,27 +376,51 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
             {picker(p.pickUsdc, usdc)}
             {picker(p.pickVolatile, volatile)}
           </div>
-          <p className="caption mt-4">
-            {evm.address
-              ? p.refundNote(`${evm.address.slice(0, 6)}…${evm.address.slice(-4)}`)
-              : p.refundNone}
-          </p>
+          {route ? (
+            <form
+              noValidate
+              className="mt-6 space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setRefundShown(true);
+                if (refundProblem === null) void start(route.id, refund);
+              }}
+            >
+              <Input
+                label={p.refundLabel}
+                helper={p.refundHelp}
+                value={refund}
+                autoCapitalize="none"
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => setRefund(e.target.value.trim())}
+                error={
+                  (refundShown && refundProblem) ||
+                  (sessionError === "refund" ? p.refundRejected : undefined) ||
+                  undefined
+                }
+              />
+              <Button type="submit" loading={starting}>
+                {p.getPrice}
+              </Button>
+            </form>
+          ) : null}
         </Card>
       )}
 
       {open && routeId ? (
         starting ? (
           <Card title={p.getting} state="loading" />
-        ) : sessionError ? (
+        ) : sessionError === "failed" ? (
           <div className="surface-card">
-            <ErrorState body={p.sessionError} onRetry={() => void start(routeId)} />
+            <ErrorState body={p.sessionError} onRetry={() => void start(routeId, refund)} />
           </div>
         ) : session && route ? (
           <SessionView
             key={session.id}
             session={session}
             route={route}
-            onNewQuote={() => void start(route.id)}
+            onNewQuote={() => void start(route.id, refund)}
             starting={starting}
           />
         ) : null

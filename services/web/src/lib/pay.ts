@@ -1,4 +1,5 @@
 import type { ChainId } from "../components/ui/chain-badge";
+import { copy } from "../copy";
 
 // Pure view logic for the pay page (blueprint 2.8). No React, no network.
 
@@ -93,3 +94,28 @@ const DATE = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "
 /** An API date (`2026-12-01`) as `Dec 1, 2026`, in UTC so every viewer reads the same day. */
 export const formatDueDate = (isoDate: string): string =>
   DATE.format(new Date(`${isoDate}T00:00:00Z`));
+
+const EVM_CHAINS: readonly ChainId[] = [
+  "ethereum",
+  "base",
+  "arbitrum",
+  "optimism",
+  "polygon",
+  "bnb",
+];
+const NEAR_ACCOUNT = /^(?=.{2,64}$)([a-z\d]+([-_][a-z\d]+)*\.)*[a-z\d]+([-_][a-z\d]+)*$/;
+
+/**
+ * A plain-words problem with a refund address on the route's origin chain, or null when it looks
+ * right. The API validates per chain too (`invalid_refund_address`); this only saves a round trip.
+ */
+export function refundAddressProblem(chain: ChainId | null, value: string): string | null {
+  const v = value.trim();
+  if (chain !== null && EVM_CHAINS.includes(chain))
+    return /^0x[0-9a-fA-F]{40}$/.test(v) ? null : copy.pay.refundBad.evm;
+  if (chain === "solana")
+    return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? null : copy.pay.refundBad.solana;
+  if (chain === "near")
+    return NEAR_ACCOUNT.test(v) || /^[0-9a-f]{64}$/.test(v) ? null : copy.pay.refundBad.near;
+  return copy.pay.refundBad.unknown;
+}
