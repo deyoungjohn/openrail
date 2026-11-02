@@ -43,7 +43,7 @@ function sendJson(response: ServerResponse, status: number, body: unknown, fixtu
   const headers: Record<string, string> = {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "authorization,content-type,idempotency-key",
   };
   if (fixture !== undefined) headers["x-mock-fixture"] = fixture;
@@ -78,7 +78,7 @@ export function createMockServer(options: MockServerOptions = {}): Server {
     if (method === "OPTIONS") {
       response.writeHead(204, {
         "access-control-allow-origin": "*",
-        "access-control-allow-methods": "GET,POST,OPTIONS",
+        "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
         "access-control-allow-headers": "authorization,content-type,idempotency-key",
       });
       response.end();
