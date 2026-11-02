@@ -567,6 +567,8 @@ pub struct Claim {
     pub created_block: u64,
 }
 
+pub use crate::hooks::KindRules;
+
 /// JSON view representation of a claim including its undistributed legs.
 #[near(serializers = [json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -592,12 +594,14 @@ pub struct ClaimView {
     pub credit_source: Option<u8>,
     pub last_seen_balance: HashMap<TokenId, U128>,
     pub undistributed: Vec<Leg>,
+    pub kind_rules: KindRules,
     pub assignment_doc_hash: Option<Hex32>,
     pub created_block: u64,
 }
 
 impl ClaimView {
     pub fn from_claim(claim: Claim, undistributed: Vec<Leg>) -> Self {
+        let kind_rules = crate::hooks::dispatch_kind_rules(claim.kind);
         Self {
             token_id: claim.token_id,
             kind: claim.kind,
@@ -620,6 +624,7 @@ impl ClaimView {
             credit_source: claim.credit_source,
             last_seen_balance: claim.last_seen_balance,
             undistributed,
+            kind_rules,
             assignment_doc_hash: claim.assignment_doc_hash,
             created_block: claim.created_block,
         }

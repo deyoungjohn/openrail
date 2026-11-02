@@ -25,7 +25,7 @@ use std::collections::HashMap;
 
 pub use types::{
     Ack, AckScheme, Claim, ClaimView, Config, Debtor, DebtorCosig, Hex20, Hex32, HexBytes,
-    JsonToken, Leg, Lock, NFTContractMetadata, Quote, Status, TokenId, TokenMetadata,
+    JsonToken, KindRules, Leg, Lock, NFTContractMetadata, Quote, Status, TokenId, TokenMetadata,
 };
 
 // ──────────────────────────────────────────────
@@ -510,6 +510,11 @@ impl Contract {
     /// Returns global contract configuration.
     pub fn config(&self) -> Config {
         self.internal_config()
+    }
+
+    /// Returns prepaid storage credit balance of an account in yoctoNEAR.
+    pub fn storage_credit_of(&self, account_id: AccountId) -> U128 {
+        self.internal_storage_credit_of(account_id)
     }
 }
 

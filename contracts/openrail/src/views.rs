@@ -79,4 +79,12 @@ impl Contract {
     pub(crate) fn internal_config(&self) -> Config {
         self.config.clone()
     }
+
+    /// Returns the prepaid storage credit balance of an account in yoctoNEAR.
+    pub(crate) fn internal_storage_credit_of(&self, account_id: AccountId) -> U128 {
+        self.storage_credit
+            .get(&account_id)
+            .copied()
+            .unwrap_or(U128(0))
+    }
 }
