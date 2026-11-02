@@ -8,6 +8,8 @@ const config: NextConfig = {
   // that yet, so the app builds with webpack, which does through extensionAlias.
   webpack(config) {
     config.resolve.extensionAlias = { ".js": [".ts", ".tsx", ".js"] };
+    // WalletConnect's logger optionally requires pino-pretty, a Node-only pretty printer.
+    config.resolve.alias = { ...config.resolve.alias, "pino-pretty": false };
     return config;
   },
 };

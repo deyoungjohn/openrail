@@ -196,7 +196,7 @@ export function NearProvider({ children }: { children: ReactNode }) {
         nonce: Buffer.from(nonce),
       });
     } catch (e) {
-      if (classifyProbe(e) === false) throw new Error("SIGNMESSAGE_UNSUPPORTED");
+      if (classifyProbe(e) === false) throw new Error("SIGNMESSAGE_UNSUPPORTED", { cause: e });
       throw e;
     }
     if (!signed) throw new Error("WALLET_NO_SIGNATURE");

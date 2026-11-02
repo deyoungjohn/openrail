@@ -86,15 +86,29 @@ test.describe("what the selector says about each wallet", () => {
 
     const ids = table.map((r) => r.id);
     expect(ids.join(" ")).not.toMatch(/my-near-wallet|mynear/i);
-    for (const id of [
-      "meteor-wallet",
-      "hot-wallet",
-      "here-wallet",
-      "okx-wallet",
-      "bitget-wallet",
-      "coin98-wallet",
-    ])
+    // Bitget's module does not start without its extension, so it is absent from the runtime list;
+    // its capability is pinned statically in src/wallet/capabilities.test.ts.
+    for (const id of ["meteor-wallet", "hot-wallet", "here-wallet", "okx-wallet", "coin98-wallet"])
       expect(ids).toContain(id);
     for (const r of table) expect(["yes", "no", "unknown"]).toContain(r.signMessage);
   });
 });
+
+// Run with SCREENSHOTS=1 to write the PR images to .next/e2e-screenshots/.
+for (const scheme of ["light", "dark"] as const) {
+  for (const width of [360, 1280]) {
+    test(`screenshot wallet picker ${scheme} ${width}`, async ({ page }) => {
+      test.skip(!process.env.SCREENSHOTS, "set SCREENSHOTS=1");
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto("/_dev/components");
+      await page.getByRole("button", { name: "Open wallet picker" }).click();
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: /HOT Wallet/ })
+        .click();
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: `.next/e2e-screenshots/wallet-picker-${scheme}-${width}.png` });
+    });
+  }
+}
