@@ -45,3 +45,14 @@ export function ackTypedData(i: AckInput) {
     },
   } as const;
 }
+
+const EIP7702_DELEGATION = /^0xef0100[0-9a-f]{40}$/i;
+
+/**
+ * Can this account acknowledge with a plain ECDSA signature? EIP-1271 contract wallets cannot
+ * (blueprint 2.7). An EOA that delegates through EIP-7702 has code `0xef0100` + a 20-byte address
+ * and still signs with its own key, so it is allowed.
+ */
+export function canAckFromCode(code: string): boolean {
+  return code === "0x" || code === "0x0" || EIP7702_DELEGATION.test(code);
+}

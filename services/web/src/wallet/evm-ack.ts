@@ -1,5 +1,5 @@
 import { createWalletClient, custom, getAddress, type EIP1193Provider } from "viem";
-import { ACK_CHAIN_IDS, ackTypedData } from "../lib/ack";
+import { ACK_CHAIN_IDS, ackTypedData, canAckFromCode } from "../lib/ack";
 import type { Claim } from "../lib/claim";
 
 export type EvmAckError =
@@ -33,12 +33,11 @@ export async function signEvmAck(
   if (!(ACK_CHAIN_IDS as readonly number[]).includes(chainId))
     throw new EvmAckFailure("UNSUPPORTED_CHAIN");
 
-  // EIP-1271 is not supported: a contract account has code.
+  // EIP-1271 is not supported: a contract account has code (an EIP-7702 delegated EOA is fine).
   const code = await provider
     .request({ method: "eth_getCode", params: [account, "latest"] })
     .catch(() => "0x");
-  if (typeof code === "string" && code !== "0x" && code !== "0x0")
-    throw new EvmAckFailure("CONTRACT_WALLET");
+  if (typeof code === "string" && !canAckFromCode(code)) throw new EvmAckFailure("CONTRACT_WALLET");
 
   try {
     const signature = await wallet.signTypedData({
