@@ -151,6 +151,10 @@
       "kind": "call"
     },
     {
+      "name": "storage_credit_of",
+      "kind": "view"
+    },
+    {
       "name": "withdraw_storage_credit",
       "kind": "call"
     }

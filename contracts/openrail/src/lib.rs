@@ -511,6 +511,11 @@ impl Contract {
     pub fn config(&self) -> Config {
         self.internal_config()
     }
+
+    /// Returns prepaid storage credit balance of an account in yoctoNEAR.
+    pub fn storage_credit_of(&self, account_id: AccountId) -> U128 {
+        self.internal_storage_credit_of(account_id)
+    }
 }
 
 // ──────────────────────────────────────────

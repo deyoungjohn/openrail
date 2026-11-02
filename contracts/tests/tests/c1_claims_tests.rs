@@ -115,6 +115,23 @@ async fn test_c1_storage_credits_and_issue_for() -> Result<()> {
         .await?
         .into_result()?;
 
+    // Check storage_credit_of view before issuance
+    let bob_credit: U128 = env
+        .root
+        .view("storage_credit_of")
+        .args_json(json!({ "account_id": env.bob.id() }))
+        .await?
+        .json()?;
+    assert_eq!(bob_credit.0, deposit_amount.as_yoctonear());
+
+    let carol_credit: U128 = env
+        .root
+        .view("storage_credit_of")
+        .args_json(json!({ "account_id": env.carol.id() }))
+        .await?
+        .json()?;
+    assert_eq!(carol_credit.0, 0);
+
     // 2. Call issue_for from allow-listed issuer account (env.issuer)
     let terms_hash = Hex32::new([88u8; 32]);
     let amount_due = 25_000_000u128;
