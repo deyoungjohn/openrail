@@ -208,7 +208,15 @@ importers:
 
   services/relayer: {}
 
-  services/watcher: {}
+  services/watcher:
+    dependencies:
+      '@openrail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      near-api-js:
+        specifier: 7.4.0
+        version: 7.4.0
 
   services/web:
     dependencies:
