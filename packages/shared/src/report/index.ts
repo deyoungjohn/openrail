@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { isDryRun, redactDeep } from "../env/index.js";
 
 export type ReportResult = "PASS" | "FAIL" | "ERROR" | "SKIPPED" | "PENDING";
+export type ReportNetwork = "mainnet" | "testnet" | "sandbox";
 export type ThresholdOp = ">=" | "<=" | "==" | "!=" | ">" | "<" | "in";
 
 export interface Threshold {
@@ -28,7 +29,7 @@ export interface Report {
   test_id: string;
   spec_ref: string;
   tier: string;
-  network: string;
+  network: ReportNetwork;
   started_utc: string;
   finished_utc: string;
   dry_run: boolean;
@@ -45,7 +46,7 @@ export interface ReportInput {
   test_id: string;
   spec_ref: string;
   tier: string;
-  network?: string;
+  network: ReportNetwork;
   started_utc?: string;
   finished_utc?: string;
   dry_run?: boolean;
@@ -162,12 +163,16 @@ export function writeReport(
     fail("spend_usd must be a non-negative number");
   }
 
+  const networks: ReportNetwork[] = ["mainnet", "testnet", "sandbox"];
+  const network = requireString(input.network, "network") as ReportNetwork;
+  if (!networks.includes(network)) fail(`network must be one of ${networks.join(" | ")}`);
+
   const result = computeResult(input.thresholds, input.measurements);
   const report: Report = {
     test_id: testId,
     spec_ref: specRef,
     tier,
-    network: input.network ?? process.env.NEAR_NETWORK ?? "testnet",
+    network,
     started_utc: input.started_utc ?? utcIsoNow(),
     finished_utc: input.finished_utc ?? utcIsoNow(),
     dry_run: input.dry_run ?? isDryRun(),
