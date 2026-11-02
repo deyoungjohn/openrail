@@ -10,9 +10,10 @@
 //! Stubs until C4/C5 land return NOT_IMPLEMENTED, marked with `#[ignore = "C<n>"]`.
 
 use anyhow::Result;
+use near_sdk::json_types::U128;
 use openrail::types::{ClaimView, Leg, Status};
 use openrail_model::{Action, Hex32 as ModelHex32, Model as OracleModel};
-use openrail_tests::Env;
+use openrail_tests::{Env, DEFAULT_SETTLEMENT_ASSET};
 use serde_json::json;
 
 // ──────────────────────────────────────────────
@@ -364,8 +365,231 @@ async fn undistributed_payee_fixed_at_booking() -> Result<()> {
     Ok(())
 }
 
+async fn intents_balance(env: &Env, account_id: &near_workspaces::AccountId) -> Result<u128> {
+    let bal: U128 = env
+        .intents
+        .view("mt_balance_of")
+        .args_json(json!({
+            "account_id": account_id,
+            "token_id": DEFAULT_SETTLEMENT_ASSET,
+        }))
+        .await?
+        .json()?;
+    Ok(bal.0)
+}
+
 // ──────────────────────────────────────────────
-// Invariant 3: retry_undistributed_succeeds
+// Invariant 3: retry_pays_recorded_payee_once
+// ──────────────────────────────────────────────
+
+/// Invariant: A retry pays only the recorded receiver and only once.
+/// (A second retry pays nothing, a transfer in between does not redirect it).
+/// (Blueprint 2.5, 2.11 D-S8).
+#[tokio::test]
+#[ignore = "C4"]
+async fn retry_pays_recorded_payee_once() -> Result<()> {
+    let env = Env::new().await?;
+
+    // 1. Issue claim for 100 USDC to Alice
+    let _ = env
+        .issue_claim(&env.alice, 0, 100_000_000, 1_800_000_000)
+        .await?;
+
+    // 2. Fund 50 USDC and reconcile, producing an undistributed leg recorded to Alice
+    let _ = env.fund_claim("c-1", 50_000_000, None).await?;
+    let _ = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let view1: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(view1.undistributed.len(), 1);
+    assert_eq!(view1.distributed_total.0, 0);
+
+    // 3. Transfer token from Alice to Bob
+    let transfer_res = env
+        .alice
+        .call(env.root.id(), "nft_transfer")
+        .args_json(json!({
+            "receiver_id": env.bob.id(),
+            "token_id": "c-1",
+            "memo": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        }))
+        .deposit(near_workspaces::types::NearToken::from_yoctonear(1))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(transfer_res.is_success());
+
+    // 4. Record balances before retry
+    let alice_bal_before = intents_balance(&env, env.alice.id()).await?;
+    let bob_bal_before = intents_balance(&env, env.bob.id()).await?;
+
+    // 5. First retry_distribution call: pays recorded payee (Alice), NOT Bob
+    let retry1 = env
+        .bob
+        .call(env.root.id(), "retry_distribution")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(retry1.is_success());
+
+    let alice_bal_after = intents_balance(&env, env.alice.id()).await?;
+    let bob_bal_after = intents_balance(&env, env.bob.id()).await?;
+
+    // Alice (recorded payee) got paid the net amount
+    assert_eq!(
+        alice_bal_after - alice_bal_before,
+        49_875_000,
+        "D-S8: Retry must pay the originally recorded payee (Alice)"
+    );
+    // Bob (current token owner) got nothing from this booking retry
+    assert_eq!(
+        bob_bal_after, bob_bal_before,
+        "D-S8: Retry must NOT pay the current token owner (Bob)"
+    );
+
+    let view2: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(
+        view2.undistributed.is_empty(),
+        "Undistributed legs cleared after first retry"
+    );
+    assert_eq!(view2.distributed_total.0, 49_875_000);
+
+    // 6. Second retry_distribution call: pays nothing (already paid)
+    let retry2 = env
+        .alice
+        .call(env.root.id(), "retry_distribution")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(retry2.is_success());
+
+    let alice_bal_second = intents_balance(&env, env.alice.id()).await?;
+    assert_eq!(
+        alice_bal_second, alice_bal_after,
+        "D-S8: Second retry must pay nothing (retry only pays once)"
+    );
+
+    let view3: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(
+        view3.distributed_total.0, 49_875_000,
+        "Distributed total unchanged on second retry"
+    );
+
+    Ok(())
+}
+
+// ──────────────────────────────────────────────
+// Invariant 4: invoice_balance_covers_undistributed
+// ──────────────────────────────────────────────
+
+/// Invariant: The claim account's balance always covers undistributed legs.
+/// (Contract view and intents.near balance, after a failed leg and after a retry).
+/// (Blueprint 2.5, 2.11 D-S8).
+#[tokio::test]
+#[ignore = "C4"]
+async fn invoice_balance_covers_undistributed() -> Result<()> {
+    let env = Env::new().await?;
+
+    // 1. Issue claim
+    let _ = env
+        .issue_claim(&env.alice, 0, 100_000_000, 1_800_000_000)
+        .await?;
+
+    // 2. Fund 60 USDC and reconcile with a failed leg
+    let _ = env.fund_claim("c-1", 60_000_000, None).await?;
+    let _ = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+
+    // 3. Check after failed leg: intents.near balance of claim account covers undistributed legs
+    let view_failed: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+
+    let undistributed_sum: u128 = view_failed
+        .undistributed
+        .iter()
+        .map(|l| match l {
+            Leg::Pay { amount, .. } => amount.0,
+            Leg::Hold { amount, .. } => amount.0,
+        })
+        .sum();
+
+    let claim_intents_bal = env.claim_balance("c-1", None).await?;
+
+    assert!(
+        claim_intents_bal >= undistributed_sum,
+        "Claim account balance ({claim_intents_bal}) must cover undistributed sum ({undistributed_sum}) after failed leg"
+    );
+
+    // 4. Retry distribution
+    let retry_res = env
+        .alice
+        .call(env.root.id(), "retry_distribution")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(retry_res.is_success());
+
+    // 5. Check after retry: remaining balance still covers any remaining undistributed legs
+    let view_retried: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+
+    let remaining_undistributed_sum: u128 = view_retried
+        .undistributed
+        .iter()
+        .map(|l| match l {
+            Leg::Pay { amount, .. } => amount.0,
+            Leg::Hold { amount, .. } => amount.0,
+        })
+        .sum();
+
+    let claim_intents_bal_after = env.claim_balance("c-1", None).await?;
+
+    assert!(
+        claim_intents_bal_after >= remaining_undistributed_sum,
+        "Claim account balance ({claim_intents_bal_after}) must cover remaining undistributed ({remaining_undistributed_sum}) after retry"
+    );
+
+    Ok(())
+}
+
+// ──────────────────────────────────────────────
+// Invariant 5: retry_undistributed_succeeds (Additional helper test)
 // ──────────────────────────────────────────────
 
 /// Invariant: Calling retry_distribution successfully delivers pending undistributed legs
