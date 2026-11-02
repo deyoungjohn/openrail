@@ -297,7 +297,7 @@ export interface PaySessionRequest {
   token_id: string;
   route_id: string;
   amount_usd?: string;
-  refund_to: string;
+  refund_to?: string;
   deadline_seconds?: number;
 }
 
@@ -556,6 +556,15 @@ export interface AckEvmResponse {
   token_id: string;
   ack: Ack;
   tx_hash: string;
+}
+
+export interface AuthSessionInfo {
+  account_id: string;
+  expires_at: string;
+}
+
+export interface LogoutResponse {
+  ok: true;
 }
 
 export interface operations {
@@ -972,6 +981,22 @@ export interface operations {
       "404": Error;
       "409": Error;
       "422": Error;
+    };
+  };
+  getAuthSession: {
+    responses: {
+      "200": AuthSessionInfo;
+      "401": Error;
+    };
+  };
+  logout: {
+    parameters: {
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    responses: {
+      "200": LogoutResponse;
     };
   };
 }

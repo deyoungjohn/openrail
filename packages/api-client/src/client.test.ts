@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, OpenrailClient, createClient, type FetchLike } from "./client.js";
+import { ApiError, OpenrailClient, createClient, type FetchLike } from "./client";
 
 const FIXTURES = new URL("../../../fixtures/api/", import.meta.url);
 
@@ -49,6 +49,7 @@ describe("typed client", () => {
     expect(init.method).toBe("POST");
     expect(headersOf(init).authorization).toBe("Bearer or_sk_live_example");
     expect(headersOf(init)["Idempotency-Key"]).toBe("idem-12345678");
+    expect(init.credentials).toBe("include");
     expect(JSON.parse(String(init.body))).toEqual(createBody);
   });
 
@@ -162,6 +163,22 @@ describe("typed client", () => {
     expect(headersOf(fetchImpl.mock.calls[0]?.[1] as RequestInit)["Idempotency-Key"]).toBe(
       "ack-key-0001",
     );
+  });
+
+  it("reads and clears the cookie-backed session", async () => {
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(jsonResponse(fixture("auth.session.json")))
+      .mockResolvedValueOnce(jsonResponse(fixture("auth.logout.json")));
+    const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });
+
+    const session = await client.auth.session();
+    const logout = await client.auth.logout({ idempotencyKey: "logout-key-01" });
+
+    expect(session.account_id).toBe("acme.openrail.near");
+    expect(logout.ok).toBe(true);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.openrail.near/v1/auth/session");
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe("https://api.openrail.near/v1/auth/logout");
   });
 
   it("serves the OpenAPI document", async () => {

@@ -288,6 +288,22 @@
       "status": 200,
       "schema": "AckEvmResponse",
       "mock": true
+    },
+    {
+      "file": "auth.session.json",
+      "method": "GET",
+      "path": "/v1/auth/session",
+      "status": 200,
+      "schema": "AuthSessionInfo",
+      "mock": true
+    },
+    {
+      "file": "auth.logout.json",
+      "method": "POST",
+      "path": "/v1/auth/logout",
+      "status": 200,
+      "schema": "LogoutResponse",
+      "mock": true
     }
   ]
 }

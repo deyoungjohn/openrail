@@ -4,9 +4,9 @@
  * Types come from src/generated.ts (generated from services/api/openapi.json).
  * The helpers build paths and forward JSON; they add no business logic.
  */
-import type { operations } from "./generated.js";
+import type { operations } from "./generated";
 
-export * from "./generated.js";
+export * from "./generated";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -30,6 +30,7 @@ export interface ApiClientOptions {
   baseUrl: string;
   apiKey?: string;
   fetchImpl?: FetchLike;
+  credentials?: "omit" | "same-origin" | "include";
 }
 
 export interface ApiErrorBody {
@@ -71,11 +72,13 @@ export class OpenrailClient {
   readonly baseUrl: string;
   private readonly apiKey?: string;
   private readonly fetchImpl: FetchLike;
+  private readonly credentials: "omit" | "same-origin" | "include";
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.apiKey = options.apiKey;
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.credentials = options.credentials ?? "include";
   }
 
   private async call<K extends keyof operations>(
@@ -91,12 +94,15 @@ export class OpenrailClient {
     if (this.apiKey !== undefined && this.apiKey !== "") {
       headers.authorization = `Bearer ${this.apiKey}`;
     }
-    if (options.body !== undefined) headers["content-type"] = "application/json";
+    if (options.body !== undefined || method !== "GET") {
+      headers["content-type"] = "application/json";
+    }
     if (options.idempotencyKey !== undefined) headers["Idempotency-Key"] = options.idempotencyKey;
 
     const response = await this.fetchImpl(url.toString(), {
       method,
       headers,
+      credentials: this.credentials,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
     const text = await response.text();
@@ -223,6 +229,9 @@ export class OpenrailClient {
         body,
         idempotencyKey: options.idempotencyKey,
       }),
+    session: (): Promise<SuccessBody<"getAuthSession">> => this.call("GET", "/v1/auth/session"),
+    logout: (options: { idempotencyKey?: string } = {}): Promise<SuccessBody<"logout">> =>
+      this.call("POST", "/v1/auth/logout", { idempotencyKey: options.idempotencyKey }),
   };
 
   apiKeys = {

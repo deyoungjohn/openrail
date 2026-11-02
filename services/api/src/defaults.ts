@@ -15,9 +15,13 @@ import {
   type ContractPort,
   type IssuerPort,
 } from "./app.js";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { AuthStore } from "./auth.js";
+import { IdempotencyStore } from "./idempotency.js";
 import { loadSpec } from "./mock.js";
 import type { QuoteProvider } from "./quote.js";
+import { createSqliteStores } from "./stores.js";
 
 async function rpc<T>(url: string, method: string, params: unknown): Promise<T> {
   const response = await fetch(url, {
@@ -166,13 +170,18 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
   const issuerUrl = requireEnv("ISSUER_URL");
   const rpcUrl = getEnv("NEAR_RPC_URL");
   if (rpcUrl === undefined) requireEnv("NEAR_RPC_URL");
+  const databasePath = (getEnv("DATABASE_URL") ?? "data/openrail.sqlite").replace(/^file:/, "");
+  mkdirSync(dirname(databasePath), { recursive: true });
+  const stores = createSqliteStores(databasePath);
   return new ApiApp({
     config: {
       rootAccount,
       recipient: getEnv("API_RECIPIENT") ?? "api.openrail.near",
       payBaseUrl: getEnv("PAY_BASE_URL") ?? "https://pay.openrail.near",
     },
-    auth: new AuthStore(),
+    store: stores.api,
+    auth: new AuthStore(Date.now, 7 * 24 * 60 * 60 * 1000, stores),
+    idempotency: new IdempotencyStore(stores.idempotency),
     contract: createContractPort(rootAccount),
     issuer: createHttpIssuer(issuerUrl),
     accessKey: createAccessKeyPort(rpcUrl as string),

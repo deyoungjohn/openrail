@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiApp, type ApiDeps } from "./app.js";
 import { AuthStore } from "./auth.js";
 import { termsHash } from "./terms.js";
@@ -55,6 +55,7 @@ function harness() {
     issuer,
     contract,
     accessKey: { has: async () => true },
+    verifier: () => true,
     cashout: { quote: async () => ({ deposit_address: "0xdeposit" }) },
     quoteProvider,
     clock,
@@ -75,10 +76,15 @@ function request(
     method,
     path,
     query: new URLSearchParams(),
-    headers: { authorization: `Bearer ${secret}`, ...headers },
+    headers: { ...(secret === "" ? {} : { authorization: `Bearer ${secret}` }), ...headers },
     body,
   };
 }
+
+afterEach(() => {
+  delete process.env.WEB_ORIGIN;
+  delete process.env.COOKIE_DOMAIN;
+});
 
 const invoiceBody = {
   invoice_number: "INV-2026-001",
@@ -250,6 +256,81 @@ describe("webhooks route", () => {
       request("GET", `/v1/webhook_endpoints/${endpoint.id}/deliveries`, undefined, secret),
     );
     expect(deliveries.status).toBe(200);
+  });
+});
+
+describe("session cookie", () => {
+  it("sets an HttpOnly session cookie, reads it and logs out", async () => {
+    process.env.WEB_ORIGIN = "http://localhost:3000";
+    process.env.COOKIE_DOMAIN = "openrail.incepture.dev";
+    const { app } = harness();
+    const challenge = await app.handle(
+      request("POST", "/v1/auth/challenge", { account_id: "acme.openrail.near" }, ""),
+    );
+    const nonce = (challenge.body as { nonce: string }).nonce;
+    const verified = await app.handle(
+      request(
+        "POST",
+        "/v1/auth/verify",
+        {
+          account_id: "acme.openrail.near",
+          public_key: "ed25519:example",
+          signature: "sig",
+          nonce,
+        },
+        "",
+      ),
+    );
+    expect(verified.status).toBe(200);
+    const cookie = String(verified.headers?.["set-cookie"]);
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("Secure");
+    expect(cookie).toContain("SameSite=Lax");
+    expect(cookie).toContain("Domain=openrail.incepture.dev");
+    const token = /or_sess=([^;]+)/.exec(cookie)?.[1] ?? "";
+
+    const session = await app.handle(
+      request("GET", "/v1/auth/session", undefined, "", { cookie: `or_sess=${token}` }),
+    );
+    expect(session.status).toBe(200);
+    expect((session.body as { account_id: string }).account_id).toBe("acme.openrail.near");
+
+    const logout = await app.handle(
+      request("POST", "/v1/auth/logout", {}, "", {
+        cookie: `or_sess=${token}`,
+        origin: "http://localhost:3000",
+        "content-type": "application/json",
+      }),
+    );
+    expect(logout.status).toBe(200);
+    const after = await app.handle(
+      request("GET", "/v1/auth/session", undefined, "", { cookie: `or_sess=${token}` }),
+    );
+    expect(after.status).toBe(401);
+  });
+
+  it("rejects a cookie-authenticated state change with no allowed Origin (CSRF)", async () => {
+    process.env.WEB_ORIGIN = "http://localhost:3000";
+    const { app, auth } = harness();
+    const challenge = auth.challenge("acme.openrail.near", "api.openrail.near");
+    const session = await auth.verify(
+      {
+        accountId: "acme.openrail.near",
+        publicKey: "ed25519:example",
+        signature: "sig",
+        nonce: challenge.nonce,
+      },
+      () => true,
+      async () => true,
+    );
+    const response = await app.handle(
+      request("POST", "/v1/invoices", invoiceBody, "", {
+        cookie: `or_sess=${session.sessionToken}`,
+        "content-type": "application/json",
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect((response.body as { error: { code: string } }).error.code).toBe("csrf_origin");
   });
 });
 

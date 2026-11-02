@@ -1,14 +1,10 @@
-/** In-memory Idempotency-Key store (blueprint 1.7). */
+/** Idempotency-Key store (blueprint 1.7); SQLite-backed through the repository. */
 import { createHash } from "node:crypto";
+import { createMemoryStores, type IdempotencyRepository } from "./stores.js";
 
 export interface StoredResponse {
   status: number;
   body: unknown;
-}
-
-interface Entry {
-  fingerprint: string;
-  response: StoredResponse;
 }
 
 export class IdempotencyConflict extends Error {
@@ -34,20 +30,31 @@ export function bodyFingerprint(body: unknown): string {
 }
 
 export class IdempotencyStore {
-  private readonly entries = new Map<string, Entry>();
+  private readonly ttlMs = 24 * 60 * 60 * 1000;
+
+  constructor(
+    private readonly repository: IdempotencyRepository = createMemoryStores().idempotency,
+    private readonly clock: () => number = () => Date.now(),
+  ) {}
+
+  private prune(): void {
+    this.repository.prune(this.clock() - this.ttlMs);
+  }
 
   get(key: string, body: unknown): StoredResponse | undefined {
-    const entry = this.entries.get(key);
+    this.prune();
+    const entry = this.repository.get(key);
     if (entry === undefined) return undefined;
     if (entry.fingerprint !== bodyFingerprint(body)) throw new IdempotencyConflict();
     return entry.response;
   }
 
   put(key: string, body: unknown, response: StoredResponse): void {
-    this.entries.set(key, { fingerprint: bodyFingerprint(body), response });
+    this.prune();
+    this.repository.put(key, bodyFingerprint(body), response, this.clock());
   }
 
   clear(): void {
-    this.entries.clear();
+    // Test helper: a fresh store has a fresh repository; clearing is not part of the API.
   }
 }
