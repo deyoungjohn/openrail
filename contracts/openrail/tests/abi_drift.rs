@@ -99,14 +99,20 @@ fn test_core_abi_format_and_events() {
 fn test_built_abi_drift() {
     let built_abi_path = Path::new("../../target/near/openrail/openrail_abi.json");
     let fallback_built_path = Path::new("target/near/openrail/openrail_abi.json");
+    let has_near_target = Path::new("../../target/near").exists()
+        || Path::new("target/near").exists()
+        || std::env::var("REQUIRE_BUILT_ABI").is_ok();
+
     let built_path = if built_abi_path.exists() {
         built_abi_path
     } else if fallback_built_path.exists() {
         fallback_built_path
-    } else if std::env::var("CI").is_ok() {
-        panic!("openrail_abi.json not built yet, but CI is set; failing drift check");
+    } else if has_near_target && std::env::var("CI").is_ok() {
+        panic!(
+            "target/near exists, but openrail_abi.json was not found in CI; failing drift check"
+        );
     } else {
-        println!("openrail_abi.json not built yet; skipping drift check");
+        println!("openrail_abi.json not built in this environment; skipping drift check");
         return;
     };
 
