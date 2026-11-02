@@ -7,10 +7,16 @@ import { createMockServer } from "./mock.js";
 
 const port = Number(process.env.API_PORT ?? 8787);
 
-function cors(response: ServerResponse): void {
-  response.setHeader("access-control-allow-origin", "*");
+function cors(request: IncomingMessage, response: ServerResponse): void {
+  const allowed = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+  const origin = request.headers.origin;
+  response.setHeader("vary", "Origin");
   response.setHeader("access-control-allow-methods", "GET,POST,PUT,DELETE,OPTIONS");
   response.setHeader("access-control-allow-headers", "authorization,content-type,idempotency-key");
+  if (origin !== undefined && origin === allowed) {
+    response.setHeader("access-control-allow-origin", origin);
+    response.setHeader("access-control-allow-credentials", "true");
+  }
 }
 
 async function bodyOf(request: IncomingMessage): Promise<unknown> {
@@ -36,7 +42,7 @@ async function main(): Promise<void> {
   const app = await createApiAppFromEnv();
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
-      cors(response);
+      cors(request, response);
       if (request.method === "OPTIONS") {
         response.writeHead(204);
         response.end();

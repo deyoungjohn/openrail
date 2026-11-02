@@ -1,7 +1,14 @@
 /** Dashboard sessions, API keys and NEP-413 sign-in. */
 import { createHash, randomBytes } from "node:crypto";
 import { PublicKey, baseDecode } from "near-api-js";
-import { constantTimeEqual, randomToken } from "./crypto.js";
+import { constantTimeEqual, randomToken, sha256Hex } from "./crypto.js";
+import {
+  createMemoryStores,
+  type ApiKeyStore,
+  type ChallengeStore,
+  type SessionStore,
+  type Stores,
+} from "./stores.js";
 
 export type KeyKind = "secret" | "publishable";
 export type AuthKind = KeyKind | "session";
@@ -23,6 +30,8 @@ export interface AuthContext {
   kind: AuthKind;
   accountId: string;
   scopes: string[];
+  source: "bearer" | "cookie";
+  session?: { tokenHash: string; expiresAt: number };
 }
 
 export interface Challenge {
@@ -102,18 +111,20 @@ export const verifyNep413: Nep413Verifier = (publicKey, signature, payload) => {
 };
 
 export class AuthStore {
-  private readonly keysByHash = new Map<string, ApiKeyRecord>();
-  private readonly keysById = new Map<string, ApiKeyRecord>();
-  private readonly sessions = new Map<
-    string,
-    { accountId: string; expiresAt: number; scopes: string[] }
-  >();
-  private readonly challenges = new Map<string, Challenge>();
+  private readonly keys: ApiKeyStore;
+  private readonly sessions: SessionStore;
+  private readonly challenges: ChallengeStore;
 
   constructor(
     private readonly clock: () => number = () => Date.now(),
-    private readonly sessionMs = 12 * 60 * 60 * 1000,
-  ) {}
+    private readonly sessionMs = 7 * 24 * 60 * 60 * 1000,
+    stores: Pick<Stores, "keys" | "sessions" | "challenges"> = createMemoryStores(),
+    private readonly maxSessionMs = 30 * 24 * 60 * 60 * 1000,
+  ) {
+    this.keys = stores.keys;
+    this.sessions = stores.sessions;
+    this.challenges = stores.challenges;
+  }
 
   createApiKey(
     accountId: string,
@@ -134,15 +145,13 @@ export class AuthStore {
       lastUsedAt: null,
       revokedAt: null,
     };
-    this.keysByHash.set(record.hash, record);
-    this.keysById.set(record.id, record);
+    this.keys.create(record);
     return { record, secret };
   }
 
-  rotateApiKey(id: string): { record: ApiKeyRecord; secret: string } {
-    const existing = this.keysById.get(id);
+  rotateApiKey(id: string, accountId?: string): { record: ApiKeyRecord; secret: string } {
+    const existing = this.keys.list(accountId).find((key) => key.id === id);
     if (existing === undefined) throw new AuthError(404, "api_key_not_found");
-    this.keysByHash.delete(existing.hash);
     const secret = randomToken(existing.kind === "secret" ? "or_sk_live_" : "or_pk_live_");
     const record: ApiKeyRecord = {
       ...existing,
@@ -150,55 +159,64 @@ export class AuthStore {
       hash: hashApiKey(secret),
       createdAt: new Date(this.clock()).toISOString(),
     };
-    this.keysByHash.set(record.hash, record);
-    this.keysById.set(record.id, record);
+    this.keys.update(record);
     return { record, secret };
   }
 
-  revokeApiKey(id: string): ApiKeyRecord {
-    const record = this.keysById.get(id);
+  revokeApiKey(id: string, accountId?: string): ApiKeyRecord {
+    const record = this.keys.list(accountId).find((key) => key.id === id);
     if (record === undefined) throw new AuthError(404, "api_key_not_found");
     record.revokedAt = new Date(this.clock()).toISOString();
-    this.keysByHash.delete(record.hash);
+    this.keys.update(record);
     return record;
   }
 
-  listApiKeys(): ApiKeyRecord[] {
-    return [...this.keysById.values()];
+  listApiKeys(accountId?: string): ApiKeyRecord[] {
+    return this.keys.list(accountId);
   }
 
-  authenticate(token: string | undefined): AuthContext {
+  authenticate(token: string | undefined, source: "bearer" | "cookie" = "bearer"): AuthContext {
     if (token === undefined || token === "") throw new AuthError(401, "unauthorized");
     if (token.startsWith("or_sess_")) {
-      const session = this.sessions.get(token);
+      const tokenHash = sha256Hex(token);
+      const session = this.sessions.get(tokenHash);
       if (session === undefined || session.expiresAt <= this.clock()) {
+        this.sessions.delete(tokenHash);
         throw new AuthError(401, "session_expired");
       }
-      return { kind: "session", accountId: session.accountId, scopes: session.scopes };
+      const extended = Math.min(this.clock() + this.sessionMs, session.absoluteExpiresAt);
+      if (extended > session.expiresAt) this.sessions.touch(tokenHash, extended);
+      return {
+        kind: "session",
+        accountId: session.accountId,
+        scopes: ["dashboard"],
+        source,
+        session: { tokenHash, expiresAt: extended },
+      };
     }
-    const record = this.keysByHash.get(hashApiKey(token));
+    const record = this.keys.findByHash(hashApiKey(token));
     if (record === undefined || record.revokedAt !== null)
       throw new AuthError(401, "invalid_api_key");
     if (record.kind === "secret" && !constantTimeEqual(hashApiKey(token), record.hash)) {
       throw new AuthError(401, "invalid_api_key");
     }
     record.lastUsedAt = new Date(this.clock()).toISOString();
-    return {
-      kind: record.kind,
-      accountId: record.accountId,
-      scopes: record.scopes,
-    };
+    this.keys.update(record);
+    return { kind: record.kind, accountId: record.accountId, scopes: record.scopes, source };
   }
 
-  private pruneChallenges(): void {
-    const now = this.clock();
-    for (const [nonce, challenge] of this.challenges) {
-      if (challenge.expiresAt <= now) this.challenges.delete(nonce);
-    }
+  sessionInfo(token: string): { accountId: string; expiresAt: number } | undefined {
+    const session = this.sessions.get(sha256Hex(token));
+    if (session === undefined || session.expiresAt <= this.clock()) return undefined;
+    return { accountId: session.accountId, expiresAt: session.expiresAt };
+  }
+
+  logout(token: string): void {
+    this.sessions.delete(sha256Hex(token));
   }
 
   challenge(accountId: string, recipient: string): Challenge {
-    this.pruneChallenges();
+    this.challenges.prune(this.clock());
     const nonce = randomBytes(32).toString("base64");
     const challenge: Challenge = {
       nonce,
@@ -207,7 +225,7 @@ export class AuthStore {
       accountId,
       expiresAt: this.clock() + 5 * 60 * 1000,
     };
-    this.challenges.set(nonce, challenge);
+    this.challenges.put(challenge);
     return challenge;
   }
 
@@ -215,9 +233,15 @@ export class AuthStore {
     input: { accountId: string; publicKey: string; signature: string; nonce: string },
     verifier: Nep413Verifier,
     accessKey: AccessKeyLookup,
-  ): Promise<{ sessionToken: string; accountId: string; expiresAt: string }> {
-    this.pruneChallenges();
-    const challenge = this.challenges.get(input.nonce);
+  ): Promise<{
+    sessionToken: string;
+    accountId: string;
+    expiresAt: string;
+    tokenHash: string;
+    absoluteExpiresAt: number;
+  }> {
+    this.challenges.prune(this.clock());
+    const challenge = this.challenges.take(input.nonce);
     if (challenge === undefined || challenge.expiresAt <= this.clock()) {
       throw new AuthError(401, "challenge_expired");
     }
@@ -228,18 +252,22 @@ export class AuthStore {
     if (!(await accessKey(input.accountId, input.publicKey))) {
       throw new AuthError(401, "wrong_signer");
     }
-    this.challenges.delete(input.nonce);
     const sessionToken = randomToken("or_sess_");
+    const tokenHash = sha256Hex(sessionToken);
     const expiresAt = this.clock() + this.sessionMs;
-    this.sessions.set(sessionToken, {
+    const absoluteExpiresAt = this.clock() + this.maxSessionMs;
+    this.sessions.create({
+      tokenHash,
       accountId: input.accountId,
       expiresAt,
-      scopes: ["dashboard"],
+      absoluteExpiresAt,
     });
     return {
       sessionToken,
       accountId: input.accountId,
       expiresAt: new Date(expiresAt).toISOString(),
+      tokenHash,
+      absoluteExpiresAt,
     };
   }
 }

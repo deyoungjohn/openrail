@@ -16,15 +16,10 @@ import {
   type Nep413Verifier,
 } from "./auth.js";
 import { sha256Hex0x } from "./crypto.js";
+import { createMemoryStores, type ApiStore } from "./stores.js";
 import { IdempotencyConflict, IdempotencyStore } from "./idempotency.js";
 import { renderInvoicePdfBase64 } from "./pdf.js";
-import {
-  QuoteError,
-  QuoteService,
-  type ClaimSnapshot,
-  type PaySession,
-  type QuoteProvider,
-} from "./quote.js";
+import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
 import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
 
@@ -76,18 +71,6 @@ export interface CashoutPort {
   }): Promise<Record<string, unknown>>;
 }
 
-export interface ApiStore {
-  invoices: Map<string, InvoiceRecord>;
-  payments: Map<string, Record<string, unknown>>;
-  receipts: Map<string, Record<string, unknown>>;
-  webhookEndpoints: Map<string, WebhookEndpointRecord>;
-  deliveries: Map<string, Record<string, unknown>[]>;
-  events: Record<string, unknown>[];
-  paySessions: Map<string, PaySession>;
-  openQuotes: Map<string, Record<string, unknown>[]>;
-  business: Map<string, BusinessRecord>;
-}
-
 export interface BusinessRecord {
   account_id: string;
   legal_name: string;
@@ -120,17 +103,7 @@ export interface InvoiceRecord {
 }
 
 export function createStore(): ApiStore {
-  return {
-    invoices: new Map(),
-    payments: new Map(),
-    receipts: new Map(),
-    webhookEndpoints: new Map(),
-    deliveries: new Map(),
-    events: [],
-    paySessions: new Map(),
-    openQuotes: new Map(),
-    business: new Map(),
-  };
+  return createMemoryStores().api;
 }
 
 export function kindRules(kind: number): ClaimSnapshot["kindRules"] {
@@ -222,6 +195,35 @@ function stableLineItems(lineItems: unknown): string {
   return sha256Hex0x(JSON.stringify(lineItems));
 }
 
+function cookieToken(header: string | undefined): string | undefined {
+  if (header === undefined) return undefined;
+  for (const part of header.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === "or_sess") return rest.join("=");
+  }
+  return undefined;
+}
+
+function sessionCookie(token: string, maxAgeSeconds: number): string {
+  const domain = process.env.COOKIE_DOMAIN;
+  return [
+    `or_sess=${token}`,
+    "Path=/",
+    "HttpOnly",
+    "Secure",
+    "SameSite=Lax",
+    `Max-Age=${maxAgeSeconds}`,
+    ...(domain === undefined || domain === "" ? [] : [`Domain=${domain}`]),
+  ].join("; ");
+}
+
+function allowedOrigins(): string[] {
+  return (process.env.WEB_ORIGIN ?? "http://localhost:3000")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin !== "");
+}
+
 export class ApiApp {
   readonly store: ApiStore;
   private readonly auth: AuthStore;
@@ -232,7 +234,7 @@ export class ApiApp {
   private readonly verifier: Nep413Verifier;
 
   constructor(private readonly deps: ApiDeps) {
-    this.store = deps.store ?? createStore();
+    this.store = deps.store ?? createMemoryStores().api;
     this.auth = deps.auth ?? new AuthStore();
     this.idempotency = deps.idempotency ?? new IdempotencyStore();
     this.clock = deps.clock ?? (() => new Date());
@@ -258,8 +260,28 @@ export class ApiApp {
 
   private requireAuth(request: ApiRequest, allowPublishable = false): AuthContext {
     const header = request.headers.authorization ?? "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
-    const context = this.auth.authenticate(token);
+    const bearer = header.startsWith("Bearer ") ? header.slice(7) : undefined;
+    const cookie = cookieToken(request.headers.cookie);
+    const token = bearer ?? cookie;
+    const source = bearer === undefined ? "cookie" : "bearer";
+    if (source === "cookie" && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
+      const origin = request.headers.origin;
+      if (origin === undefined || !allowedOrigins().includes(origin)) {
+        throw new ApiError(
+          403,
+          "csrf_origin",
+          "cookie-authenticated request needs an allowed Origin",
+        );
+      }
+      if (!(request.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
+        throw new ApiError(
+          403,
+          "csrf_content_type",
+          "cookie-authenticated POST needs application/json",
+        );
+      }
+    }
+    const context = this.auth.authenticate(token, source);
     if (context.kind === "publishable" && !allowPublishable) {
       throw new ApiError(403, "forbidden", "publishable keys may only create pay sessions");
     }
@@ -279,9 +301,7 @@ export class ApiApp {
   }
 
   private invoiceBy(idOrToken: string): InvoiceRecord {
-    const invoice = [...this.store.invoices.values()].find(
-      (entry) => entry.id === idOrToken || entry.token_id === idOrToken,
-    );
+    const invoice = this.store.getInvoice(idOrToken);
     if (invoice === undefined) throw new ApiError(404, "invoice_not_found");
     return invoice;
   }
@@ -291,7 +311,7 @@ export class ApiApp {
   }
 
   private business(accountId: string): BusinessRecord {
-    const existing = this.store.business.get(accountId);
+    const existing = this.store.getBusiness(accountId);
     if (existing !== undefined) return existing;
     const created: BusinessRecord = {
       account_id: accountId,
@@ -301,7 +321,7 @@ export class ApiApp {
       created_at: nowIso(this.clock),
       updated_at: nowIso(this.clock),
     };
-    this.store.business.set(accountId, created);
+    this.store.saveBusiness(created);
     return created;
   }
 
@@ -427,6 +447,7 @@ export class ApiApp {
         );
         return {
           status: 200,
+          headers: { "set-cookie": sessionCookie(session.sessionToken, 7 * 24 * 60 * 60) },
           body: {
             session_token: session.sessionToken,
             account_id: session.accountId,
@@ -434,6 +455,32 @@ export class ApiApp {
           },
         };
       });
+    }
+
+    if (path === "/v1/auth/session" && method === "GET") {
+      const context = this.requireAuth(request);
+      if (context.kind !== "session" || context.session === undefined) {
+        throw new ApiError(401, "unauthorized");
+      }
+      return {
+        status: 200,
+        body: {
+          account_id: context.accountId,
+          expires_at: new Date(context.session.expiresAt).toISOString(),
+        },
+      };
+    }
+    if (path === "/v1/auth/logout" && method === "POST") {
+      const header = request.headers.authorization ?? "";
+      const token = header.startsWith("Bearer ")
+        ? header.slice(7)
+        : cookieToken(request.headers.cookie);
+      if (token !== undefined) this.auth.logout(token);
+      return {
+        status: 200,
+        headers: { "set-cookie": sessionCookie("", 0) },
+        body: { ok: true },
+      };
     }
 
     const apiKeyMatch = /^\/v1\/api_keys(?:\/([^/]+))?(?:\/(rotate))?$/.exec(path);
@@ -445,7 +492,7 @@ export class ApiApp {
         return {
           status: 200,
           body: {
-            data: this.auth.listApiKeys().map((key) => ({
+            data: this.auth.listApiKeys(context.accountId).map((key) => ({
               id: key.id,
               name: key.name,
               prefix: key.prefix,
@@ -481,7 +528,7 @@ export class ApiApp {
       }
       if (method === "POST" && keyId !== undefined && rotate) {
         return this.withIdempotency(request, async () => {
-          const result = this.auth.rotateApiKey(keyId);
+          const result = this.auth.rotateApiKey(keyId, context.accountId);
           return {
             status: 200,
             body: {
@@ -496,7 +543,7 @@ export class ApiApp {
         });
       }
       if (method === "DELETE" && keyId !== undefined) {
-        this.auth.revokeApiKey(keyId);
+        this.auth.revokeApiKey(keyId, context.accountId);
         return { status: 200, body: { id: keyId, deleted: true } };
       }
     }
@@ -534,11 +581,13 @@ export class ApiApp {
       return this.withIdempotency(request, () => this.createInvoice(request));
     }
     if (path === "/v1/invoices" && method === "GET") {
-      this.requireAuth(request);
+      const context = this.requireAuth(request);
       return {
         status: 200,
         body: {
-          data: [...this.store.invoices.values()].map((invoice) => this.invoiceView(invoice)),
+          data: this.store
+            .listInvoices(context.accountId)
+            .map((invoice) => this.invoiceView(invoice)),
         },
       };
     }
@@ -579,9 +628,7 @@ export class ApiApp {
         return {
           status: 200,
           body: {
-            data: [...this.store.receipts.values()].filter(
-              (receipt) => receipt.token_id === invoice.token_id,
-            ),
+            data: this.store.listReceipts(invoice.token_id),
           },
         };
       }
@@ -604,7 +651,7 @@ export class ApiApp {
       if (action === "open_quotes" && method === "GET") {
         this.requireAuth(request);
         const invoice = this.invoiceBy(invoiceId);
-        return { status: 200, body: { data: this.store.openQuotes.get(invoice.token_id) ?? [] } };
+        return { status: 200, body: { data: this.store.getOpenQuotes(invoice.token_id) } };
       }
     }
 
@@ -637,8 +684,8 @@ export class ApiApp {
           refundTo: body.refund_to,
           deadlineSeconds: body.deadline_seconds,
         });
-        this.store.paySessions.set(session.id, session);
-        const quotes = this.store.openQuotes.get(session.token_id) ?? [];
+        this.store.savePaySession(session);
+        const quotes = this.store.getOpenQuotes(session.token_id);
         quotes.push({
           quote_id: session.quote_id,
           deposit_address: session.deposit_address,
@@ -648,13 +695,13 @@ export class ApiApp {
           route_id: session.route_id,
           expired: false,
         });
-        this.store.openQuotes.set(session.token_id, quotes);
+        this.store.saveOpenQuotes(session.token_id, quotes);
         return { status: 201, body: session };
       });
     }
     const paySessionMatch = /^\/v1\/pay\/sessions\/([^/]+)$/.exec(path);
     if (paySessionMatch !== null && method === "GET") {
-      const session = this.store.paySessions.get(paySessionMatch[1] ?? "");
+      const session = this.store.getPaySession(paySessionMatch[1] ?? "");
       if (session === undefined) throw new ApiError(404, "pay_session_not_found");
       return {
         status: 200,
@@ -791,7 +838,8 @@ export class ApiApp {
     if (path === "/v1/statements" && method === "GET") {
       this.requireAuth(request);
       const format = request.query.get("format") === "pdf" ? "pdf" : "csv";
-      const invoices = [...this.store.invoices.values()];
+      const context = this.requireAuth(request);
+      const invoices = this.store.listInvoices(context.accountId);
       const csv = [
         "invoice_number,amount_usd,due_date,status",
         ...invoices.map(
@@ -837,7 +885,7 @@ export class ApiApp {
         return {
           status: 200,
           body: {
-            data: [...this.store.webhookEndpoints.values()].map((endpoint) => ({
+            data: this.store.listWebhookEndpoints(context.accountId).map((endpoint) => ({
               id: endpoint.id,
               url: endpoint.url,
               events: endpoint.events,
@@ -858,7 +906,7 @@ export class ApiApp {
             secret: `whsec_${randomBytes(24).toString("base64url")}`,
             events: body.events,
           };
-          this.store.webhookEndpoints.set(endpoint.id, endpoint);
+          this.store.saveWebhookEndpoint(context.accountId, endpoint);
           void context;
           return {
             status: 201,
@@ -878,10 +926,10 @@ export class ApiApp {
       this.requireAuth(request);
       const endpointId = webhookMatch[1] ?? "";
       const action = webhookMatch[2];
-      const endpoint = this.store.webhookEndpoints.get(endpointId);
+      const endpoint = this.store.getWebhookEndpoint(endpointId);
       if (endpoint === undefined) throw new ApiError(404, "webhook_endpoint_not_found");
       if (method === "DELETE" && action === undefined) {
-        this.store.webhookEndpoints.delete(endpointId);
+        this.store.deleteWebhookEndpoint(endpointId);
         return { status: 200, body: { id: endpointId, deleted: true } };
       }
       if (method === "POST" && action === "test") {
@@ -907,18 +955,18 @@ export class ApiApp {
         });
       }
       if (method === "GET" && action === "deliveries") {
-        return { status: 200, body: { data: this.store.deliveries.get(endpointId) ?? [] } };
+        return { status: 200, body: { data: this.store.listDeliveries(endpointId) } };
       }
     }
 
     if (path === "/v1/events" && method === "GET") {
       this.requireAuth(request);
-      return { status: 200, body: { data: this.store.events } };
+      return { status: 200, body: { data: this.store.listEvents() } };
     }
 
     const receiptMatch = /^\/v1\/receipts\/([^/]+)$/.exec(path);
     if (receiptMatch !== null && method === "GET") {
-      const receipt = this.store.receipts.get(receiptMatch[1] ?? "");
+      const receipt = this.store.getReceipt(receiptMatch[1] ?? "");
       if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
       return {
         status: 200,
@@ -933,7 +981,7 @@ export class ApiApp {
     const paymentMatch = /^\/v1\/payments\/([^/]+)$/.exec(path);
     if (paymentMatch !== null && method === "GET") {
       this.requireAuth(request);
-      const payment = this.store.payments.get(paymentMatch[1] ?? "");
+      const payment = this.store.getPayment(paymentMatch[1] ?? "");
       if (payment === undefined) throw new ApiError(404, "payment_not_found");
       return { status: 200, body: payment };
     }
@@ -1015,7 +1063,7 @@ export class ApiApp {
       created_block: 0,
       terms,
     };
-    this.store.invoices.set(invoice.id, invoice);
+    this.store.saveInvoice(invoice);
     return { status: 201, body: invoice };
   }
 }

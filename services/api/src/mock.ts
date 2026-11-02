@@ -39,12 +39,33 @@ function pathMatches(template: string, actual: string): boolean {
   });
 }
 
-function sendJson(response: ServerResponse, status: number, body: unknown, fixture?: string): void {
+function webOrigin(): string {
+  return process.env.WEB_ORIGIN ?? "http://localhost:3000";
+}
+
+function corsHeaders(origin: string | undefined): Record<string, string> {
   const headers: Record<string, string> = {
-    "content-type": "application/json; charset=utf-8",
-    "access-control-allow-origin": "*",
+    vary: "Origin",
     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "authorization,content-type,idempotency-key",
+  };
+  if (origin !== undefined && origin === webOrigin()) {
+    headers["access-control-allow-origin"] = origin;
+    headers["access-control-allow-credentials"] = "true";
+  }
+  return headers;
+}
+
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  fixture?: string,
+  origin?: string,
+): void {
+  const headers: Record<string, string> = {
+    "content-type": "application/json; charset=utf-8",
+    ...corsHeaders(origin),
   };
   if (fixture !== undefined) headers["x-mock-fixture"] = fixture;
   response.writeHead(status, headers);
@@ -76,31 +97,27 @@ export function createMockServer(options: MockServerOptions = {}): Server {
   return createServer((request: IncomingMessage, response: ServerResponse) => {
     const method = (request.method ?? "GET").toUpperCase();
     if (method === "OPTIONS") {
-      response.writeHead(204, {
-        "access-control-allow-origin": "*",
-        "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "access-control-allow-headers": "authorization,content-type,idempotency-key",
-      });
+      response.writeHead(204, corsHeaders(request.headers.origin));
       response.end();
       return;
     }
 
     const pathname = new URL(request.url ?? "/", "http://mock.local").pathname;
     if (method === "GET" && pathname === "/v1/openapi.json") {
-      sendJson(response, 200, spec, "openapi.json");
+      sendJson(response, 200, spec, "openapi.json", request.headers.origin);
       return;
     }
     if (method === "GET" && pathname === "/health") {
-      sendJson(response, 200, { ok: true, mock: true });
+      sendJson(response, 200, { ok: true, mock: true }, undefined, request.headers.origin);
       return;
     }
 
     for (const { entry, body } of fixtures.values()) {
       if (entry.method === method && pathMatches(entry.path, pathname)) {
-        sendJson(response, entry.status, body, entry.file);
+        sendJson(response, entry.status, body, entry.file, request.headers.origin);
         return;
       }
     }
-    sendJson(response, 404, notFound, "error.404.json");
+    sendJson(response, 404, notFound, "error.404.json", request.headers.origin);
   });
 }

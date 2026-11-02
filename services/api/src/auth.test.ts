@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { KeyPair, KeyPairSigner } from "near-api-js";
 import { describe, expect, it } from "vitest";
 import { AuthError, AuthStore, hashApiKey, nep413Hash, verifyNep413 } from "./auth.js";
+import { createMemoryStores } from "./stores.js";
 
 const clock = () => Date.parse("2026-11-02T10:00:00Z");
 
@@ -32,7 +33,7 @@ describe("API keys", () => {
 });
 
 describe("NEP-413 sign-in", () => {
-  it("verifies a real NEP-413 signature and issues a 12 h session", async () => {
+  it("verifies a real NEP-413 signature and issues a sliding session", async () => {
     const signer = KeyPairSigner.fromSecretKey(KeyPair.fromRandom("ed25519").toString());
     const publicKey = (await signer.getPublicKey()).toString();
     const store = new AuthStore(clock);
@@ -56,12 +57,13 @@ describe("NEP-413 sign-in", () => {
     );
 
     expect(session.sessionToken.startsWith("or_sess_")).toBe(true);
-    expect(session.expiresAt).toBe("2026-11-02T22:00:00.000Z");
+    expect(session.expiresAt).toBe("2026-11-09T10:00:00.000Z");
     const context = store.authenticate(session.sessionToken);
-    expect(context).toEqual({
+    expect(context).toMatchObject({
       kind: "session",
       accountId: "acme.openrail.near",
       scopes: ["dashboard"],
+      source: "bearer",
     });
   });
 
@@ -97,6 +99,28 @@ describe("NEP-413 sign-in", () => {
         payload,
       ),
     ).toBe(false);
+  });
+
+  it("slides the session expiry and caps it at 30 days", async () => {
+    let now = Date.parse("2026-11-02T10:00:00Z");
+    const stores = createMemoryStores();
+    const store = new AuthStore(() => now, 7 * 24 * 60 * 60 * 1000, stores);
+    const challenge = store.challenge("acme.openrail.near", "api.openrail.near");
+    const session = await store.verify(
+      {
+        accountId: "acme.openrail.near",
+        publicKey: "ed25519:example",
+        signature: "sig",
+        nonce: challenge.nonce,
+      },
+      () => true,
+      async () => true,
+    );
+    now += 6 * 24 * 60 * 60 * 1000;
+    const context = store.authenticate(session.sessionToken);
+    expect(context.session?.expiresAt).toBe(now + 7 * 24 * 60 * 60 * 1000);
+    now += 25 * 24 * 60 * 60 * 1000;
+    expect(() => store.authenticate(session.sessionToken)).toThrow("session_expired");
   });
 
   it("hashes the borsh NEP-413 payload deterministically", () => {

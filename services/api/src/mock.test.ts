@@ -49,10 +49,22 @@ describe("MOCK=1 API", () => {
     expect(await response.json()).toEqual(fixture("error.404.json"));
   });
 
-  it("answers CORS preflight for the UI dev server", async () => {
-    const response = await fetch(`${baseUrl}/v1/invoices`, { method: "OPTIONS" });
+  it("answers CORS preflight with the exact web origin and credentials", async () => {
+    process.env.WEB_ORIGIN = "http://localhost:3000";
+    const response = await fetch(`${baseUrl}/v1/invoices`, {
+      method: "OPTIONS",
+      headers: { origin: "http://localhost:3000" },
+    });
     expect(response.status).toBe(204);
-    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+    expect(response.headers.get("access-control-allow-credentials")).toBe("true");
     expect(response.headers.get("access-control-allow-headers")).toContain("idempotency-key");
+
+    const other = await fetch(`${baseUrl}/v1/invoices`, {
+      method: "OPTIONS",
+      headers: { origin: "http://evil.example" },
+    });
+    expect(other.headers.get("access-control-allow-origin")).toBeNull();
+    delete process.env.WEB_ORIGIN;
   });
 });
