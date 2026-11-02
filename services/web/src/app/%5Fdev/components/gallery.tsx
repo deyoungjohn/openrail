@@ -55,8 +55,8 @@ const pickerWallets: NearWalletInfo[] = [
     signsMessage: null,
   },
   {
-    id: "bitget-wallet",
-    name: "Bitget Wallet",
+    id: "coin98-wallet",
+    name: "Coin98 Wallet",
     iconUrl: null,
     type: "injected",
     available: false,

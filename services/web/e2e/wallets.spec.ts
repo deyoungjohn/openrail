@@ -17,7 +17,7 @@ test.describe("wallet picker (static cases in the gallery)", () => {
     ]);
     await expect(dialog.getByRole("button", { name: /Meteor Wallet/ })).toBeEnabled();
     await expect(dialog.getByRole("button", { name: /OKX Wallet/ })).toBeDisabled();
-    await expect(dialog.getByRole("button", { name: /Bitget Wallet/ })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: /Coin98 Wallet/ })).toBeDisabled();
     await expect(dialog.getByRole("alert")).toHaveCount(0);
     await dialog.getByRole("button", { name: /HOT Wallet/ }).click();
     await expect(dialog.getByRole("alert")).toHaveText(

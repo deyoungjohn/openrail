@@ -9,7 +9,8 @@ const fixture = (name: string) =>
   ) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const CORS = {
-  "access-control-allow-origin": "*",
+  "access-control-allow-origin": "http://127.0.0.1:3100",
+  "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,idempotency-key",
   "access-control-allow-methods": "GET,POST,OPTIONS",
 };
