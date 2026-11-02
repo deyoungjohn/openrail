@@ -1,7 +1,12 @@
 /**
- * Account-scoped production source: NearBlocks v3 receipts for `<root>`, newest page first.
- * The cursor is our own `h:<height>`: fetch the newest page(s), keep only blocks above it, and
- * stop once a page reaches already-indexed heights. One request per quiet poll.
+ * Account-scoped production source.
+ *
+ * NearBlocks lists the transactions that touch `<root>` (`/v1/account/<root>/txns`, cursor
+ * paging). The list rows have no logs, so each new transaction is read once with
+ * `EXPERIMENTAL_tx_status` (`wait_until: FINAL`); only receipts executed by `<root>` are kept.
+ *
+ * The cursor is our own `h:<height>`: fetch the newest page(s), keep transactions above it,
+ * and stop once a page reaches already-indexed heights. A quiet poll is one NearBlocks call.
  */
 import type { EventSource, SourceBlock, SourcePage, SourceReceipt } from "./types.js";
 
@@ -13,31 +18,27 @@ interface NbBlockRef {
   block_hash?: string;
 }
 
-interface NbReceipt {
-  receipt_id?: string;
-  receiptId?: string;
+interface NbTxn {
   transaction_hash?: string;
-  tx_hash?: string;
-  block?: NbBlockRef | null;
-  block_height?: number;
-  block_timestamp?: number | string;
-  block_hash?: string;
-  predecessor_account_id?: string;
+  signer_account_id?: string;
   receiver_account_id?: string;
-  outcome?: { logs?: unknown } | null;
-  receipts?: NbReceipt[];
+  block?: NbBlockRef | null;
+  receipt_block?: NbBlockRef | null;
+  block_timestamp?: number | string;
+  included_in_block_hash?: string;
 }
 
 interface NbResponse {
-  data?: NbReceipt[];
-  meta?: { next_page?: string | null; prev_page?: string | null };
+  cursor?: string | null;
+  txns?: NbTxn[];
+  meta?: { next_page?: string | null };
 }
 
-interface PageState {
-  height: number;
-  hash: string;
-  timestamp: number;
-  receipts: SourceReceipt[];
+interface TxStatus {
+  receipts_outcome?: {
+    id?: string;
+    outcome?: { logs?: unknown; executor_id?: string } | null;
+  }[];
 }
 
 function timestampSeconds(value: number | string | undefined): number {
@@ -60,121 +61,161 @@ function cursorHeight(cursor: string | null): number {
 export class NearBlocksEventSource implements EventSource {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly rpcUrls: string[];
   private readonly fetchImpl: FetchLike;
   private readonly limit: number;
   private readonly maxPages: number;
-  private calls = 0;
+  private readonly counts = new Map<string, number>();
 
   constructor(
     private readonly rootAccount: string,
     baseUrl = "https://api.nearblocks.io",
     apiKey = "",
+    rpcUrls: string[] = [],
     fetchImpl: FetchLike = (input, init) => fetch(input, init),
     limit = 100,
     maxPages = 5,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKey = apiKey;
+    this.rpcUrls = rpcUrls;
     this.fetchImpl = fetchImpl;
     this.limit = Math.max(1, Math.min(limit, 100));
     this.maxPages = Math.max(1, maxPages);
   }
 
   callCounts(): Record<string, number> {
-    return { "nearblocks.receipts": this.calls };
+    return Object.fromEntries(this.counts);
   }
 
-  private walk(
-    node: NbReceipt,
-    inherited: { height: number; hash: string; timestamp: number; txHash?: string },
-    pages: Map<number, PageState>,
-  ): void {
-    const height = node.block?.block_height ?? node.block_height ?? inherited.height ?? 0;
-    const hash = node.block?.block_hash ?? node.block_hash ?? inherited.hash ?? `h${height}`;
-    const timestamp =
-      timestampSeconds(node.block?.block_timestamp ?? node.block_timestamp) ||
-      inherited.timestamp ||
-      0;
-    const txHash =
-      node.transaction_hash ??
-      node.tx_hash ??
-      inherited.txHash ??
-      node.receipt_id ??
-      node.receiptId ??
-      `r${height}`;
-    const logs = node.outcome?.logs;
-    if (Array.isArray(logs) && logs.some((log) => typeof log === "string")) {
-      const page = pages.get(height) ?? { height, hash, timestamp, receipts: [] };
-      page.receipts.push({
-        receiptId: node.receipt_id ?? node.receiptId ?? `${txHash}:${page.receipts.length}`,
-        txHash,
-        predecessorId: node.predecessor_account_id ?? "",
-        receiverId: node.receiver_account_id ?? this.rootAccount,
+  private increment(feature: string): void {
+    this.counts.set(feature, (this.counts.get(feature) ?? 0) + 1);
+  }
+
+  private async listPage(cursor: string | null): Promise<NbResponse> {
+    const query = new URLSearchParams({ limit: String(this.limit) });
+    if (cursor !== null) query.set("cursor", cursor);
+    const url = `${this.baseUrl}/v1/account/${encodeURIComponent(this.rootAccount)}/txns?${query.toString()}`;
+    this.increment("nearblocks.txns");
+    const response = await this.fetchImpl(url, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        ...(this.apiKey === "" ? {} : { authorization: `Bearer ${this.apiKey}` }),
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`NEARBLOCKS_HTTP_${response.status}`);
+    return (await response.json()) as NbResponse;
+  }
+
+  private async txStatus(txHash: string, signerId: string): Promise<TxStatus> {
+    let lastError: unknown;
+    for (const url of this.rpcUrls) {
+      this.increment("rpc.tx_status");
+      try {
+        const response = await this.fetchImpl(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "EXPERIMENTAL_tx_status",
+            params: {
+              tx_hash: txHash,
+              sender_account_id: signerId,
+              wait_until: "FINAL",
+            },
+          }),
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!response.ok) {
+          lastError = new Error(`RPC_HTTP_${response.status}`);
+          continue;
+        }
+        const body = (await response.json()) as { result?: TxStatus; error?: unknown };
+        if (body.error !== undefined) {
+          lastError = new Error(`RPC_ERROR: ${JSON.stringify(body.error)}`);
+          continue;
+        }
+        if (body.result === undefined) {
+          lastError = new Error("RPC_RESULT_MISSING");
+          continue;
+        }
+        return body.result;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("RPC_UNAVAILABLE");
+  }
+
+  private async rootLogs(tx: NbTxn): Promise<SourceReceipt[]> {
+    if (typeof tx.transaction_hash !== "string" || typeof tx.signer_account_id !== "string") {
+      return [];
+    }
+    const status = await this.txStatus(tx.transaction_hash, tx.signer_account_id);
+    const receipts: SourceReceipt[] = [];
+    for (const outcome of status.receipts_outcome ?? []) {
+      if (outcome.outcome?.executor_id !== this.rootAccount) continue;
+      const logs = outcome.outcome.logs;
+      if (!Array.isArray(logs) || !logs.some((log) => typeof log === "string")) continue;
+      receipts.push({
+        receiptId: outcome.id ?? `${tx.transaction_hash}:${receipts.length}`,
+        txHash: tx.transaction_hash,
+        predecessorId: tx.receiver_account_id ?? "",
+        receiverId: this.rootAccount,
         logs: logs.filter((log): log is string => typeof log === "string"),
       });
-      pages.set(height, page);
     }
-    for (const child of node.receipts ?? []) {
-      this.walk(child, { height, hash, timestamp, txHash }, pages);
-    }
+    return receipts;
   }
 
   async fetch(cursor: string | null): Promise<SourcePage> {
     const storedHeight = cursorHeight(cursor);
-    const pages = new Map<number, PageState>();
-    let latestBlock = storedHeight;
     let next: string | null = null;
-    let done = false;
+    let latestBlock = storedHeight;
     let oldestHeight = Number.POSITIVE_INFINITY;
+    let done = false;
+    const blocks = new Map<number, SourceBlock>();
 
     for (let pageIndex = 0; pageIndex < this.maxPages; pageIndex += 1) {
-      const query = new URLSearchParams({ limit: String(this.limit) });
-      if (next !== null) query.set("next", next);
-      const url = `${this.baseUrl}/v3/accounts/${encodeURIComponent(this.rootAccount)}/receipts?${query.toString()}`;
-      this.calls += 1;
-      const response = await this.fetchImpl(url, {
-        method: "GET",
-        headers: {
-          accept: "application/json",
-          ...(this.apiKey === "" ? {} : { authorization: `Bearer ${this.apiKey}` }),
-        },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!response.ok) {
-        throw new Error(`NEARBLOCKS_HTTP_${response.status}`);
-      }
-      const body = (await response.json()) as NbResponse;
-      const data = Array.isArray(body.data) ? body.data : [];
+      const body = await this.listPage(next);
+      const txns = Array.isArray(body.txns) ? body.txns : [];
       const heights: number[] = [];
-      for (const receipt of data) {
-        this.walk(receipt, { height: 0, hash: "", timestamp: 0 }, pages);
-        const height = receipt.block?.block_height ?? receipt.block_height;
-        if (typeof height === "number") heights.push(height);
+      for (const tx of txns) {
+        const height = tx.receipt_block?.block_height ?? tx.block?.block_height ?? 0;
+        if (height <= storedHeight) continue;
+        heights.push(height);
+        latestBlock = Math.max(latestBlock, height);
+        const receipts = await this.rootLogs(tx);
+        if (receipts.length === 0) continue;
+        const hash = tx.receipt_block?.block_hash ?? tx.block?.block_hash ?? `h${height}`;
+        const timestamp = timestampSeconds(
+          tx.receipt_block?.block_timestamp ?? tx.block?.block_timestamp ?? tx.block_timestamp,
+        );
+        const block = blocks.get(height) ?? { height, hash, timestamp, receipts: [] };
+        block.receipts.push(...receipts);
+        blocks.set(height, block);
       }
-      latestBlock = Math.max(latestBlock, ...heights);
-      next = body.meta?.next_page ?? null;
-      const oldest = heights.length === 0 ? null : Math.min(...heights);
-      if (oldest !== null) oldestHeight = Math.min(oldestHeight, oldest);
-      if (next === null || (oldest !== null && oldest <= storedHeight)) {
+      if (heights.length > 0) oldestHeight = Math.min(oldestHeight, ...heights);
+      next = body.cursor ?? body.meta?.next_page ?? null;
+      if (
+        next === null ||
+        txns.length === 0 ||
+        (heights.length > 0 && oldestHeight <= storedHeight)
+      ) {
         done = true;
         break;
       }
     }
 
-    const blocks: SourceBlock[] = [...pages.values()]
-      .filter((page) => page.height > storedHeight)
-      .sort((a, b) => a.height - b.height)
-      .map((page) => ({
-        height: page.height,
-        hash: page.hash,
-        timestamp: page.timestamp,
-        receipts: page.receipts,
-      }));
-    latestBlock = Math.max(latestBlock, ...blocks.map((block) => block.height));
+    const ordered = [...blocks.values()].sort((a, b) => a.height - b.height);
+    latestBlock = Math.max(latestBlock, ...ordered.map((block) => block.height));
     const nextCursor =
       done || !Number.isFinite(oldestHeight)
         ? latestBlock
         : Math.max(storedHeight, oldestHeight - 1);
-    return { blocks, cursor: `h:${nextCursor}`, done, latestBlock };
+    return { blocks: ordered, cursor: `h:${nextCursor}`, done, latestBlock };
   }
 }

@@ -63,6 +63,7 @@ async function main(): Promise<void> {
             rootAccount,
             getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
             getEnv("NEARBLOCKS_API_KEY") ?? "",
+            rpcUrls,
           ),
           rpcSource,
         );

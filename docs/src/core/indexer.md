@@ -19,18 +19,21 @@ and see the CSV envelope; `format=pdf` returns the PDF envelope.
 → `curl -s localhost:8788/r/<booking-tx-hash>` and see the receipt. Any other hash is 404
 (`receipt_equals_booked_event`).
 
-`INDEXER_SOURCE=nearblocks` (default) uses the account-scoped NearBlocks receipts API. If a
-NearBlocks request fails, that poll falls back to the RPC scanner (one request per block, still
-heavy); `INDEXER_SOURCE=rpc` selects the scanner directly for tests or an emergency run;
+`INDEXER_SOURCE=nearblocks` (default) uses the account-scoped NearBlocks `/v1/account/<root>/txns`
+list (cursor paging). The list rows have no logs, so each new transaction is read once with
+`EXPERIMENTAL_tx_status` (`wait_until: FINAL`) and only receipts executed by `<root>` are kept.
+If a NearBlocks request fails, that poll falls back to the RPC scanner (one request per block,
+still heavy); `INDEXER_SOURCE=rpc` selects the scanner directly for tests or an emergency run;
 it makes roughly one `block` + one `chunk` + one `tx` call per block and is **not** the
 production default (about 10 calls/second / ~1M/day at mainnet block time).
 
 ## Load budget
 
-NearBlocks is account-scoped: one receipts page per poll in a quiet period.
+NearBlocks is account-scoped: one `txns` page per poll in a quiet period, plus one RPC
+`EXPERIMENTAL_tx_status` per **new** transaction (a few per payment, not per block).
 
-- **Default cadence** `INDEXER_POLL_INTERVAL_MS=15000`: 4 polls/min → **240 requests in a
-  quiet hour** (≈5,760/day).
+- **Default cadence** `INDEXER_POLL_INTERVAL_MS=15000`: 4 polls/min → **240 NearBlocks
+  requests in a quiet hour** (≈5,760/day, zero RPC calls if nothing new).
 - A burst that does not fit in 100 receipts follows older pages up to `INDEXER_MAX_PAGES`
   (default 5), then continues on the next poll; each extra page is one request.
 - On the NearBlocks free tier (333 calls/day) set `INDEXER_POLL_INTERVAL_MS=300000`
@@ -70,8 +73,9 @@ kept forever; only operational rows are pruned.
 ## Tests
 
 ```bash
-pnpm --filter @openrail/indexer test   # 43 tests, no network
+pnpm --filter @openrail/indexer test   # 44 tests, no network
 ```
 
-The recorded block fixture is `services/indexer/src/fixtures/blocks.json`; the fake source
-replays it. `source.test.ts` covers the off-by-default RPC scanner with a fake RPC.
+The recorded fixtures are `services/indexer/src/fixtures/txn.deploy-global.json` (a real
+NearBlocks `txns` row, no logs) and `account-receipts.openrail.json`; the block fixture is
+`blocks.json`. `source.test.ts` covers the off-by-default RPC scanner with a fake RPC.
