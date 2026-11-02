@@ -27,12 +27,6 @@
   --danger-text: #b91c1c;
   --on-danger: #ffffff;
   --info: #2563eb;
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04);
-  --shadow-pop: 0 12px 32px rgb(15 23 42 / 0.12);
-  --card-highlight: 0 0 #0000;
-  --glow: 0 0 #0000;
-  --glow-focus: 0 0 #0000;
-  --nav-bar: transparent;
   --dur-fast: 120ms;
   --dur: 200ms;
   --dur-slow: 320ms;
@@ -60,13 +54,6 @@
   --danger-text: #f87171;
   --on-danger: #0b0d17;
   --info: #60a5fa;
-  --shadow-card: 0 0 #0000;
-  --shadow-pop: 0 0 #0000;
-  --card-highlight: 0 0 #0000;
-  /* Accent glow: interactive and live elements only (DESIGN.md, dark mode). */
-  --glow: 0 0 0 1px rgb(124 130 255 / 0.4), 0 8px 24px rgb(124 130 255 / 0.25);
-  --glow-focus: 0 0 0 4px rgb(124 130 255 / 0.25);
-  --nav-bar: var(--accent);
 }
 
 @theme inline {
@@ -123,7 +110,6 @@ h3 {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  box-shadow: var(--glow-focus);
 }
 
 .tabular {
@@ -145,7 +131,6 @@ h3 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card), var(--card-highlight);
   transition:
     background-color var(--dur) var(--ease),
     border-color var(--dur) var(--ease);

@@ -63,7 +63,7 @@ function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: (
                   "flex h-11 items-center gap-3 rounded-[10px] px-3 text-[14px] leading-5 font-medium",
                   "transition-colors duration-[var(--dur-fast)] ease-[var(--ease)]",
                   active
-                    ? "bg-accent-soft text-accent shadow-[inset_2px_0_0_var(--nav-bar)]"
+                    ? "relative bg-accent-soft text-accent before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-accent"
                     : "text-text hover:bg-surface-2",
                   collapsed && "justify-center px-0",
                 )}
@@ -151,7 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           collapsed ? "md:pl-[72px]" : "md:pl-[248px]",
         )}
       >
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-bg/90 px-4 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-bg px-4 md:px-6">
           <button
             type="button"
             onClick={() => setMenu(true)}

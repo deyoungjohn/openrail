@@ -58,7 +58,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               role="status"
-              className="surface-card route-rise pointer-events-auto flex w-full items-start gap-3 p-4 shadow-[var(--shadow-pop)]"
+              className="surface-card route-rise pointer-events-auto flex w-full items-start gap-3 p-4"
             >
               <Icon
                 size={20}

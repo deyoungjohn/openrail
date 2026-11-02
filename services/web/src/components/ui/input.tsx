@@ -54,9 +54,9 @@ function Frame({
 
 const field =
   "h-11 w-full rounded-[10px] border bg-surface px-3 dark:bg-surface-2 text-[15px] text-text " +
-  "transition-[border-color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease)] " +
-  "placeholder:text-muted focus-visible:border-accent focus-visible:outline-none " +
-  "focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60";
+  "transition-[border-color] duration-[var(--dur-fast)] ease-[var(--ease)] " +
+  "placeholder:text-muted focus-visible:border-accent " +
+  "disabled:opacity-60";
 
 export function Input({
   label,
