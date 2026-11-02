@@ -69,6 +69,10 @@ async fn test_c1_issue_lifecycle_and_views() -> Result<()> {
     assert_eq!(cv.booked_total.0, 0);
     assert_eq!(cv.surplus.0, 0);
     assert_eq!(cv.credit_total.0, 0);
+    assert!(cv.kind_rules.ack_required_for_sale);
+    assert!(cv.kind_rules.sellable);
+    assert_eq!(cv.kind_rules.quote_deadline, 3600);
+    assert!(!cv.kind_rules.debtor_optional);
 
     // View: outstanding
     let outstanding: Option<U128> = env
@@ -248,6 +252,17 @@ async fn test_c1_issue_failure_refunds_and_deletes_claim() -> Result<()> {
 
     // Transaction executes without callback panic reverting state
     assert!(res.is_success(), "Transaction must succeed without panic");
+
+    // Must NOT emit nft_mint on failed account creation (Mutant 5 verification)
+    let events = openrail_tests::decode_events(&res);
+    let mint_events: Vec<_> = events
+        .into_iter()
+        .filter(|e| e.get("event").and_then(|v| v.as_str()) == Some("nft_mint"))
+        .collect();
+    assert!(
+        mint_events.is_empty(),
+        "Must NOT emit nft_mint on failed account creation"
+    );
 
     // Claim must be deleted from state
     let claim_view: Option<ClaimView> = env
@@ -534,6 +549,48 @@ async fn test_c1_mutation_break_6_vault_not_configured() -> Result<()> {
     assert!(
         failure.contains("vault not configured"),
         "Must reject with 'vault not configured', got: {failure}"
+    );
+
+    Ok(())
+}
+
+/// Excess deposit refund verification (Mutant 4):
+/// Asserts that when a caller attaches more than REQUIRED_ISSUE_DEPOSIT (e.g. 1 NEAR),
+/// the excess (~0.95 NEAR) is refunded back to the caller in `on_issue`.
+#[tokio::test]
+async fn test_c1_excess_deposit_refunded() -> Result<()> {
+    let env = Env::new().await?;
+
+    let alice_bal_before = env.alice.view_account().await?.balance;
+
+    let res = env
+        .alice
+        .call(env.root.id(), "issue")
+        .args_json(json!({
+            "kind": 0,
+            "debtor": Debtor::Near(env.bob.id().clone()),
+            "terms_hash": Hex32::new([42u8; 32]),
+            "amount_due": U128(10_000_000),
+            "due_date": 1_700_000_000u64,
+            "metadata": null,
+        }))
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    assert!(res.is_success(), "issue must succeed");
+
+    let alice_bal_after = env.alice.view_account().await?.balance;
+    let diff = alice_bal_before
+        .as_yoctonear()
+        .saturating_sub(alice_bal_after.as_yoctonear());
+
+    // Alice should only have spent ~0.05 NEAR storage + minimal gas, NOT 1.0 NEAR.
+    assert!(
+        diff < NearToken::from_millinear(65).as_yoctonear(),
+        "Excess deposit must be refunded: diff was {} yocto (>= 0.065 NEAR)",
+        diff
     );
 
     Ok(())

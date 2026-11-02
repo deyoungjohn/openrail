@@ -25,7 +25,7 @@ use std::collections::HashMap;
 
 pub use types::{
     Ack, AckScheme, Claim, ClaimView, Config, Debtor, DebtorCosig, Hex20, Hex32, HexBytes,
-    JsonToken, Leg, Lock, NFTContractMetadata, Quote, Status, TokenId, TokenMetadata,
+    JsonToken, KindRules, Leg, Lock, NFTContractMetadata, Quote, Status, TokenId, TokenMetadata,
 };
 
 // ──────────────────────────────────────────────
