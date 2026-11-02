@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BookedEvent",
+  "type": "object",
+  "required": [
+    "standard",
+    "version",
+    "event",
+    "data"
+  ],
+  "properties": {
+    "standard": {
+      "type": "string",
+      "const": "openrail"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "event": {
+      "type": "string",
+      "const": "booked"
+    },
+    "data": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "token_id",
+          "payment",
+          "surplus",
+          "fee",
+          "credit",
+          "legs"
+        ],
+        "properties": {
+          "token_id": {
+            "type": "string"
+          },
+          "payment": {
+            "type": "string"
+          },
+          "surplus": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "string"
+          },
+          "credit": {
+            "type": "string"
+          },
+          "legs": {
+            "type": "array"
+          }
+        }
+      }
+    }
+  }
+}

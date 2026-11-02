@@ -1,0 +1,174 @@
+{
+  "interface": "v1",
+  "methods": [
+    {
+      "name": "acknowledge_evm",
+      "kind": "call"
+    },
+    {
+      "name": "acknowledge_near",
+      "kind": "call"
+    },
+    {
+      "name": "cancel",
+      "kind": "call"
+    },
+    {
+      "name": "claim",
+      "kind": "view"
+    },
+    {
+      "name": "claims_by_issuer",
+      "kind": "view"
+    },
+    {
+      "name": "clear_stale_lock",
+      "kind": "call"
+    },
+    {
+      "name": "close",
+      "kind": "call"
+    },
+    {
+      "name": "close_writeoff",
+      "kind": "call"
+    },
+    {
+      "name": "config",
+      "kind": "view"
+    },
+    {
+      "name": "contract_source_metadata",
+      "kind": "view"
+    },
+    {
+      "name": "deposit_storage_credit",
+      "kind": "call"
+    },
+    {
+      "name": "issue",
+      "kind": "call"
+    },
+    {
+      "name": "issue_for",
+      "kind": "call"
+    },
+    {
+      "name": "log_quote",
+      "kind": "call"
+    },
+    {
+      "name": "new",
+      "kind": "call"
+    },
+    {
+      "name": "nft_approve",
+      "kind": "call"
+    },
+    {
+      "name": "nft_is_approved",
+      "kind": "view"
+    },
+    {
+      "name": "nft_metadata",
+      "kind": "view"
+    },
+    {
+      "name": "nft_resolve_transfer",
+      "kind": "call"
+    },
+    {
+      "name": "nft_revoke",
+      "kind": "call"
+    },
+    {
+      "name": "nft_revoke_all",
+      "kind": "call"
+    },
+    {
+      "name": "nft_supply_for_owner",
+      "kind": "view"
+    },
+    {
+      "name": "nft_token",
+      "kind": "view"
+    },
+    {
+      "name": "nft_tokens",
+      "kind": "view"
+    },
+    {
+      "name": "nft_tokens_for_owner",
+      "kind": "view"
+    },
+    {
+      "name": "nft_total_supply",
+      "kind": "view"
+    },
+    {
+      "name": "nft_transfer",
+      "kind": "call"
+    },
+    {
+      "name": "nft_transfer_call",
+      "kind": "call"
+    },
+    {
+      "name": "outstanding",
+      "kind": "view"
+    },
+    {
+      "name": "pause_issue",
+      "kind": "call"
+    },
+    {
+      "name": "payment_log",
+      "kind": "view"
+    },
+    {
+      "name": "prepare_transfer",
+      "kind": "call"
+    },
+    {
+      "name": "reconcile",
+      "kind": "call"
+    },
+    {
+      "name": "release_surplus",
+      "kind": "call"
+    },
+    {
+      "name": "retry_distribution",
+      "kind": "call"
+    },
+    {
+      "name": "set_config",
+      "kind": "call"
+    },
+    {
+      "name": "withdraw_storage_credit",
+      "kind": "call"
+    }
+  ],
+  "events": [
+    "issue",
+    "ack",
+    "quote_logged",
+    "booked",
+    "distributed",
+    "distribution_failed",
+    "surplus",
+    "surplus_released",
+    "unmatched",
+    "anomaly",
+    "transfer_window",
+    "cancel",
+    "close",
+    "writeoff",
+    "lock_cleared",
+    "config_changed",
+    "reconcile_failed",
+    "nft_mint",
+    "nft_transfer"
+  ]
+}
