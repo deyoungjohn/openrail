@@ -210,3 +210,23 @@ for (const scheme of ["light", "dark"] as const) {
     expect(r.violations).toEqual([]);
   });
 }
+
+// Run with SCREENSHOTS=1 to write the PR images to .next/e2e-screenshots/.
+for (const scheme of ["light", "dark"] as const) {
+  for (const width of [360, 1280]) {
+    test(`screenshot pay ${scheme} ${width}`, async ({ page }) => {
+      test.skip(!process.env.SCREENSHOTS, "set SCREENSHOTS=1");
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: scheme });
+      await mockApi(page);
+      await page.goto("/pay/c-1");
+      await page.getByRole("button", { name: "Base" }).first().click();
+      await expect(page.getByRole("region", { name: "Your price" })).toBeVisible();
+      await page.waitForTimeout(800);
+      await page.screenshot({
+        path: `.next/e2e-screenshots/pay-${scheme}-${width}.png`,
+        fullPage: true,
+      });
+    });
+  }
+}
