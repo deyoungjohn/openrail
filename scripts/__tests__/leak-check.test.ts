@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -51,6 +52,7 @@ function wasmExporting(name: string): Uint8Array {
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "leak-"));
+  spawnSync("git", ["init", "-q"], { cwd: root });
   kw = join(root, "kw.txt");
   writeFileSync(kw, "# made-up\nid:zorp\nblorptastic widget\n");
   write("README.md", "# Title\nNothing to see.\n");
@@ -112,12 +114,25 @@ describe("runLeakCheck", () => {
     expect(runLeakCheck(root, { LEAK_KEYWORDS_FILE: kw }).code).toBe(1);
   });
 
+  it("scans tracked source files like contracts/x.rs and skips scripts/__tests__", () => {
+    write("contracts/x.rs", 'const X: &str = "modules/zorp";\n');
+    spawnSync("git", ["add", "contracts/x.rs"], { cwd: root });
+    expect(runLeakCheck(root, { LEAK_KEYWORDS_FILE: kw }).code).toBe(1);
+
+    write("scripts/__tests__/dummy.test.ts", 'const X: &str = "modules/zorp";\n');
+    spawnSync("git", ["add", "scripts/__tests__/dummy.test.ts"], { cwd: root });
+    write("contracts/x.rs", 'const X: &str = "clean";\n');
+    spawnSync("git", ["add", "contracts/x.rs"], { cwd: root });
+    expect(runLeakCheck(root, { LEAK_KEYWORDS_FILE: kw }).code).toBe(0);
+  });
+
   it("never prints the term, only file and line", () => {
     write("README.md", "a\nsee modules/zorp\n");
     const r = runLeakCheck(root, { LEAK_KEYWORDS_FILE: kw });
     const out = r.messages.join("\n");
     expect(out).toContain("README.md:2");
     expect(out).not.toContain("zorp");
+    expect(out).not.toContain("term #");
   });
 
   it("without a keyword file: warns and passes locally, fails closed in CI", () => {

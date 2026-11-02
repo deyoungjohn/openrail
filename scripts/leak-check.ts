@@ -1,5 +1,5 @@
 /**
- * Leak check: nothing about a switched-off module may appear in the build.
+ * Leak check: nothing about a switched-off module may appear in the build or source tree.
  * The switched-off list does NOT live in this repo. Terms come from the file named by
  * LEAK_KEYWORDS_FILE (in CI, written from the GitHub secret LEAK_KEYWORDS).
  *
@@ -8,9 +8,10 @@
  *             feature = "<id>"  /v1/<id>   (ids can be common words)
  *   <phrase>  case-insensitive substring
  *
- * Searched: wasm export names and the built ABI json, the web bundle (if built), CLI help
+ * Searched: tracked text files (git ls-files, skipping scripts/__tests__/** and pnpm-lock.yaml),
+ * wasm export names and the built ABI json, the web bundle (if built), CLI help
  * (if built), README.md and the generated docs (docs/dist). Output names file and line only,
- * never the matched term. Without a keyword file: warn and exit 0 locally, fail closed with CI=true.
+ * never the matched term or term index. Without a keyword file: warn and exit 0 locally, fail closed with CI=true.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -66,6 +67,30 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+function trackedFiles(root: string): string[] {
+  const r = spawnSync("git", ["ls-files"], { cwd: root, encoding: "utf8" });
+  if (r.status === 0 && typeof r.stdout === "string") {
+    return r.stdout
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }
+  return [];
+}
+
+function isBinaryFile(p: string): boolean {
+  try {
+    const buf = readFileSync(p);
+    const len = Math.min(buf.length, 8000);
+    for (let i = 0; i < len; i++) {
+      if (buf[i] === 0) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 // The ES2022 lib has no WebAssembly types; declare only what is used.
 declare const WebAssembly: {
   Module: {
@@ -104,11 +129,26 @@ export function runLeakCheck(
   const messages: string[] = [];
   const scan = (label: string, lines: string[], withLine: boolean) => {
     lines.forEach((l, i) => {
-      matchers.forEach((m, k) => {
-        if (m(l)) messages.push(`leak: ${label}${withLine ? `:${i + 1}` : ""} (term #${k + 1})`);
-      });
+      if (matchers.some((m) => m(l))) {
+        messages.push(`leak: ${label}${withLine ? `:${i + 1}` : ""}`);
+      }
     });
   };
+
+  const scanned = new Set<string>();
+
+  const tracked = trackedFiles(root);
+  for (const rel of tracked) {
+    if (rel === "pnpm-lock.yaml" || rel.startsWith("scripts/__tests__/")) {
+      continue;
+    }
+    const p = join(root, rel);
+    if (!existsSync(p) || statSync(p).isDirectory() || isBinaryFile(p)) {
+      continue;
+    }
+    scanned.add(rel);
+    scan(rel, readFileSync(p, "utf8").split("\n"), true);
+  }
 
   const built = join(root, "target/near/openrail");
   if (existsSync(built)) {
@@ -125,7 +165,9 @@ export function runLeakCheck(
     }
   }
   const readme = join(root, "README.md");
-  if (existsSync(readme)) scan("README.md", readFileSync(readme, "utf8").split("\n"), true);
+  if (existsSync(readme) && !scanned.has("README.md")) {
+    scan("README.md", readFileSync(readme, "utf8").split("\n"), true);
+  }
 
   const cli = join(root, "services/cli/dist/index.js");
   if (existsSync(cli)) {
