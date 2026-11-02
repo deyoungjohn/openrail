@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
-import { formatUsdc } from "@/lib/format";
+import { formatUsdc, formatUsdcExact } from "@/lib/format";
 import { chipFor, claimRows } from "@/lib/invoice-model";
 import { chainOfRoute, formatDueDate } from "@/lib/pay";
 import { useAsync } from "@/lib/use-async";
@@ -207,7 +207,7 @@ export function InvoiceDetailScreen({ id }: { id: string }) {
                   data-counter={row.key}
                   className={`tabular text-[15px] ${row.key === "outstanding" ? "font-bold" : "font-medium"}`}
                 >
-                  {formatUsdc(row.value)}
+                  {formatUsdcExact(row.value)}
                 </dd>
               </div>
             ))}

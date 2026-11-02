@@ -1,5 +1,5 @@
 import { copy } from "@/copy";
-import { formatDate, formatUsdc } from "@/lib/format";
+import { formatDate, formatUsdcExact } from "@/lib/format";
 import { outstanding, type Claim } from "@/lib/claim";
 import { AddressChip } from "../ui/address-chip";
 import type { ReactNode } from "react";
@@ -36,12 +36,12 @@ export function ClaimTerms({
       <Row label={f.to}>{claim.debtorName}</Row>
       <Row label={f.amount}>
         <span className="tabular text-[20px] leading-7 font-bold">
-          {formatUsdc(claim.amountDue)}
+          {formatUsdcExact(claim.amountDue)}
         </span>
       </Row>
       {showOutstanding ? (
         <Row label={f.outstanding}>
-          <span className="tabular font-medium">{formatUsdc(outstanding(claim))}</span>
+          <span className="tabular font-medium">{formatUsdcExact(outstanding(claim))}</span>
         </Row>
       ) : null}
       <Row label={f.dueDate}>{formatDate(claim.dueDate)}</Row>

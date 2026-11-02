@@ -240,9 +240,52 @@ test.describe("issue form", () => {
   const created = fixture("invoices.create");
   const handlers = {
     "GET /v1/business": { body: fixture("business.get") },
+    "GET /v1/business/storage_credit": { body: fixture("business.storage_credit") },
     "POST /v1/invoices": { status: 201, body: created },
     "POST /v1/invoices/{id}/send": { body: fixture("invoices.send") },
   };
+
+  test("shows the storage credit that pays for invoices", async ({ page }) => {
+    await mockApi(page, handlers);
+    await page.goto("/app/invoices/new");
+    const credit = page.getByRole("region", { name: "Storage credit" });
+    await expect(credit).toContainText("5 NEAR");
+    await expect(credit.getByRole("button", { name: "Deposit storage credit" })).toHaveCount(0);
+  });
+
+  test("warns when the credit cannot cover an invoice and offers the deposit", async ({ page }) => {
+    let balance = "0";
+    await mockApi(page, {
+      ...handlers,
+      "GET /v1/business/storage_credit": () => ({
+        body: { ...fixture("business.storage_credit"), balance },
+      }),
+    });
+    await page.goto("/app/invoices/new");
+    const credit = page.getByRole("region", { name: "Storage credit" });
+    await expect(credit).toContainText("0 NEAR");
+    await expect(credit).toContainText("not enough storage credit");
+    balance = fixture("business.storage_credit").amount;
+    await credit.getByRole("button", { name: "Deposit storage credit" }).click();
+    await expect(credit.getByText("Deposit sent")).toBeVisible();
+    await expect(credit).toContainText("1 NEAR");
+    await expect(credit).not.toContainText("not enough storage credit");
+  });
+
+  test("an unreadable credit does not block the form", async ({ page }) => {
+    await mockApi(page, {
+      ...handlers,
+      "GET /v1/business/storage_credit": {
+        status: 500,
+        body: { error: { code: "internal", message: "x" } },
+      },
+    });
+    await page.goto("/app/invoices/new");
+    await expect(page.getByRole("region", { name: "Storage credit" })).toContainText(
+      "couldn't check",
+    );
+    await expect(page.getByRole("button", { name: "Create invoice" })).toBeEnabled();
+  });
 
   test("asks for what is missing, in plain words, and sends nothing", async ({ page }) => {
     const calls = await mockApi(page, handlers);
