@@ -11,7 +11,9 @@ import {
   resetSecretsForTests,
 } from "./index.js";
 
-const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiJ0ZXN0In0", "c2ln" + "bmF0dXJl"].join(".");
+const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiJ0ZXN0In0", "c2ln" + "bmF0dXJl"].join(
+  ".",
+);
 const ED25519 = "ed25519:" + "1".repeat(88);
 const LONG_HEX = "0x" + "ab".repeat(32);
 const ENV_SECRET = "env-value-" + "s3cr3t".repeat(2);
