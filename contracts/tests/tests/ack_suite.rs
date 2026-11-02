@@ -620,12 +620,23 @@ fn ack_high_s_rejected() {
     setup_vm();
     let k14 = load_k14();
     let v = &k14.valid[0];
-    let digest = hex32(&v.digest);
     let high_s = hex_bytes(&k14.high_s_sig);
+    let amount = v.amount_due.parse::<u128>().expect("amount parses");
 
-    // Malleability flag ensures high-s is rejected
-    let err = recover_address(&EnvEcrecover, &digest, &high_s)
-        .expect_err("high-s signature must be rejected");
+    // Malleability flag ensures high-s is rejected through verify_ack with real EnvEcrecover
+    let err = verify_ack(
+        &EnvEcrecover,
+        K14_ACK,
+        v.chain_id,
+        &k14.owed_contract,
+        &v.token_id,
+        &hex32(&v.terms_hash),
+        amount,
+        v.due_date,
+        &hex20(&v.debtor_evm),
+        &high_s,
+    )
+    .expect_err("high-s signature must be rejected");
     assert_eq!(err, AckError::BadSignature);
 }
 
@@ -824,6 +835,29 @@ async fn contract_ack_replay_other_deployment() -> Result<()> {
 
 #[test]
 fn ack_only_once() {
+    setup_vm();
+    let ack_fixture = load_ack_v1();
+    let v = &ack_fixture.ack[0];
+    let sig = hex_bytes(&v.signature);
+    let expected_signer = hex20(&v.signer);
+    let amount = v.amount_due.parse::<u128>().expect("amount parses");
+
+    // Drive verify_ack with real EnvEcrecover on the vector before proving write-once semantics
+    let recovered = verify_ack(
+        &EnvEcrecover,
+        OPENRAIL_ACK,
+        v.chain_id,
+        &v.root_contract,
+        &v.token_id,
+        &hex32(&v.terms_hash),
+        amount,
+        v.due_date,
+        &expected_signer,
+        &sig,
+    )
+    .expect("verify_ack with EnvEcrecover succeeds on valid vector");
+    assert_eq!(recovered, expected_signer);
+
     // Model oracle verification of write-once ack
     let mut model = Model::new();
     let debtor = ModelHex20([0x11; 20]);
@@ -998,6 +1032,25 @@ fn ack_digest_parity() {
             v.token_id
         );
     }
+
+    // 4. Drive verify_ack with real EnvEcrecover on vector 0 to prove the recover path
+    setup_vm();
+    let v0 = &ack_fixture.ack[0];
+    let amount0 = v0.amount_due.parse::<u128>().expect("amount parses");
+    let recovered0 = verify_ack(
+        &EnvEcrecover,
+        OPENRAIL_ACK,
+        v0.chain_id,
+        &v0.root_contract,
+        &v0.token_id,
+        &hex32(&v0.terms_hash),
+        amount0,
+        v0.due_date,
+        &hex20(&v0.signer),
+        &hex_bytes(&v0.signature),
+    )
+    .expect("verify_ack recovers expected signer on vector 0");
+    assert_eq!(recovered0, hex20(&v0.signer));
 }
 
 // ──────────────────────────────────────────────
@@ -1009,12 +1062,23 @@ fn ack_contract_wallet_refused() {
     setup_vm();
     let k14 = load_k14();
     let v = &k14.valid[0];
-    let digest = hex32(&v.digest);
     let contract_wallet_blob = hex_bytes(&k14.safe_contract_wallet_blob);
+    let amount = v.amount_due.parse::<u128>().expect("amount parses");
 
-    // EIP-1271 contract wallet signature is refused before recovery
-    let err = recover_address(&EnvEcrecover, &digest, &contract_wallet_blob)
-        .expect_err("contract wallet signature must be refused");
+    // EIP-1271 contract wallet signature is refused before recovery through verify_ack with EnvEcrecover
+    let err = verify_ack(
+        &EnvEcrecover,
+        K14_ACK,
+        v.chain_id,
+        &k14.owed_contract,
+        &v.token_id,
+        &hex32(&v.terms_hash),
+        amount,
+        v.due_date,
+        &hex20(&v.debtor_evm),
+        &contract_wallet_blob,
+    )
+    .expect_err("contract wallet signature must be refused");
     assert_eq!(err, AckError::ContractWallet);
 }
 
