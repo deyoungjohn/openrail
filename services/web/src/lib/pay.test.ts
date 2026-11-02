@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   amountPrefix,
   chainOfRoute,
+  formatDueDate,
   formatToken,
   payStage,
   payTimeline,
@@ -57,16 +58,18 @@ describe("amountPrefix (blueprint 2.8)", () => {
 });
 
 describe("chainOfRoute", () => {
-  it("maps API chain names to the badge ids", () => {
-    expect(chainOfRoute(route({ origin_chain: "base" }))).toBe("base");
-    expect(chainOfRoute(route({ origin_chain: "bnb" }))).toBe("bnb");
-    expect(chainOfRoute(route({ origin_chain: "eth" }))).toBe("ethereum");
-    expect(chainOfRoute(route({ origin_chain: "ethereum" }))).toBe("ethereum");
-    expect(chainOfRoute(route({ origin_chain: "sol" }))).toBe("solana");
-    expect(chainOfRoute(route({ origin_chain: "arb" }))).toBe("arbitrum");
-    expect(chainOfRoute(route({ origin_chain: "op" }))).toBe("optimism");
-    expect(chainOfRoute(route({ origin_chain: "pol" }))).toBe("polygon");
-    expect(chainOfRoute(route({ origin_chain: "near" }))).toBe("near");
+  it("maps the route names in fixtures/routes.json to badge ids", () => {
+    for (const name of [
+      "base",
+      "arbitrum",
+      "ethereum",
+      "optimism",
+      "polygon",
+      "bnb",
+      "solana",
+      "near",
+    ])
+      expect(chainOfRoute(route({ origin_chain: name }))).toBe(name);
   });
   it("returns null for a chain the UI has no badge for, never a wrong one", () => {
     expect(chainOfRoute(route({ origin_chain: "unknownchain" }))).toBeNull();
@@ -102,5 +105,11 @@ describe("payTimeline", () => {
   it("marks the step that failed", () => {
     expect(payTimeline("failed").map((s) => s.status)).toEqual(["done", "failed", "todo"]);
     expect(payTimeline("refunded").map((s) => s.status)).toEqual(["done", "failed", "todo"]);
+  });
+});
+
+describe("formatDueDate", () => {
+  it("formats an API date in UTC", () => {
+    expect(formatDueDate("2026-12-01")).toBe("Dec 1, 2026");
   });
 });
