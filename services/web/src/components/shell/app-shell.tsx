@@ -36,10 +36,12 @@ const coreNav: readonly NavItem[] = [
   { href: "/app/settings", label: copy.nav.settings, Icon: Settings },
 ];
 
-// Module entries come from the generated registry; the shell names none of them.
-const moduleNav: readonly NavItem[] = enabledModules.flatMap((m) =>
-  m.nav ? [{ href: m.nav.href, label: m.nav.label, Icon: FileText }] : [],
-);
+// Module entries come from the generated registry; the shell names none of them. A module may
+// export `nav: { href, label }`; modules without it add no nav entry.
+const moduleNav: readonly NavItem[] = enabledModules.flatMap(({ module }) => {
+  const nav = (module as { nav?: { href: string; label: string } } | null)?.nav;
+  return nav ? [{ href: nav.href, label: nav.label, Icon: FileText }] : [];
+});
 
 function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const path = usePathname();
