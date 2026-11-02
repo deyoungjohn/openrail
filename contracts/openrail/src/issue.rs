@@ -8,7 +8,7 @@ use crate::events::{ConfigChangedEvent, IssueEvent, NftMintEvent, QuoteLoggedEve
 use crate::types::{Claim, Debtor, Hex32, Lock, Quote, Status, TokenId, TokenMetadata};
 use crate::Contract;
 use near_sdk::json_types::U128;
-use near_sdk::{env, near, require, AccountId, NearToken, PromiseResult};
+use near_sdk::{env, near, require, AccountId, NearToken};
 use std::collections::HashMap;
 
 /// Callback payload passed to `on_issue`.
@@ -20,6 +20,12 @@ pub struct IssueCallbackArgs {
     pub payer_or_business: AccountId,
     pub attached_deposit: U128,
     pub storage_cost: U128,
+}
+
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
+pub struct OnIssueArgs {
+    pub args: IssueCallbackArgs,
 }
 
 fn build_token_metadata(
@@ -82,6 +88,10 @@ impl Contract {
         metadata: Option<TokenMetadata>,
     ) -> String {
         require!(!self.config.issue_paused, "issuance is paused");
+        require!(
+            self.config.vault_code_hash.0 != [0u8; 32],
+            "vault not configured"
+        );
         require!(amount_due.0 > 0, "amount_due must be positive");
 
         let kind_rules = crate::hooks::dispatch_kind_rules(kind);
@@ -140,7 +150,8 @@ impl Contract {
             attached_deposit: U128(attached.as_yoctonear()),
             storage_cost: U128(REQUIRED_ISSUE_DEPOSIT.as_yoctonear()),
         };
-        let args_bytes = near_sdk::serde_json::to_vec(&args).expect("failed to serialize args");
+        let args_bytes =
+            near_sdk::serde_json::to_vec(&OnIssueArgs { args }).expect("failed to serialize args");
         let callback = env::promise_then(
             batch,
             env::current_account_id(),
@@ -169,6 +180,10 @@ impl Contract {
             "Unauthorized issuer"
         );
         require!(!self.config.issue_paused, "issuance is paused");
+        require!(
+            self.config.vault_code_hash.0 != [0u8; 32],
+            "vault not configured"
+        );
         require!(amount_due.0 > 0, "amount_due must be positive");
 
         let kind_rules = crate::hooks::dispatch_kind_rules(kind);
@@ -238,7 +253,8 @@ impl Contract {
             attached_deposit: U128(0),
             storage_cost: U128(REQUIRED_ISSUE_DEPOSIT.as_yoctonear()),
         };
-        let args_bytes = near_sdk::serde_json::to_vec(&args).expect("failed to serialize args");
+        let args_bytes =
+            near_sdk::serde_json::to_vec(&OnIssueArgs { args }).expect("failed to serialize args");
         let callback = env::promise_then(
             batch,
             env::current_account_id(),
@@ -252,10 +268,8 @@ impl Contract {
     }
 
     /// Handles callback from keyless claim account creation.
-    #[allow(dead_code)]
-    pub(crate) fn handle_on_issue(&mut self, args: IssueCallbackArgs) -> String {
-        #[allow(deprecated)]
-        let success = matches!(env::promise_result(0), PromiseResult::Successful(_));
+    pub(crate) fn internal_on_issue(&mut self, args: IssueCallbackArgs) -> Option<String> {
+        let success = env::promise_result_checked(0, 1024).is_ok();
 
         if success {
             let claim = self
@@ -290,7 +304,7 @@ impl Contract {
                 env::promise_batch_action_transfer(refund, NearToken::from_yoctonear(excess));
             }
 
-            args.token_id
+            Some(args.token_id)
         } else {
             self.claims.remove(&args.token_id);
             self.token_metadata.remove(&args.token_id);
@@ -312,7 +326,7 @@ impl Contract {
                 );
             }
 
-            env::panic_str("Claim account creation failed");
+            None
         }
     }
 
@@ -363,15 +377,14 @@ impl Contract {
         );
         require!(self.claims.contains_key(&token_id), "claim not found");
 
-        let count = self.payment_log_count.get(&token_id).copied().unwrap_or(0);
-        for idx in 0..count {
-            if let Some(existing) = self.payment_log.get(&(token_id.clone(), idx)) {
-                if existing.quote_id == quote.quote_id {
-                    env::panic_str("duplicate quote_id");
-                }
-            }
-        }
+        let dedup_key = (token_id.clone(), quote.quote_id.clone());
+        require!(
+            !self.quote_dedup.contains_key(&dedup_key),
+            "duplicate quote_id"
+        );
+        self.quote_dedup.insert(dedup_key, ());
 
+        let count = self.payment_log_count.get(&token_id).copied().unwrap_or(0);
         self.payment_log
             .insert((token_id.clone(), count), quote.clone());
         self.payment_log_count.insert(token_id.clone(), count + 1);
@@ -468,22 +481,4 @@ impl Contract {
         }
         .emit();
     }
-}
-
-/// WebAssembly entrypoint for `on_issue` callback (private to contract).
-#[cfg(target_arch = "wasm32")]
-#[no_mangle]
-pub extern "C" fn on_issue() {
-    near_sdk::env::setup_panic_hook();
-    if env::predecessor_account_id() != env::current_account_id() {
-        env::panic_str("Private method");
-    }
-    let input = env::input().expect("missing callback input");
-    let args: IssueCallbackArgs =
-        near_sdk::serde_json::from_slice(&input).expect("invalid callback args");
-    let mut contract: Contract = env::state_read().expect("contract state not found");
-    let token_id = contract.handle_on_issue(args);
-    env::state_write(&contract);
-    let ret = near_sdk::serde_json::to_vec(&token_id).expect("serialize return");
-    env::value_return(&ret);
 }

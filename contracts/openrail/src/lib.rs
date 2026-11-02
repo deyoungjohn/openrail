@@ -42,6 +42,8 @@ pub const STORAGE_PREFIX_TOKEN_METADATA: &[u8] = b"t:";
 pub const STORAGE_PREFIX_PAYMENT_LOG: &[u8] = b"l:";
 /// Storage prefix for payment log per-token count (`LookupMap<String, u64>`).
 pub const STORAGE_PREFIX_PAYMENT_LOG_COUNT: &[u8] = b"lc:";
+/// Storage prefix for quote deduplication map (`LookupMap<(String, String), ()>`).
+pub const STORAGE_PREFIX_QUOTE_DEDUP: &[u8] = b"qd:";
 /// Storage prefix for undistributed legs map (`LookupMap<String, Vec<Leg>>`).
 pub const STORAGE_PREFIX_UNDISTRIBUTED: &[u8] = b"u:";
 /// Storage prefix for prepaid storage credits map.
@@ -75,6 +77,7 @@ pub struct Contract {
     pub token_metadata: LookupMap<String, TokenMetadata>,
     pub payment_log: LookupMap<(String, u64), Quote>,
     pub payment_log_count: LookupMap<String, u64>,
+    pub quote_dedup: LookupMap<(String, String), ()>,
     pub undistributed: LookupMap<String, Vec<Leg>>,
     pub storage_credit: LookupMap<AccountId, U128>,
     pub config: Config,
@@ -94,6 +97,7 @@ impl Contract {
             token_metadata: LookupMap::new(STORAGE_PREFIX_TOKEN_METADATA),
             payment_log: LookupMap::new(STORAGE_PREFIX_PAYMENT_LOG),
             payment_log_count: LookupMap::new(STORAGE_PREFIX_PAYMENT_LOG_COUNT),
+            quote_dedup: LookupMap::new(STORAGE_PREFIX_QUOTE_DEDUP),
             undistributed: LookupMap::new(STORAGE_PREFIX_UNDISTRIBUTED),
             storage_credit: LookupMap::new(STORAGE_PREFIX_STORAGE_CREDIT),
             config,
@@ -142,6 +146,14 @@ impl Contract {
         self.internal_issue_for(
             business, kind, debtor, terms_hash, amount_due, due_date, metadata,
         )
+    }
+
+    /// Private callback executed after keyless vault account creation batch (Blueprint 2.2).
+    ///
+    /// Caller: Contract itself (`<root>`).
+    #[private]
+    pub fn on_issue(&mut self, args: crate::issue::IssueCallbackArgs) -> Option<String> {
+        self.internal_on_issue(args)
     }
 
     /// Prepays storage credit for API invoice issuance.

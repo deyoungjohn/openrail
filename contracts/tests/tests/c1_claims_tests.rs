@@ -17,6 +17,10 @@ async fn test_c1_issue_lifecycle_and_views() -> Result<()> {
     let amount_due = 10_000_000u128; // 10 USDC
     let due_date = 1_800_000_000u64;
 
+    // Measure storage usage before issue
+    let root_acc_before = env.root.view_account().await?;
+    let storage_before = root_acc_before.storage_usage;
+
     // Issue claim as alice
     let res = env
         .issue_claim_with_details(
@@ -33,6 +37,13 @@ async fn test_c1_issue_lifecycle_and_views() -> Result<()> {
     assert!(res.is_success(), "issue must succeed");
     let token_id: String = res.clone().json()?;
     assert_eq!(token_id, "c-1");
+
+    // Measure storage usage after issue
+    let root_acc_after = env.root.view_account().await?;
+    let storage_after = root_acc_after.storage_usage;
+    let storage_diff = storage_after.saturating_sub(storage_before);
+    println!("Claim c-1 on-chain root storage consumption: {storage_diff} bytes");
+    assert!(storage_diff > 0, "storage usage must increase");
 
     // Events emitted: nft_mint and issue
     let mint_events = env.assert_event(&res, "nft_mint");
@@ -169,8 +180,7 @@ async fn test_c1_payment_log_and_quotes() -> Result<()> {
         route_id: "ethereum-usdc".to_string(),
     };
 
-    // Log quote from allow-listed quote_writer (we can use env.root or an allow-listed writer)
-    // First, let's configure alice as a quote writer or use the root to set quote_writers
+    // First configure alice as a quote writer
     let set_cfg_res = env
         .root
         .call("set_config")
@@ -210,11 +220,115 @@ async fn test_c1_payment_log_and_quotes() -> Result<()> {
     Ok(())
 }
 
+/// Finding 1: Tests that failed claim subaccount creation deletes the claim record,
+/// refunds the attached deposit to the payer (or restores credit for issue_for),
+/// and completes normally without panicking.
 #[tokio::test]
-async fn test_c1_mutation_5_breaks() -> Result<()> {
+async fn test_c1_issue_failure_refunds_and_deletes_claim() -> Result<()> {
     let env = Env::new().await?;
 
-    // Break 1: Issue paused rejected
+    // Configure vault_code_hash to an unknown / invalid hash
+    let invalid_hash = Hex32::new([99u8; 32]);
+    let cfg_res = env
+        .root
+        .call("set_config")
+        .args_json(json!({
+            "vault_code_hash": invalid_hash,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(cfg_res.is_success());
+
+    // 1. Direct `issue` with attached deposit (50 mN)
+    let alice_bal_before = env.alice.view_account().await?.balance;
+    let res = env
+        .issue_claim(&env.alice, 0, 10_000_000, 1_700_000_000)
+        .await?;
+
+    // Transaction executes without callback panic reverting state
+    assert!(res.is_success(), "Transaction must succeed without panic");
+
+    // Claim must be deleted from state
+    let claim_view: Option<ClaimView> = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(claim_view.is_none(), "Claim c-1 must not exist in state");
+
+    // Payer's attached deposit was refunded (balance decreased only by gas, not 0.05 NEAR)
+    let alice_bal_after = env.alice.view_account().await?.balance;
+    let diff = alice_bal_before
+        .as_yoctonear()
+        .saturating_sub(alice_bal_after.as_yoctonear());
+    assert!(
+        diff < NearToken::from_millinear(10).as_yoctonear(),
+        "Payer must receive full deposit refund, diff was {} yocto",
+        diff
+    );
+
+    // 2. `issue_for` failure: storage credit must be restored
+    // Deposit 50 mN storage credit for bob
+    env.bob
+        .call(env.root.id(), "deposit_storage_credit")
+        .deposit(NearToken::from_millinear(50))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let res_for = env
+        .issuer
+        .call(env.root.id(), "issue_for")
+        .args_json(json!({
+            "business": env.bob.id(),
+            "kind": 0,
+            "debtor": Debtor::Near(env.alice.id().clone()),
+            "terms_hash": Hex32::new([123u8; 32]),
+            "amount_due": U128(10_000_000),
+            "due_date": 1_700_000_000u64,
+            "metadata": null,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+
+    assert!(res_for.is_success());
+
+    // Claim c-2 must not exist
+    let claim2: Option<ClaimView> = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-2" }))
+        .await?
+        .json()?;
+    assert!(claim2.is_none(), "Claim c-2 must not exist in state");
+
+    // Bob can withdraw all 50 mN credit, proving it was fully restored upon failure
+    let withdraw_res = env
+        .bob
+        .call(env.root.id(), "withdraw_storage_credit")
+        .args_json(json!({
+            "amount": U128(NearToken::from_millinear(50).as_yoctonear())
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(
+        withdraw_res.is_success(),
+        "Credit was restored and full amount can be withdrawn"
+    );
+
+    Ok(())
+}
+
+/// Mutation Break 1: Issuance when issue_paused is true is rejected.
+#[tokio::test]
+async fn test_c1_mutation_break_1_issue_paused() -> Result<()> {
+    let env = Env::new().await?;
+
     let pause_res = env
         .root
         .call("pause_issue")
@@ -224,27 +338,25 @@ async fn test_c1_mutation_5_breaks() -> Result<()> {
         .await?;
     assert!(pause_res.is_success());
 
-    let break1_res = env
+    let res = env
         .issue_claim(&env.alice, 0, 10_000_000, 1_700_000_000)
         .await?;
-    assert!(break1_res.is_failure());
-    let failure1 = format!("{:?}", break1_res.failures());
+    assert!(res.is_failure());
+    let failure = format!("{:?}", res.failures());
     assert!(
-        failure1.contains("issuance is paused"),
-        "Must reject with 'issuance is paused', got: {failure1}"
+        failure.contains("issuance is paused"),
+        "Must reject with 'issuance is paused', got: {failure}"
     );
 
-    // Unpause for subsequent tests
-    env.root
-        .call("pause_issue")
-        .args_json(json!({ "paused": false }))
-        .max_gas()
-        .transact()
-        .await?
-        .into_result()?;
+    Ok(())
+}
 
-    // Break 2: issue_for rejected when NO_STORAGE_CREDIT
-    let break2_res = env
+/// Mutation Break 2: issue_for rejected when storage_credit is insufficient.
+#[tokio::test]
+async fn test_c1_mutation_break_2_no_storage_credit() -> Result<()> {
+    let env = Env::new().await?;
+
+    let res = env
         .issuer
         .call(env.root.id(), "issue_for")
         .args_json(json!({
@@ -259,15 +371,22 @@ async fn test_c1_mutation_5_breaks() -> Result<()> {
         .max_gas()
         .transact()
         .await?;
-    assert!(break2_res.is_failure());
-    let failure2 = format!("{:?}", break2_res.failures());
+    assert!(res.is_failure());
+    let failure = format!("{:?}", res.failures());
     assert!(
-        failure2.contains("NO_STORAGE_CREDIT"),
-        "Must reject with 'NO_STORAGE_CREDIT', got: {failure2}"
+        failure.contains("NO_STORAGE_CREDIT"),
+        "Must reject with 'NO_STORAGE_CREDIT', got: {failure}"
     );
 
-    // Break 3: issue_for from unauthorized issuer rejected
-    let break3_res = env
+    Ok(())
+}
+
+/// Mutation Break 3: issue_for rejected from unauthorized caller (not in config.issuers).
+#[tokio::test]
+async fn test_c1_mutation_break_3_unauthorized_issuer() -> Result<()> {
+    let env = Env::new().await?;
+
+    let res = env
         .alice
         .call(env.root.id(), "issue_for")
         .args_json(json!({
@@ -282,45 +401,27 @@ async fn test_c1_mutation_5_breaks() -> Result<()> {
         .max_gas()
         .transact()
         .await?;
-    assert!(break3_res.is_failure());
-    let failure3 = format!("{:?}", break3_res.failures());
+    assert!(res.is_failure());
+    let failure = format!("{:?}", res.failures());
     assert!(
-        failure3.contains("Unauthorized issuer"),
-        "Must reject with 'Unauthorized issuer', got: {failure3}"
+        failure.contains("Unauthorized issuer"),
+        "Must reject with 'Unauthorized issuer', got: {failure}"
     );
 
-    // Create a claim for break 4 and 5
+    Ok(())
+}
+
+/// Mutation Break 4: duplicate quote_id rejected on the same token.
+#[tokio::test]
+async fn test_c1_mutation_break_4_duplicate_quote_id() -> Result<()> {
+    let env = Env::new().await?;
+
     let issue_ok = env
         .issue_claim(&env.alice, 0, 10_000_000, 1_700_000_000)
         .await?;
     assert!(issue_ok.is_success());
 
-    // Break 5 (test before break 4): log_quote by unauthorized caller rejected
-    let quote = Quote {
-        quote_id: "mut-quote-1".to_string(),
-        deposit_address: "0x123".to_string(),
-        deadline_requested: 1_700_003_600,
-        refund_to: "alice.near".to_string(),
-        route_id: "ethereum-usdc".to_string(),
-    };
-    let break5_res = env
-        .alice
-        .call(env.root.id(), "log_quote")
-        .args_json(json!({
-            "token_id": "c-1",
-            "quote": quote,
-        }))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(break5_res.is_failure());
-    let failure5 = format!("{:?}", break5_res.failures());
-    assert!(
-        failure5.contains("Unauthorized quote writer"),
-        "Must reject with 'Unauthorized quote writer', got: {failure5}"
-    );
-
-    // Now authorize alice as quote writer and log quote once
+    // Authorize alice as quote writer
     env.root
         .call("set_config")
         .args_json(json!({
@@ -330,6 +431,14 @@ async fn test_c1_mutation_5_breaks() -> Result<()> {
         .transact()
         .await?
         .into_result()?;
+
+    let quote = Quote {
+        quote_id: "mut-quote-dup".to_string(),
+        deposit_address: "0x123".to_string(),
+        deadline_requested: 1_700_003_600,
+        refund_to: "alice.near".to_string(),
+        route_id: "ethereum-usdc".to_string(),
+    };
 
     env.alice
         .call(env.root.id(), "log_quote")
@@ -342,7 +451,7 @@ async fn test_c1_mutation_5_breaks() -> Result<()> {
         .await?
         .into_result()?;
 
-    // Break 4: duplicate quote_id rejected
+    // Duplicate quote_id must fail
     let break4_res = env
         .alice
         .call(env.root.id(), "log_quote")
@@ -358,6 +467,73 @@ async fn test_c1_mutation_5_breaks() -> Result<()> {
     assert!(
         failure4.contains("duplicate quote_id"),
         "Must reject with 'duplicate quote_id', got: {failure4}"
+    );
+
+    Ok(())
+}
+
+/// Mutation Break 5: log_quote rejected from unauthorized caller (not in config.quote_writers).
+#[tokio::test]
+async fn test_c1_mutation_break_5_unauthorized_quote_writer() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_ok = env
+        .issue_claim(&env.alice, 0, 10_000_000, 1_700_000_000)
+        .await?;
+    assert!(issue_ok.is_success());
+
+    let quote = Quote {
+        quote_id: "mut-quote-unauth".to_string(),
+        deposit_address: "0x123".to_string(),
+        deadline_requested: 1_700_003_600,
+        refund_to: "alice.near".to_string(),
+        route_id: "ethereum-usdc".to_string(),
+    };
+
+    let res = env
+        .alice
+        .call(env.root.id(), "log_quote")
+        .args_json(json!({
+            "token_id": "c-1",
+            "quote": quote,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_failure());
+    let failure = format!("{:?}", res.failures());
+    assert!(
+        failure.contains("Unauthorized quote writer"),
+        "Must reject with 'Unauthorized quote writer', got: {failure}"
+    );
+
+    Ok(())
+}
+
+/// Mutation Break 6: issue rejected when vault_code_hash is not configured.
+#[tokio::test]
+async fn test_c1_mutation_break_6_vault_not_configured() -> Result<()> {
+    let env = Env::new().await?;
+
+    // Zero out vault_code_hash
+    env.root
+        .call("set_config")
+        .args_json(json!({
+            "vault_code_hash": Hex32::new([0u8; 32]),
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let res = env
+        .issue_claim(&env.alice, 0, 10_000_000, 1_700_000_000)
+        .await?;
+    assert!(res.is_failure());
+    let failure = format!("{:?}", res.failures());
+    assert!(
+        failure.contains("vault not configured"),
+        "Must reject with 'vault not configured', got: {failure}"
     );
 
     Ok(())

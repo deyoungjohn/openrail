@@ -114,6 +114,11 @@
       "kind": "call"
     },
     {
+      "name": "on_issue",
+      "kind": "call",
+      "internal": true
+    },
+    {
       "name": "outstanding",
       "kind": "view"
     },
