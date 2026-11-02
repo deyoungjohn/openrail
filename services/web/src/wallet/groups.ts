@@ -13,6 +13,9 @@ export interface WalletGroups {
   unavailable: NearWalletInfo[];
 }
 
+/** Wallets whose module has no signMessage (pinned in capabilities.test.ts): never offered for sign-in. */
+const NO_SIGN_IN: readonly string[] = ["bitget-wallet"];
+
 /** Sort wallets for the picker. Sign-in lists the wallets that can sign a message first. */
 export function groupWallets(
   wallets: readonly NearWalletInfo[],
@@ -20,6 +23,7 @@ export function groupWallets(
 ): WalletGroups {
   const g: WalletGroups = { usable: [], checking: [], cannotSign: [], unavailable: [] };
   for (const w of wallets) {
+    if (purpose === "signIn" && NO_SIGN_IN.includes(w.id)) continue;
     if (!w.available) g.unavailable.push(w);
     else if (purpose === "connect") g.usable.push(w);
     else if (w.signsMessage === true) g.usable.push(w);

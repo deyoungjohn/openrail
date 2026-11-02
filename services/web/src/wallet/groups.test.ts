@@ -39,3 +39,24 @@ describe("groupWallets", () => {
     expect(groupWallets([w("x")], "signIn").usable).toEqual([]);
   });
 });
+
+describe("wallets that are left out of dashboard sign-in", () => {
+  const list = [
+    w("meteor-wallet", { signsMessage: true }),
+    w("bitget-wallet", { signsMessage: false }),
+  ];
+
+  it("Bitget has no signMessage, so it is not offered for sign-in at all", () => {
+    const g = groupWallets(list, "signIn");
+    expect(
+      [...g.usable, ...g.checking, ...g.cannotSign, ...g.unavailable].map((x) => x.id),
+    ).toEqual(["meteor-wallet"]);
+  });
+
+  it("but it stays in the list for connecting to sign a transaction", () => {
+    expect(groupWallets(list, "connect").usable.map((x) => x.id)).toEqual([
+      "meteor-wallet",
+      "bitget-wallet",
+    ]);
+  });
+});
