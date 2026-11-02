@@ -208,6 +208,15 @@ importers:
 
   services/indexer: {}
 
+  services/issuer:
+    dependencies:
+      '@openrail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      near-api-js:
+        specifier: 7.4.0
+        version: 7.4.0
+
   services/relayer: {}
 
   services/watcher:

@@ -1,0 +1,15 @@
+{
+  "name": "@openrail/issuer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "vitest run --config ../../vitest.config.ts --root ."
+  },
+  "dependencies": {
+    "@openrail/shared": "workspace:*",
+    "near-api-js": "7.4.0"
+  }
+}
