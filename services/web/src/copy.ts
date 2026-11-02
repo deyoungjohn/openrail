@@ -100,6 +100,7 @@ export const copy = {
     confirm: "Confirm with wallet",
     confirming: "Waiting for your wallet",
     sending: "Sending your confirmation",
+    expectedNearLead: "Sign in with the NEAR account",
     expectedNear: (a: string) => `Sign in with the NEAR account ${a}.`,
     expectedEvm: (a: string) => `Use the wallet ${a}.`,
     wrongNear: (a: string, b: string) =>
@@ -155,6 +156,7 @@ export const copy = {
     doneBody: (buyer: string) => `${buyer} now owns this invoice. Later payments go to them.`,
     failed: "The sale didn't go through. Nothing changed. Try again.",
     rejected: "You cancelled in your wallet. Nothing was sent.",
+    notOwnerLead: "Only the owner can sell this invoice. Sign in with",
     notOwner: (o: string) => `Only the owner can sell this invoice. Sign in with ${o}.`,
     signInFirst: "Sign in with the owner's NEAR account to sell.",
   },
@@ -243,9 +245,25 @@ export const copy = {
     title: "Sign in to Openrail",
     body: "Sign in with your NEAR account. You sign one message in your wallet. It costs nothing, and you stay signed in on this device for a week.",
     failed: "We couldn't sign you in. Nothing was changed. Check your wallet and try again.",
+    unsupported: "This wallet cannot sign you in. Use another wallet.",
     errorTitle: "We couldn't check your sign-in",
     errorBody:
       "We can't reach the server right now. Your session is not lost. Try again in a moment.",
     signedInAs: "Signed in as",
+  },
+  walletPicker: {
+    title: "Choose a wallet",
+    introSignIn:
+      "Pick the wallet that holds your NEAR account. You sign one message with it. It costs nothing.",
+    introConnect: "Pick the wallet that holds your NEAR account.",
+    none: "No wallets are available. Reload the page and try again.",
+    canSignIn: "Can sign you in",
+    available: "Wallets",
+    checking: "Checking",
+    checkingNote: "Checking what this wallet supports",
+    cannotSignIn: "Cannot sign you in",
+    cannotSign: "This wallet cannot sign you in. Use another wallet.",
+    unavailable: "Not available on this device",
+    unavailableNote: "Install it or open this page in its app",
   },
 } as const;

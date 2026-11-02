@@ -15,7 +15,7 @@ import { useNear } from "@/wallet/near";
 export type AuthState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "signedOut"; failed?: boolean }
+  | { status: "signedOut"; failed?: "unsupported" | "failed" }
   | { status: "signedIn"; accountId: string };
 
 interface AuthCtx {
@@ -59,12 +59,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async () => {
     try {
+      if (!MOCK_MODE) {
+        const id = await near.pickWallet("signIn");
+        if (!id) return;
+        await near.connect(id);
+      }
       const s = await auth.signIn(near.signMessage);
       setState({ status: "signedIn", accountId: s.account_id });
-    } catch {
-      setState({ status: "signedOut", failed: true });
+    } catch (e) {
+      setState({
+        status: "signedOut",
+        failed:
+          e instanceof Error && e.message === "SIGNMESSAGE_UNSUPPORTED" ? "unsupported" : "failed",
+      });
     }
-  }, [near.signMessage]);
+  }, [near]);
 
   const signOut = useCallback(async () => {
     try {

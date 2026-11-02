@@ -2,6 +2,7 @@
 
 import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
+import { AccountId } from "../ui/account-id";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { StatusChip } from "../ui/status-chip";
@@ -105,7 +106,9 @@ function AckActions({ claim, onAcked }: { claim: Claim; onAcked: () => void }) {
       <p className="caption">{copy.ack.walletNote}</p>
       {debtor.kind === "near" ? (
         <div className="space-y-2">
-          <p className="text-[14px]">{copy.ack.expectedNear(debtor.account)}</p>
+          <p className="text-[14px]">
+            {copy.ack.expectedNearLead} <AccountId value={debtor.account} full />
+          </p>
           <NearWalletView {...near} />
         </div>
       ) : (
