@@ -103,6 +103,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - name: Cache cargo-near binary
@@ -129,6 +131,26 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache cargo-near binary
+        id: cargo-near-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-near
+          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
+      - name: Install cargo-near (pinned)
+        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
+      - run: make contract
+      - name: Write the switched-off keyword list (secret; never printed)
+        env:
+          LEAK_KEYWORDS: ${{ secrets.LEAK_KEYWORDS }}
+        run: |
+          printf '%s\n' "$LEAK_KEYWORDS" > "$RUNNER_TEMP/leak-keywords.txt"
+          echo "LEAK_KEYWORDS_FILE=$RUNNER_TEMP/leak-keywords.txt" >> "$GITHUB_ENV"
       - run: make leak-check
 
   secret-scan:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
-# Stub owned by P0.2. Fill in; the Makefile only delegates here.
+# Owner: P0.2. Delegates to scripts/docs.ts.
 set -euo pipefail
-echo "TODO(P0.2): docs"
+cd "$(dirname "$0")/.."
+exec pnpm exec tsx scripts/docs.ts
