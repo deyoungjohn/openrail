@@ -84,6 +84,69 @@ describe("typed client", () => {
     expect(headersOf(fetchImpl.mock.calls[0]?.[1] as RequestInit).authorization).toBeUndefined();
   });
 
+  it("verifies a NEP-413 challenge and returns a session token", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(fixture("auth.verify.json")));
+    const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });
+
+    const session = await client.auth.verify({
+      account_id: "acme.openrail.near",
+      public_key: "ed25519:example",
+      signature: "signature",
+      nonce: "nonce",
+    });
+
+    expect(session.session_token.startsWith("or_sess_")).toBe(true);
+    expect(session.account_id).toBe("acme.openrail.near");
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.openrail.near/v1/auth/verify");
+  });
+
+  it("uses a dashboard session bearer for business and API-key calls", async () => {
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(jsonResponse(fixture("business.get.json")))
+      .mockResolvedValueOnce(jsonResponse(fixture("api_keys.create.json"), 201));
+    const client = new OpenrailClient({
+      baseUrl: "https://api.openrail.near",
+      apiKey: "or_sess_example",
+      fetchImpl,
+    });
+
+    await client.business.get();
+    const key = await client.apiKeys.create(
+      { name: "Production" },
+      { idempotencyKey: "idem-key-0001" },
+    );
+
+    expect(key.secret).toBe("or_sk_live_example_shown_once");
+    const first = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+    const second = fetchImpl.mock.calls[1]?.[1] as RequestInit;
+    expect(headersOf(first).authorization).toBe("Bearer or_sess_example");
+    expect(headersOf(second)["Idempotency-Key"]).toBe("idem-key-0001");
+  });
+
+  it("passes statement filters and reads a cash-out quote", async () => {
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(jsonResponse(fixture("statements.get.json")))
+      .mockResolvedValueOnce(jsonResponse(fixture("cashout.quote.json"), 201));
+    const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });
+
+    const statement = await client.statements.get({
+      from: "2026-11-01",
+      to: "2026-11-30",
+      format: "csv",
+    });
+    await client.cashout.quote({
+      amount: "2000000",
+      destination_chain: "base",
+      address: "0x" + "e".repeat(40),
+    });
+
+    expect(statement.format).toBe("csv");
+    const url = new URL(String(fetchImpl.mock.calls[0]?.[0]));
+    expect(url.searchParams.get("format")).toBe("csv");
+  });
+
   it("serves the OpenAPI document", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ openapi: "3.1.0" }));
     const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });

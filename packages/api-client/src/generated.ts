@@ -257,7 +257,7 @@ export interface CreateWebhookEndpointRequest {
 export interface WebhookEndpoint {
   id: string;
   url: string;
-  secret: string;
+  secret?: string;
   events: WebhookEventType[];
   created_at: string;
 }
@@ -373,6 +373,170 @@ export interface AckData {
   message: AckMessage;
 }
 
+export interface AuthChallengeRequest {
+  account_id: string;
+}
+
+export interface AuthChallenge {
+  nonce: string;
+  message: string;
+  recipient: string;
+}
+
+export interface AuthVerifyRequest {
+  account_id: string;
+  public_key: string;
+  signature: string;
+  nonce: string;
+}
+
+export interface AuthSession {
+  session_token: string;
+  account_id: string;
+  expires_at: string;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  created_at: string;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+}
+
+export interface ApiKeyList {
+  data: ApiKey[];
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  scopes?: string[];
+}
+
+export interface ApiKeyCreated {
+  id: string;
+  name: string;
+  prefix: string;
+  secret: string;
+  scopes: string[];
+  created_at: string;
+}
+
+export interface DeletedResource {
+  id: string;
+  deleted: true;
+}
+
+export interface WebhookEndpointList {
+  data: WebhookEndpoint[];
+}
+
+export interface WebhookDelivery {
+  id: string;
+  endpoint_id: string;
+  event_id: string;
+  type: WebhookEventType;
+  attempt: number;
+  status_code: number;
+  delivered_at?: string | null;
+  error?: string | null;
+}
+
+export interface WebhookDeliveryList {
+  data: WebhookDelivery[];
+}
+
+export interface WebhookTestResult {
+  delivered: boolean;
+  status_code: number;
+  event_id: string;
+}
+
+export interface Business {
+  account_id: string;
+  legal_name: string;
+  payout_account: string;
+  contact_email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpdateBusinessRequest {
+  legal_name?: string;
+  payout_account?: string;
+  contact_email?: string;
+}
+
+export interface StorageCredit {
+  balance: U128;
+  account_id: string;
+  contract_id: string;
+  amount: U128;
+  method: "deposit_storage_credit";
+}
+
+export interface Statement {
+  format: "csv" | "pdf";
+  filename: string;
+  content_type: string;
+  content_base64: string;
+  sha256: Hex32;
+  generated_at: string;
+  from?: string;
+  to?: string;
+}
+
+export interface PdfDocument {
+  invoice_id: string;
+  token_id: string;
+  filename: string;
+  content_type: "application/pdf";
+  content_base64: string;
+  sha256: Hex32;
+  generated_at: string;
+}
+
+export interface OpenQuote {
+  quote_id: string;
+  deposit_address: string;
+  deadline_requested: number;
+  refund_to: string;
+  route_id: string;
+  expired: boolean;
+}
+
+export interface OpenQuoteList {
+  data: OpenQuote[];
+}
+
+export interface CashoutQuoteRequest {
+  amount: U128;
+  destination_chain: "base" | "arbitrum" | "optimism" | "polygon" | "solana" | "ethereum" | "near";
+  address: string;
+}
+
+export interface CashoutQuote {
+  amount: U128;
+  source_asset: string;
+  destination_chain: string;
+  destination_address: string;
+  amount_out: U128;
+  route_cost_usd: string;
+  deposit_address: string;
+  deposit_type: "INTENTS";
+  swap_type: "EXACT_OUTPUT";
+  route_id: string;
+  deadline: string;
+}
+
+export interface PublicReceipt {
+  receipt: Receipt;
+  verify_url: string;
+  claim_account: string;
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -457,6 +621,13 @@ export interface operations {
       "400": Error;
       "401": Error;
       "404": Error;
+    };
+  };
+  listWebhookEndpoints: {
+    responses: {
+      "200": WebhookEndpointList;
+      "400": Error;
+      "401": Error;
     };
   };
   createWebhookEndpoint: {
@@ -550,6 +721,218 @@ export interface operations {
   getOpenApi: {
     responses: {
       "200": Record<string, unknown>;
+    };
+  };
+  createAuthChallenge: {
+    parameters: {
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    requestBody: AuthChallengeRequest;
+    responses: {
+      "200": AuthChallenge;
+      "400": Error;
+      "401": Error;
+      "409": Error;
+    };
+  };
+  verifyAuthChallenge: {
+    parameters: {
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    requestBody: AuthVerifyRequest;
+    responses: {
+      "200": AuthSession;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  listApiKeys: {
+    responses: {
+      "200": ApiKeyList;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  createApiKey: {
+    parameters: {
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    requestBody: CreateApiKeyRequest;
+    responses: {
+      "201": ApiKeyCreated;
+      "400": Error;
+      "401": Error;
+      "409": Error;
+    };
+  };
+  rotateApiKey: {
+    parameters: {
+      path: {
+        id: string;
+      };
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    responses: {
+      "200": ApiKeyCreated;
+      "400": Error;
+      "401": Error;
+      "404": Error;
+      "409": Error;
+    };
+  };
+  deleteApiKey: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": DeletedResource;
+      "400": Error;
+      "401": Error;
+      "404": Error;
+    };
+  };
+  deleteWebhookEndpoint: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": DeletedResource;
+      "400": Error;
+      "401": Error;
+      "404": Error;
+    };
+  };
+  testWebhookEndpoint: {
+    parameters: {
+      path: {
+        id: string;
+      };
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    responses: {
+      "200": WebhookTestResult;
+      "400": Error;
+      "401": Error;
+      "404": Error;
+      "409": Error;
+    };
+  };
+  listWebhookDeliveries: {
+    parameters: {
+      path: {
+        id: string;
+      };
+      query: {
+        cursor?: string;
+        limit?: number;
+      };
+    };
+    responses: {
+      "200": WebhookDeliveryList;
+      "400": Error;
+      "401": Error;
+      "404": Error;
+    };
+  };
+  getBusiness: {
+    responses: {
+      "200": Business;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  updateBusiness: {
+    requestBody: UpdateBusinessRequest;
+    responses: {
+      "200": Business;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  getStorageCredit: {
+    responses: {
+      "200": StorageCredit;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  getStatement: {
+    parameters: {
+      query: {
+        from?: string;
+        to?: string;
+        format?: "csv" | "pdf";
+      };
+    };
+    responses: {
+      "200": Statement;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  getInvoicePdf: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": PdfDocument;
+      "400": Error;
+      "401": Error;
+      "404": Error;
+    };
+  };
+  listOpenQuotes: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": OpenQuoteList;
+      "400": Error;
+      "401": Error;
+      "404": Error;
+    };
+  };
+  createCashoutQuote: {
+    parameters: {
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    requestBody: CashoutQuoteRequest;
+    responses: {
+      "201": CashoutQuote;
+      "400": Error;
+      "401": Error;
+      "409": Error;
+    };
+  };
+  getPublicReceipt: {
+    parameters: {
+      path: {
+        booking_tx_hash: string;
+      };
+    };
+    responses: {
+      "200": PublicReceipt;
+      "404": Error;
     };
   };
 }
