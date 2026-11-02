@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { computeResult, utcStamp, writeReport, type ReportInput } from "./index.js";
 
-const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiJ0ZXN0In0", "c2ln" + "bmF0dXJl"].join(".");
+const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiJ0ZXN0In0", "c2ln" + "bmF0dXJl"].join(
+  ".",
+);
 
 const dirs: string[] = [];
 function reportsDir(): string {
@@ -47,9 +49,9 @@ describe("mechanical result", () => {
   });
 
   it("reads a nested measurement path", () => {
-    expect(computeResult([{ path: "swap.credit", op: "==", value: "10" }], { swap: { credit: "10" } })).toBe(
-      "PASS",
-    );
+    expect(
+      computeResult([{ path: "swap.credit", op: "==", value: "10" }], { swap: { credit: "10" } }),
+    ).toBe("PASS");
   });
 });
 
