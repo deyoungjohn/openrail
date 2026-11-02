@@ -558,6 +558,15 @@ export interface AckEvmResponse {
   tx_hash: string;
 }
 
+export interface AuthSessionInfo {
+  account_id: string;
+  expires_at: string;
+}
+
+export interface LogoutResponse {
+  ok: true;
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -972,6 +981,22 @@ export interface operations {
       "404": Error;
       "409": Error;
       "422": Error;
+    };
+  };
+  getAuthSession: {
+    responses: {
+      "200": AuthSessionInfo;
+      "401": Error;
+    };
+  };
+  logout: {
+    parameters: {
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    responses: {
+      "200": LogoutResponse;
     };
   };
 }
