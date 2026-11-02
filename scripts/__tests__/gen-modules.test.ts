@@ -40,7 +40,10 @@ describe("generate", () => {
     }
     const rs = files["contracts/openrail/src/modules/mod.rs"];
     expect(rs).toContain("// GENERATED, do not edit");
-    expect(rs).toContain("pub const ENABLED: &[&str] = &[");
+    expect(rs).toContain("pub const ENABLED: &[&str] = &[];");
+    expect(rs).toContain(
+      "pub fn registered() -> Vec<&'static dyn crate::hooks::Hook> {\n    Vec::new()\n}",
+    );
     expect(rs).not.toContain("alpha");
   });
 
@@ -66,6 +69,7 @@ describe("generate", () => {
     const rs = files["contracts/openrail/src/modules/mod.rs"];
     expect(rs).toContain(`#[cfg(feature = "alpha")]`);
     expect(rs).toContain("pub mod alpha;");
+    expect(rs).toContain("&alpha::HOOK");
     expect(rs).not.toContain("beta");
   });
 

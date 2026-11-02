@@ -149,4 +149,15 @@ describe("runLeakCheck", () => {
     writeFileSync(kw, "# only a comment\n\n");
     expect(runLeakCheck(root, { CI: "true", LEAK_KEYWORDS_FILE: kw }).code).toBe(1);
   });
+
+  it("fails closed in CI when git ls-files fails, and warns locally", () => {
+    rmSync(join(root, ".git"), { recursive: true, force: true });
+    const ci = runLeakCheck(root, { CI: "true", LEAK_KEYWORDS_FILE: kw });
+    expect(ci.code).toBe(1);
+    expect(ci.messages.join("\n")).toContain("git ls-files failed");
+
+    const local = runLeakCheck(root, { LEAK_KEYWORDS_FILE: kw });
+    expect(local.code).toBe(0);
+    expect(local.messages.join("\n")).toContain("git ls-files failed");
+  });
 });
