@@ -38,7 +38,9 @@ S1b implements:
 - invoice creation through `issue_for` (the issuer port), with the claim account
   allocated before the terms hash is signed;
 - pay sessions: route allow-list → 1Click quote → `log_quote` → deposit address
-  (`src/quote.test.ts` proves the order);
+  (`src/quote.test.ts` proves the order). Amounts are carried as exact base-unit
+  `bigint`/strings; `amount_usd` is display-only. `refund_to` is required and is
+  validated per origin chain (EVM checksum, Solana 32-byte base58, NEAR account);
 - claim views with `kind_rules`, `deadline_requested` (unix seconds) and the
   provider `deadline`;
 - EVM acknowledgement relay through the issuer's restricted key
