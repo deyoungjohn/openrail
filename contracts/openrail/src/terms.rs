@@ -65,7 +65,86 @@ pub fn validate(terms: &Terms) -> Result<(), String> {
     if terms.amount_usd.len() > 40 {
         return Err("amount_usd is too large".to_string());
     }
+    if !is_lower_hex32(&terms.line_items_sha256) {
+        return Err(
+            "line_items_sha256 must be 0x followed by 64 lowercase hex characters".to_string(),
+        );
+    }
+    if let Some(hash) = &terms.assignment_agreement_sha256 {
+        if !is_lower_hex32(hash) {
+            return Err(
+                "assignment_agreement_sha256 must be 0x followed by 64 lowercase hex characters"
+                    .to_string(),
+            );
+        }
+    }
+    if !is_iso8601_utc(&terms.due_date) {
+        return Err(
+            "due_date must be an ISO 8601 UTC timestamp in YYYY-MM-DDTHH:MM:SSZ form".to_string(),
+        );
+    }
     Ok(())
+}
+
+fn is_lower_hex32(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("0x") else {
+        return false;
+    };
+    hex.len() == 64
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// Exact `YYYY-MM-DDTHH:MM:SSZ` with a real calendar date and wall-clock time.
+fn is_iso8601_utc(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+        || bytes[19] != b'Z'
+    {
+        return false;
+    }
+    let digits = [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18];
+    if !digits.iter().all(|&index| bytes[index].is_ascii_digit()) {
+        return false;
+    }
+    let number = |start: usize, len: usize| -> u32 {
+        bytes[start..start + len]
+            .iter()
+            .fold(0u32, |acc, byte| acc * 10 + u32::from(byte - b'0'))
+    };
+    let year = number(0, 4) as i64;
+    let month = number(5, 2);
+    let day = number(8, 2);
+    let hour = number(11, 2);
+    let minute = number(14, 2);
+    let second = number(17, 2);
+
+    (1..=12).contains(&month)
+        && day >= 1
+        && day <= days_in_month(year, month)
+        && hour <= 23
+        && minute <= 59
+        && second <= 59
+}
+
+fn days_in_month(year: i64, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+fn is_leap_year(year: i64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
 fn is_two_decimal_amount(value: &str) -> bool {
