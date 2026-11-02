@@ -1,5 +1,6 @@
+import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SpendGuard } from "./index.js";
+import { SpendGuard, promptYes } from "./index.js";
 
 const ENV_KEYS = ["DRY_RUN", "OWED_CONFIRM_MAINNET", "MAX_SPEND_USD"] as const;
 
@@ -83,9 +84,56 @@ describe("spend guard", () => {
     expect(guard.totalUsd()).toBe(3);
   });
 
+  it("fails closed when live and MAX_SPEND_USD is unset", () => {
+    process.env.DRY_RUN = "no";
+    const writes: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation(((chunk: unknown) => {
+      writes.push(String(chunk));
+      return true;
+    }) as never);
+    const exit = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`EXIT:${code}`);
+    }) as never);
+    const guard = new SpendGuard();
+
+    expect(() => guard.plan(1)).toThrow("EXIT:1");
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(writes.join("")).toContain("MISSING_ENV: MAX_SPEND_USD");
+  });
+
+  it("keeps the default cap for a dry run when MAX_SPEND_USD is unset", () => {
+    const guard = new SpendGuard();
+    expect(guard.plan(5)).toBe(5);
+    expect(() => guard.plan(0.01)).toThrow("SPEND_CAP_EXCEEDED");
+  });
+
   it("rejects an invalid amount", () => {
     const guard = new SpendGuard();
     expect(() => guard.plan(-1)).toThrow("SPEND_INVALID_AMOUNT");
     expect(() => guard.plan(Number.NaN)).toThrow("SPEND_INVALID_AMOUNT");
+  });
+});
+
+describe("typed confirmation prompt", () => {
+  it("refuses when the streams are not a TTY", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    await expect(promptYes("Type YES", { input, output })).rejects.toThrow("PROMPT_NOT_A_TTY");
+    input.destroy();
+    output.destroy();
+  });
+
+  it("returns the typed answer from a TTY stream", async () => {
+    const input = new PassThrough() as PassThrough & { isTTY: boolean };
+    const output = new PassThrough() as PassThrough & { isTTY: boolean };
+    input.isTTY = true;
+    output.isTTY = true;
+
+    const answer = promptYes("Type YES to continue", { input, output });
+    input.write("YES\n");
+
+    await expect(answer).resolves.toBe("YES");
+    input.destroy();
+    output.destroy();
   });
 });

@@ -7,6 +7,9 @@ import { computeResult, utcStamp, writeReport, type ReportInput } from "./index.
 const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiJ0ZXN0In0", "c2ln" + "bmF0dXJl"].join(
   ".",
 );
+const EVM_TX_HASH = "0x" + "ab".repeat(32);
+const SHA256_HASH = "cd".repeat(32);
+const SECRET_HEX = "12".repeat(32);
 
 const dirs: string[] = [];
 function reportsDir(): string {
@@ -75,12 +78,34 @@ describe("report writer", () => {
     expect(onDisk.tx).toHaveLength(1);
   });
 
+  it("requires a network and rejects an unknown one", () => {
+    const missing = baseInput();
+    delete (missing as Partial<ReportInput>).network;
+    expect(() => writeReport(missing, { reportsDir: reportsDir() })).toThrow("network");
+
+    const invalid = { ...baseInput(), network: "production" } as unknown as ReportInput;
+    expect(() => writeReport(invalid, { reportsDir: reportsDir() })).toThrow("network");
+  });
+
+  it("keeps EVM transaction, sha256 and code hashes readable on disk", () => {
+    const input = baseInput();
+    input.tx = [{ chain: "base", hash: EVM_TX_HASH, purpose: "deposit" }];
+    input.measurements = { credit: 2, terms_hash: SHA256_HASH, code_hash: SHA256_HASH };
+    const { path } = writeReport(input, { reportsDir: reportsDir() });
+    const text = readFileSync(path, "utf8");
+
+    expect(text).toContain(EVM_TX_HASH);
+    expect(text).toContain(SHA256_HASH);
+  });
+
   it("redacts secrets before writing", () => {
     const input = baseInput();
-    input.measurements = { credit: 1, token: JWT };
+    input.measurements = { credit: 1, token: JWT, private_key: SECRET_HEX };
     const { path } = writeReport(input, { reportsDir: reportsDir() });
+    const text = readFileSync(path, "utf8");
 
-    expect(readFileSync(path, "utf8")).not.toContain(JWT);
+    expect(text).not.toContain(JWT);
+    expect(text).not.toContain(SECRET_HEX);
   });
 
   it("stamps UTC in a filesystem-safe form", () => {

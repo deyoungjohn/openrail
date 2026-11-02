@@ -15,7 +15,10 @@ const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiJ0ZXN0In0", "c2ln" + "
   ".",
 );
 const ED25519 = "ed25519:" + "1".repeat(88);
-const LONG_HEX = "0x" + "ab".repeat(32);
+const EVM_TX_HASH = "0x" + "ab".repeat(32);
+const SHA256_HASH = "cd".repeat(32);
+const CODE_HASH = "0x" + "ef".repeat(32);
+const SECRET_HEX = "12".repeat(32);
 const ENV_SECRET = "env-value-" + "s3cr3t".repeat(2);
 
 afterEach(() => {
@@ -89,14 +92,46 @@ describe("redaction", () => {
     expect(redactString(`key=${ED25519}`)).not.toContain(ED25519);
   });
 
-  it("masks a 32-byte long hex value", () => {
-    expect(redactString(`hash=${LONG_HEX}`)).not.toContain(LONG_HEX);
+  it("preserves EVM transaction, sha256 and code hashes", () => {
+    const line = `tx ${EVM_TX_HASH} sha ${SHA256_HASH} code ${CODE_HASH}`;
+    const redacted = redactString(line);
+    expect(redacted).toContain(EVM_TX_HASH);
+    expect(redacted).toContain(SHA256_HASH);
+    expect(redacted).toContain(CODE_HASH);
+  });
+
+  it("masks a 64-hex value only under a secret key context", () => {
+    const result = redact({
+      private_key: SECRET_HEX,
+      secret: SECRET_HEX,
+      token: SECRET_HEX,
+      hash: EVM_TX_HASH,
+      terms_hash: SHA256_HASH,
+      code_hash: CODE_HASH,
+    }) as Record<string, string>;
+
+    expect(result.private_key).not.toContain(SECRET_HEX);
+    expect(result.secret).not.toContain(SECRET_HEX);
+    expect(result.token).not.toContain(SECRET_HEX);
+    expect(result.hash).toBe(EVM_TX_HASH);
+    expect(result.terms_hash).toBe(SHA256_HASH);
+    expect(result.code_hash).toBe(CODE_HASH);
+  });
+
+  it("masks a 64-hex value after a key= or secret: prefix", () => {
+    expect(redactString(`key=${SECRET_HEX}`)).not.toContain(SECRET_HEX);
+    expect(redactString(`secret: ${SECRET_HEX}`)).not.toContain(SECRET_HEX);
+  });
+
+  it("still masks a registered secret value that is 64 hex", () => {
+    registerSecret("DEMO_HEX", SECRET_HEX);
+    expect(redactString(SECRET_HEX)).not.toContain(SECRET_HEX);
   });
 
   it("masks each shape inside objects, arrays and errors", () => {
     const error = new Error(`crashed with ${JWT}`);
     const result = redact({
-      nested: { secret: ENV_SECRET, key: ED25519, hex: LONG_HEX },
+      nested: { secret: ENV_SECRET, key: ED25519, hash: EVM_TX_HASH },
       list: [JWT, "safe"],
       error,
     }) as {
@@ -108,7 +143,6 @@ describe("redaction", () => {
     const flattened = JSON.stringify(result);
     expect(flattened).not.toContain(JWT);
     expect(flattened).not.toContain(ED25519);
-    expect(flattened).not.toContain(LONG_HEX);
     expect(result.list[1]).toBe("safe");
   });
 });
@@ -119,11 +153,12 @@ describe("logger", () => {
     const lines: string[] = [];
     const logger = createLogger("svc", (line) => lines.push(line));
 
-    logger.info(`hello ${ENV_SECRET}`, { jwt: JWT });
+    logger.info(`hello ${ENV_SECRET}`, { jwt: JWT, tx: { hash: EVM_TX_HASH } });
 
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("[svc]");
     expect(lines[0]).not.toContain(ENV_SECRET);
     expect(lines[0]).not.toContain(JWT);
+    expect(lines[0]).toContain(EVM_TX_HASH);
   });
 });
