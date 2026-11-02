@@ -47,8 +47,10 @@ test("every field is on the page before the wallet button (blueprint 2.7)", asyn
   const main = page.getByRole("main");
   for (const text of ["INV-0001", "$1,250.00", "Acme Ltd", "Northwind Studio", "c-1.openrail.near"])
     await expect(main.getByText(text).first()).toBeVisible();
-  await expect(main.getByText("Jan 15, 2027")).toBeVisible();
-  await expect(main.getByText("0x82c0dd")).toBeVisible();
+  await expect(main.getByText("Jan 16, 2027")).toBeVisible();
+  await expect(
+    main.getByText("0x82c0dd15895dbb114c0d7d0e04b1123d62ec5ddacfeec9d067df71555b03edea"),
+  ).toBeVisible();
   const button = main.getByRole("button", { name: "Confirm with wallet" });
   await expect(button).toBeVisible();
   const fieldBox = await main.getByText("INV-0001").first().boundingBox();
@@ -85,7 +87,7 @@ test("EVM debtor: a different connected account is refused before signing", asyn
   await injectWallet(page, { account: "0x000000000000000000000000000000000000dEaD" });
   await page.goto("/ack/c-1");
   await page.getByRole("button", { name: "Confirm with wallet" }).click();
-  await expect(page.getByRole("alert")).toContainText("different account");
+  await expect(page.locator("main [role=alert]")).toContainText("different account");
   expect(
     await page.evaluate(() => (window as unknown as { __signed: unknown[] }).__signed),
   ).toHaveLength(0);
@@ -97,13 +99,13 @@ test("EVM debtor: an unsupported chain and a contract wallet are refused in plai
   await injectWallet(page, { chainIdHex: "0x539" });
   await page.goto("/ack/c-1");
   await page.getByRole("button", { name: "Confirm with wallet" }).click();
-  await expect(page.getByRole("alert")).toContainText("Switch your wallet to");
+  await expect(page.locator("main [role=alert]")).toContainText("Switch your wallet to");
 
   const page2 = await page.context().newPage();
   await injectWallet(page2, { code: "0x6080" });
   await page2.goto("/ack/c-1");
   await page2.getByRole("button", { name: "Confirm with wallet" }).click();
-  await expect(page2.getByRole("alert")).toContainText("smart-contract wallet");
+  await expect(page2.locator("main [role=alert]")).toContainText("smart-contract wallet");
 });
 
 test("no browser wallet: says what to do", async ({ page }) => {
@@ -126,7 +128,7 @@ test("already accepted, not found and error states", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "We can't find this invoice" })).toBeVisible();
 
   await page.goto("/ack/c-error");
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.locator("main [role=alert]")).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 
   await page.goto("/ack/c-4");

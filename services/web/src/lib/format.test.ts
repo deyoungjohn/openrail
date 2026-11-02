@@ -40,6 +40,6 @@ describe("formatUsdc and formatDate", () => {
   });
 
   it("formats unix seconds in UTC", () => {
-    expect(formatDate(1_800_086_400)).toBe("Jan 15, 2027");
+    expect(formatDate(1_800_086_400)).toBe("Jan 16, 2027");
   });
 });

@@ -20,12 +20,12 @@ test("no open quotes shows an empty state", async ({ page }) => {
 
 test("refuses with the rule number in plain words", async ({ page }) => {
   await page.goto("/app/invoices/c-4/transfer");
-  await expect(page.getByRole("alert")).toContainText("Rule 2:");
+  await expect(page.locator("main [role=alert]")).toContainText("Rule 2:");
   await expect(page.getByRole("button", { name: "Prepare sale" })).toBeDisabled();
 
   await page.goto("/app/invoices/c-1/transfer");
-  await expect(page.getByRole("alert")).toContainText("Rule 3:");
-  await expect(page.getByRole("alert")).toContainText("hasn't accepted");
+  await expect(page.locator("main [role=alert]")).toContainText("Rule 3:");
+  await expect(page.locator("main [role=alert]")).toContainText("hasn't accepted");
 });
 
 test("document is hashed in the browser; only the fingerprint is shown", async ({ page }) => {
@@ -47,7 +47,7 @@ test("sale flow: prepare, then sign, then done (fixture mode)", async ({ page })
     mimeType: "application/pdf",
     buffer: Buffer.from("hello"),
   });
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator("main [role=alert]")).toHaveCount(0);
   await page.getByRole("button", { name: "Prepare sale" }).click();
   await expect(page.getByRole("button", { name: "Sign sale" })).toBeEnabled();
   await page.getByRole("button", { name: "Sign sale" }).click();
@@ -57,7 +57,7 @@ test("sale flow: prepare, then sign, then done (fixture mode)", async ({ page })
 test("a malformed buyer account is refused", async ({ page }) => {
   await page.goto("/app/invoices/c-3/transfer");
   await page.getByLabel("Buyer account").fill("Not An Account");
-  await expect(page.getByRole("alert")).toContainText("valid NEAR account");
+  await expect(page.locator("main [role=alert]")).toContainText("valid NEAR account");
 });
 
 test("not found", async ({ page }) => {

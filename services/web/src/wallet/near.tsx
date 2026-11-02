@@ -1,6 +1,10 @@
 "use client";
 
-import { setupWalletSelector, type WalletSelector } from "@near-wallet-selector/core";
+import {
+  actionCreators,
+  setupWalletSelector,
+  type WalletSelector,
+} from "@near-wallet-selector/core";
 import { setupModal, type WalletSelectorModal } from "@near-wallet-selector/modal-ui";
 import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import "@near-wallet-selector/modal-ui/styles.css";
@@ -21,6 +25,18 @@ interface NearState {
   error: boolean;
   signIn: () => void;
   signOut: () => Promise<void>;
+  /** One FunctionCall transaction, signed by the connected NEAR wallet. */
+  call: (c: NearCall) => Promise<void>;
+}
+
+export interface NearCall {
+  receiverId: string;
+  methodName: string;
+  args: object;
+  /** Gas as a decimal string of gas units. */
+  gas: string;
+  /** Deposit in yoctoNEAR as a decimal string. */
+  deposit: string;
 }
 
 const Ctx = createContext<NearState | null>(null);
@@ -72,9 +88,21 @@ export function NearProvider({ children }: { children: ReactNode }) {
     await wallet.signOut();
   }, []);
 
+  const call = useCallback(async (c: NearCall) => {
+    const s = selector.current;
+    if (!s?.isSignedIn()) throw new Error("NOT_SIGNED_IN");
+    const wallet = await s.wallet();
+    await wallet.signAndSendTransaction({
+      receiverId: c.receiverId,
+      actions: [
+        actionCreators.functionCall(c.methodName, c.args, BigInt(c.gas), BigInt(c.deposit)),
+      ],
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ accountId, ready, error, signIn, signOut }),
-    [accountId, ready, error, signIn, signOut],
+    () => ({ accountId, ready, error, signIn, signOut, call }),
+    [accountId, ready, error, signIn, signOut, call],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
