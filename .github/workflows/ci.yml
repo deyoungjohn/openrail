@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -26,26 +26,57 @@ jobs:
       contracts: ${{ steps.filter.outputs.contracts }}
       modules: ${{ steps.filter.outputs.modules }}
       core: ${{ steps.filter.outputs.core }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: filter
         with:
           filters: |
             contracts:
+              - '.github/**'
               - 'contracts/**'
               - 'abi/**'
               - 'schemas/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
             modules:
+              - '.github/**'
               - 'contracts/**'
               - 'scripts/gen-modules.*'
               - 'openrail.modules.json'
             core:
-              - '!services/web/**'
-              - '!docs/**'
-              - '!README.md'
+              - '.github/**'
+              - 'contracts/**'
+              - 'services/api/**'
+              - 'services/cli/**'
+              - 'services/indexer/**'
+              - 'services/issuer/**'
+              - 'services/relayer/**'
+              - 'services/watcher/**'
+              - 'packages/**'
+              - 'fixtures/**'
+              - 'scripts/**'
+              - 'config/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'Makefile'
+              - 'openrail.modules.json'
+            web:
+              - '.github/**'
+              - 'services/web/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
 
   # Quick checks: secrets scan, docs build, and lint (format + clippy + eslint) merged
   quick:
@@ -54,6 +85,11 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -69,8 +105,8 @@ jobs:
       - name: Setup runner target directory
         if: runner.environment != 'github-hosted'
         run: |
-          mkdir -p "$HOME/target-ci/${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ github.job }}" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
+          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - name: Secret scan
         run: make secret-scan
@@ -87,6 +123,11 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -102,8 +143,8 @@ jobs:
       - name: Setup runner target directory
         if: runner.environment != 'github-hosted'
         run: |
-          mkdir -p "$HOME/target-ci/${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ github.job }}" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
+          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Cache cargo-near binary
         if: runner.environment == 'github-hosted'
         id: cargo-near-cache
@@ -140,6 +181,11 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -155,8 +201,8 @@ jobs:
       - name: Setup runner target directory
         if: runner.environment != 'github-hosted'
         run: |
-          mkdir -p "$HOME/target-ci/${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ github.job }}" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
+          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Cache cargo-near binary
         if: runner.environment == 'github-hosted'
         id: cargo-near-cache
@@ -184,6 +230,11 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - name: Rust toolchain (from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - name: Rust cache
@@ -192,8 +243,8 @@ jobs:
       - name: Setup runner target directory
         if: runner.environment != 'github-hosted'
         run: |
-          mkdir -p "$HOME/target-ci/${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ github.job }}" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
+          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Test each module sequentially
         run: |
           for mod in $(scripts/enabled-features --all); do
@@ -209,6 +260,11 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -222,11 +278,37 @@ jobs:
       - name: Setup runner target directory
         if: runner.environment != 'github-hosted'
         run: |
-          mkdir -p "$HOME/target-ci/${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ github.job }}" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
+          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - name: Every enabled module
         run: cargo test -p openrail --features "$(scripts/enabled-features)"
+
+  # Web verification: test, typecheck, and build web service
+  web:
+    name: web
+    needs: changes
+    if: (github.event_name == 'push') || (needs.changes.outputs.web == 'true')
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test web package
+        run: pnpm --filter @openrail/web test
+      - name: Typecheck web package
+        run: pnpm --filter @openrail/web exec tsc --noEmit
+      - name: Build web package
+        run: pnpm --filter @openrail/web build
 
   e2e:
     name: e2e
@@ -234,32 +316,96 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - run: echo "TODO owner I1, end-to-end suite"
 
   # Aggregate status check keeping a single unified check name that passes when required jobs succeed or are cleanly skipped
   ci-ok:
     name: ci-ok
-    needs: [changes, quick, contract, core-only, each-module, all-enabled, e2e]
+    needs: [changes, quick, contract, core-only, each-module, all-enabled, web, e2e]
     if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - name: Verify all required jobs passed or were skipped cleanly
+        env:
+          CHANGES_RES: ${{ needs.changes.result }}
+          QUICK_RES: ${{ needs.quick.result }}
+          CONTRACT_RES: ${{ needs.contract.result }}
+          CORE_RES: ${{ needs.core-only.result }}
+          EACH_RES: ${{ needs.each-module.result }}
+          ALL_RES: ${{ needs.all-enabled.result }}
+          WEB_RES: ${{ needs.web.result }}
+          E2E_RES: ${{ needs.e2e.result }}
+          FILTER_CONTRACTS: ${{ needs.changes.outputs.contracts }}
+          FILTER_MODULES: ${{ needs.changes.outputs.modules }}
+          FILTER_CORE: ${{ needs.changes.outputs.core }}
+          FILTER_WEB: ${{ needs.changes.outputs.web }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          echo "Quick: ${{ needs.quick.result }}"
-          echo "Contract: ${{ needs.contract.result }}"
-          echo "Core-only: ${{ needs.core-only.result }}"
-          echo "Each-module: ${{ needs.each-module.result }}"
-          echo "All-enabled: ${{ needs.all-enabled.result }}"
-          echo "E2E: ${{ needs.e2e.result }}"
-          for res in "${{ needs.quick.result }}" \
-                     "${{ needs.contract.result }}" \
-                     "${{ needs.core-only.result }}" \
-                     "${{ needs.each-module.result }}" \
-                     "${{ needs.all-enabled.result }}" \
-                     "${{ needs.e2e.result }}"; do
+          echo "Changes: $CHANGES_RES"
+          echo "Quick: $QUICK_RES"
+          echo "Contract: $CONTRACT_RES (filter: $FILTER_CONTRACTS)"
+          echo "Core-only: $CORE_RES (filter: $FILTER_CORE)"
+          echo "Each-module: $EACH_RES (filter: $FILTER_MODULES)"
+          echo "All-enabled: $ALL_RES (filter: $FILTER_MODULES)"
+          echo "Web: $WEB_RES (filter: $FILTER_WEB)"
+          echo "E2E: $E2E_RES"
+
+          # 1. changes job must have succeeded
+          if [ "$CHANGES_RES" != "success" ]; then
+            echo "Error: 'changes' job did not succeed ($CHANGES_RES)."
+            exit 1
+          fi
+
+          # 2. Check for outright failures or cancellations across all jobs
+          for res in "$QUICK_RES" "$CONTRACT_RES" "$CORE_RES" "$EACH_RES" "$ALL_RES" "$WEB_RES" "$E2E_RES"; do
             if [ "$res" = "failure" ] || [ "$res" = "cancelled" ]; then
-              echo "Error: One or more required jobs failed or were cancelled ($res)."
+              echo "Error: One or more jobs failed or were cancelled ($res)."
               exit 1
             fi
           done
-          echo "All checks passed or were skipped legitimately."
+
+          # 3. Always required jobs
+          if [ "$QUICK_RES" != "success" ]; then
+            echo "Error: 'quick' job must succeed, but got $QUICK_RES."
+            exit 1
+          fi
+          if [ "$E2E_RES" != "success" ]; then
+            echo "Error: 'e2e' job must succeed, but got $E2E_RES."
+            exit 1
+          fi
+
+          # 4. Conditionally required jobs (fail if skipped when change set required them)
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_CONTRACTS" = "true" ]; then
+            if [ "$CONTRACT_RES" != "success" ]; then
+              echo "Error: 'contract' job was required but result is $CONTRACT_RES."
+              exit 1
+            fi
+          fi
+
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_CORE" = "true" ]; then
+            if [ "$CORE_RES" != "success" ]; then
+              echo "Error: 'core-only' job was required but result is $CORE_RES."
+              exit 1
+            fi
+          fi
+
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_MODULES" = "true" ]; then
+            if [ "$EACH_RES" != "success" ] || [ "$ALL_RES" != "success" ]; then
+              echo "Error: Module test jobs ('each-module': $EACH_RES, 'all-enabled': $ALL_RES) were required."
+              exit 1
+            fi
+          fi
+
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_WEB" = "true" ]; then
+            if [ "$WEB_RES" != "success" ]; then
+              echo "Error: 'web' job was required but result is $WEB_RES."
+              exit 1
+            fi
+          fi
+
+          echo "All checks passed or were legitimately skipped."

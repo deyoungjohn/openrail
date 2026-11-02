@@ -18,6 +18,11 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -33,8 +38,8 @@ jobs:
       - name: Setup runner target directory
         if: runner.environment != 'github-hosted'
         run: |
-          mkdir -p "$HOME/target-ci/${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ github.job }}" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
+          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Cache cargo-near binary
         if: runner.environment == 'github-hosted'
         id: cargo-near-cache
@@ -64,6 +69,11 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
+      - name: Clean untracked files on self-hosted
+        if: runner.environment != 'github-hosted'
+        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -79,8 +89,8 @@ jobs:
       - name: Setup runner target directory
         if: runner.environment != 'github-hosted'
         run: |
-          mkdir -p "$HOME/target-ci/${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ github.job }}" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
+          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Cache cargo-near binary
         if: runner.environment == 'github-hosted'
         id: cargo-near-cache
