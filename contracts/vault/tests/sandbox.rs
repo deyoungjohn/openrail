@@ -19,6 +19,9 @@ const FORWARD_MIN_TGAS: u64 = 8;
 const FORWARD_MAX_TGAS: u64 = 50;
 const SIGN_MAX_TGAS: u64 = 280;
 
+/// One sandbox at a time: ten neard processes on a 2-core CI runner is needless load.
+static SANDBOX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 struct Fixture {
     worker: Worker<Sandbox>,
     /// The parent account: the account that owns the keyless vault accounts.
@@ -267,6 +270,7 @@ impl Fixture {
 
 #[tokio::test]
 async fn inv_account_has_no_keys() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
     let keys = f.worker.view_access_keys(&f.invoice_id).await?;
     assert!(
@@ -279,6 +283,7 @@ async fn inv_account_has_no_keys() -> Result<()> {
 
 #[tokio::test]
 async fn inv_account_obeys_only_owed() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
     let outsider = f.worker.dev_create_account().await?;
 
@@ -308,6 +313,7 @@ async fn inv_account_obeys_only_owed() -> Result<()> {
 
 #[tokio::test]
 async fn only_the_parent_can_call_forward_and_sign() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
     let other = f.worker.dev_create_account().await?;
 
@@ -322,6 +328,7 @@ async fn only_the_parent_can_call_forward_and_sign() -> Result<()> {
 
 #[tokio::test]
 async fn forward_gas_bound_is_8_to_50_tgas() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
 
     let low = f.forward_res(&f.parent, FORWARD_MIN_TGAS - 1).await?;
@@ -354,6 +361,7 @@ async fn forward_gas_bound_is_8_to_50_tgas() -> Result<()> {
 
 #[tokio::test]
 async fn sign_gas_bound_is_at_most_280_tgas() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
 
     let max = f.sign_res(&f.parent, SIGN_MAX_TGAS).await?;
@@ -430,6 +438,7 @@ fn exactly_two_public_methods() -> Result<()> {
 
 #[tokio::test]
 async fn deployed_from_a_global_hash_works() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
 
     let details = f.worker.view_account(&f.invoice_id).await?;
@@ -450,6 +459,7 @@ async fn deployed_from_a_global_hash_works() -> Result<()> {
 
 #[tokio::test]
 async fn no_key_can_be_added() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
 
     assert!(f.worker.view_access_keys(&f.invoice_id).await?.is_empty());
@@ -472,6 +482,7 @@ async fn no_key_can_be_added() -> Result<()> {
 
 #[tokio::test]
 async fn forward_moves_tokens_through_the_receiver() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
 
     let out = f.forward(&f.parent, 12).await?;
@@ -495,6 +506,7 @@ async fn forward_moves_tokens_through_the_receiver() -> Result<()> {
 
 #[tokio::test]
 async fn sign_relays_the_request_and_returns_the_result() -> Result<()> {
+    let _serial = SANDBOX.lock().await;
     let f = setup().await?;
 
     let out: Value = f
