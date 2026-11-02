@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  actionCreators,
-  setupWalletSelector,
-  type WalletSelector,
-} from "@near-wallet-selector/core";
+import { NearConnector, type NearWalletBase } from "@hot-labs/near-connect";
 import {
   createContext,
   useCallback,
@@ -18,8 +14,6 @@ import {
 import type { ChallengeToSign, SignedChallenge } from "../lib/auth";
 import { WalletPicker } from "../components/wallet-picker";
 import type { PickerPurpose } from "./groups";
-import { nearWalletModules } from "./near-wallets";
-import { classifyProbe } from "./probe";
 
 /** One wallet in the picker. `signsMessage`: true or false from the selector, null while unknown. */
 export interface NearWalletInfo {
@@ -72,74 +66,70 @@ export function useNear() {
 }
 
 const network = process.env.NEXT_PUBLIC_NEAR_NETWORK === "testnet" ? "testnet" : "mainnet";
-const ROOT_CONTRACT = process.env.NEXT_PUBLIC_ROOT_CONTRACT ?? "openrail.near";
 
+// SPIKE: the same NearState interface backed by NEAR Connect (@hot-labs/near-connect) instead of
+// the wallet selector. Capability comes from each wallet's manifest `features.signMessage`.
 export function NearProvider({ children }: { children: ReactNode }) {
-  const selector = useRef<WalletSelector | null>(null);
+  const connector = useRef<NearConnector | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [walletId, setWalletId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [wallets, setWallets] = useState<NearWalletInfo[]>([]);
-  const probed = useRef(false);
   const [picker, setPicker] = useState<null | {
     purpose: PickerPurpose;
     done: (id: string | null) => void;
   }>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-    setupWalletSelector({ network, modules: nearWalletModules(window.location.origin) })
-      .then((s) => {
-        if (cancelled) return;
-        selector.current = s;
-        const sub = s.store.observable.subscribe((state) => {
-          const active = state.accounts.find((a) => a.active) ?? state.accounts[0];
-          setAccountId(active?.accountId ?? null);
-          setWalletId(state.selectedWalletId);
-          setWallets((prev) =>
-            state.modules.map((m) => ({
-              id: m.id,
-              name: m.metadata.name,
-              iconUrl: m.metadata.iconUrl || null,
-              type: m.type,
-              available: m.metadata.available,
-              signsMessage: prev.find((p) => p.id === m.id)?.signsMessage ?? null,
-            })),
-          );
-        });
-        unsubscribe = () => sub.unsubscribe();
+    const c = new NearConnector({
+      network,
+      excludedWallets: ["mynearwallet"],
+      autoConnect: true,
+    });
+    connector.current = c;
+    const refresh = () =>
+      setWallets(
+        c.availableWallets.map((w) => ({
+          id: w.manifest.id,
+          name: w.manifest.name,
+          iconUrl: w.manifest.icon || null,
+          type: w.manifest.type,
+          available: true,
+          signsMessage: w.manifest.features.signMessage === true,
+        })),
+      );
+    c.whenManifestLoaded
+      .then(() => {
+        refresh();
         setReady(true);
+        return c.getConnectedWallet().then(
+          ({ wallet, accounts }) => {
+            setWalletId(wallet.manifest.id);
+            setAccountId(accounts[0]?.accountId ?? null);
+          },
+          () => undefined,
+        );
       })
-      .catch(() => !cancelled && setError(true));
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
+      .catch(() => setError(true));
+    c.on("wallet:signIn", (t) => {
+      setWalletId(t.wallet.manifest.id);
+      setAccountId(t.accounts[0]?.accountId ?? null);
+    });
+    c.on("wallet:signOut", () => {
+      setWalletId(null);
+      setAccountId(null);
+    });
+    c.on("selector:walletsChanged", refresh);
+    return () => c.removeAllListeners();
   }, []);
 
-  const probeWallets = useCallback(async () => {
-    const s = selector.current;
-    if (!s || probed.current) return;
-    probed.current = true;
-    for (const m of s.store.getState().modules) {
-      let verdict: boolean | null = null;
-      try {
-        const w = await s.wallet(m.id);
-        // Empty parameters: an unsupported wallet is refused first, a supporting one fails validation.
-        await w.signMessage({ message: "", recipient: "", nonce: Buffer.alloc(0) });
-      } catch (e) {
-        verdict = classifyProbe(e);
-      }
-      setWallets((prev) => prev.map((p) => (p.id === m.id ? { ...p, signsMessage: verdict } : p)));
-    }
-  }, []);
+  // Capability is in the manifest, so there is nothing to probe.
+  const probeWallets = useCallback(async () => {}, []);
 
   const pickWallet = useCallback(
     (purpose: PickerPurpose) =>
       new Promise<string | null>((resolve) => {
-        void probeWallets();
         setPicker({
           purpose,
           done: (id) => {
@@ -148,16 +138,11 @@ export function NearProvider({ children }: { children: ReactNode }) {
           },
         });
       }),
-    [probeWallets],
+    [],
   );
 
   const connect = useCallback(async (id: string) => {
-    const s = selector.current;
-    if (!s) throw new Error("WALLET_NOT_READY");
-    const w = await s.wallet(id);
-    // The selector wants a contract for the access key a wallet adds; none of our calls need one
-    // beyond the root contract, and sign-in itself is a signed message, not a transaction.
-    await w.signIn({ contractId: ROOT_CONTRACT } as never);
+    await connector.current?.connect({ walletId: id });
   }, []);
 
   const signIn = useCallback(() => {
@@ -165,41 +150,32 @@ export function NearProvider({ children }: { children: ReactNode }) {
   }, [pickWallet, connect]);
 
   const signOut = useCallback(async () => {
-    const s = selector.current;
-    if (!s?.isSignedIn()) return;
-    const wallet = await s.wallet();
-    await wallet.signOut();
+    await connector.current?.disconnect();
   }, []);
 
   const call = useCallback(async (c: NearCall) => {
-    const s = selector.current;
-    if (!s?.isSignedIn()) throw new Error("NOT_SIGNED_IN");
-    const wallet = await s.wallet();
+    const wallet: NearWalletBase = await connector.current!.wallet();
     await wallet.signAndSendTransaction({
       receiverId: c.receiverId,
       actions: [
-        actionCreators.functionCall(c.methodName, c.args, BigInt(c.gas), BigInt(c.deposit)),
+        {
+          type: "FunctionCall",
+          params: {
+            methodName: c.methodName,
+            args: c.args as Record<string, unknown>,
+            gas: c.gas,
+            deposit: c.deposit,
+          },
+        },
       ],
     });
   }, []);
 
   const signMessage = useCallback(async (c: ChallengeToSign): Promise<SignedChallenge> => {
-    const s = selector.current;
-    if (!s) throw new Error("WALLET_NOT_READY");
-    const wallet = await s.wallet();
+    const wallet = await connector.current!.wallet();
+    if (wallet.manifest.features.signMessage !== true) throw new Error("SIGNMESSAGE_UNSUPPORTED");
     const nonce = Uint8Array.from(atob(c.nonce), (ch) => ch.charCodeAt(0));
-    let signed;
-    try {
-      signed = await wallet.signMessage({
-        message: c.message,
-        recipient: c.recipient,
-        nonce: Buffer.from(nonce),
-      });
-    } catch (e) {
-      if (classifyProbe(e) === false) throw new Error("SIGNMESSAGE_UNSUPPORTED", { cause: e });
-      throw e;
-    }
-    if (!signed) throw new Error("WALLET_NO_SIGNATURE");
+    const signed = await wallet.signMessage({ message: c.message, recipient: c.recipient, nonce });
     return {
       accountId: signed.accountId,
       publicKey: signed.publicKey,
