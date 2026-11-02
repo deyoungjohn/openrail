@@ -194,6 +194,8 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
+  packages/api-client: {}
+
   packages/shared:
     dependencies:
       near-api-js:
@@ -205,6 +207,16 @@ importers:
   services/cli: {}
 
   services/indexer: {}
+
+  services/issuer:
+    dependencies:
+      '@openrail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      near-api-js:
+        specifier: 7.4.0
+        version: 7.4.0
 
   services/relayer: {}
 
