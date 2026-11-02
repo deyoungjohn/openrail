@@ -4,8 +4,10 @@
  *
  * Environment:
  *   NEAR_ROOT_ACCOUNT, NEAR_RPC_URL, NEAR_RPC_URL_FALLBACK
- *   INDEXER_DB_PATH (required), INDEXER_START_HEIGHT (0), INDEXER_POLL_INTERVAL_MS (5000),
- *   INDEXER_BATCH_BLOCKS (100), INDEXER_RETENTION_DAYS (30), INDEXER_PORT (8788)
+ *   INDEXER_DB_PATH (required), INDEXER_SOURCE (nearblocks|rpc; default nearblocks),
+ *   NEARBLOCKS_API_URL / NEARBLOCKS_API_KEY (account-scoped source),
+ *   INDEXER_POLL_INTERVAL_MS (15000), INDEXER_MAX_PAGES (5), INDEXER_RETENTION_DAYS (30),
+ *   INDEXER_PORT (8788), INDEXER_START_HEIGHT (0, RPC scanner only)
  *   INDEXER_WEBHOOK_URL / INDEXER_WEBHOOK_SECRET (optional; indexed events only)
  *   ONECLICK_API_URL / ONECLICK_JWT (optional; receipt origin/NEAR hashes)
  */
@@ -21,6 +23,8 @@ import { ContractClaimReader } from "./claim.js";
 import { createIndexerApp } from "./http.js";
 import { Indexer } from "./indexer.js";
 import { EvmOriginVerifier, OneClickReceiptEnricher, StatusAmountVerifier } from "./receipt.js";
+import { FallbackEventSource } from "./fallback.js";
+import { NearBlocksEventSource } from "./nearblocks.js";
 import { RpcEventSource, nearRpcUrls } from "./source.js";
 import { IndexerStore } from "./store.js";
 import { HttpEventSink } from "./webhook.js";
@@ -45,7 +49,23 @@ async function main(): Promise<void> {
   const rpcUrls = nearRpcUrls();
 
   const store = new IndexerStore(dbPath, rootAccount);
-  const source = new RpcEventSource(rootAccount, rpcUrls);
+  const sourceKind = (getEnv("INDEXER_SOURCE") ?? "nearblocks").toLowerCase();
+  const rpcSource = new RpcEventSource(
+    rootAccount,
+    rpcUrls,
+    Math.floor(numberEnv("INDEXER_START_HEIGHT", 0)),
+  );
+  const source =
+    sourceKind === "rpc"
+      ? rpcSource
+      : new FallbackEventSource(
+          new NearBlocksEventSource(
+            rootAccount,
+            getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
+            getEnv("NEARBLOCKS_API_KEY") ?? "",
+          ),
+          rpcSource,
+        );
   const near = nearClientFromEnv();
   const claimReader = new ContractClaimReader(near, rootAccount);
 
@@ -73,9 +93,8 @@ async function main(): Promise<void> {
     store,
     ...(sink === undefined ? {} : { sink }),
     ...(enricher === undefined ? {} : { enricher }),
-    startHeight: Math.floor(numberEnv("INDEXER_START_HEIGHT", 0)),
-    batchBlocks: Math.floor(numberEnv("INDEXER_BATCH_BLOCKS", 100)),
-    pollIntervalMs: Math.floor(numberEnv("INDEXER_POLL_INTERVAL_MS", 5_000)),
+    maxPagesPerSync: Math.floor(numberEnv("INDEXER_MAX_PAGES", 5)),
+    pollIntervalMs: Math.floor(numberEnv("INDEXER_POLL_INTERVAL_MS", 15_000)),
     retentionDays: Math.floor(numberEnv("INDEXER_RETENTION_DAYS", 30)),
     logger,
   });
@@ -103,6 +122,7 @@ async function main(): Promise<void> {
   });
   logger.info("indexer started", {
     root: rootAccount,
+    source: sourceKind,
     db: dbPath,
     health: `http://127.0.0.1:${port}/health`,
   });

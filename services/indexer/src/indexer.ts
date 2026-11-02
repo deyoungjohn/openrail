@@ -1,15 +1,19 @@
-/** Ingestion loop: final blocks → SQLite, resumable cursor, idempotent, enrichment, pruning. */
+/**
+ * Ingestion loop: account-scoped final event pages → SQLite, opaque resumable cursor,
+ * idempotent event keys, receipt enrichment, retention pruning.
+ */
 import type { Logger } from "@openrail/shared";
 import type { EventSink, ReceiptEnricher, EventSource } from "./types.js";
 import type { IndexerStore } from "./store.js";
+
+export const DEFAULT_POLL_INTERVAL_MS = 15_000;
 
 export interface IndexerOptions {
   source: EventSource;
   store: IndexerStore;
   sink?: EventSink;
   enricher?: ReceiptEnricher;
-  startHeight?: number;
-  batchBlocks?: number;
+  maxPagesPerSync?: number;
   pollIntervalMs?: number;
   retentionDays?: number;
   logger: Logger;
@@ -17,9 +21,11 @@ export interface IndexerOptions {
 }
 
 export interface SyncResult {
-  head: number;
+  latest_block: number;
   blocks: number;
   events: number;
+  pages: number;
+  calls: Record<string, number>;
 }
 
 export class Indexer {
@@ -27,8 +33,7 @@ export class Indexer {
   private readonly store: IndexerStore;
   private readonly sink: EventSink | undefined;
   private readonly enricher: ReceiptEnricher | undefined;
-  private readonly startHeight: number;
-  private readonly batchBlocks: number;
+  private readonly maxPagesPerSync: number;
   private readonly pollIntervalMs: number;
   private readonly retentionDays: number;
   private readonly logger: Logger;
@@ -40,9 +45,8 @@ export class Indexer {
     this.store = options.store;
     this.sink = options.sink;
     this.enricher = options.enricher;
-    this.startHeight = options.startHeight ?? 0;
-    this.batchBlocks = Math.max(1, options.batchBlocks ?? 100);
-    this.pollIntervalMs = Math.max(1, options.pollIntervalMs ?? 5_000);
+    this.maxPagesPerSync = Math.max(1, options.maxPagesPerSync ?? 5);
+    this.pollIntervalMs = Math.max(1, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
     this.retentionDays = Math.max(1, options.retentionDays ?? 30);
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
@@ -83,37 +87,47 @@ export class Indexer {
     }
   }
 
-  /** One pass from the cursor to the current final head. */
+  /** Fetches pages until the source says it is done, the page budget is hit, or no progress. */
   async syncOnce(): Promise<SyncResult> {
-    const head = await this.source.finalHead();
-    this.lastHead = head;
-    const cursor = this.store.cursor();
-    let next = cursor === null ? this.startHeight : cursor.height + 1;
-    if (next > head) return { head, blocks: 0, events: 0 };
-
+    const stored = this.store.cursor();
+    let cursor = stored?.sourceCursor ?? null;
+    let latestBlock = stored?.height ?? 0;
     let blocks = 0;
     let events = 0;
-    while (next <= head) {
-      const end = Math.min(head, next + this.batchBlocks - 1);
-      const range = await this.source.fetchRange(next, end);
-      if (range.length === 0) break;
-      const ordered = [...range].sort((a, b) => a.height - b.height);
+    let pages = 0;
+
+    for (;;) {
+      const page = await this.source.fetch(cursor);
+      pages += 1;
+      latestBlock = Math.max(latestBlock, page.latestBlock);
+      const ordered = [...page.blocks].sort((a, b) => a.height - b.height);
       for (const block of ordered) {
-        if (block.height > head) continue;
         const inserted = this.store.ingestBlock(block);
         blocks += 1;
         events += inserted.length;
+        latestBlock = Math.max(latestBlock, block.height);
         for (const event of inserted) {
           await this.emit(event);
           await this.enrich(event);
         }
       }
-      const highest = ordered[ordered.length - 1]?.height;
-      if (highest === undefined) break;
-      next = highest + 1;
+      const last = ordered[ordered.length - 1];
+      this.store.setCursor(
+        last === undefined ? latestBlock : Math.max(latestBlock, last.height),
+        last?.hash ?? stored?.blockHash ?? "",
+        page.cursor ?? cursor,
+      );
+
+      const previous = cursor;
+      cursor = page.cursor;
+      if (page.done || pages >= this.maxPagesPerSync) break;
+      if (cursor === null || cursor === previous) break;
     }
-    this.logger.info("indexed", { head, blocks, events });
-    return { head, blocks, events };
+
+    this.lastHead = latestBlock;
+    const calls = this.source.callCounts?.() ?? {};
+    this.logger.info("indexed", { latestBlock, blocks, events, pages, calls });
+    return { latest_block: latestBlock, blocks, events, pages, calls };
   }
 
   /** Deletes prunable operational events; evidence kinds are never touched. */
@@ -149,7 +163,14 @@ export class Indexer {
     quotes: number;
     acks: number;
     transfers: number;
+    calls: Record<string, number>;
+    poll_interval_ms: number;
   } {
-    return { ...this.store.health(), last_head: this.lastHead };
+    return {
+      ...this.store.health(),
+      last_head: this.lastHead,
+      calls: this.source.callCounts?.() ?? {},
+      poll_interval_ms: this.pollIntervalMs,
+    };
   }
 }

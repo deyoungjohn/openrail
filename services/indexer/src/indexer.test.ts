@@ -21,8 +21,7 @@ function fixture(options: { enricher?: boolean } = {}) {
     store,
     sink,
     ...(enricher === undefined ? {} : { enricher }),
-    startHeight: 100,
-    batchBlocks: 2,
+    maxPagesPerSync: 10,
     logger: silentLogger(),
     now: () => 1_800_000_000_000,
   });
@@ -34,8 +33,12 @@ describe("indexer ingestion", () => {
     const f = fixture();
     const result = await f.indexer.syncOnce();
 
-    expect(result).toMatchObject({ head: 103, blocks: 4, events: 10 });
-    expect(f.store.cursor()).toEqual({ height: 103, blockHash: "BlockHash103" });
+    expect(result).toMatchObject({ latest_block: 103, blocks: 4, events: 10, pages: 1 });
+    expect(f.store.cursor()).toMatchObject({
+      height: 103,
+      blockHash: "BlockHash103",
+      sourceCursor: "h:103",
+    });
     expect(f.sink.events).toHaveLength(10);
     expect(f.store.health()).toMatchObject({
       events: 10,
@@ -67,8 +70,7 @@ describe("indexer ingestion", () => {
       source: f.source,
       store: f.store,
       sink: f.sink,
-      startHeight: 0,
-      batchBlocks: 10,
+      maxPagesPerSync: 10,
       logger: silentLogger(),
     });
     f.source.setHead(103);
@@ -94,8 +96,7 @@ describe("indexer ingestion", () => {
       source: new FakeSource(blocks),
       store,
       sink,
-      startHeight: 100,
-      batchBlocks: 10,
+      maxPagesPerSync: 10,
       logger: silentLogger(),
     });
     await indexer.syncOnce();
@@ -171,8 +172,7 @@ describe("indexer receipts", () => {
       source: new FakeSource(blocks),
       store,
       enricher: failing,
-      startHeight: 100,
-      batchBlocks: 10,
+      maxPagesPerSync: 10,
       logger: silentLogger(),
     });
     await indexer.syncOnce();

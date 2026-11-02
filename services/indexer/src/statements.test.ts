@@ -29,8 +29,7 @@ async function syncedStore() {
   const indexer = new Indexer({
     source: new FakeSource(loadBlocks()),
     store,
-    startHeight: 100,
-    batchBlocks: 10,
+    maxPagesPerSync: 10,
     logger: silentLogger(),
   });
   await indexer.syncOnce();

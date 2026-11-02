@@ -31,8 +31,7 @@ async function setup() {
     source: new FakeSource(loadBlocks()),
     store,
     enricher: new FakeEnricher(),
-    startHeight: 100,
-    batchBlocks: 10,
+    maxPagesPerSync: 10,
     logger: silentLogger(),
   });
   await indexer.syncOnce();

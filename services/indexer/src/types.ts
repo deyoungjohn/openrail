@@ -17,12 +17,21 @@ export interface SourceBlock {
 }
 
 /**
- * Only final blocks may be returned. The production implementation scans the final chain;
- * tests use a recorded fake.
+ * Account-scoped event feed (NearBlocks in production). `cursor` is opaque to the indexer and
+ * stored in SQLite; a null cursor means "start from the oldest available page". The source only
+ * returns final data.
  */
+export interface SourcePage {
+  blocks: SourceBlock[];
+  cursor: string | null;
+  done: boolean;
+  latestBlock: number;
+}
+
 export interface EventSource {
-  finalHead(): Promise<number>;
-  fetchRange(fromHeight: number, toHeight: number): Promise<SourceBlock[]>;
+  fetch(cursor: string | null): Promise<SourcePage>;
+  /** HTTP/RPC calls per feature, for the load budget. */
+  callCounts?(): Record<string, number>;
 }
 
 export interface ParsedEvent {

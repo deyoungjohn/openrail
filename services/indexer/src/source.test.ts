@@ -11,29 +11,46 @@ function rpc(result: unknown): Response {
   });
 }
 
-describe("RPC event source", () => {
-  it("reads the final head", async () => {
+describe("RPC event source (off by default)", () => {
+  it("starts at the stored height and reports the final head", async () => {
+    const calls: string[] = [];
     const fetchImpl: FetchLike = async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as { method: string };
-      if (body.method === "block") return rpc({ header: { height: 103 } });
+      const body = JSON.parse(String(init?.body)) as {
+        method: string;
+        params: { finality?: string; block_id?: number };
+      };
+      calls.push(body.method);
+      if (body.method === "block" && body.params.finality === "final") {
+        return rpc({ header: { height: 103 } });
+      }
+      if (body.method === "block") {
+        return rpc({
+          header: { height: 103, hash: "H103", timestamp: "1793613660000000000" },
+          chunks: [],
+        });
+      }
       return rpc({});
     };
-    await expect(
-      new RpcEventSource("openrail.near", ["https://rpc.test"], fetchImpl).finalHead(),
-    ).resolves.toBe(103);
+    const page = await new RpcEventSource(
+      "openrail.near",
+      ["https://rpc.test"],
+      103,
+      fetchImpl,
+    ).fetch(null);
+    expect(page.latestBlock).toBe(103);
+    expect(page.blocks.map((block) => block.height)).toEqual([103]);
+    expect(page.cursor).toBe("h:103");
+    expect(calls).toEqual(["block", "block"]);
   });
 
   it("scans a final block, keeps root transactions and extracts receipt logs", async () => {
     const calls: string[] = [];
     const fetchImpl: FetchLike = async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as {
-        method: string;
-        params: unknown;
-      };
+      const body = JSON.parse(String(init?.body)) as { method: string; params: unknown };
       calls.push(body.method);
       if (body.method === "block") {
         const params = body.params as { block_id?: number; finality?: string };
-        if (params.finality === "final") return rpc({ header: { height: 103 } });
+        if (params.finality === "final") return rpc({ header: { height: 100 } });
         return rpc({
           header: { height: 100, hash: "H100", timestamp: "1793613600000000000" },
           chunks: [{ chunk_hash: "C1" }],
@@ -55,18 +72,19 @@ describe("RPC event source", () => {
       return rpc({});
     };
 
-    const blocks = await new RpcEventSource(
+    const page = await new RpcEventSource(
       "openrail.near",
       ["https://rpc.test"],
+      100,
       fetchImpl,
-    ).fetchRange(100, 100);
+    ).fetch("h:99");
 
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0]?.height).toBe(100);
-    expect(blocks[0]?.timestamp).toBe(1793613600);
-    expect(blocks[0]?.receipts).toHaveLength(1);
-    expect(blocks[0]?.receipts[0]?.txHash).toBe("Tx1");
-    expect(blocks[0]?.receipts[0]?.logs[0]).toBe(LOG);
-    expect(calls).toEqual(["block", "chunk", "tx"]);
+    expect(page.blocks).toHaveLength(1);
+    expect(page.blocks[0]?.height).toBe(100);
+    expect(page.blocks[0]?.timestamp).toBe(1793613600);
+    expect(page.blocks[0]?.receipts).toHaveLength(1);
+    expect(page.blocks[0]?.receipts[0]?.txHash).toBe("Tx1");
+    expect(page.blocks[0]?.receipts[0]?.logs[0]).toBe(LOG);
+    expect(calls).toEqual(["block", "block", "chunk", "tx"]);
   });
 });

@@ -23,6 +23,7 @@ function payLeg(leg: unknown): LegShape | null {
 export interface Cursor {
   height: number;
   blockHash: string;
+  sourceCursor: string | null;
 }
 
 export interface EventRow {
@@ -106,6 +107,7 @@ export class IndexerStore {
         id INTEGER PRIMARY KEY CHECK (id = 1),
         height INTEGER NOT NULL,
         block_hash TEXT NOT NULL,
+        source_cursor TEXT,
         updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS events (
@@ -210,9 +212,18 @@ export class IndexerStore {
       );
       CREATE INDEX IF NOT EXISTS receipts_tx ON receipts(tx_hash);
     `);
+    const cursorColumns = this.db.prepare("PRAGMA table_info(cursor)").all() as unknown as {
+      name: string;
+    }[];
+    if (!cursorColumns.some((column) => column.name === "source_cursor")) {
+      this.db.exec("ALTER TABLE cursor ADD COLUMN source_cursor TEXT");
+    }
     this.db
       .prepare("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)")
       .run(SCHEMA_VERSION, new Date().toISOString());
+    this.db
+      .prepare("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)")
+      .run(SCHEMA_VERSION + 1, new Date().toISOString());
   }
 
   close(): void {
@@ -220,18 +231,26 @@ export class IndexerStore {
   }
 
   cursor(): Cursor | null {
-    const row = this.db.prepare("SELECT height, block_hash FROM cursor WHERE id = 1").get() as
-      { height: number; block_hash: string } | undefined;
-    return row === undefined ? null : { height: row.height, blockHash: row.block_hash };
+    const row = this.db
+      .prepare("SELECT height, block_hash, source_cursor FROM cursor WHERE id = 1")
+      .get() as { height: number; block_hash: string; source_cursor: string | null } | undefined;
+    return row === undefined
+      ? null
+      : {
+          height: row.height,
+          blockHash: row.block_hash,
+          sourceCursor: row.source_cursor,
+        };
   }
 
-  private setCursor(height: number, blockHash: string): void {
+  /** Stores the account-scoped source cursor and the highest processed block. */
+  setCursor(height: number, blockHash: string, sourceCursor: string | null): void {
     this.db
       .prepare(
-        "INSERT INTO cursor(id, height, block_hash, updated_at) VALUES (1, ?, ?, ?) " +
-          "ON CONFLICT(id) DO UPDATE SET height=excluded.height, block_hash=excluded.block_hash, updated_at=excluded.updated_at",
+        "INSERT INTO cursor(id, height, block_hash, source_cursor, updated_at) VALUES (1, ?, ?, ?, ?) " +
+          "ON CONFLICT(id) DO UPDATE SET height=excluded.height, block_hash=excluded.block_hash, source_cursor=excluded.source_cursor, updated_at=excluded.updated_at",
       )
-      .run(height, blockHash, new Date().toISOString());
+      .run(height, blockHash, sourceCursor, new Date().toISOString());
   }
 
   private insertEvent(event: ParsedEvent): boolean {
@@ -478,7 +497,6 @@ export class IndexerStore {
         this.applyEvent(event);
         inserted.push(event);
       }
-      this.setCursor(block.height, block.hash);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");

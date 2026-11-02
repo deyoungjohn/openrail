@@ -11,6 +11,7 @@ import type {
   ReceiptEnricher,
   ReceiptEvidence,
   SourceBlock,
+  SourcePage,
 } from "./types.js";
 
 export const ROOT = "openrail.near";
@@ -25,6 +26,7 @@ export function memoryStore(): IndexerStore {
 }
 
 export class FakeSource implements EventSource {
+  private calls = 0;
   constructor(
     private readonly blocks: SourceBlock[],
     private head = blocks[blocks.length - 1]?.height ?? 0,
@@ -34,12 +36,23 @@ export class FakeSource implements EventSource {
     this.head = height;
   }
 
-  async finalHead(): Promise<number> {
-    return this.head;
+  callCounts(): Record<string, number> {
+    return { "fake.fetch": this.calls };
   }
 
-  async fetchRange(fromHeight: number, toHeight: number): Promise<SourceBlock[]> {
-    return this.blocks.filter((block) => block.height >= fromHeight && block.height <= toHeight);
+  async fetch(cursor: string | null): Promise<SourcePage> {
+    this.calls += 1;
+    const stored = cursor === null ? 0 : Number(cursor.replace("h:", ""));
+    const blocks = this.blocks
+      .filter((block) => block.height > stored && block.height <= this.head)
+      .sort((a, b) => a.height - b.height);
+    const latest = blocks[blocks.length - 1]?.height ?? stored;
+    return {
+      blocks,
+      cursor: `h:${latest}`,
+      done: true,
+      latestBlock: this.head,
+    };
   }
 }
 
