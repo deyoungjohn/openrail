@@ -73,6 +73,26 @@ describe("generate", () => {
     expect(rs).not.toContain("beta");
   });
 
+  it("emits multiple hook references when multiple module folders exist", () => {
+    fixture(
+      [
+        { id: "alpha", enabled: true },
+        { id: "beta", enabled: true },
+      ],
+      ["alpha", "beta"],
+    );
+    mkdirSync(join(root, "contracts/openrail/src/modules/alpha"), { recursive: true });
+    mkdirSync(join(root, "contracts/openrail/src/modules/beta"), { recursive: true });
+    const { files, errors } = generate(root);
+    expect(errors).toEqual([]);
+    const rs = files["contracts/openrail/src/modules/mod.rs"];
+    expect(rs).toContain("&alpha::HOOK");
+    expect(rs).toContain("&beta::HOOK");
+    expect(rs).toMatch(
+      /vec!\[\s*#\[cfg\(feature = "alpha"\)\]\s*&alpha::HOOK,\s*#\[cfg\(feature = "beta"\)\]\s*&beta::HOOK,\s*\]/,
+    );
+  });
+
   it("never emits a disabled module even when its folder exists", () => {
     fixture(
       [
