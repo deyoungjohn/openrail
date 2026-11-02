@@ -3,7 +3,7 @@
 //! Standard: `openrail`, version: `1.0.0`.
 //! NFT standard: `nep171`, version: `1.0.0`.
 
-use crate::types::{AckScheme, Debtor, Leg, Lock};
+use crate::types::{AckScheme, Debtor, Hex32, Leg, Lock, TokenId};
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::{self, json};
 use near_sdk::{near, AccountId};
@@ -36,7 +36,7 @@ pub struct IssueEvent {
     pub issuer_id: AccountId,
     pub owner_id: AccountId,
     pub debtor: Option<Debtor>,
-    pub terms_hash: String,
+    pub terms_hash: Hex32,
     pub amount_due: U128,
     pub due_date: u64,
 }
@@ -201,7 +201,7 @@ impl SurplusReleasedEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnmatchedEvent {
     pub token_id: String,
-    pub asset: AccountId,
+    pub asset: TokenId,
     pub amount: U128,
 }
 
@@ -221,7 +221,7 @@ impl UnmatchedEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AnomalyEvent {
     pub token_id: String,
-    pub asset: AccountId,
+    pub asset: TokenId,
     pub balance: U128,
     pub last_seen: U128,
 }

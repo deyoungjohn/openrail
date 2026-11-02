@@ -58,6 +58,10 @@
       "kind": "call"
     },
     {
+      "name": "new",
+      "kind": "call"
+    },
+    {
       "name": "nft_approve",
       "kind": "call"
     },

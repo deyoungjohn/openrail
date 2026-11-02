@@ -179,79 +179,176 @@ pub struct CoreDefaultHook;
 impl Hook for CoreDefaultHook {}
 
 // ──────────────────────────────────────────────
-// Hook Dispatcher (Iterates crate::modules::ENABLED)
+// Hook Composition & Dispatcher Mechanisms (Blueprint 1.4)
 // ──────────────────────────────────────────────
 
-/// Dispatches `check_transfer` across enabled modules.
-pub fn dispatch_check_transfer(claim: &Claim, receiver: &AccountId) -> Result<(), Refusal> {
-    if crate::modules::ENABLED.is_empty() {
-        return CoreDefaultHook.check_transfer(claim, receiver);
+/// Composed check_transfer: core first, then modules in order; first refusal wins.
+/// A module may refuse, but can never permit what core refuses.
+pub fn dispatch_check_transfer_with(
+    hooks: &[&dyn Hook],
+    claim: &Claim,
+    receiver: &AccountId,
+) -> Result<(), Refusal> {
+    CoreDefaultHook.check_transfer(claim, receiver)?;
+    for hook in hooks {
+        hook.check_transfer(claim, receiver)?;
     }
-    // Modules will register here when compiled in.
-    CoreDefaultHook.check_transfer(claim, receiver)
+    Ok(())
 }
 
-/// Dispatches `check_cancel` across enabled modules.
-pub fn dispatch_check_cancel(claim: &Claim) -> Result<(), Refusal> {
-    if crate::modules::ENABLED.is_empty() {
-        return CoreDefaultHook.check_cancel(claim);
+/// Composed check_cancel: core first, then modules in order; first refusal wins.
+pub fn dispatch_check_cancel_with(hooks: &[&dyn Hook], claim: &Claim) -> Result<(), Refusal> {
+    CoreDefaultHook.check_cancel(claim)?;
+    for hook in hooks {
+        hook.check_cancel(claim)?;
     }
-    CoreDefaultHook.check_cancel(claim)
+    Ok(())
 }
 
-/// Dispatches `check_writeoff` across enabled modules.
-pub fn dispatch_check_writeoff(claim: &Claim) -> Result<(), Refusal> {
-    if crate::modules::ENABLED.is_empty() {
-        return CoreDefaultHook.check_writeoff(claim);
+/// Composed check_writeoff: core first, then modules in order; first refusal wins.
+pub fn dispatch_check_writeoff_with(hooks: &[&dyn Hook], claim: &Claim) -> Result<(), Refusal> {
+    CoreDefaultHook.check_writeoff(claim)?;
+    for hook in hooks {
+        hook.check_writeoff(claim)?;
     }
-    CoreDefaultHook.check_writeoff(claim)
+    Ok(())
 }
 
-/// Dispatches `adjust_booking` across enabled modules.
-pub fn dispatch_adjust_booking(claim: &Claim, input: BookingInput) -> BookingAdjust {
-    if crate::modules::ENABLED.is_empty() {
-        return CoreDefaultHook.adjust_booking(claim, input);
+/// Composed check_credit: core enforces single-source rule, then modules in order.
+pub fn dispatch_check_credit_with(
+    hooks: &[&dyn Hook],
+    claim: &Claim,
+    source: u8,
+) -> Result<(), Refusal> {
+    if let Some(existing) = claim.credit_source {
+        if existing != source {
+            return Err(Refusal::new("only one credit source permitted per claim"));
+        }
     }
-    CoreDefaultHook.adjust_booking(claim, input)
+    CoreDefaultHook.check_credit(claim, source)?;
+    for hook in hooks {
+        hook.check_credit(claim, source)?;
+    }
+    Ok(())
 }
 
-/// Dispatches `split_distribution` across enabled modules.
-pub fn dispatch_split_distribution(claim: &Claim, net: U128) -> Vec<Leg> {
-    if crate::modules::ENABLED.is_empty() {
-        return CoreDefaultHook.split_distribution(claim, net);
+/// Composed adjust_booking: core default first; each module may only lower payment / add credit
+/// within credit <= outstanding.
+pub fn dispatch_adjust_booking_with(
+    hooks: &[&dyn Hook],
+    claim: &Claim,
+    input: BookingInput,
+) -> BookingAdjust {
+    let mut current = CoreDefaultHook.adjust_booking(claim, input.clone());
+    for hook in hooks {
+        let mod_adj = hook.adjust_booking(claim, input.clone());
+        if mod_adj.payment.0 <= current.payment.0 {
+            current.payment = mod_adj.payment;
+        }
+        let max_credit = std::cmp::min(input.outstanding.0, mod_adj.credit.0);
+        if max_credit >= current.credit.0 {
+            current.credit = U128(max_credit);
+        }
     }
-    CoreDefaultHook.split_distribution(claim, net)
+    current
 }
 
-/// Dispatches `check_credit` across enabled modules.
-pub fn dispatch_check_credit(claim: &Claim, source: u8) -> Result<(), Refusal> {
-    if crate::modules::ENABLED.is_empty() {
-        return CoreDefaultHook.check_credit(claim, source);
+/// Composed split_distribution: legs must sum to net, else fall back to core default and emit anomaly.
+pub fn dispatch_split_distribution_with(hooks: &[&dyn Hook], claim: &Claim, net: U128) -> Vec<Leg> {
+    let core_default = CoreDefaultHook.split_distribution(claim, net);
+    if hooks.is_empty() {
+        return core_default;
     }
-    CoreDefaultHook.check_credit(claim, source)
+    for hook in hooks {
+        let legs = hook.split_distribution(claim, net);
+        let sum: u128 = legs.iter().map(|l| l.amount().0).sum();
+        if sum == net.0 {
+            return legs;
+        } else {
+            // Legs violate conservation law! Fall back to core default and log anomaly.
+            near_sdk::env::log_str("ANOMALY: module distribution legs do not sum to net");
+        }
+    }
+    core_default
 }
 
-/// Dispatches `in_motion` across enabled modules.
-pub fn dispatch_in_motion(claim: &Claim) -> bool {
-    if crate::modules::ENABLED.is_empty() {
-        return CoreDefaultHook.in_motion(claim);
+/// Composed in_motion: returns true if core or any module is in motion.
+pub fn dispatch_in_motion_with(hooks: &[&dyn Hook], claim: &Claim) -> bool {
+    if CoreDefaultHook.in_motion(claim) {
+        return true;
     }
-    CoreDefaultHook.in_motion(claim)
+    for hook in hooks {
+        if hook.in_motion(claim) {
+            return true;
+        }
+    }
+    false
 }
 
-/// Dispatches `on_booked` across enabled modules.
-pub fn dispatch_on_booked(claim: &Claim, booking: &Booking) {
-    if crate::modules::ENABLED.is_empty() {
-        CoreDefaultHook.on_booked(claim, booking);
-        return;
-    }
+/// Composed on_booked: invokes all hooks.
+pub fn dispatch_on_booked_with(hooks: &[&dyn Hook], claim: &Claim, booking: &Booking) {
     CoreDefaultHook.on_booked(claim, booking);
+    for hook in hooks {
+        hook.on_booked(claim, booking);
+    }
 }
 
-/// Dispatches `kind_rules` for a given kind across enabled modules.
-pub fn dispatch_kind_rules(kind: u8) -> KindRules {
-    if crate::modules::ENABLED.is_empty() {
-        return CoreDefaultHook.kind_rules(kind);
+/// Composed kind_rules: kind 0 is invoice; otherwise queries modules.
+pub fn dispatch_kind_rules_with(hooks: &[&dyn Hook], kind: u8) -> KindRules {
+    if kind == 0 {
+        return KindRules::invoice();
     }
-    CoreDefaultHook.kind_rules(kind)
+    if let Some(hook) = hooks.first() {
+        return hook.kind_rules(kind);
+    }
+    KindRules::default()
+}
+
+// ──────────────────────────────────────────────
+// Default Dispatchers (Query crate::modules::registered())
+// ──────────────────────────────────────────────
+
+pub fn dispatch_check_transfer(claim: &Claim, receiver: &AccountId) -> Result<(), Refusal> {
+    let hooks = crate::modules::registered();
+    dispatch_check_transfer_with(&hooks, claim, receiver)
+}
+
+pub fn dispatch_check_cancel(claim: &Claim) -> Result<(), Refusal> {
+    let hooks = crate::modules::registered();
+    dispatch_check_cancel_with(&hooks, claim)
+}
+
+pub fn dispatch_check_writeoff(claim: &Claim) -> Result<(), Refusal> {
+    let hooks = crate::modules::registered();
+    dispatch_check_writeoff_with(&hooks, claim)
+}
+
+pub fn dispatch_check_credit(claim: &Claim, source: u8) -> Result<(), Refusal> {
+    let hooks = crate::modules::registered();
+    dispatch_check_credit_with(&hooks, claim, source)
+}
+
+pub fn dispatch_adjust_booking(claim: &Claim, input: BookingInput) -> BookingAdjust {
+    let hooks = crate::modules::registered();
+    dispatch_adjust_booking_with(&hooks, claim, input)
+}
+
+pub fn dispatch_split_distribution(claim: &Claim, net: U128) -> Vec<Leg> {
+    let hooks = crate::modules::registered();
+    dispatch_split_distribution_with(&hooks, claim, net)
+}
+
+pub fn dispatch_in_motion(claim: &Claim) -> bool {
+    let hooks = crate::modules::registered();
+    dispatch_in_motion_with(&hooks, claim)
+}
+
+pub fn dispatch_on_booked(claim: &Claim, booking: &Booking) {
+    let hooks = crate::modules::registered();
+    dispatch_on_booked_with(&hooks, claim, booking);
+}
+
+pub fn dispatch_kind_rules(kind: u8) -> KindRules {
+    let hooks = crate::modules::registered();
+    dispatch_kind_rules_with(&hooks, kind)
 }

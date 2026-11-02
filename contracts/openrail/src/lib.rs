@@ -13,13 +13,13 @@ pub mod modules;
 pub mod types;
 
 use near_sdk::json_types::U128;
-use near_sdk::store::{LookupMap, Vector};
+use near_sdk::store::LookupMap;
 use near_sdk::{env, near, AccountId, PanicOnDefault, PromiseOrValue};
 use std::collections::HashMap;
 
 pub use types::{
-    Ack, AckScheme, Claim, Config, Debtor, DebtorCosig, JsonToken, Leg, Lock, NFTContractMetadata,
-    Quote, Status, TokenMetadata,
+    Ack, AckScheme, Claim, ClaimView, Config, Debtor, DebtorCosig, Hex20, Hex32, HexBytes,
+    JsonToken, Leg, Lock, NFTContractMetadata, Quote, Status, TokenId, TokenMetadata,
 };
 
 // ──────────────────────────────────────────────
@@ -32,9 +32,11 @@ pub const STORAGE_PREFIX_CLAIMS: &[u8] = b"c:";
 pub const STORAGE_PREFIX_OWNER_INDEX: &[u8] = b"o:";
 /// Storage prefix for token metadata map.
 pub const STORAGE_PREFIX_TOKEN_METADATA: &[u8] = b"t:";
-/// Storage prefix for append-only payment log entries.
+/// Storage prefix for per-key append-only payment log entries (`LookupMap<(String, u64), Quote>`).
 pub const STORAGE_PREFIX_PAYMENT_LOG: &[u8] = b"l:";
-/// Storage prefix for undistributed legs map.
+/// Storage prefix for payment log per-token count (`LookupMap<String, u64>`).
+pub const STORAGE_PREFIX_PAYMENT_LOG_COUNT: &[u8] = b"lc:";
+/// Storage prefix for undistributed legs map (`LookupMap<String, Vec<Leg>>`).
 pub const STORAGE_PREFIX_UNDISTRIBUTED: &[u8] = b"u:";
 /// Storage prefix for prepaid storage credits map.
 pub const STORAGE_PREFIX_STORAGE_CREDIT: &[u8] = b"s:";
@@ -63,43 +65,36 @@ pub const ERR_RULE_8_HOOK_REFUSED: &str = "Rule 8: hook transfer check refused";
 #[derive(PanicOnDefault)]
 pub struct Contract {
     pub claims: LookupMap<String, Claim>,
-    pub owner_index: LookupMap<AccountId, Vector<String>>,
+    pub owner_index: LookupMap<AccountId, Vec<String>>,
     pub token_metadata: LookupMap<String, TokenMetadata>,
-    pub payment_log: LookupMap<String, Vec<Quote>>,
+    pub payment_log: LookupMap<(String, u64), Quote>,
+    pub payment_log_count: LookupMap<String, u64>,
     pub undistributed: LookupMap<String, Vec<Leg>>,
     pub storage_credit: LookupMap<AccountId, U128>,
     pub config: Config,
     pub next_token_id: u64,
 }
 
+#[near]
 impl Contract {
-    /// Creates an empty default contract state structure for initial setup.
-    #[allow(clippy::new_without_default)]
-    pub fn new_empty() -> Self {
+    /// Initializes the Openrail root contract with global configuration (Blueprint 1.2, 2.1).
+    ///
+    /// Caller: Contract account (<root>) during initial deployment.
+    #[init]
+    pub fn new(config: Config) -> Self {
         Self {
             claims: LookupMap::new(STORAGE_PREFIX_CLAIMS),
             owner_index: LookupMap::new(STORAGE_PREFIX_OWNER_INDEX),
             token_metadata: LookupMap::new(STORAGE_PREFIX_TOKEN_METADATA),
             payment_log: LookupMap::new(STORAGE_PREFIX_PAYMENT_LOG),
+            payment_log_count: LookupMap::new(STORAGE_PREFIX_PAYMENT_LOG_COUNT),
             undistributed: LookupMap::new(STORAGE_PREFIX_UNDISTRIBUTED),
             storage_credit: LookupMap::new(STORAGE_PREFIX_STORAGE_CREDIT),
-            config: Config {
-                settlement_assets: Vec::new(),
-                vault_code_hash: [0u8; 32],
-                fee_account: "fees.openrail.near".parse().unwrap(),
-                watchers: Vec::new(),
-                quote_writers: Vec::new(),
-                issuers: Vec::new(),
-                issue_paused: false,
-            },
+            config,
             next_token_id: 1,
         }
     }
-}
 
-#[allow(clippy::too_many_arguments)]
-#[near]
-impl Contract {
     // ──────────────────────────────────────────
     // Core Issuance & Storage (Blueprint 2.2)
     // ──────────────────────────────────────────
@@ -115,7 +110,7 @@ impl Contract {
         &mut self,
         kind: u8,
         debtor: Option<Debtor>,
-        terms_hash: [u8; 32],
+        terms_hash: Hex32,
         amount_due: U128,
         due_date: u64,
         metadata: Option<TokenMetadata>,
@@ -134,7 +129,7 @@ impl Contract {
         business: AccountId,
         kind: u8,
         debtor: Option<Debtor>,
-        terms_hash: [u8; 32],
+        terms_hash: Hex32,
         amount_due: U128,
         due_date: u64,
         metadata: Option<TokenMetadata>,
@@ -181,7 +176,7 @@ impl Contract {
     /// Caller: Anyone (relays signature).
     /// Deposit: None. Verifies EIP-712 signature with `env::ecrecover`;
     ///         recovered address must equal `claim.debtor == Evm(address)`.
-    pub fn acknowledge_evm(&mut self, token_id: String, chain_id: u64, sig: Vec<u8>) {
+    pub fn acknowledge_evm(&mut self, token_id: String, chain_id: u64, sig: HexBytes) {
         let _ = (token_id, chain_id, sig);
         env::panic_str("NOT_IMPLEMENTED");
     }
@@ -438,8 +433,8 @@ impl Contract {
     /// Caller: Root account `<root>` only. Emits `config_changed`.
     pub fn set_config(
         &mut self,
-        settlement_assets: Option<Vec<AccountId>>,
-        vault_code_hash: Option<[u8; 32]>,
+        settlement_assets: Option<Vec<TokenId>>,
+        vault_code_hash: Option<Hex32>,
         fee_account: Option<AccountId>,
         issue_paused: Option<bool>,
         watchers: Option<Vec<AccountId>>,
@@ -470,8 +465,8 @@ impl Contract {
     // Views (Blueprint 2.2)
     // ──────────────────────────────────────────
 
-    /// Returns the full Claim record by `token_id`.
-    pub fn claim(&self, token_id: String) -> Option<Claim> {
+    /// Returns the full Claim record along with undistributed legs by `token_id`.
+    pub fn claim(&self, token_id: String) -> Option<ClaimView> {
         let _ = token_id;
         env::panic_str("NOT_IMPLEMENTED");
     }
@@ -482,7 +477,7 @@ impl Contract {
         account: AccountId,
         from: Option<u64>,
         limit: Option<u64>,
-    ) -> Vec<Claim> {
+    ) -> Vec<ClaimView> {
         let _ = (account, from, limit);
         env::panic_str("NOT_IMPLEMENTED");
     }
@@ -506,6 +501,25 @@ impl Contract {
 
     /// Returns global contract configuration.
     pub fn config(&self) -> Config {
+        env::panic_str("NOT_IMPLEMENTED");
+    }
+}
+
+// ──────────────────────────────────────────
+// Synchronous Module Functions (Blueprint 1.4)
+// ──────────────────────────────────────────
+
+impl Contract {
+    /// Applies a value-less credit from an enabled module outside of reconcile (Blueprint 1.4).
+    ///
+    /// Callable synchronously by enabled modules.
+    /// Rules:
+    /// - `claim.lock == Lock::None`
+    /// - At most one `credit_source` per claim, ever (write-once)
+    /// - `credit_total + amount <= amount_due - (booked_total - surplus)` (i.e. `credit <= outstanding`)
+    #[allow(dead_code)]
+    pub(crate) fn apply_credit(&mut self, token_id: &str, amount: U128, source: u8) {
+        let _ = (token_id, amount, source);
         env::panic_str("NOT_IMPLEMENTED");
     }
 }

@@ -103,6 +103,8 @@ fn test_built_abi_drift() {
         built_abi_path
     } else if fallback_built_path.exists() {
         fallback_built_path
+    } else if std::env::var("CI").is_ok() {
+        panic!("openrail_abi.json not built yet, but CI is set; failing drift check");
     } else {
         println!("openrail_abi.json not built yet; skipping drift check");
         return;

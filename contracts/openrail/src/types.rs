@@ -5,6 +5,300 @@
 use near_sdk::json_types::U128;
 use near_sdk::{near, AccountId};
 use std::collections::HashMap;
+use std::fmt;
+use std::ops::Deref;
+
+/// Intents token identifier (e.g. `nep141:...` or `nep245:...`).
+///
+/// Contains `:` delimiters and is not a valid NEAR AccountId.
+pub type TokenId = String;
+
+// ──────────────────────────────────────────────
+// Hex Serialization Helpers & Newtypes
+// ──────────────────────────────────────────────
+
+fn to_hex(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(2 + bytes.len() * 2);
+    s.push_str("0x");
+    for &b in bytes {
+        use std::fmt::Write;
+        write!(&mut s, "{:02x}", b).unwrap();
+    }
+    s
+}
+
+fn from_hex(s: &str) -> Result<Vec<u8>, String> {
+    let s = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .ok_or_else(|| "missing 0x prefix on hex string".to_string())?;
+    if s.len() % 2 != 0 {
+        return Err("odd hex string length".to_string());
+    }
+    let mut bytes = Vec::with_capacity(s.len() / 2);
+    for i in (0..s.len()).step_by(2) {
+        let byte = u8::from_str_radix(&s[i..i + 2], 16)
+            .map_err(|e| format!("invalid hex character at position {}: {}", i, e))?;
+        bytes.push(byte);
+    }
+    Ok(bytes)
+}
+
+fn from_hex_fixed<const N: usize>(s: &str) -> Result<[u8; N], String> {
+    let bytes = from_hex(s)?;
+    if bytes.len() != N {
+        return Err(format!(
+            "expected {} bytes ({} hex chars), got {}",
+            N,
+            N * 2,
+            bytes.len()
+        ));
+    }
+    let mut arr = [0u8; N];
+    arr.copy_from_slice(&bytes);
+    Ok(arr)
+}
+
+/// 0x-prefixed 32-byte hex string in JSON; raw 32 bytes in Borsh.
+#[near(serializers = [json, borsh])]
+#[serde(into = "String", try_from = "String")]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct Hex32(pub [u8; 32]);
+
+impl Hex32 {
+    pub const fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn from_hex(s: &str) -> Result<Self, String> {
+        from_hex_fixed::<32>(s).map(Self)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl Deref for Hex32 {
+    type Target = [u8; 32];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<[u8; 32]> for Hex32 {
+    fn as_ref(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl From<[u8; 32]> for Hex32 {
+    fn from(b: [u8; 32]) -> Self {
+        Self(b)
+    }
+}
+
+impl From<Hex32> for [u8; 32] {
+    fn from(h: Hex32) -> Self {
+        h.0
+    }
+}
+
+impl From<Hex32> for String {
+    fn from(h: Hex32) -> Self {
+        to_hex(&h.0)
+    }
+}
+
+impl TryFrom<String> for Hex32 {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::from_hex(&s)
+    }
+}
+
+impl TryFrom<&str> for Hex32 {
+    type Error = String;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_hex(s)
+    }
+}
+
+impl fmt::Debug for Hex32 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Hex32({})", to_hex(&self.0))
+    }
+}
+
+impl fmt::Display for Hex32 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", to_hex(&self.0))
+    }
+}
+
+/// 0x-prefixed 20-byte EVM address hex string in JSON; raw 20 bytes in Borsh.
+#[near(serializers = [json, borsh])]
+#[serde(into = "String", try_from = "String")]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct Hex20(pub [u8; 20]);
+
+impl Hex20 {
+    pub const fn new(bytes: [u8; 20]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn from_hex(s: &str) -> Result<Self, String> {
+        from_hex_fixed::<20>(s).map(Self)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 20] {
+        &self.0
+    }
+}
+
+impl Deref for Hex20 {
+    type Target = [u8; 20];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<[u8; 20]> for Hex20 {
+    fn as_ref(&self) -> &[u8; 20] {
+        &self.0
+    }
+}
+
+impl From<[u8; 20]> for Hex20 {
+    fn from(b: [u8; 20]) -> Self {
+        Self(b)
+    }
+}
+
+impl From<Hex20> for [u8; 20] {
+    fn from(h: Hex20) -> Self {
+        h.0
+    }
+}
+
+impl From<Hex20> for String {
+    fn from(h: Hex20) -> Self {
+        to_hex(&h.0)
+    }
+}
+
+impl TryFrom<String> for Hex20 {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::from_hex(&s)
+    }
+}
+
+impl TryFrom<&str> for Hex20 {
+    type Error = String;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_hex(s)
+    }
+}
+
+impl fmt::Debug for Hex20 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Hex20({})", to_hex(&self.0))
+    }
+}
+
+impl fmt::Display for Hex20 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", to_hex(&self.0))
+    }
+}
+
+/// 0x-prefixed hex string of variable byte length in JSON; raw byte vector in Borsh.
+#[near(serializers = [json, borsh])]
+#[serde(into = "String", try_from = "String")]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct HexBytes(pub Vec<u8>);
+
+impl HexBytes {
+    pub const fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    pub fn from_hex(s: &str) -> Result<Self, String> {
+        from_hex(s).map(Self)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Deref for HexBytes {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<[u8]> for HexBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<Vec<u8>> for HexBytes {
+    fn from(v: Vec<u8>) -> Self {
+        Self(v)
+    }
+}
+
+impl From<&[u8]> for HexBytes {
+    fn from(s: &[u8]) -> Self {
+        Self(s.to_vec())
+    }
+}
+
+impl From<HexBytes> for Vec<u8> {
+    fn from(h: HexBytes) -> Self {
+        h.0
+    }
+}
+
+impl From<HexBytes> for String {
+    fn from(h: HexBytes) -> Self {
+        to_hex(&h.0)
+    }
+}
+
+impl TryFrom<String> for HexBytes {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::from_hex(&s)
+    }
+}
+
+impl TryFrom<&str> for HexBytes {
+    type Error = String;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_hex(s)
+    }
+}
+
+impl fmt::Debug for HexBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "HexBytes({})", to_hex(&self.0))
+    }
+}
+
+impl fmt::Display for HexBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", to_hex(&self.0))
+    }
+}
+
+// ──────────────────────────────────────────────
+// Domain Types (Blueprint 2.1)
+// ──────────────────────────────────────────────
 
 /// The Debtor on a claim (Blueprint 2.1).
 ///
@@ -13,8 +307,8 @@ use std::collections::HashMap;
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Debtor {
-    /// 20-byte EVM address of the debtor.
-    Evm([u8; 20]),
+    /// 20-byte EVM address (0x-prefixed hex in JSON).
+    Evm(Hex20),
     /// NEAR account identifier of the debtor.
     Near(AccountId),
 }
@@ -24,7 +318,7 @@ pub enum Debtor {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AckScheme {
     /// EIP-712 signed typed data on an accepted EVM chain.
-    Evm { chain_id: u64, signer: [u8; 20] },
+    Evm { chain_id: u64, signer: Hex20 },
     /// Direct call or NEP-366 meta-transaction by NEAR account.
     Near { account: AccountId },
 }
@@ -87,14 +381,14 @@ pub enum Leg {
         receiver: AccountId,
         amount: U128,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        asset: Option<AccountId>,
+        asset: Option<TokenId>,
     },
     /// Retained in the claim account for delayed payout by an enabled module.
     Hold {
         module_id: String,
         amount: U128,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        asset: Option<AccountId>,
+        asset: Option<TokenId>,
     },
 }
 
@@ -109,7 +403,7 @@ impl Leg {
     }
 
     /// Constructs a payment leg with an assigned settlement asset.
-    pub fn pay_with_asset(receiver: AccountId, amount: U128, asset: AccountId) -> Self {
+    pub fn pay_with_asset(receiver: AccountId, amount: U128, asset: TokenId) -> Self {
         Self::Pay {
             receiver,
             amount,
@@ -143,7 +437,7 @@ impl Leg {
     }
 
     /// Returns the assigned settlement asset if allocated.
-    pub fn asset(&self) -> Option<&AccountId> {
+    pub fn asset(&self) -> Option<&TokenId> {
         match self {
             Self::Pay { asset, .. } => asset.as_ref(),
             Self::Hold { asset, .. } => asset.as_ref(),
@@ -175,7 +469,7 @@ pub struct Quote {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DebtorCosig {
     /// EVM EIP-712 signature over OPENRAIL_CANCEL_V1.
-    Evm { chain_id: u64, sig: Vec<u8> },
+    Evm { chain_id: u64, sig: HexBytes },
     /// NEAR direct call from the debtor account.
     Near,
 }
@@ -184,10 +478,10 @@ pub enum DebtorCosig {
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
-    /// The 4 USDC Intents settlement asset token IDs.
-    pub settlement_assets: Vec<AccountId>,
+    /// The 4 USDC Intents settlement asset token IDs (TokenId).
+    pub settlement_assets: Vec<TokenId>,
     /// Code hash of the vault v2 published global contract.
-    pub vault_code_hash: [u8; 32],
+    pub vault_code_hash: Hex32,
     /// Protocol fee account receiving 25 bps.
     pub fee_account: AccountId,
     /// Authorized watcher accounts for automated pump calls.
@@ -201,6 +495,8 @@ pub struct Config {
 }
 
 /// The core `Claim` record stored under prefix `c:`, keyed by `token_id` (Blueprint 2.1).
+///
+/// Note: `undistributed` is stored separately under prefix `u:` per Finding 6 and Blueprint 2.1.
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Claim {
@@ -223,7 +519,7 @@ pub struct Claim {
     pub debtor: Option<Debtor>,
 
     /// SHA-256 hash of canonical terms JSON (2.6). Written by `issue`; immutable.
-    pub terms_hash: [u8; 32],
+    pub terms_hash: Hex32,
 
     /// Total amount due in USDC base units (6 decimals). Written by `issue`; immutable.
     pub amount_due: U128,
@@ -241,7 +537,7 @@ pub struct Claim {
     pub lock: Lock,
 
     /// Accepted settlement assets (USDC token IDs). Copied from config at `issue`; immutable.
-    pub settlement_assets: Vec<AccountId>,
+    pub settlement_assets: Vec<TokenId>,
 
     /// Cumulative USDC base units booked to this claim. Reconcile callback; only increases.
     pub booked_total: U128,
@@ -262,16 +558,72 @@ pub struct Claim {
     pub credit_source: Option<u8>,
 
     /// Last observed balance per settlement asset on `claim_account`. Updated in reconcile callbacks (2.5).
-    pub last_seen_balance: HashMap<AccountId, U128>,
-
-    /// Undistributed payment legs pending retry (prefix `u:`). Receiver fixed at booking (D-S8).
-    pub undistributed: Vec<Leg>,
+    pub last_seen_balance: HashMap<TokenId, U128>,
 
     /// SHA-256 hash of legal assignment document. Required on sale when receiver != issuer (2.4 rule 4).
-    pub assignment_doc_hash: Option<[u8; 32]>,
+    pub assignment_doc_hash: Option<Hex32>,
 
     /// Block height at which claim was issued. Written by `issue`; immutable.
     pub created_block: u64,
+}
+
+/// JSON view representation of a claim including its undistributed legs.
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClaimView {
+    pub token_id: String,
+    pub kind: u8,
+    pub issuer_id: AccountId,
+    pub owner_id: AccountId,
+    pub claim_account: AccountId,
+    pub debtor: Option<Debtor>,
+    pub terms_hash: Hex32,
+    pub amount_due: U128,
+    pub due_date: u64,
+    pub ack: Option<Ack>,
+    pub status: Status,
+    pub lock: Lock,
+    pub settlement_assets: Vec<TokenId>,
+    pub booked_total: U128,
+    pub distributed_total: U128,
+    pub fee_total: U128,
+    pub surplus: U128,
+    pub credit_total: U128,
+    pub credit_source: Option<u8>,
+    pub last_seen_balance: HashMap<TokenId, U128>,
+    pub undistributed: Vec<Leg>,
+    pub assignment_doc_hash: Option<Hex32>,
+    pub created_block: u64,
+}
+
+impl ClaimView {
+    pub fn from_claim(claim: Claim, undistributed: Vec<Leg>) -> Self {
+        Self {
+            token_id: claim.token_id,
+            kind: claim.kind,
+            issuer_id: claim.issuer_id,
+            owner_id: claim.owner_id,
+            claim_account: claim.claim_account,
+            debtor: claim.debtor,
+            terms_hash: claim.terms_hash,
+            amount_due: claim.amount_due,
+            due_date: claim.due_date,
+            ack: claim.ack,
+            status: claim.status,
+            lock: claim.lock,
+            settlement_assets: claim.settlement_assets,
+            booked_total: claim.booked_total,
+            distributed_total: claim.distributed_total,
+            fee_total: claim.fee_total,
+            surplus: claim.surplus,
+            credit_total: claim.credit_total,
+            credit_source: claim.credit_source,
+            last_seen_balance: claim.last_seen_balance,
+            undistributed,
+            assignment_doc_hash: claim.assignment_doc_hash,
+            created_block: claim.created_block,
+        }
+    }
 }
 
 // ──────────────────────────────────────────────

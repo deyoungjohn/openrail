@@ -3,7 +3,7 @@
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::{self, Value};
 use openrail::events::*;
-use openrail::types::{AckScheme, Debtor, Leg, Lock};
+use openrail::types::{AckScheme, Debtor, Hex32, Leg, Lock};
 use std::fs;
 use std::path::Path;
 
@@ -109,7 +109,7 @@ fn test_sample_events_validate_against_schemas() {
         issuer_id: "alice.near".parse().unwrap(),
         owner_id: "alice.near".parse().unwrap(),
         debtor: Some(Debtor::Near("bob.near".parse().unwrap())),
-        terms_hash: "a".repeat(64),
+        terms_hash: Hex32::from_hex(&format!("0x{}", "a".repeat(64))).unwrap(),
         amount_due: U128(1_000_000),
         due_date: 1735689600,
     };
