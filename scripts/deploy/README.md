@@ -74,3 +74,16 @@ Never export a private key for this script. It only needs public keys; the near 
 | relayer | `acknowledge_evm` |
 
 The reproducible build pins its Rust image and feature list in `contracts/openrail/Cargo.toml`. If `openrail.modules.json` changes, update the `--features` value there; `plan.ts` stops when the two lists differ.
+
+## Sandbox rehearsal
+
+`scripts/deploy/rehearse.sh` runs the runbook against the local NEAR sandbox: deploy + `new`, add the issuer/relay/watcher function-call keys, issue one invoice through the real issuer service, pay it through the mock intents contract, reconcile with the watcher key, and read the receipt from the real indexer service. It prints every equivalent command and the final receipt JSON; no mainnet connection and no secrets are printed.
+
+```bash
+NEAR_SANDBOX_BIN_PATH="$HOME/.near/sandbox" scripts/deploy/rehearse.sh
+```
+
+→ prints the sandbox RPC URL, the deploy/config command, the three `add-key` commands, the issuer `curl`, the mock `mt_mint` and `reconcile` calls, and the indexer receipt.
+→ exits non-zero if any service, transaction, or receipt step fails.
+
+Prerequisites: `cargo`, `pnpm`, `curl`, and the `near-sandbox` binary. The script rebuilds `target/near/openrail/openrail.wasm` from the current checkout first, so a stale wasm cannot mask a failure. The human then runs the `scripts/deploy/plan.sh` commands against mainnet.
