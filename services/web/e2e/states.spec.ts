@@ -78,6 +78,18 @@ test.describe("loading: a skeleton while the answer is on its way, never a blank
     await expect(skeleton(page)).toBeVisible();
   });
 
+  test("the session check shows a skeleton, not a flash of the sign-in card", async ({
+    page,
+    context,
+  }) => {
+    await context.addCookies([
+      { name: "or_sess_mock", value: "__slow", url: "http://127.0.0.1:3100" },
+    ]);
+    await page.goto("/app", { waitUntil: "commit" });
+    await expect(skeleton(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in" })).toHaveCount(0);
+  });
+
   test("ack page and transfer page (fixture mode)", async ({ page }) => {
     await page.goto("/ack/c-slow", { waitUntil: "commit" });
     await expect(skeleton(page)).toBeVisible();
