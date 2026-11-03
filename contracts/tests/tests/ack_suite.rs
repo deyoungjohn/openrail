@@ -173,51 +173,6 @@ fn to_hex(bytes: &[u8]) -> String {
 }
 
 // ──────────────────────────────────────────────
-// 0. Smoke Test: Stubs Return NOT_IMPLEMENTED
-// ──────────────────────────────────────────────
-
-#[tokio::test]
-async fn smoke_ack_stubs_return_not_implemented() -> Result<()> {
-    let env = Env::new().await?;
-
-    // acknowledge_near returns NOT_IMPLEMENTED
-    let near_res = env
-        .alice
-        .call(env.root.id(), "acknowledge_near")
-        .args_json(json!({ "token_id": "c-1" }))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(near_res.is_failure());
-    let failure = format!("{:?} {}", near_res.failures(), near_res.logs().join(" "));
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "acknowledge_near must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    // acknowledge_evm returns NOT_IMPLEMENTED
-    let evm_res = env
-        .alice
-        .call(env.root.id(), "acknowledge_evm")
-        .args_json(json!({
-            "token_id": "c-1",
-            "chain_id": 1,
-            "sig": "0x00"
-        }))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(evm_res.is_failure());
-    let failure = format!("{:?} {}", evm_res.failures(), evm_res.logs().join(" "));
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "acknowledge_evm must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    Ok(())
-}
-
-// ──────────────────────────────────────────────
 // 1. ack_eip712_valid
 // ──────────────────────────────────────────────
 
@@ -305,7 +260,6 @@ fn ack_eip712_valid() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_eip712_valid() -> Result<()> {
     let env = Env::new().await?;
     let ack_fixture = load_ack_v1();
@@ -443,7 +397,6 @@ fn ack_eip712_tamper() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_eip712_tamper() -> Result<()> {
     let env = Env::new().await?;
     let ack_fixture = load_ack_v1();
@@ -515,7 +468,6 @@ fn ack_wrong_signer() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_wrong_signer() -> Result<()> {
     let env = Env::new().await?;
     let k14 = load_k14();
@@ -617,18 +569,21 @@ fn ack_v_normalised() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_v_normalised() -> Result<()> {
     let env = Env::new().await?;
-    let k14 = load_k14();
-    let v = &k14.valid[0];
+    let fixture = load_ack_v1();
+    let v = &fixture.ack[0];
+    let sig = &v.signature;
+    let v_byte = u8::from_str_radix(&sig[sig.len() - 2..], 16)?;
+    let normalized = if v_byte >= 27 { v_byte - 27 } else { v_byte };
+    let sig_v01 = format!("{}{:02x}", &sig[..sig.len() - 2], normalized);
 
     let issue_res = env
         .issue_claim_with_details(
             &env.alice,
             0,
             Some(Debtor::Evm(
-                Hex20::from_hex(&v.debtor_evm).map_err(|e| anyhow::anyhow!("{e}"))?,
+                Hex20::from_hex(&v.signer).map_err(|e| anyhow::anyhow!("{e}"))?,
             )),
             Hex32::from_hex(&v.terms_hash).map_err(|e| anyhow::anyhow!("{e}"))?,
             v.amount_due.parse::<u128>()?,
@@ -646,7 +601,7 @@ async fn contract_ack_v_normalised() -> Result<()> {
         .args_json(json!({
             "token_id": token_id,
             "chain_id": v.chain_id,
-            "sig": v.sig_v01,
+            "sig": sig_v01,
         }))
         .max_gas()
         .transact()
@@ -675,7 +630,6 @@ fn ack_high_s_rejected() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_high_s_rejected() -> Result<()> {
     let env = Env::new().await?;
     let k14 = load_k14();
@@ -752,7 +706,6 @@ fn ack_replay_other_invoice() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_replay_other_invoice() -> Result<()> {
     let env = Env::new().await?;
     let ack_fixture = load_ack_v1();
@@ -828,7 +781,6 @@ fn ack_replay_other_deployment() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_replay_other_deployment() -> Result<()> {
     let env = Env::new().await?;
     let k14 = load_k14();
@@ -929,7 +881,6 @@ fn ack_only_once() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_only_once() -> Result<()> {
     let env = Env::new().await?;
     let ack_fixture = load_ack_v1();
@@ -1068,7 +1019,6 @@ fn ack_contract_wallet_refused() {
 }
 
 #[tokio::test]
-#[ignore = "C3"]
 async fn contract_ack_contract_wallet_refused() -> Result<()> {
     let env = Env::new().await?;
     let k14 = load_k14();
