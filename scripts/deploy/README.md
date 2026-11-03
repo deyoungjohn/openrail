@@ -27,7 +27,10 @@
 | `QUOTE_WRITERS` | comma-separated quote writers | falls back to `ISSUER_ACCOUNT_ID` |
 | `RELAYER_ACCOUNT_ID` | account that receives the acknowledgement key | required |
 | `RELAYER_PUBLIC_KEY` | relayer function-call public key | required |
-| `KEY_ALLOWANCE_NEAR` | allowance per function-call key | `0.25 NEAR` |
+| `WATCHER_KEY_ALLOWANCE_NEAR` | watcher key allowance | `1 NEAR` |
+| `ISSUER_KEY_ALLOWANCE_NEAR` | issuer key allowance | `1 NEAR` |
+| `RELAYER_KEY_ALLOWANCE_NEAR` | relayer key allowance | `0.5 NEAR` |
+| `ACCOUNT_BALANCE_NEAR` | optional current signer balance; plan stops if a key allowance exceeds it | — |
 
 Never export a private key for this script. It only needs public keys; the near CLI asks the human to sign.
 
