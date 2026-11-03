@@ -162,6 +162,9 @@ export function summarize(
     due_date: string;
     amount_usd: string;
     debtor_legal_name: string;
+    /** USDC base units still owed, and paid in so far (SQ-10). Absent on older API versions. */
+    outstanding?: string;
+    paid_total?: string;
   }[],
   nowSec: number,
 ): Summary {
@@ -176,15 +179,23 @@ export function summarize(
   for (const i of list) {
     if (i.status === "Cancelled") continue;
     const cents = parseCents(i.amount_usd) ?? 0n;
+    // What is still owed, and what came in. Both from the API when it says, else from the amount.
+    const owed = i.outstanding !== undefined ? unitsToCentsUp(BigInt(i.outstanding)) : cents;
+    const paidIn =
+      i.paid_total !== undefined
+        ? unitsToCentsUp(BigInt(i.paid_total))
+        : i.status === "Paid"
+          ? cents
+          : 0n;
     clients.set(i.debtor_legal_name, (clients.get(i.debtor_legal_name) ?? 0n) + cents);
+    s.paidCents += paidIn;
     if (i.status === "Paid") {
       s.counts.paid += 1;
-      s.paidCents += cents;
     } else if (isOpen(i.status)) {
-      s.outstandingCents += cents;
+      s.outstandingCents += owed;
       if (chipFor(i, nowSec, false).kind === "overdue") {
         s.counts.overdue += 1;
-        s.overdueCents += cents;
+        s.overdueCents += owed;
       } else s.counts.waiting += 1;
     }
   }
@@ -198,4 +209,40 @@ export function summarize(
           : 1,
     );
   return s;
+}
+
+/** USDC base units (6 decimals) to cents, a sub-cent remainder rounded up. */
+export const unitsToCentsUp = (units: bigint): bigint => (units + 9_999n) / 10_000n;
+
+interface PaymentLike {
+  amount: string;
+  origin_chain: string;
+  status: string;
+  booked_at: string;
+}
+
+/** Settled incoming USDC per origin chain, largest first. Refunded and failed payments are not money in. */
+export function paymentsByChain(list: readonly PaymentLike[]): { chain: string; units: bigint }[] {
+  const m = new Map<string, bigint>();
+  for (const p of list)
+    if (p.status === "success")
+      m.set(p.origin_chain, (m.get(p.origin_chain) ?? 0n) + BigInt(p.amount));
+  return [...m]
+    .map(([chain, units]) => ({ chain, units }))
+    .sort((a, b) =>
+      a.units === b.units ? a.chain.localeCompare(b.chain) : a.units > b.units ? -1 : 1,
+    );
+}
+
+/** Settled incoming USDC per UTC month (`2026-11`), oldest first. */
+export function paymentsByMonth(list: readonly PaymentLike[]): { month: string; units: bigint }[] {
+  const m = new Map<string, bigint>();
+  for (const p of list)
+    if (p.status === "success") {
+      const month = p.booked_at.slice(0, 7);
+      m.set(month, (m.get(month) ?? 0n) + BigInt(p.amount));
+    }
+  return [...m]
+    .map(([month, units]) => ({ month, units }))
+    .sort((a, b) => a.month.localeCompare(b.month));
 }

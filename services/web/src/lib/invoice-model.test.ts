@@ -6,6 +6,8 @@ import {
   lineCents,
   outstandingUnits,
   parseCents,
+  paymentsByChain,
+  paymentsByMonth,
   summarize,
   validateIssue,
   type IssueForm,
@@ -200,5 +202,75 @@ describe("summarize (dashboard)", () => {
       paidCents: 0n,
       outstandingCents: 0n,
     });
+  });
+});
+
+describe("summarize uses the API's outstanding and paid_total when it has them (SQ-10)", () => {
+  const partly = {
+    ...inv({ status: "PartiallyPaid", due_date: "2026-10-01" }),
+    amount_usd: "100.00",
+    debtor_legal_name: "A Co",
+    outstanding: "40000000",
+    paid_total: "60000000",
+  };
+  it("counts only what is still owed as outstanding and overdue, and what came in as collected", () => {
+    const s = summarize([partly], NOW);
+    expect(s.outstandingCents).toBe(4000n);
+    expect(s.overdueCents).toBe(4000n);
+    expect(s.paidCents).toBe(6000n);
+    expect(s.counts).toEqual({ all: 1, paid: 0, waiting: 0, overdue: 1 });
+  });
+  it("rounds a sub-cent remainder up to the next cent", () => {
+    const s = summarize([{ ...partly, outstanding: "40000001", paid_total: "59999999" }], NOW);
+    expect(s.outstandingCents).toBe(4001n);
+  });
+  it("a paid invoice counts what was paid in", () => {
+    const paid = {
+      ...inv({ status: "Paid" }),
+      amount_usd: "100.00",
+      debtor_legal_name: "B Co",
+      outstanding: "0",
+      paid_total: "100000000",
+    };
+    expect(summarize([paid], NOW).paidCents).toBe(10000n);
+  });
+  it("without the fields it falls back to the invoice amount", () => {
+    const old = { ...inv(), amount_usd: "100.00", debtor_legal_name: "C Co" };
+    expect(summarize([old], NOW).outstandingCents).toBe(10000n);
+  });
+});
+
+describe("payments by chain and by month (incoming only)", () => {
+  const pay = (amount: string, chain: string, at: string, status = "success") => ({
+    id: `${chain}${at}${amount}`,
+    invoice_id: "i",
+    amount,
+    origin_chain: chain,
+    origin_asset: "a",
+    status,
+    booked_at: at,
+  });
+  const list = [
+    pay("10000000", "base", "2026-10-03T10:00:00Z"),
+    pay("5000000", "base", "2026-11-01T00:00:00Z"),
+    pay("2500000", "solana", "2026-11-02T10:00:00Z"),
+    pay("9000000", "ethereum", "2026-11-02T10:00:00Z", "failed"),
+    pay("1000000", "ethereum", "2026-11-02T10:00:00Z", "refunded"),
+  ];
+  it("sums settled payments per origin chain, largest first, ignoring refunded and failed ones", () => {
+    expect(paymentsByChain(list)).toEqual([
+      { chain: "base", units: 15000000n },
+      { chain: "solana", units: 2500000n },
+    ]);
+  });
+  it("sums settled payments per UTC month, oldest first", () => {
+    expect(paymentsByMonth(list)).toEqual([
+      { month: "2026-10", units: 10000000n },
+      { month: "2026-11", units: 7500000n },
+    ]);
+  });
+  it("is empty for no payments", () => {
+    expect(paymentsByChain([])).toEqual([]);
+    expect(paymentsByMonth([])).toEqual([]);
   });
 });
