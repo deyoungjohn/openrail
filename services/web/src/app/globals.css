@@ -191,3 +191,93 @@ dialog.overlay::backdrop {
     scroll-behavior: auto !important;
   }
 }
+
+/* Touch screens: every control is at least 44 by 44 px (WCAG 2.5.5). Text links inside a sentence are exempt. */
+@media (pointer: coarse) {
+  button,
+  [role="tab"],
+  select,
+  input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: 44px;
+  }
+  button {
+    min-width: 44px;
+    flex-shrink: 0;
+  }
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    min-height: 44px;
+  }
+  a[href]:not(p a):not(a:has(button)) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Paper: black on white, one page, no controls, links and hashes written out. */
+@page {
+  size: A4;
+  margin: 14mm;
+}
+@media print {
+  :root,
+  :root[data-theme="dark"],
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #ffffff;
+    --border: #888888;
+    --text: #000000;
+    --text-muted: #333333;
+    --accent: #000000;
+    --success-text: #000000;
+    --danger-text: #000000;
+    --warning: #000000;
+    --info: #000000;
+  }
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+  html,
+  body {
+    background: #ffffff;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  main {
+    padding: 0 !important;
+    animation: none !important;
+  }
+  main > div {
+    gap: 8px !important;
+  }
+  main > div > * + * {
+    margin-top: 8px !important;
+  }
+  .surface-card {
+    padding: 10px !important;
+    break-inside: avoid;
+  }
+  main h1 {
+    font-size: 18px;
+    line-height: 1.2;
+  }
+  main p.tabular {
+    font-size: 20px !important;
+  }
+  main a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 9px;
+    word-break: break-all;
+  }
+  a {
+    color: #000000 !important;
+    text-decoration: none;
+  }
+}

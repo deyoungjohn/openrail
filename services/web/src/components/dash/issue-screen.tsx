@@ -368,13 +368,18 @@ export function IssueScreen() {
           <fieldset className="space-y-4">
             <legend className="mb-2 text-[14px] leading-5 font-medium">{t.lines}</legend>
             {form.lines.map((l, i) => (
-              <div key={i} className="grid grid-cols-[1fr_72px_96px_36px] items-start gap-2">
-                <Input
-                  label={t.description}
-                  value={l.description}
-                  onChange={(e) => setLine(i, { description: e.target.value })}
-                  error={err(`line.${i}.description`)}
-                />
+              <div
+                key={i}
+                className="grid grid-cols-[88px_1fr_44px] items-start gap-2 sm:grid-cols-[1fr_72px_96px_36px]"
+              >
+                <div className="col-span-3 sm:col-span-1">
+                  <Input
+                    label={t.description}
+                    value={l.description}
+                    onChange={(e) => setLine(i, { description: e.target.value })}
+                    error={err(`line.${i}.description`)}
+                  />
+                </div>
                 <Input
                   label={t.quantity}
                   inputMode="decimal"
