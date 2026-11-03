@@ -62,7 +62,10 @@ async function axeClean(page: Page) {
 
 test.describe("dashboard", () => {
   test("shows exact totals, the status mix and the top clients", async ({ page }) => {
-    await mockApi(page, { "GET /v1/invoices": { body: LIST } });
+    await mockApi(page, {
+      "GET /v1/invoices": { body: LIST },
+      "GET /v1/payments": { body: { data: [] } },
+    });
     await page.goto("/app");
     const main = page.getByRole("main");
     await expect(main.getByText("Outstanding")).toBeVisible();
@@ -83,6 +86,93 @@ test.describe("dashboard", () => {
       "href",
       "/app/invoices/inv_1",
     );
+  });
+
+  test("shows where clients paid from and collections by month, from settled payments only", async ({
+    page,
+  }) => {
+    const pay = (
+      id: string,
+      amount: string,
+      origin_chain: string,
+      booked_at: string,
+      status = "success",
+    ) => ({
+      id,
+      invoice_id: "inv_1",
+      amount,
+      origin_chain,
+      origin_asset: "a",
+      status,
+      booked_at,
+    });
+    await mockApi(page, {
+      "GET /v1/invoices": { body: LIST },
+      "GET /v1/payments": {
+        body: {
+          data: [
+            pay("p1", "10000000", "base", "2026-10-03T10:00:00Z"),
+            pay("p2", "5000000", "base", "2026-11-01T10:00:00Z"),
+            pay("p3", "2500000", "solana", "2026-11-02T10:00:00Z"),
+            pay("p4", "9000000", "ethereum", "2026-11-02T10:00:00Z", "failed"),
+          ],
+        },
+      },
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/app");
+    const from = page.getByRole("region", { name: "Where clients paid from" });
+    await expect(from).toContainText("Base");
+    await expect(from).toContainText("$15.00");
+    await expect(from).toContainText("Solana");
+    await expect(from).toContainText("$2.50");
+    await expect(from).not.toContainText("Ethereum");
+    const months = page.getByRole("region", { name: "Collections by month" });
+    await expect(
+      months.getByRole("img", { name: /2026-10: \$10\.00, 2026-11: \$7\.50/ }),
+    ).toBeVisible();
+  });
+
+  test("no payments yet, and a failed payments load, are said plainly", async ({ page }) => {
+    await mockApi(page, {
+      "GET /v1/invoices": { body: LIST },
+      "GET /v1/payments": { body: { data: [] } },
+    });
+    await page.goto("/app");
+    await expect(page.getByRole("region", { name: "Where clients paid from" })).toContainText(
+      "No payments yet",
+    );
+
+    const p2 = await page.context().newPage();
+    await mockApi(p2, {
+      "GET /v1/invoices": { body: LIST },
+      "GET /v1/payments": { status: 500, body: { error: { code: "internal", message: "x" } } },
+    });
+    await p2.goto("/app");
+    await expect(
+      p2
+        .getByRole("region", { name: "Where clients paid from" })
+        .getByRole("button", { name: "Try again" }),
+    ).toBeVisible();
+  });
+
+  test("a partly paid invoice counts only what is still owed, from the API", async ({ page }) => {
+    const partly = inv("inv_9", {
+      status: "PartiallyPaid",
+      amount_usd: "100.00",
+      debtor_legal_name: "Half Co",
+      due_date: day(10),
+      outstanding: "40000000",
+      paid_total: "60000000",
+    });
+    await mockApi(page, {
+      "GET /v1/invoices": { body: { data: [partly], next_cursor: null } },
+      "GET /v1/payments": { body: { data: [] } },
+    });
+    await page.goto("/app");
+    const main = page.getByRole("main");
+    await expect(main.locator("p", { hasText: /^\$40\.00$/ }).first()).toBeVisible();
+    await expect(main.locator("p", { hasText: /^\$60\.00$/ })).toBeVisible();
   });
 
   test("empty: invites the first invoice", async ({ page }) => {
@@ -113,7 +203,10 @@ test.describe("dashboard", () => {
   for (const scheme of ["light", "dark"] as const) {
     test(`360px, ${scheme}: no scroll, no WCAG AA violations`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
-      await mockApi(page, { "GET /v1/invoices": { body: LIST } });
+      await mockApi(page, {
+        "GET /v1/invoices": { body: LIST },
+        "GET /v1/payments": { body: { data: [] } },
+      });
       await page.goto("/app");
       await expect(page.getByRole("link", { name: "INV-1" })).toBeVisible();
       await axeClean(page);
@@ -123,7 +216,10 @@ test.describe("dashboard", () => {
 
 test.describe("invoices list", () => {
   test("tabs carry counts and filter the table", async ({ page }) => {
-    await mockApi(page, { "GET /v1/invoices": { body: LIST } });
+    await mockApi(page, {
+      "GET /v1/invoices": { body: LIST },
+      "GET /v1/payments": { body: { data: [] } },
+    });
     await page.goto("/app/invoices");
     const tabs = page.getByRole("tablist", { name: "Invoice status" });
     await expect(tabs.getByRole("tab", { name: /All\s*4/ })).toBeVisible();
@@ -199,6 +295,15 @@ test.describe("claim detail", () => {
     await expect(page.getByRole("link", { name: "Sell invoice" })).toHaveAttribute(
       "href",
       "/app/invoices/c-1/transfer",
+    );
+  });
+
+  test("each payment links to its public receipt by booking hash", async ({ page }) => {
+    await mockApi(page, handlers);
+    await page.goto("/app/invoices/inv_01J00000000000000000000000");
+    await expect(page.getByRole("link", { name: "View receipt" })).toHaveAttribute(
+      "href",
+      "/r/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     );
   });
 
