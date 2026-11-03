@@ -17,7 +17,10 @@ import { Tabs } from "@/components/ui/tabs";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Timeline } from "@/components/ui/timeline";
 import { useToast } from "@/components/ui/toast";
+import { AccountId } from "@/components/ui/account-id";
+import { WalletPicker } from "@/components/wallet-picker";
 import { EvmWalletView, NearWalletView } from "@/components/wallet-buttons";
+import type { NearWalletInfo } from "@/wallet/near";
 import { formatUsd } from "@/lib/format";
 
 // Fixed values so screenshots are stable. The hash and address are made up for display.
@@ -25,6 +28,41 @@ const HASH = "0x1bfc8f2d4e6a90b7c3d5e1f8a2b4c6d8e0f1a3b5c7d9e2f4a6b8c0d2e4f6a603
 const ADDR = "0x9A4e0B3c5D7f1E2a4B6c8D0e2F4a6B8c0D2e4F6a";
 const NOW = 1_800_000_000_000;
 const noop = () => {};
+const IMPLICIT = "98793cd91a3f870fb126f66285808c7e094afcfc4eda8a970f6648cdf0dbd6de";
+const pickerWallets: NearWalletInfo[] = [
+  {
+    id: "meteor-wallet",
+    name: "Meteor Wallet",
+    iconUrl: null,
+    type: "injected",
+    available: true,
+    signsMessage: true,
+  },
+  {
+    id: "hot-wallet",
+    name: "HOT Wallet",
+    iconUrl: null,
+    type: "injected",
+    available: true,
+    signsMessage: false,
+  },
+  {
+    id: "okx-wallet",
+    name: "OKX Wallet",
+    iconUrl: null,
+    type: "injected",
+    available: true,
+    signsMessage: null,
+  },
+  {
+    id: "coin98-wallet",
+    name: "Coin98 Wallet",
+    iconUrl: null,
+    type: "injected",
+    available: false,
+    signsMessage: null,
+  },
+];
 
 const statuses: Status[] = [
   { kind: "draft" },
@@ -72,6 +110,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export function Gallery() {
   const [modal, setModal] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [picker, setPicker] = useState(false);
   const [chain, setChain] = useState<ChainId>("base");
   const toast = useToast();
 
@@ -262,6 +301,30 @@ export function Gallery() {
           <EvmWalletView address={ADDR} available error={false} connect={noop} disconnect={noop} />
         </div>
       </Section>
+
+      <Section title="NEAR accounts and the wallet picker">
+        <div className="space-y-3">
+          <p className="text-[14px]">
+            Named: <AccountId value="acme.openrail.near" />
+          </p>
+          <p className="text-[14px]">
+            Implicit, truncated: <AccountId value={IMPLICIT} />
+          </p>
+          <p className="text-[14px]">
+            Implicit, in full: <AccountId value={IMPLICIT} full />
+          </p>
+          <Button variant="secondary" onClick={() => setPicker(true)}>
+            Open wallet picker
+          </Button>
+        </div>
+      </Section>
+
+      <WalletPicker
+        wallets={pickerWallets}
+        open={picker}
+        onPick={() => setPicker(false)}
+        onClose={() => setPicker(false)}
+      />
 
       <Section title="Toast, modal and drawer">
         <div className="flex flex-wrap gap-3">

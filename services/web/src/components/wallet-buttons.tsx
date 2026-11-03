@@ -3,6 +3,7 @@
 import { copy } from "@/copy";
 import { useEvm } from "@/wallet/evm";
 import { useNear } from "@/wallet/near";
+import { AccountId } from "./ui/account-id";
 import { AddressChip } from "./ui/address-chip";
 import { Button } from "./ui/button";
 
@@ -28,7 +29,7 @@ export function NearWalletView({
     return (
       <div className="flex flex-wrap items-center gap-2">
         <span className="caption">{copy.wallet.signedInAs}</span>
-        <code className="font-mono text-[13px]">{accountId}</code>
+        <AccountId value={accountId} />
         <Button variant="secondary" size="sm" onClick={() => void signOut()}>
           {copy.wallet.signOut}
         </Button>

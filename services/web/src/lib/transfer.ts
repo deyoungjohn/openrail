@@ -1,4 +1,5 @@
 import { copy } from "../copy";
+import { isNearAccountId } from "./near-account";
 import type { Claim, PaymentLogEntry } from "./claim";
 
 export interface TransferInput {
@@ -19,7 +20,6 @@ export interface Refusal {
   message: string;
 }
 
-const NEAR_ACCOUNT = /^(?=.{2,64}$)([a-z\d]+([-_][a-z\d]+)*\.)*[a-z\d]+([-_][a-z\d]+)*$/;
 const HEX64 = /^[0-9a-fA-F]{64}$/;
 
 const refuse = (rule: number, text: string): Refusal => ({
@@ -45,7 +45,7 @@ export function checkTransfer(claim: Claim, input: TransferInput, rules: KindRul
   if (input.receiver === claim.claimAccount) out.push(refuse(5, text[5]));
   if (!rules.sellable) out.push(refuse(7, text[7]));
 
-  if (!NEAR_ACCOUNT.test(input.receiver)) out.push(refuse(0, text.badAccount));
+  if (!isNearAccountId(input.receiver)) out.push(refuse(0, text.badAccount));
   return out;
 }
 
