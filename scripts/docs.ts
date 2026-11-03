@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkDocRefs } from "./check-doc-refs.ts";
 
 function mdFiles(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -82,7 +83,16 @@ export function buildDocs(root: string): { code: number; messages: string[] } {
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, stripFrontMatter(readFileSync(file, "utf8")));
   }
-  return { code: 0, messages: [`docs: OK (${sources.length} file(s) into docs/dist)`] };
+
+  const refCheck = checkDocRefs(root);
+  if (refCheck.code !== 0) {
+    return { code: refCheck.code, messages: [...refCheck.messages, "docs FAILED"] };
+  }
+
+  return {
+    code: 0,
+    messages: [`docs: OK (${sources.length} file(s) into docs/dist)`, ...refCheck.messages],
+  };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -46,7 +46,7 @@ runs against the complete live local application stack.
    - Ephemeral node instance running locally on a dynamic or configured RPC port (default `3030`).
    - Root contract `openrail.wasm` compiled and deployed to the root account (`openrail.test.near`).
    - Initialization parameters applied (`new` method with designated authority and settlement assets).
-   - Mock token contracts or `intents.near` simulator for multi-asset deposits.
+   - Mock token contracts or `intents.near` simulator (`openrail-mock-intents`) for multi-asset deposits.
 
 2. **SQLite Database**:
    - Ephemeral database instance with all schema migrations applied (`schema_migrations`).
@@ -56,16 +56,26 @@ runs against the complete live local application stack.
    - **Issuer Service**: Runs with restricted function-call access key to issue claims and relay acknowledgements.
    - **API Server (`services/api`)**: Runs in live mode (no `MOCK=1`) connected to the SQLite database, issuer service, and NEAR sandbox RPC.
    - **Indexer Service**: Watches sandbox blocks and events, updating local SQLite stores.
+   - **Watcher Service**: Polls sandbox claim accounts, triggers reconciliation on deposit balance increases, and clears stale locks.
 
 4. **Web Frontend (`services/web`)**:
    - Next.js application running on test port `3100`, configured with `NEXT_PUBLIC_API_URL=http://127.0.0.1:8787` and `NEXT_PUBLIC_NEAR_RPC_URL=http://127.0.0.1:3030`.
 
 5. **Playwright Test Runner**:
    - Automated browser instance with injected wallet providers:
-     - **EVM Provider**: Injected `window.ethereum` mock provider capable of signing EIP-712 structured data (`OpenrailInvoiceAck`) with deterministic test private keys.
+     - **EVM Provider**: Injected `window.ethereum` mock provider capable of signing EIP-712 structured data (`Acknowledge` type with `kind = "OPENRAIL_ACK_V1"` per blueprint §2.7) with deterministic test private keys.
      - **NEAR Provider**: Mock wallet selector allowing programmatic approval of NEP-413 sign-in challenges and NEP-171 transfers.
 
-### 1.2 Harness lifecycle and isolation
+### 1.2 Offline payment simulation (no real 1Click or mainnet)
+
+Real 1Click network endpoints and external blockchain mainnets are never contacted in CI or local automated tests.
+All payments are simulated deterministically via:
+
+1. **Mock 1Click HTTP Service**: Intercepts quote and status requests (`POST /v1/pay/sessions`, etc.) returning predictable quotes, deposit addresses, and state progression (`pending_deposit` → `detecting` → `locked` → `booked` → `distributed`).
+2. **Intents Mock Minting (`mt_mint`)**: The test harness invokes `mt_mint` on the local sandbox intents contract (`openrail-mock-intents`) to credit the invoice's keyless subaccount `c-<n>.<root>` directly with the required settlement asset.
+3. **Watcher & Reconcile Engine**: The watcher service detects the balance increase on `c-<n>.<root>` via RPC polling, executes `reconcile` on the root contract, sweeps settlement funds to the creditor or assignee, and marks the payment distributed.
+
+### 1.3 Harness lifecycle and isolation
 
 - **Global Setup (`globalSetup`)**:
   - Compiles `openrail.wasm` via `cargo near build`.
@@ -148,7 +158,7 @@ Verifies that a debtor reviews the legal terms and cryptographically acknowledge
    - **Assertion**: UI displays connected address and confirms address matches debtor specification.
 3. **Sign Acknowledgement**:
    - Click "Sign & Acknowledge Terms".
-   - Injected wallet receives EIP-712 structured data for `OpenrailInvoiceAck` matching the terms hash.
+   - Injected wallet receives EIP-712 structured data for the `Acknowledge` primary type with `kind = "OPENRAIL_ACK_V1"` (blueprint §2.7) matching the canonical terms hash.
    - Wallet produces signature `(v, r, s)`.
    - Front-end submits signature to `POST /v1/ack/{token_id}/evm`.
    - Relayer calls `acknowledge_evm` on the root contract in sandbox.
@@ -176,13 +186,13 @@ Verifies route discovery, quote generation, payment deposit detection, and statu
      - Exact payment amount shown with expiration timer.
      - Copy button copies exact deposit address.
 4. **Deposit Simulation**:
-   - Test harness simulates transfer of funds to the deposit address.
-   - Indexer detects inbound transaction and relays receipt to API.
+   - Harness invokes `mt_mint` on `openrail-mock-intents` for the claim account `c-<n>.<root>`.
+   - Indexer and watcher detect the inbound balance change.
 5. **Real-Time Payment State Progression**:
    - **Assertion**:
      - UI transitions status: `Detecting` → `Locked` → `Booked` → `Distributed`.
      - Invoice status displays `Paid in Full`.
-     - Public receipt link becomes available.
+     - Verifiable receipt link becomes available at `/r/<booking tx hash>`.
 
 ### Flow 5: Claim NFT transfer (`/app/invoices/[id]/transfer`)
 
@@ -205,9 +215,9 @@ Verifies transferring debt claim ownership to a third-party assignee.
      - Querying sandbox `nft_token` confirms owner is `investor.near`.
      - Original creditor dashboard updates: invoice moves to "Transferred / Factored" tab.
 
-### Flow 6: Statements and verifiable receipts (`/app/statements`, `/receipt/[hash]`)
+### Flow 6: Statements and verifiable receipts (`/app/statements`, `/r/[hash]`, `/app/cashout`)
 
-Verifies historical statement inspection and cryptographic receipt proof.
+Verifies historical statement inspection, receipt verification, and cash-out flow.
 
 1. **Open Statements Screen**:
    - Creditor navigates to `/app/statements`.
@@ -215,8 +225,8 @@ Verifies historical statement inspection and cryptographic receipt proof.
 2. **Filter by Invoice**:
    - Provide query parameter `?token_id={tokenId}`.
    - **Assertion**: Table filters to show only the selected invoice.
-3. **Inspect Verifiable Receipt**:
-   - Click "View Receipt" for a settled invoice.
+3. **Inspect Verifiable Receipt (`/r/[hash]`)**:
+   - Click "View Receipt" for a settled invoice to open `/r/<booking tx hash>`.
    - **Assertion**:
      - Receipt view displays:
        - Invoice ID and terms digest.
@@ -225,6 +235,10 @@ Verifies historical statement inspection and cryptographic receipt proof.
        - Payout destination transaction hash.
      - "Download Statement (CSV)" produces valid CSV export.
      - "Download Invoice Envelope (PDF)" delivers base64-decoded PDF document.
+4. **Cash-Out Flow (`/app/cashout`)**:
+   - Navigate to `/app/cashout`.
+   - Select destination external chain and payout address.
+   - **Assertion**: Displays exact output received, network route fee, and arrival confirmation once processed.
 
 ### Flow 7: Developer settings and API keys (`/app/developers`)
 
@@ -276,23 +290,27 @@ validates each step against the sandbox stack:
   ```ts
   const accessKeys = await sandboxRpc.viewAccessKeys(`c-1.${rootContract}`);
   expect(accessKeys.keys).toHaveLength(0); // Keyless account constraint
-  const token = await sandboxRpc.viewMethod(rootContract, "nft_token", { token_id: "c-1" });
+  const token = await sandboxRpc.viewMethod(rootContract, "nft_token", {
+    token_id: "c-1",
+  });
   expect(token.owner_id).toBe("acme.near");
   ```
 
 #### Step 4: Acknowledgement and write-once enforcement
 
-- **Flow**: Debtor signs acknowledgement on `/ack/c-1`.
+- **Flow**: Debtor signs acknowledgement on `/ack/c-1` using `Acknowledge` EIP-712 typed signature with `kind = "OPENRAIL_ACK_V1"`.
 - **Sandbox Assertion**:
   ```ts
-  const ack = await sandboxRpc.viewMethod(rootContract, "get_ack", { token_id: "c-1" });
+  const ack = await sandboxRpc.viewMethod(rootContract, "get_ack", {
+    token_id: "c-1",
+  });
   expect(ack.debtor_address.toLowerCase()).toBe("0x53c5d39a5828badf817e40f22d75d96d731f8239");
   expect(ack.timestamp_nanos).toBeGreaterThan(0);
   ```
 
 #### Step 5: Deposit, reconcile, and receipt generation
 
-- **Flow**: Debtor deposits required funds on `/pay/c-1`.
+- **Flow**: Harness credits `c-1.<root>` via `mt_mint` on `openrail-mock-intents`. Reconcile runs, and client inspects receipt on `/r/<booking tx hash>`.
 - **Sandbox Assertion**:
   ```ts
   const claimBalance = await sandboxRpc.viewBalance(`c-1.${rootContract}`);
@@ -307,7 +325,9 @@ validates each step against the sandbox stack:
 - **Flow**: Creditor transfers token `c-1` to `investor.near`. Payment then deposited on `/pay/c-1`.
 - **Sandbox Assertion**:
   ```ts
-  const token = await sandboxRpc.viewMethod(rootContract, "nft_token", { token_id: "c-1" });
+  const token = await sandboxRpc.viewMethod(rootContract, "nft_token", {
+    token_id: "c-1",
+  });
   expect(token.owner_id).toBe("investor.near");
   // Post-payment distribution assertion
   const sellerDelta = await getBalanceDelta("acme.near");
@@ -325,19 +345,32 @@ validates each step against the sandbox stack:
 
 ---
 
-## 4. Implementation roadmap and conventions
+## 4. Execution tiers, CI budget, and conventions
 
-1. **File Organization**:
-   - Specifications and tests reside under `services/web/e2e/`.
-   - Screen flows: `services/web/e2e/flows/*.spec.ts`.
-   - Readme flows: `services/web/e2e/readme/*.spec.ts`.
-   - Shared harnesses and wallet mocks: `services/web/e2e/harness/`.
-2. **Reliability & Timing Guidelines**:
-   - Never use arbitrary `sleep(ms)` or hardcoded timeouts.
-   - Use Playwright locators with auto-waiting (`page.getByRole(...)`, `expect(locator).toBeVisible()`).
-   - Poll sandbox block states via explicit event waiters or RPC view queries.
-3. **Execution Command**:
-   ```bash
-   pnpm --filter @openrail/web test:e2e:stack
-   ```
-   This command starts the local sandbox, boots the backend stack, runs the full suite, and shuts down cleanly.
+### 4.1 CI execution tiers and cost control
+
+Running the complete multi-process stack (NEAR sandbox, SQLite, API, issuer, Next.js, and Playwright) on every commit would exhaust CI minutes and create feedback bottlenecks. Tests are therefore structured in two strict tiers:
+
+1. **Per-PR Signed-in Smoke Test (Fast)**:
+   - Runs against Next.js with the lightweight mock API (`MOCK=1`).
+   - Verifies signed-in sessions, core screen rendering, and wallet picker interactions in < 60 seconds.
+   - Runs on every PR that modifies `services/web/**`.
+2. **Full-Stack End-to-End Suite (Comprehensive)**:
+   - Spawns the real NEAR sandbox, compiles contract wasm, applies SQLite migrations, and boots all background services.
+   - Executes the full Playwright suite across all screens and README flows.
+   - Runs on merge to `main` and on-demand via manual workflow dispatch (`workflow_dispatch`) before releases.
+   - Never runs on untrusted pull requests.
+
+### 4.2 File organization and commands
+
+- Screen flows: `services/web/e2e/flows/*.spec.ts`.
+- README flows: `services/web/e2e/readme/*.spec.ts`.
+- Shared harnesses and wallet mocks: `services/web/e2e/harness/`.
+- Commands:
+  ```bash
+  # Per-PR smoke test
+  pnpm --filter @openrail/web test:e2e:smoke
+
+  # Full-stack local sandbox integration
+  pnpm --filter @openrail/web test:e2e:stack
+  ```
