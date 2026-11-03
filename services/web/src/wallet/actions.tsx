@@ -10,6 +10,8 @@ export interface Actions {
   acknowledgeNear(rootContract: string, tokenId: string): Promise<void>;
   /** Runs a reconcile and, if it passes, opens the transfer window (blueprint 2.2). */
   prepareTransfer(rootContract: string, tokenId: string): Promise<void>;
+  /** Prepays storage for API issuance: `deposit_storage_credit` with the NEAR attached (blueprint 2.2). */
+  depositStorageCredit(contractId: string, depositYocto: string): Promise<void>;
   /** NEP-171 transfer. Exactly 1 yoctoNEAR; on a sale the memo carries the document hash. */
   nftTransfer(
     rootContract: string,
@@ -22,6 +24,7 @@ const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const mockActions: Actions = {
   acknowledgeNear: () => wait(800),
   prepareTransfer: () => wait(1000),
+  depositStorageCredit: () => wait(800),
   nftTransfer: () => wait(1000),
 };
 
@@ -48,6 +51,14 @@ export function useActions(): Actions {
                 args: { token_id: tokenId },
                 gas: TGAS(300),
                 deposit: "0",
+              }),
+            depositStorageCredit: (contractId, depositYocto) =>
+              call({
+                receiverId: contractId,
+                methodName: "deposit_storage_credit",
+                args: {},
+                gas: TGAS(30),
+                deposit: depositYocto,
               }),
             nftTransfer: (root, a) =>
               call({
