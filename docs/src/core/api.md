@@ -73,6 +73,8 @@ The mock stays available with `MOCK=1 pnpm --filter @openrail/api start` for UI 
 - API-key scopes: `invoices:read`, `invoices:write`, `payments:read`,
   `receipts:read`, `webhooks:write`, and `pay_sessions:create`. A new secret key
   defaults to the first five; a publishable key has exactly `pay_sessions:create`.
+  Each endpoint enforces its scope and returns `403 insufficient_scope` with
+  `missing scope: <name>`; dashboard sessions hold all scopes.
 - Every `POST` accepts `Idempotency-Key`. The same key with the same body returns
   the first response; the same key with another body returns `409`.
 - Public hosted-page reads (`/v1/pay/sessions/{id}`, `/v1/pay/claims/{token_id}`,

@@ -154,7 +154,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "description": "Stable machine-readable code, e.g. invoice_not_found."
+            "description": "Stable machine-readable code; insufficient_scope means a missing key scope (named in message)."
           },
           "message": {
             "type": "string"
@@ -2252,6 +2252,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2301,6 +2311,16 @@
           },
           "401": {
             "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2369,6 +2389,16 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2467,6 +2497,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2528,6 +2568,16 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2603,6 +2653,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2643,6 +2703,16 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2705,6 +2775,16 @@
           },
           "409": {
             "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2888,6 +2968,16 @@
           },
           "409": {
             "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3553,6 +3643,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3634,6 +3734,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3701,6 +3811,16 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4013,6 +4133,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -4074,6 +4204,16 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4378,6 +4518,16 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {

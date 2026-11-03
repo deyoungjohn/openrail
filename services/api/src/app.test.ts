@@ -13,7 +13,11 @@ const config = {
 function harness() {
   const auth = new AuthStore(() => clock().getTime());
   const { secret } = auth.createApiKey("acme.openrail.near", "Production", "secret", [
+    "invoices:read",
     "invoices:write",
+    "payments:read",
+    "receipts:read",
+    "webhooks:write",
   ]);
   const issuer = {
     prepareIssue: vi.fn(async () => ({ tokenId: "c-1", claimAccount: "c-1.openrail.near" })),
@@ -165,6 +169,71 @@ describe("invoice route", () => {
       "receipts:read",
       "webhooks:write",
     ]);
+  });
+
+  it.each([
+    { scope: "invoices:read", method: "GET", path: "/v1/invoices", body: undefined, ok: 200 },
+    { scope: "invoices:write", method: "POST", path: "/v1/invoices", body: invoiceBody, ok: 201 },
+    { scope: "payments:read", method: "GET", path: "/v1/payments", body: undefined, ok: 200 },
+    {
+      scope: "receipts:read",
+      method: "GET",
+      path: "/v1/invoices/c-1/receipts",
+      body: undefined,
+      ok: 200,
+    },
+    {
+      scope: "webhooks:write",
+      method: "GET",
+      path: "/v1/webhook_endpoints",
+      body: undefined,
+      ok: 200,
+    },
+  ])("enforces $scope", async ({ scope, method, path, body, ok }) => {
+    const { app, auth, secret } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    const allowed = auth.createApiKey("acme.openrail.near", "scoped", "secret", [scope]).secret;
+    const allowedResponse = await app.handle(request(method, path, body, allowed));
+    expect(allowedResponse.status, `${scope} allowed`).toBe(ok);
+
+    const denied = auth.createApiKey("acme.openrail.near", "unscoped", "secret", []).secret;
+    const deniedResponse = await app.handle(request(method, path, body, denied));
+    expect(deniedResponse.status, `${scope} denied`).toBe(403);
+    expect(
+      (deniedResponse.body as { error: { code: string; message: string } }).error,
+    ).toMatchObject({
+      code: "insufficient_scope",
+      message: `missing scope: ${scope}`,
+    });
+  });
+
+  it("requires pay_sessions:create for a publishable pay session", async () => {
+    const { app, auth, secret } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    const publishable = auth.createApiKey("acme.openrail.near", "Pay", "publishable", [
+      "pay_sessions:create",
+    ]).secret;
+    const allowed = await app.handle(
+      request(
+        "POST",
+        "/v1/pay/sessions",
+        { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) },
+        publishable,
+      ),
+    );
+    expect(allowed.status).toBe(201);
+
+    const unscoped = auth.createApiKey("acme.openrail.near", "Pay2", "publishable", []).secret;
+    const denied = await app.handle(
+      request(
+        "POST",
+        "/v1/pay/sessions",
+        { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) },
+        unscoped,
+      ),
+    );
+    expect(denied.status).toBe(403);
+    expect((denied.body as { error: { code: string } }).error.code).toBe("insufficient_scope");
   });
 
   it("lists payments for the business", async () => {

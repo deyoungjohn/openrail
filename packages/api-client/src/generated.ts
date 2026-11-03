@@ -605,6 +605,7 @@ export interface operations {
       "201": Invoice;
       "400": Error;
       "401": Error;
+      "403": Error;
       "409": Error;
     };
   };
@@ -620,6 +621,7 @@ export interface operations {
       "200": InvoiceList;
       "400": Error;
       "401": Error;
+      "403": Error;
     };
   };
   getInvoice: {
@@ -632,6 +634,7 @@ export interface operations {
       "200": InvoiceDetail;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -649,6 +652,7 @@ export interface operations {
       "200": SendInvoiceResponse;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
       "409": Error;
     };
@@ -663,6 +667,7 @@ export interface operations {
       "200": ReceiptList;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -676,6 +681,7 @@ export interface operations {
       "200": Payment;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -684,6 +690,7 @@ export interface operations {
       "200": WebhookEndpointList;
       "400": Error;
       "401": Error;
+      "403": Error;
     };
   };
   createWebhookEndpoint: {
@@ -697,6 +704,7 @@ export interface operations {
       "201": WebhookEndpoint;
       "400": Error;
       "401": Error;
+      "403": Error;
       "409": Error;
     };
   };
@@ -732,6 +740,7 @@ export interface operations {
       "201": PaySession;
       "400": Error;
       "401": Error;
+      "403": Error;
       "409": Error;
     };
   };
@@ -867,6 +876,7 @@ export interface operations {
       "200": DeletedResource;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -883,6 +893,7 @@ export interface operations {
       "200": WebhookTestResult;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
       "409": Error;
     };
@@ -901,6 +912,7 @@ export interface operations {
       "200": WebhookDeliveryList;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -951,6 +963,7 @@ export interface operations {
       "200": PdfDocument;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -964,6 +977,7 @@ export interface operations {
       "200": OpenQuoteList;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -1031,6 +1045,7 @@ export interface operations {
       "200": PaymentList;
       "400": Error;
       "401": Error;
+      "403": Error;
     };
   };
 }

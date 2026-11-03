@@ -291,6 +291,13 @@ export class ApiApp {
     return context;
   }
 
+  private requireScope(context: AuthContext, scope: string): void {
+    if (context.kind === "session") return;
+    if (!context.scopes.includes(scope)) {
+      throw new ApiError(403, "insufficient_scope", `missing scope: ${scope}`);
+    }
+  }
+
   private async claimSnapshot(tokenId: string): Promise<ClaimSnapshot> {
     const claim = await this.deps.contract.claim(tokenId);
     return {
@@ -581,10 +588,12 @@ export class ApiApp {
     }
 
     if (path === "/v1/invoices" && method === "POST") {
+      this.requireScope(this.requireAuth(request), "invoices:write");
       return this.withIdempotency(request, () => this.createInvoice(request));
     }
     if (path === "/v1/invoices" && method === "GET") {
       const context = this.requireAuth(request);
+      this.requireScope(context, "invoices:read");
       return {
         status: 200,
         body: {
@@ -603,7 +612,7 @@ export class ApiApp {
       const action = invoiceMatch[2];
       if (invoiceId === undefined) throw new ApiError(404, "invoice_not_found");
       if (action === undefined && method === "GET") {
-        this.requireAuth(request);
+        this.requireScope(this.requireAuth(request), "invoices:read");
         const invoice = this.invoiceBy(invoiceId);
         const claim = await this.deps.contract.claim(invoice.token_id);
         return {
@@ -620,7 +629,7 @@ export class ApiApp {
       }
       if (action === "send" && method === "POST") {
         return this.withIdempotency(request, async () => {
-          this.requireAuth(request);
+          this.requireScope(this.requireAuth(request), "invoices:write");
           this.invoiceBy(invoiceId);
           const body = (request.body ?? {}) as { to?: string };
           return {
@@ -630,7 +639,7 @@ export class ApiApp {
         });
       }
       if (action === "receipts" && method === "GET") {
-        this.requireAuth(request);
+        this.requireScope(this.requireAuth(request), "receipts:read");
         const invoice = this.invoiceBy(invoiceId);
         return {
           status: 200,
@@ -640,7 +649,7 @@ export class ApiApp {
         };
       }
       if (action === "pdf" && method === "GET") {
-        this.requireAuth(request);
+        this.requireScope(this.requireAuth(request), "invoices:read");
         const invoice = this.invoiceBy(invoiceId);
         return {
           status: 200,
@@ -656,7 +665,7 @@ export class ApiApp {
         };
       }
       if (action === "open_quotes" && method === "GET") {
-        this.requireAuth(request);
+        this.requireScope(this.requireAuth(request), "invoices:read");
         const invoice = this.invoiceBy(invoiceId);
         return { status: 200, body: { data: this.store.getOpenQuotes(invoice.token_id) } };
       }
@@ -664,7 +673,10 @@ export class ApiApp {
 
     if (path === "/v1/pay/sessions" && method === "POST") {
       return this.withIdempotency(request, async () => {
-        this.requireAuth(request, true);
+        const context = this.requireAuth(request, true);
+        if (context.kind === "publishable") {
+          this.requireScope(context, "pay_sessions:create");
+        }
         const body = (request.body ?? {}) as {
           token_id?: string;
           route_id?: string;
@@ -891,6 +903,7 @@ export class ApiApp {
 
     if (path === "/v1/webhook_endpoints") {
       const context = this.requireAuth(request);
+      this.requireScope(context, "webhooks:write");
       if (method === "GET") {
         return {
           status: 200,
@@ -933,7 +946,7 @@ export class ApiApp {
     }
     const webhookMatch = /^\/v1\/webhook_endpoints\/([^/]+)(?:\/(test|deliveries))?$/.exec(path);
     if (webhookMatch !== null) {
-      this.requireAuth(request);
+      this.requireScope(this.requireAuth(request), "webhooks:write");
       const endpointId = webhookMatch[1] ?? "";
       const action = webhookMatch[2];
       const endpoint = this.store.getWebhookEndpoint(endpointId);
@@ -990,12 +1003,13 @@ export class ApiApp {
 
     if (path === "/v1/payments" && method === "GET") {
       const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
       return { status: 200, body: { data: this.store.listPayments(context.accountId) } };
     }
 
     const paymentMatch = /^\/v1\/payments\/([^/]+)$/.exec(path);
     if (paymentMatch !== null && method === "GET") {
-      this.requireAuth(request);
+      this.requireScope(this.requireAuth(request), "payments:read");
       const payment = this.store.getPayment(paymentMatch[1] ?? "");
       if (payment === undefined) throw new ApiError(404, "payment_not_found");
       return { status: 200, body: payment };
