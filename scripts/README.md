@@ -13,3 +13,10 @@
 | `abi-check.sh` | `abi-check` | P0.2 |
 | `docs.sh` | `docs` | P0.2 |
 | `enabled-features` | none | P0.1 (prints the enabled module ids, comma-separated; `--all` lists every id) |
+
+## CI Runner
+
+The GitHub Actions workflows (`ci.yml` and `nightly.yml`) run on GitHub-hosted `ubuntu-latest` runners:
+- Uses `Swatinem/rust-cache` and `actions/cache` for `cargo-near` binaries.
+- Sets `TMPDIR=$RUNNER_TEMP` on sandbox test jobs to avoid shared lockfile contention.
+- Applies `CARGO_BUILD_JOBS=6`, `RUST_TEST_THREADS=4`, job timeouts, and sequential execution for heavy jobs.

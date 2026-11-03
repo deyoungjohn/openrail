@@ -5,25 +5,85 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_NEAR_VERSION: "0.22.0"
+  CARGO_BUILD_JOBS: "6"
+  RUST_TEST_THREADS: "4"
 
 jobs:
-  # Helper: reads module ids from openrail.modules.json for the each-module matrix.
-  modules:
+  # Detect file changes to avoid redundant heavy jobs on web-only or docs-only PRs
+  changes:
+    name: changes
+    timeout-minutes: 15
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      ids: ${{ steps.ids.outputs.ids }}
+      contracts: ${{ steps.filter.outputs.contracts }}
+      modules: ${{ steps.filter.outputs.modules }}
+      core: ${{ steps.filter.outputs.core }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v4
-      - id: ids
-        run: echo "ids=$(scripts/enabled-features --all | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: |
+            contracts:
+              - '.github/**'
+              - 'contracts/**'
+              - 'abi/**'
+              - 'schemas/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            modules:
+              - '.github/**'
+              - 'contracts/**'
+              - 'scripts/gen-modules.*'
+              - 'openrail.modules.json'
+            core:
+              - '.github/**'
+              - 'contracts/**'
+              - 'services/api/**'
+              - 'services/cli/**'
+              - 'services/indexer/**'
+              - 'services/issuer/**'
+              - 'services/relayer/**'
+              - 'services/watcher/**'
+              - 'packages/**'
+              - 'fixtures/**'
+              - 'scripts/**'
+              - 'config/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'Makefile'
+              - 'openrail.modules.json'
+            web:
+              - '.github/**'
+              - 'services/web/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
 
-  core-only:
+  # Quick checks: secrets scan, docs build, and lint (format + clippy + eslint) merged
+  quick:
+    name: quick
+    timeout-minutes: 15
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,41 +96,22 @@ jobs:
         run: |
           rustup show active-toolchain || rustup toolchain install
           rustup target add wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - name: Cache cargo-near binary
-        id: cargo-near-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-near
-          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
-      - name: Install cargo-near (pinned)
-        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
-          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
-      - run: make lint
-      - run: cargo test --workspace
-      - run: pnpm -r test
-      - run: pnpm exec vitest run scripts
-      - run: pnpm exec tsx scripts/gen-modules.ts --check
-      - run: pnpm -r exec tsc --noEmit
+      - name: Secret scan
+        run: make secret-scan
+      - name: Lint (clippy, rustfmt, eslint, prettier)
+        run: make lint
+      - name: Docs build
+        run: make docs
 
-  each-module:
-    needs: modules
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        module: ${{ fromJSON(needs.modules.outputs.ids) }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-      - name: Core plus one module
-        run: cargo test -p openrail --features "${{ matrix.module }}"
-
-  all-enabled:
+  # Unified contract validation: build once with cargo-near, then run wasm, abi, and leak checks
+  contract:
+    name: contract
+    timeout-minutes: 30
+    needs: changes
+    if: (github.event_name == 'push') || (needs.changes.outputs.contracts == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,22 +120,12 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-      - run: pnpm install --frozen-lockfile
-      - name: Every enabled module
-        run: cargo test -p openrail --features "$(scripts/enabled-features)"
-
-  wasm-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
       - name: Cache cargo-near binary
         id: cargo-near-cache
         uses: actions/cache@v4
@@ -106,74 +137,111 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
           cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
-      - run: make contract
-      - run: make wasm-check
-
-  abi-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-      - name: Cache cargo-near binary
-        id: cargo-near-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-near
-          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
-      - name: Install cargo-near (pinned)
-        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
-          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
-      - run: make contract
-      - run: make abi-check
-
-  leak-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-      - name: Cache cargo-near binary
-        id: cargo-near-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-near
-          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
-      - name: Install cargo-near (pinned)
-        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
-          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
-      - run: make contract
+      - name: Build contract once
+        run: make contract
+      - name: wasm-check
+        run: make wasm-check
+      - name: abi-check
+        run: make abi-check
       - name: Write the switched-off keyword list (secret; never printed)
         env:
           LEAK_KEYWORDS: ${{ secrets.LEAK_KEYWORDS }}
         run: |
           printf '%s\n' "$LEAK_KEYWORDS" > "$RUNNER_TEMP/leak-keywords.txt"
           echo "LEAK_KEYWORDS_FILE=$RUNNER_TEMP/leak-keywords.txt" >> "$GITHUB_ENV"
-      - run: make leak-check
+      - name: leak-check
+        run: make leak-check
 
-  secret-scan:
+  # Core tests: contract workspace tests, unit tests, ts packages, and type checking
+  # Runs after contract (if contract runs) to avoid simultaneous heavy compilation on a single runner
+  core-only:
+    name: core-only
+    timeout-minutes: 40
+    needs: [changes, contract]
+    if: always() && (needs.changes.result == 'success') && (needs.contract.result == 'success' || needs.contract.result == 'skipped') && ((github.event_name == 'push') || (needs.changes.outputs.core == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set sandbox temp directory
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo-near binary
+        id: cargo-near-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-near
+          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
+      - name: Install cargo-near (pinned)
+        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
+      - run: pnpm install --frozen-lockfile
+      - run: cargo test --workspace
+      - run: pnpm -r test
+      - run: pnpm exec vitest run scripts
+      - run: pnpm exec tsx scripts/gen-modules.ts --check
+      - run: pnpm -r exec tsc --noEmit
+
+  # Sequential loop over each module in one job instead of seven parallel matrix jobs
+  each-module:
+    name: each-module
+    timeout-minutes: 15
+    needs: changes
+    if: (github.event_name == 'push') || (needs.changes.outputs.modules == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: make secret-scan
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+      - name: Test each module sequentially
+        run: |
+          for mod in $(scripts/enabled-features --all); do
+            echo "== Core plus module: $mod =="
+            cargo test -p openrail --features "$mod"
+          done
 
-  docs-build:
+  # All enabled modules together
+  all-enabled:
+    name: all-enabled
+    timeout-minutes: 15
+    needs: changes
+    if: (github.event_name == 'push') || (needs.changes.outputs.modules == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - name: Every enabled module
+        run: cargo test -p openrail --features "$(scripts/enabled-features)"
+
+  # Web verification: test, typecheck, and build web service
+  web:
+    name: web
+    timeout-minutes: 15
+    needs: changes
+    if: (github.event_name == 'push') || (needs.changes.outputs.web == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -183,10 +251,106 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: make docs
+      - name: Test web package
+        run: pnpm --filter @openrail/web test
+      - name: Typecheck web package
+        run: pnpm --filter @openrail/web exec tsc --noEmit
+      - name: Build web package
+        run: pnpm --filter @openrail/web build
 
   e2e:
+    name: e2e
+    timeout-minutes: 15
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: echo "TODO owner I1, end-to-end suite"
+
+  # Aggregate status check keeping a single unified check name that passes when required jobs succeed or are cleanly skipped
+  ci-ok:
+    name: ci-ok
+    timeout-minutes: 15
+    needs: [changes, quick, contract, core-only, each-module, all-enabled, web, e2e]
+    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs passed or were skipped cleanly
+        env:
+          CHANGES_RES: ${{ needs.changes.result }}
+          QUICK_RES: ${{ needs.quick.result }}
+          CONTRACT_RES: ${{ needs.contract.result }}
+          CORE_RES: ${{ needs.core-only.result }}
+          EACH_RES: ${{ needs.each-module.result }}
+          ALL_RES: ${{ needs.all-enabled.result }}
+          WEB_RES: ${{ needs.web.result }}
+          E2E_RES: ${{ needs.e2e.result }}
+          FILTER_CONTRACTS: ${{ needs.changes.outputs.contracts }}
+          FILTER_MODULES: ${{ needs.changes.outputs.modules }}
+          FILTER_CORE: ${{ needs.changes.outputs.core }}
+          FILTER_WEB: ${{ needs.changes.outputs.web }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          echo "Changes: $CHANGES_RES"
+          echo "Quick: $QUICK_RES"
+          echo "Contract: $CONTRACT_RES (filter: $FILTER_CONTRACTS)"
+          echo "Core-only: $CORE_RES (filter: $FILTER_CORE)"
+          echo "Each-module: $EACH_RES (filter: $FILTER_MODULES)"
+          echo "All-enabled: $ALL_RES (filter: $FILTER_MODULES)"
+          echo "Web: $WEB_RES (filter: $FILTER_WEB)"
+          echo "E2E: $E2E_RES"
+
+          # 1. changes job must have succeeded
+          if [ "$CHANGES_RES" != "success" ]; then
+            echo "Error: 'changes' job did not succeed ($CHANGES_RES)."
+            exit 1
+          fi
+
+          # 2. Check for outright failures or cancellations across all jobs
+          for res in "$QUICK_RES" "$CONTRACT_RES" "$CORE_RES" "$EACH_RES" "$ALL_RES" "$WEB_RES" "$E2E_RES"; do
+            if [ "$res" = "failure" ] || [ "$res" = "cancelled" ]; then
+              echo "Error: One or more jobs failed or were cancelled ($res)."
+              exit 1
+            fi
+          done
+
+          # 3. Always required jobs
+          if [ "$QUICK_RES" != "success" ]; then
+            echo "Error: 'quick' job must succeed, but got $QUICK_RES."
+            exit 1
+          fi
+          if [ "$E2E_RES" != "success" ]; then
+            echo "Error: 'e2e' job must succeed, but got $E2E_RES."
+            exit 1
+          fi
+
+          # 4. Conditionally required jobs (fail if skipped when change set required them)
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_CONTRACTS" = "true" ]; then
+            if [ "$CONTRACT_RES" != "success" ]; then
+              echo "Error: 'contract' job was required but result is $CONTRACT_RES."
+              exit 1
+            fi
+          fi
+
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_CORE" = "true" ]; then
+            if [ "$CORE_RES" != "success" ]; then
+              echo "Error: 'core-only' job was required but result is $CORE_RES."
+              exit 1
+            fi
+          fi
+
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_MODULES" = "true" ]; then
+            if [ "$EACH_RES" != "success" ] || [ "$ALL_RES" != "success" ]; then
+              echo "Error: Module test jobs ('each-module': $EACH_RES, 'all-enabled': $ALL_RES) were required."
+              exit 1
+            fi
+          fi
+
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_WEB" = "true" ]; then
+            if [ "$WEB_RES" != "success" ]; then
+              echo "Error: 'web' job was required but result is $WEB_RES."
+              exit 1
+            fi
+          fi
+
+          echo "All checks passed or were legitimately skipped."

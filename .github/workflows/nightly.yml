@@ -1,0 +1,95 @@
+name: nightly
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NEAR_VERSION: "0.22.0"
+  CARGO_BUILD_JOBS: "6"
+  RUST_TEST_THREADS: "4"
+  PROPTEST_CASES: "1000"
+  SCALE_CLAIMS: "5000"
+
+jobs:
+  nightly-proptest:
+    name: nightly-proptest
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set sandbox temp directory
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo-near binary
+        id: cargo-near-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-near
+          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
+      - name: Install cargo-near (pinned)
+        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
+      - run: pnpm install --frozen-lockfile
+      - name: Record Proptest Seed
+        run: |
+          # 32-byte hex seed (64 characters) for proptest reproducibility
+          SEED=$(head -c 32 /dev/urandom | xxd -p -c 32)
+          echo "PROPTEST_SEED=$SEED" >> "$GITHUB_ENV"
+          echo "### Nightly Proptest Run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Proptest cases:** ${{ env.PROPTEST_CASES }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Recorded seed:** \`$SEED\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Run workspace tests with 1,000 proptest cases
+        run: cargo test --workspace
+
+  nightly-scale:
+    name: nightly-scale
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set sandbox temp directory
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo-near binary
+        id: cargo-near-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-near
+          key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
+      - name: Install cargo-near (pinned)
+        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+          cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
+      - run: pnpm install --frozen-lockfile
+      - name: Run scale suite at 5,000 claims
+        run: |
+          echo "### Nightly Scale Run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Scale claims:** ${{ env.SCALE_CLAIMS }}" >> "$GITHUB_STEP_SUMMARY"
+          cargo test -p openrail-tests --test scale_suite -- --nocapture
