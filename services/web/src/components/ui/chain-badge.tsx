@@ -29,17 +29,20 @@ export function ChainIcon({ chain, size = 20 }: { chain: ChainId; size?: number 
 
 export function ChainBadge({
   chain,
+  label,
   selected,
   onSelect,
 }: {
   chain: ChainId;
+  /** Replaces the chain name, for example "USDC on Base". */
+  label?: string;
   selected?: boolean;
   onSelect?: () => void;
 }) {
   const body = (
     <>
       <ChainIcon chain={chain} />
-      <span>{CHAINS[chain]}</span>
+      <span>{label ?? CHAINS[chain]}</span>
     </>
   );
   const cls =

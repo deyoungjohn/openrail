@@ -20,6 +20,7 @@ import { cn } from "@/lib/cn";
 import { readStored, writeStored } from "@/lib/storage";
 import { Modal } from "../ui/modal";
 import { ThemeToggle } from "../ui/theme-toggle";
+import { Brand } from "../brand";
 import { AccountBar } from "../auth/account-bar";
 import { AuthGate } from "../auth/auth-gate";
 import { useAuth } from "../auth/auth-provider";
@@ -79,11 +80,15 @@ function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: (
   );
 }
 
-function Brand({ collapsed }: { collapsed: boolean }) {
+function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   return (
-    <Link href="/app" className="flex h-11 items-center gap-2 px-3 text-[18px] font-semibold">
-      <span aria-hidden className="size-6 rounded-md bg-accent" />
-      <span className={collapsed ? "sr-only" : undefined}>{copy.brand}</span>
+    <Link href="/app" className="flex h-11 items-center px-3">
+      <Brand className={collapsed ? "sr-only" : undefined} />
+      {collapsed ? (
+        <span aria-hidden className="mx-auto text-[18px] leading-6 font-semibold">
+          {copy.brand[0]}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -122,7 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           collapsed ? "w-[72px]" : "w-[248px]",
         )}
       >
-        <Brand collapsed={collapsed} />
+        <SidebarBrand collapsed={collapsed} />
         <div className="mt-4 flex-1 overflow-y-auto">
           <NavList collapsed={collapsed} />
         </div>
@@ -160,7 +165,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Menu size={18} strokeWidth={1.5} aria-hidden />
           </button>
-          <span className="text-[16px] font-semibold md:hidden">{copy.brand}</span>
+          <Brand className="text-[16px] leading-6 font-semibold md:hidden" />
           <div className="ml-auto hidden items-center gap-3 sm:flex">
             <AccountBar />
           </div>
