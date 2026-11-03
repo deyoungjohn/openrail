@@ -48,6 +48,14 @@ Status tags used in these docs: **built** (code and tests in this repository),
 9. Read [`TRUST.md`](TRUST.md), [`COSTS.md`](COSTS.md) and
    [`LIMITATIONS.md`](LIMITATIONS.md). **built**
 
+## Tests
+
+- `make test` runs the Rust unit, model and sandbox suites plus the TypeScript
+  service tests; the command prints the count. **tested**
+- `make secret-scan` and `make docs` gate secrets and documentation links.
+  **tested**
+- `make lint` runs rustfmt, clippy, eslint and prettier. **built**
+
 ## More
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — system map and the per-invoice account.
