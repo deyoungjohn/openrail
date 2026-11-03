@@ -227,7 +227,12 @@ impl Contract {
             return false;
         };
         if claim.owner_id != receiver_id {
-            // The receiver moved the token on inside `nft_on_transfer`; nothing to refund.
+            // The receiver moved the token on inside `nft_on_transfer`; nothing to refund,
+            // but do not leave this call's transfer window on the new owner's claim.
+            if matches!(claim.lock, Lock::TransferWindow { .. }) {
+                claim.lock = Lock::None;
+                self.claims.insert(token_id, claim);
+            }
             return true;
         }
         if !refund {
