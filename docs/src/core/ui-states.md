@@ -52,17 +52,23 @@ exist for that screen, with the reason.
 
 ## Cross-cutting checks
 
-| Check                                                 | Proof                                                                                                                     |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| No shadow, glow or blur in either theme               | `noglow.spec.ts`                                                                                                          |
-| Solid 2 px accent focus ring, 2 px offset             | `noglow.spec.ts`: "the focus ring is a solid 2px accent outline"; `states.spec.ts` keyboard checks the ring on every stop |
-| Theme follows the system, no flash, choice remembered | `shell.spec.ts`                                                                                                           |
-| No session token in web storage                       | `session.spec.ts`: "the page never keeps a session token in web storage"                                                  |
-| The signed-in journey against the mock API            | `smoke.spec.ts`                                                                                                           |
+| Check                                                                                                                                                             | Proof                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| No shadow, glow or blur in either theme                                                                                                                           | `noglow.spec.ts`                                                                                                          |
+| Solid 2 px accent focus ring, 2 px offset                                                                                                                         | `noglow.spec.ts`: "the focus ring is a solid 2px accent outline"; `states.spec.ts` keyboard checks the ring on every stop |
+| Theme follows the system, no flash, choice remembered                                                                                                             | `shell.spec.ts`                                                                                                           |
+| No session token in web storage                                                                                                                                   | `session.spec.ts`: "the page never keeps a session token in web storage"                                                  |
+| Reduced motion: with `prefers-reduced-motion` no animation or transition lasts longer than 1 ms on a signed-in screen, the issue form, the pay page and the modal | `states.spec.ts`: "reduced motion"                                                                                        |
+| Reduced motion also stops the loading animations: a skeleton and a busy button's spinner                                                                          | `a11y.spec.ts`: "a skeleton and a busy button do not animate"                                                             |
+| Tab order follows the visual order on the issue form, the ack page, the pay page and the transfer page                                                            | `a11y.spec.ts`: "tab order follows the visual order"                                                                      |
+| Every button, link and tab on every screen has a screen-reader name, and an icon next to text is hidden from screen readers                                       | `a11y.spec.ts`: "every icon-only control has a screen-reader name"                                                        |
+| The signed-in journey against the mock API                                                                                                                        | `smoke.spec.ts`                                                                                                           |
 
 ## Known limits
 
-- The keyboard check tabs through a page and checks the focus ring and that focus is not trapped. It
-  does not check the logical order of every control; the sale form has an order test of its own.
+- The keyboard check tabs through a page and checks the focus ring and that focus is not trapped. The
+  logical order of the stops is asserted on the issue form, ack, pay and transfer pages only.
+- Screen-reader names are checked from the page's accessible names, not with a real screen reader
+  (VoiceOver, NVDA).
 - Loading is proved by holding an answer back. A very fast real API shows the skeleton only briefly.
 - The tests run against fixtures and the mock API, not the live API.
