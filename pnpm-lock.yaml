@@ -227,7 +227,11 @@ importers:
         specifier: workspace:*
         version: link:../api
 
-  services/indexer: {}
+  services/indexer:
+    dependencies:
+      '@openrail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
 
   services/issuer:
     dependencies:
