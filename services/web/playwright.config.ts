@@ -4,6 +4,7 @@ const PORT = 3100;
 
 export default defineConfig({
   testDir: "e2e",
+  testIgnore: ["stack/**"],
   // Under .next so git, eslint and prettier already ignore it.
   outputDir: ".next/e2e-results",
   fullyParallel: true,

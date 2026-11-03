@@ -87,7 +87,7 @@ export function createHttpIssuer(baseUrl: string): IssuerPort {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(key === undefined ? {} : { "x-issuer-key": key }),
+        ...(key === undefined ? {} : { authorization: `Bearer ${key}`, "x-issuer-key": key }),
       },
       body: JSON.stringify(body),
     });
