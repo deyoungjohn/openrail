@@ -3,8 +3,8 @@ set -euo pipefail
 
 # scripts/gate-run.sh
 # Nightly gate run script for Phase 1 (G1):
-# 1. Proptests (1,000 cases with recorded seed)
-# 2. Scale suite (5,000 claims)
+# 1. Proptests (1,000 cases)
+# 2. Scale suite (5,000 claims, timed)
 # 3. Mutation spot checks (model & contract)
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,15 +18,6 @@ export RUST_TEST_THREADS="${RUST_TEST_THREADS:-4}"
 export PROPTEST_CASES="${PROPTEST_CASES:-1000}"
 export SCALE_CLAIMS="${SCALE_CLAIMS:-5000}"
 
-# Record or generate 32-byte hex seed (64 chars) for proptest reproducibility
-if [ -z "${PROPTEST_SEED:-}" ]; then
-  if command -v xxd >/dev/null 2>&1; then
-    export PROPTEST_SEED="$(head -c 32 /dev/urandom | xxd -p -c 32)"
-  else
-    export PROPTEST_SEED="$(od -vN "32" -An -tx1 /dev/urandom | tr -d " \n")"
-  fi
-fi
-
 # Set isolated tmpdir for sandbox locks if TMPDIR is not set
 if [ -z "${TMPDIR:-}" ]; then
   export TMPDIR="/tmp/openrail-gate-run-$$"
@@ -38,7 +29,6 @@ echo "=========================================================="
 echo "Starting OpenRail Phase 1 Gate Run"
 echo "  Proptest cases : $PROPTEST_CASES"
 echo "  Scale claims   : $SCALE_CLAIMS"
-echo "  Proptest seed  : $PROPTEST_SEED"
 echo "  TMPDIR         : $TMPDIR"
 echo "=========================================================="
 
@@ -51,13 +41,21 @@ cargo near build non-reproducible-wasm --manifest-path contracts/openrail/Cargo.
 
 # 1. Proptest 1,000 cases
 echo ""
-echo "=== [1/3] Running proptests (1,000 cases, seed: $PROPTEST_SEED) ==="
+echo "=== [1/3] Running proptests ($PROPTEST_CASES cases) ==="
+PROP_START=$(date +%s)
 cargo test -p openrail-model --test proptest_invariants -- --nocapture
+PROP_END=$(date +%s)
+PROP_ELAPSED=$((PROP_END - PROP_START))
+echo "Proptests completed in ${PROP_ELAPSED}s"
 
-# 2. Scale suite at 5,000 claims
+# 2. Scale suite at 5,000 claims (timed)
 echo ""
-echo "=== [2/3] Running scale suite (5,000 claims) ==="
+echo "=== [2/3] Running scale suite ($SCALE_CLAIMS claims) ==="
+SCALE_START=$(date +%s)
 cargo test -p openrail-tests --test scale_suite -- --nocapture
+SCALE_END=$(date +%s)
+SCALE_ELAPSED=$((SCALE_END - SCALE_START))
+echo "Scale suite completed in ${SCALE_ELAPSED}s"
 
 # 3. Mutation spot checks
 echo ""
@@ -74,8 +72,7 @@ ELAPSED=$((END_TIME - START_TIME))
 echo ""
 echo "=========================================================="
 echo "Gate Run Successful in ${ELAPSED}s"
-echo "  Seed: $PROPTEST_SEED"
-echo "  Proptest cases: $PROPTEST_CASES"
-echo "  Scale claims: $SCALE_CLAIMS"
+echo "  Proptest cases : $PROPTEST_CASES (${PROP_ELAPSED}s)"
+echo "  Scale claims   : $SCALE_CLAIMS (${SCALE_ELAPSED}s)"
 echo "  All invariant and mutation checks PASSED."
 echo "=========================================================="
