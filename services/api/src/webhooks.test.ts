@@ -35,6 +35,7 @@ describe("webhook signatures", () => {
     );
     const result = await deliverWebhook(endpoint, event, {
       fetchImpl,
+      validateUrl: async () => undefined,
       clock: () => 1762070495000,
     });
     expect(result.statusCode).toBe(200);
@@ -42,6 +43,25 @@ describe("webhook signatures", () => {
     const headers = init.headers as Record<string, string>;
     const body = String(init.body);
     expect(headers["Openrail-Signature"]).toBe(signWebhook(endpoint.secret, 1762070495, body));
+  });
+
+  it("refuses a blocked delivery URL", async () => {
+    await expect(
+      deliverWebhook(endpoint, event, {
+        fetchImpl: async () => new Response("ok", { status: 200 }),
+        validateUrl: async () => {
+          throw new Error("webhook address is not public");
+        },
+      }),
+    ).rejects.toThrow("not public");
+  });
+
+  it("treats a redirect as a failed delivery", async () => {
+    const result = await deliverWebhook(endpoint, event, {
+      fetchImpl: async () => new Response("moved", { status: 302 }),
+      validateUrl: async () => undefined,
+    });
+    expect(result.statusCode).toBe(302);
   });
 
   it("refuses a non-indexed event", async () => {
@@ -57,7 +77,7 @@ describe("webhook signatures", () => {
     const result = await deliverTestWebhook(
       endpoint,
       { id: "evt_test", type: "invoice.paid", created: 1, data: { test: true } },
-      { fetchImpl, clock: () => 1000 },
+      { fetchImpl, validateUrl: async () => undefined, clock: () => 1000 },
     );
     expect(result.statusCode).toBe(202);
   });

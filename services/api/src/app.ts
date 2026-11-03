@@ -23,6 +23,7 @@ import { renderInvoicePdfBase64 } from "./pdf.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
 import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
+import { UnsafeWebhookUrl, validateWebhookUrl } from "./webhook-url.js";
 
 export interface ApiConfig {
   rootAccount: string;
@@ -186,6 +187,7 @@ export interface ApiDeps {
   quoteProvider?: QuoteProvider;
   spec?: Record<string, unknown>;
   webhookFetch?: (input: string, init?: RequestInit) => Promise<Response>;
+  webhookUrlValidator?: (url: string) => Promise<unknown>;
 }
 
 function nowIso(clock: () => Date): string {
@@ -955,11 +957,20 @@ export class ApiApp {
           if (body.url === undefined || body.events === undefined) {
             throw new ApiError(400, "invalid_request", "url and events required");
           }
+          try {
+            await (this.deps.webhookUrlValidator ?? validateWebhookUrl)(body.url);
+          } catch (error) {
+            if (error instanceof UnsafeWebhookUrl) {
+              throw new ApiError(400, "invalid_webhook_url", error.message);
+            }
+            throw error;
+          }
           const endpoint: WebhookEndpointRecord & { secret: string } = {
             id: id("whe"),
             url: body.url,
             secret: `whsec_${randomBytes(24).toString("base64url")}`,
             events: body.events,
+            created_at: nowIso(this.clock),
           };
           this.store.saveWebhookEndpoint(context.accountId, endpoint);
           void context;
@@ -997,7 +1008,14 @@ export class ApiApp {
               created: Math.floor(this.clock().getTime() / 1000),
               data: { test: true },
             },
-            { fetchImpl: this.deps.webhookFetch },
+            {
+              ...(this.deps.webhookFetch === undefined
+                ? {}
+                : { fetchImpl: this.deps.webhookFetch }),
+              ...(this.deps.webhookUrlValidator === undefined
+                ? {}
+                : { validateUrl: this.deps.webhookUrlValidator }),
+            },
           );
           return {
             status: 200,

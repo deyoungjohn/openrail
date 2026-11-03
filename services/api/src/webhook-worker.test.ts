@@ -30,6 +30,7 @@ function harness(fetchImpl: (input: string, init?: RequestInit) => Promise<Respo
     events,
     store,
     fetchImpl,
+    validateUrl: async () => undefined,
     clock: () => new Date(now),
     retryWindowMs: 24 * 60 * 60 * 1000,
   });
@@ -81,10 +82,55 @@ describe("webhook worker", () => {
       events,
       store,
       fetchImpl,
+      validateUrl: async () => undefined,
       clock: () => new Date("2026-11-02T10:05:00Z"),
     });
     await restarted.runOnce();
     expect(store.listDeliveries(endpoint.id)).toHaveLength(1);
+    expect(store.getWorkerState("webhook_cursor")).toBe("7");
+    expect(events.listEvents).toHaveBeenLastCalledWith(expect.objectContaining({ after: "7" }));
+  });
+
+  it("does not deliver history before an endpoint was created", async () => {
+    const store = createMemoryStores().api;
+    store.saveWebhookEndpoint("acme.openrail.near", {
+      ...endpoint,
+      created_at: "2026-11-02T10:00:00Z",
+    });
+    const events = {
+      listEvents: vi.fn(async () => ({
+        data: [
+          {
+            id: "old",
+            type: "booked",
+            created: Math.floor(Date.parse("2026-11-02T09:59:00Z") / 1000),
+            data: {},
+          },
+          {
+            id: "new",
+            type: "booked",
+            created: Math.floor(Date.parse("2026-11-02T10:01:00Z") / 1000),
+            data: {},
+          },
+        ],
+        next_cursor: "2",
+      })),
+    };
+    const fetchImpl = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(
+      async () => new Response("ok", { status: 200 }),
+    );
+    const worker = new WebhookWorker({
+      events,
+      store,
+      fetchImpl,
+      validateUrl: async () => undefined,
+      clock: () => new Date("2026-11-02T10:05:00Z"),
+    });
+    await worker.runOnce();
+    const deliveries = store.listDeliveries(endpoint.id);
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]?.event_id).toBe("new");
+    expect(store.getWorkerState("webhook_cursor")).toBe("2");
   });
 
   it("stops retrying after the 24 h window", async () => {

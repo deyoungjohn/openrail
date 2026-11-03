@@ -61,6 +61,8 @@ export interface ApiStore {
   saveBusiness(record: BusinessRecord): void;
   listEvents(): Record<string, unknown>[];
   appendEvent(event: Record<string, unknown>): void;
+  getWorkerState(key: string): string | undefined;
+  setWorkerState(key: string, value: string): void;
 }
 
 export interface ApiKeyStore {
@@ -121,6 +123,7 @@ export function createMemoryStores(): Stores {
   const openQuotes = new Map<string, Record<string, unknown>[]>();
   const businesses = new Map<string, BusinessRecord>();
   const events: Record<string, unknown>[] = [];
+  const workerState = new Map<string, string>();
   const keys = new Map<string, ApiKeyRecord>();
   const sessions = new Map<string, SessionRecord>();
   const challenges = new Map<string, Challenge>();
@@ -224,6 +227,8 @@ export function createMemoryStores(): Stores {
       saveBusiness: (record) => businesses.set(record.account_id, record),
       listEvents: () => events,
       appendEvent: (event) => events.push(event),
+      getWorkerState: (key) => workerState.get(key),
+      setWorkerState: (key, value) => workerState.set(key, value),
     },
     keys: {
       create: (record) => keys.set(record.id, record),
@@ -295,6 +300,7 @@ export function createSqliteStores(path: string): Stores {
     CREATE TABLE IF NOT EXISTS open_quotes (token_id TEXT PRIMARY KEY, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS business_profiles (account_id TEXT PRIMARY KEY, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, body TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS worker_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, hash TEXT UNIQUE NOT NULL, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, expires_at INTEGER NOT NULL, absolute_expires_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS challenges (nonce TEXT PRIMARY KEY, account_id TEXT NOT NULL, expires_at INTEGER NOT NULL, body TEXT NOT NULL);
@@ -465,6 +471,15 @@ export function createSqliteStores(path: string): Stores {
         String(event.id ?? crypto.randomUUID()),
         JSON.stringify(event),
       );
+    },
+    getWorkerState(key) {
+      const row = db.prepare("SELECT value FROM worker_state WHERE key = ?").get(key);
+      return row === undefined ? undefined : String(row.value);
+    },
+    setWorkerState(key, value) {
+      db.prepare(
+        "INSERT INTO worker_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ).run(key, value);
     },
   };
 

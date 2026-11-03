@@ -1,11 +1,13 @@
 /** HMAC-signed webhooks, delivered only from indexed events (blueprint 1.7/2.9). */
 import { hmacSha256Hex } from "./crypto.js";
+import { safeWebhookFetch, validateWebhookUrl } from "./webhook-url.js";
 
 export interface WebhookEndpointRecord {
   id: string;
   url: string;
   secret: string;
   events: string[];
+  created_at?: string;
 }
 
 export interface IndexedEvent {
@@ -36,6 +38,7 @@ export function signWebhook(secret: string, timestamp: number, body: string): st
 
 export interface DeliveryOptions {
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
+  validateUrl?: (url: string) => Promise<unknown>;
   clock?: () => number;
 }
 
@@ -46,6 +49,7 @@ export async function deliverWebhook(
 ): Promise<WebhookDelivery> {
   if (event.indexed !== true) throw new WebhookNotIndexed();
   if (!endpoint.events.includes(event.type)) return { statusCode: 0, body: "event not subscribed" };
+  await (options.validateUrl ?? validateWebhookUrl)(endpoint.url);
   const body = JSON.stringify({
     id: event.id,
     type: event.type,
@@ -53,7 +57,7 @@ export async function deliverWebhook(
     data: event.data,
   });
   const timestamp = Math.floor((options.clock ?? Date.now)() / 1000);
-  const fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+  const fetchImpl = options.fetchImpl ?? safeWebhookFetch;
   const response = await fetchImpl(endpoint.url, {
     method: "POST",
     headers: {

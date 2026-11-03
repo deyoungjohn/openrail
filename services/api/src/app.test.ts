@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiApp, type ApiDeps } from "./app.js";
 import { AuthStore } from "./auth.js";
+import { UnsafeWebhookUrl } from "./webhook-url.js";
 import { termsHash } from "./terms.js";
 
 const clock = () => new Date("2026-11-02T10:00:00Z");
@@ -65,6 +66,9 @@ function harness() {
     clock,
     spec: { openapi: "3.1.0" },
     webhookFetch: async () => new Response("ok", { status: 200 }),
+    webhookUrlValidator: async (url: string) => {
+      if (!url.startsWith("https://")) throw new UnsafeWebhookUrl("webhook URL must use https");
+    },
   };
   return { app: new ApiApp(deps), auth, secret, issuer, contract, quoteProvider };
 }
@@ -135,6 +139,20 @@ describe("invoice route", () => {
     );
     expect(conflict.status).toBe(409);
     expect((conflict.body as { error: { code: string } }).error.code).toBe("idempotency_key_reuse");
+  });
+
+  it("refuses a non-https webhook URL at registration", async () => {
+    const { app, secret } = harness();
+    const response = await app.handle(
+      request(
+        "POST",
+        "/v1/webhook_endpoints",
+        { url: "http://169.254.169.254/latest/meta-data/", events: ["invoice.paid"] },
+        secret,
+      ),
+    );
+    expect(response.status).toBe(400);
+    expect((response.body as { error: { code: string } }).error.code).toBe("invalid_webhook_url");
   });
 
   it("requires a valid origin-chain refund address for a pay session", async () => {

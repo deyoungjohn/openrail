@@ -10,6 +10,7 @@ export interface WebhookWorkerDeps {
   events: Pick<IndexerPort, "listEvents">;
   store: ApiStore;
   fetchImpl?: FetchLike;
+  validateUrl?: (url: string) => Promise<unknown>;
   clock?: () => Date;
   limit?: number;
   retryWindowMs?: number;
@@ -22,6 +23,7 @@ export class WebhookWorker {
   private readonly limit: number;
   private readonly retryWindowMs: number;
   private readonly fetchImpl?: FetchLike;
+  private readonly validateUrl?: (url: string) => Promise<unknown>;
   private readonly log: (message: string, data?: Record<string, unknown>) => void;
 
   constructor(private readonly deps: WebhookWorkerDeps) {
@@ -29,7 +31,9 @@ export class WebhookWorker {
     this.limit = deps.limit ?? 100;
     this.retryWindowMs = deps.retryWindowMs ?? 24 * 60 * 60 * 1000;
     this.fetchImpl = deps.fetchImpl;
+    this.validateUrl = deps.validateUrl;
     this.log = deps.logger ?? (() => undefined);
+    this.cursor = deps.store.getWorkerState("webhook_cursor");
   }
 
   /** One poll + delivery pass. Safe to call repeatedly; the outbox is the exactly-once ledger. */
@@ -46,6 +50,8 @@ export class WebhookWorker {
       const event = { ...raw, indexed: true } as unknown as IndexedEvent;
       for (const endpoint of endpoints) {
         if (!endpoint.events.includes(event.type)) continue;
+        const createdMs = endpoint.created_at === undefined ? 0 : Date.parse(endpoint.created_at);
+        if (event.created * 1000 < createdMs) continue;
         this.deps.store.outboxEnqueue(
           endpoint.id,
           event.id,
@@ -57,6 +63,7 @@ export class WebhookWorker {
     }
     if (page.next_cursor !== undefined && page.next_cursor !== null) {
       this.cursor = page.next_cursor;
+      this.deps.store.setWorkerState("webhook_cursor", this.cursor);
     }
     await this.deliverDue(this.clock().getTime());
   }
@@ -84,6 +91,7 @@ export class WebhookWorker {
     try {
       const result = await deliverWebhook(endpoint, event, {
         ...(this.fetchImpl === undefined ? {} : { fetchImpl: this.fetchImpl }),
+        ...(this.validateUrl === undefined ? {} : { validateUrl: this.validateUrl }),
         clock: () => now,
       });
       const delivered = result.statusCode >= 200 && result.statusCode < 300;
