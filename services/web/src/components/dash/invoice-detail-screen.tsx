@@ -192,7 +192,11 @@ export function InvoiceDetailScreen({ id }: { id: string }) {
                 await navigator.clipboard.writeText(invoice.pay_link);
                 toast({ tone: "success", title: t.copied });
               } catch {
-                toast({ tone: "error", title: "Couldn't copy", body: invoice.pay_link });
+                toast({
+                  tone: "error",
+                  title: t.copyFailed,
+                  body: `${t.copyFailedBody} ${invoice.pay_link}`,
+                });
               }
             }}
           >

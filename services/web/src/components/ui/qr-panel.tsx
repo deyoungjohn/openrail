@@ -30,7 +30,7 @@ export function QrPanel({
           <Skeleton className="h-5 w-40" />
         </div>
       ) : state === "error" || state === "empty" ? (
-        <ErrorState body="We couldn't create the payment address. Reload the page to try again." />
+        <ErrorState body={copy.qr.error} />
       ) : (
         <>
           {/* Always white behind the code so it scans in dark mode. */}
