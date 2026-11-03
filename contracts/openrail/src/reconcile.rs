@@ -3,7 +3,7 @@
 use crate::claims::compute_outstanding;
 use crate::events::{
     AnomalyEvent, BookedEvent, DistributedEvent, DistributionFailedEvent, LockClearedEvent,
-    ReconcileFailedEvent, TransferWindowEvent,
+    ReconcileFailedEvent, SurplusReleasedEvent, TransferWindowEvent,
 };
 use crate::hooks::{Booking, BookingInput};
 use crate::types::{Claim, Leg, Lock, Status, TokenId};
@@ -52,6 +52,8 @@ pub struct OnDistributedArgs {
     pub is_retry: bool,
     #[serde(default)]
     pub open_transfer_window: bool,
+    #[serde(default)]
+    pub is_surplus: bool,
 }
 
 #[near(serializers = [json])]
@@ -424,11 +426,12 @@ impl Contract {
             since,
             false,
             open_transfer_window,
+            false,
         );
     }
 
     /// Dispatches forwards to the vault sub-account and schedules `on_distributed`.
-    fn dispatch_distribution_forwards(
+    pub(crate) fn dispatch_distribution_forwards(
         &mut self,
         token_id: &str,
         claim_account: AccountId,
@@ -437,6 +440,7 @@ impl Contract {
         since: u64,
         is_retry: bool,
         open_transfer_window: bool,
+        is_surplus: bool,
     ) {
         let mut forward_promises = Vec::with_capacity(legs.len());
 
@@ -506,6 +510,7 @@ impl Contract {
             since,
             is_retry,
             open_transfer_window,
+            is_surplus,
         };
         let callback_bytes =
             near_sdk::serde_json::to_vec(&callback_args).expect("serialize on_distributed args");
@@ -531,6 +536,7 @@ impl Contract {
         since: u64,
         is_retry: bool,
         open_transfer_window: bool,
+        is_surplus: bool,
     ) {
         let claim = self
             .claims
@@ -565,9 +571,21 @@ impl Contract {
                 }
                 DistributedEvent {
                     token_id: token_id.clone(),
-                    leg,
+                    leg: leg.clone(),
                 }
                 .emit();
+
+                if is_surplus {
+                    SurplusReleasedEvent {
+                        token_id: token_id.clone(),
+                        amount: leg.amount(),
+                        receiver_id: leg
+                            .receiver()
+                            .cloned()
+                            .unwrap_or_else(|| claim.owner_id.clone()),
+                    }
+                    .emit();
+                }
             } else {
                 // D-S8: failed leg is recorded into undistributed; booking counters stand!
                 let mut und = self
@@ -646,6 +664,7 @@ impl Contract {
             prev_lock,
             current_block,
             true,
+            false,
             false,
         );
     }

@@ -308,6 +308,12 @@ async fn test_c5_release_surplus_enforces_rules_and_emits_event() -> Result<()> 
         env.alice.id().as_str()
     );
 
+    let dist_events = env.assert_event(&rel_success, "distributed");
+    assert!(
+        !dist_events.is_empty(),
+        "distributed event must also be emitted on successful surplus release"
+    );
+
     let post_view: ClaimView = env
         .root
         .view("claim")
@@ -315,6 +321,113 @@ async fn test_c5_release_surplus_enforces_rules_and_emits_event() -> Result<()> 
         .await?
         .json()?;
     assert_eq!(post_view.surplus.0, 0);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_c5_release_surplus_nonexistent_receiver_fails_to_undistributed() -> Result<()> {
+    let env = Env::new().await?;
+
+    // Create an owner whose ID contains "nonexistent", so forwards will fail in mock intents
+    let nonexistent_owner = env
+        .worker
+        .root_account()?
+        .create_subaccount("nonexistent-owner")
+        .initial_balance(near_workspaces::types::NearToken::from_near(10))
+        .transact()
+        .await?
+        .into_result()?;
+
+    let issue_res = env
+        .issue_claim_with_details(
+            &nonexistent_owner,
+            0,
+            Some(Debtor::Near(env.bob.id().clone())),
+            Hex32::default(),
+            1_000_000,
+            1_800_000_000,
+            None,
+        )
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
+    // Fund with 1_500_000 (1_000_000 payment + 500_000 surplus)
+    let _ = env.fund_claim(&token_id, 1_500_000, None).await?;
+
+    // Reconcile
+    let rec = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec.is_success());
+
+    let view_before: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(view_before.status, Status::Paid);
+    assert_eq!(view_before.surplus.0, 500_000);
+    assert_eq!(
+        view_before.undistributed.len(),
+        1,
+        "Reconcile payment leg to nonexistent owner was queued into undistributed"
+    );
+
+    // Call release_surplus as nonexistent_owner
+    let rel_res = nonexistent_owner
+        .call(env.root.id(), "release_surplus")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rel_res.is_success());
+
+    // surplus_released must NOT be emitted
+    let decoded = openrail_tests::decode_events(&rel_res);
+    assert!(
+        !decoded
+            .iter()
+            .any(|e| e.get("event").and_then(|v| v.as_str()) == Some("surplus_released")),
+        "surplus_released must NOT be emitted for failed forward"
+    );
+
+    // distribution_failed MUST be emitted
+    let failed_events = env.assert_event(&rel_res, "distribution_failed");
+    assert_eq!(
+        failed_events.len(),
+        1,
+        "distribution_failed must be emitted for failed surplus forward"
+    );
+
+    // Check post claim state
+    let post_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+
+    assert_eq!(
+        post_view.surplus.0, 0,
+        "surplus zeroed upon distribution dispatch"
+    );
+    assert_eq!(
+        post_view.undistributed.len(),
+        2,
+        "Failed surplus leg queued into undistributed alongside reconcile leg"
+    );
+    assert_eq!(
+        post_view.lock,
+        openrail::types::Lock::None,
+        "Lock restored to None"
+    );
 
     Ok(())
 }

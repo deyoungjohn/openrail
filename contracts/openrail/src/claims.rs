@@ -149,6 +149,7 @@ impl Contract {
 
         let amount = claim.surplus;
         let mut remaining = amount.0;
+        let mut legs = Vec::new();
 
         // Allocate surplus across available balances in settlement assets
         for asset in &claim.settlement_assets {
@@ -168,33 +169,35 @@ impl Contract {
                     .insert(asset.clone(), near_sdk::json_types::U128(avail - take));
                 remaining -= take;
 
-                let forward_args = crate::reconcile::VaultForwardArgs {
-                    token_id: asset.clone(),
-                    amount: take.to_string(),
-                    receiver_id: claim.owner_id.clone(),
-                    gas_tgas: crate::reconcile::VAULT_FORWARD_INNER_TGAS,
-                };
-                let forward_bytes = near_sdk::serde_json::to_vec(&forward_args)
-                    .expect("serialize vault forward args");
-                env::promise_create(
-                    claim.claim_account.clone(),
-                    "forward",
-                    &forward_bytes,
-                    NearToken::ZERO,
-                    crate::reconcile::GAS_FOR_VAULT_FORWARD,
-                );
+                legs.push(crate::types::Leg::Pay {
+                    receiver: claim.owner_id.clone(),
+                    amount: near_sdk::json_types::U128(take),
+                    asset: Some(asset.clone()),
+                });
             }
         }
 
+        require!(remaining == 0, "surplus not covered by last_seen balance");
+
         claim.surplus = near_sdk::json_types::U128(0);
-        let owner_id = claim.owner_id.clone();
+        let prev_lock = claim.lock.clone();
+        let current_block = env::block_height();
+        claim.lock = Lock::Reconciling {
+            since: current_block,
+        };
+
+        let claim_account = claim.claim_account.clone();
         self.claims.insert(token_id.clone(), claim);
 
-        crate::events::SurplusReleasedEvent {
-            token_id,
-            amount,
-            receiver_id: owner_id,
-        }
-        .emit();
+        self.dispatch_distribution_forwards(
+            &token_id,
+            claim_account,
+            legs,
+            prev_lock,
+            current_block,
+            false,
+            false,
+            true,
+        );
     }
 }

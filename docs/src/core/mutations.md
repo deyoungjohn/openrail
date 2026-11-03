@@ -1,6 +1,6 @@
-# C2/C3 mutation checks
+# Contract mutation checks
 
-These are deliberate rule breaks applied to the merged contract code, each run against the named acceptance test, then restored. The recorded run is at commit [`cd54fa9`](https://github.com/deyoungjohn/openrail/commit/cd54fa9), based on [`44361a3`](https://github.com/deyoungjohn/openrail/commit/44361a3) (PR [#54](https://github.com/deyoungjohn/openrail/pull/54)); the later C2 window-cleanup commit does not touch these rules.
+These are deliberate rule breaks applied to the contract code, each run against the named acceptance test, then restored. C2/C3 are recorded at commit [`cd54fa9`](https://github.com/deyoungjohn/openrail/commit/cd54fa9), based on [`44361a3`](https://github.com/deyoungjohn/openrail/commit/44361a3) (PR [#54](https://github.com/deyoungjohn/openrail/pull/54)); C4 and C5 are recorded on branch `ph1-c5-lifecycle` (PR [#71](https://github.com/deyoungjohn/openrail/pull/71)).
 
 ## Reproduce
 
@@ -12,7 +12,7 @@ NEAR_SANDBOX_BIN_PATH="$HOME/.near/sandbox" cargo test -p openrail-tests --test 
 git checkout -- contracts/openrail/src
 ```
 
-The working tree was clean after restoring all ten mutations (`git diff --exit-code` exited 0).
+The working tree was clean after restoring all mutations (`git diff --exit-code` exited 0).
 
 ## C2 — NEP-171 transfers
 
@@ -298,4 +298,277 @@ Failure (tail):
 test contract_ack_eip712_valid ... FAILED
 thread 'contract_ack_eip712_valid' (3557162) panicked at contracts/tests/tests/ack_suite.rs:297:5:
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out; finished in 51.97s
+```
+
+## C4 — Reconcile and distribution
+
+| ID    | Break                                | Test                                                                   | Result          |
+| ----- | ------------------------------------ | ---------------------------------------------------------------------- | --------------- |
+| C4-M1 | stale callback guard disabled        | `test_c4_stale_callback_double_book_prevented`                         | FAILED (caught) |
+| C4-M2 | missing claim check removed          | `test_c4_mutation_break_2_unknown_claim`                               | FAILED (caught) |
+| C4-M3 | protocol fee set to 0 bps            | `test_c4_mutation_break_3_exact_fee_25_bps`                            | FAILED (caught) |
+| C4-M4 | D-S8 violation: unbooking failed leg | `test_c4_mutation_break_4_d_s8_failed_leg_preserves_status_and_booked` | FAILED (caught) |
+| C4-M5 | anomaly on falling balance removed   | `test_c4_mutation_break_5_falling_balance_anomaly_delta_zero`          | FAILED (caught) |
+
+### C4-M1: stale callback guard disabled
+
+Command: `cargo test -p openrail-tests --test c4_reconcile_tests test_c4_stale_callback_double_book_prevented`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -256,15 +256,6 @@
+         match &claim.lock {
+             Lock::Reconciling { since: lock_since } => {
+-                if *lock_since != since {
+-                    ReconcileFailedEvent {
+-                        token_id: token_id.clone(),
+-                        reason: "stale_callback".to_string(),
+-                    }
+-                    .emit();
+-                    return;
+-                }
++                // Stale callback guard bypassed
+             }
+             _ => {
+                 ReconcileFailedEvent {
+```
+
+Failure (tail):
+
+```text
+test test_c4_stale_callback_double_book_prevented ... FAILED
+thread 'test_c4_stale_callback_double_book_prevented' panicked at contracts/tests/tests/c4_reconcile_tests.rs:892:10:
+called `Option::unwrap()` on a `None` value (reconcile_failed event must be emitted)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 52.18s
+```
+
+### C4-M2: missing claim check removed
+
+Command: `cargo test -p openrail-tests --test c4_reconcile_tests test_c4_mutation_break_2_unknown_claim`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -207,3 +207,6 @@
+-        let claim = self
+-            .claims
+-            .get_mut(&token_id)
+-            .unwrap_or_else(|| env::panic_str("claim not found"));
++        let Some(claim) = self.claims.get_mut(&token_id) else {
++            return;
++        };
+```
+
+Failure (tail):
+
+```text
+test test_c4_mutation_break_2_unknown_claim ... FAILED
+thread 'test_c4_mutation_break_2_unknown_claim' panicked at contracts/tests/tests/c4_reconcile_tests.rs:530:5:
+assertion failed: res.is_failure()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 48.33s
+```
+
+### C4-M3: protocol fee set to 0 bps
+
+Command: `cargo test -p openrail-tests --test c4_reconcile_tests test_c4_mutation_break_3_exact_fee_25_bps`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -293,1 +293,1 @@
+-        let fee = (total_delta.saturating_mul(25)) / 10_000;
++        let fee = 0;
+```
+
+Failure (tail):
+
+```text
+test test_c4_mutation_break_3_exact_fee_25_bps ... FAILED
+thread 'test_c4_mutation_break_3_exact_fee_25_bps' panicked at contracts/tests/tests/c4_reconcile_tests.rs:575:5:
+assertion `left == right` failed: Fee must be exactly 25 bps
+  left: 0
+ right: 25000
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 51.40s
+```
+
+### C4-M4: D-S8 violation: unbooking failed leg
+
+Command: `cargo test -p openrail-tests --test c4_reconcile_tests test_c4_mutation_break_4_d_s8_failed_leg_preserves_status_and_booked`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -590,6 +590,9 @@
+             } else {
+                 // D-S8: failed leg is recorded into undistributed; booking counters stand!
++                claim.booked_total = near_sdk::json_types::U128(claim.booked_total.0.saturating_sub(leg.amount().0));
++                claim.status = Status::Issued;
++
+                 let mut und = self
+                     .undistributed
+```
+
+Failure (tail):
+
+```text
+test test_c4_mutation_break_4_d_s8_failed_leg_preserves_status_and_booked ... FAILED
+thread 'test_c4_mutation_break_4_d_s8_failed_leg_preserves_status_and_booked' panicked at contracts/tests/tests/c4_reconcile_tests.rs:629:5:
+assertion `left == right` failed: D-S8: Status must remain Paid
+  left: Issued
+ right: Paid
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 53.66s
+```
+
+### C4-M5: anomaly on falling balance removed
+
+Command: `cargo test -p openrail-tests --test c4_reconcile_tests test_c4_mutation_break_5_falling_balance_anomaly_delta_zero`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -241,10 +241,3 @@
+                 if bal < last {
+-                    AnomalyEvent {
+-                        token_id: token_id.clone(),
+-                        asset: asset.clone(),
+-                        expected: U128(last),
+-                        actual: U128(bal),
+-                    }
+-                    .emit();
+-                    claim.last_seen_balance.insert(asset.clone(), U128(bal));
+-                    continue;
++                    total_delta = total_delta.saturating_add(bal);
+                 }
+```
+
+Failure (tail):
+
+```text
+test test_c4_mutation_break_5_falling_balance_anomaly_delta_zero ... FAILED
+thread 'test_c4_mutation_break_5_falling_balance_anomaly_delta_zero' panicked at contracts/tests/tests/c4_reconcile_tests.rs:688:5:
+assertion failed: !booked: Anomaly reconcile must not emit any Booked event
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 65.12s
+```
+
+## C5 — Claim lifecycle
+
+| ID    | Break                                     | Test                                                     | Result          |
+| ----- | ----------------------------------------- | -------------------------------------------------------- | --------------- |
+| C5-M1 | prepaid gas check on reconcile removed    | `test_c5_reconcile_gas_check`                            | FAILED (caught) |
+| C5-M2 | retry distribution permitted while locked | `test_c5_retry_distribution_rejected_during_reconcile`   | FAILED (caught) |
+| C5-M3 | close allowed with remaining surplus      | `test_c5_close_enforces_rules_and_emits_event`           | FAILED (caught) |
+| C5-M4 | close writeoff allowed on Issued claim    | `test_c5_close_writeoff_enforces_rules_and_emits_event`  | FAILED (caught) |
+| C5-M5 | release surplus allowed by non-owner      | `test_c5_release_surplus_enforces_rules_and_emits_event` | FAILED (caught) |
+
+### C5-M1: prepaid gas check on reconcile removed
+
+Command: `cargo test -p openrail-tests --test c5_lifecycle_tests test_c5_reconcile_gas_check`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -198,4 +198,0 @@
+-        require!(
+-            env::prepaid_gas() >= Gas::from_tgas(230),
+-            "insufficient gas for reconcile"
+-        );
+```
+
+Failure (tail):
+
+```text
+test test_c5_reconcile_gas_check ... FAILED
+thread 'test_c5_reconcile_gas_check' panicked at contracts/tests/tests/c5_lifecycle_tests.rs:446:5:
+assertion failed: format!("{:?}", rec_low_gas.failures()).contains("insufficient gas for reconcile")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 47.88s
+```
+
+### C5-M2: retry distribution permitted while locked
+
+Command: `cargo test -p openrail-tests --test c5_lifecycle_tests test_c5_retry_distribution_rejected_during_reconcile`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -644,4 +644,0 @@
+-        require!(
+-            claim.lock.allows_transfer(),
+-            "cannot retry while reconciling"
+-        );
+```
+
+Failure (tail):
+
+```text
+test test_c5_retry_distribution_rejected_during_reconcile ... FAILED
+thread 'test_c5_retry_distribution_rejected_during_reconcile' panicked at contracts/tests/tests/c5_lifecycle_tests.rs:509:5:
+assertion failed: res.is_failure()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 55.43s
+```
+
+### C5-M3: close allowed with remaining surplus
+
+Command: `cargo test -p openrail-tests --test c5_lifecycle_tests test_c5_close_enforces_rules_and_emits_event`
+
+```diff
+--- a/contracts/openrail/src/claims.rs
++++ b/contracts/openrail/src/claims.rs
+@@ -62,1 +62,0 @@
+-        require!(claim.surplus.0 == 0, "cannot close claim with surplus");
+```
+
+Failure (tail):
+
+```text
+test test_c5_close_enforces_rules_and_emits_event ... FAILED
+thread 'test_c5_close_enforces_rules_and_emits_event' panicked at contracts/tests/tests/c5_lifecycle_tests.rs:92:5:
+assertion failed: close_surplus.is_failure()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 61.20s
+```
+
+### C5-M4: close writeoff allowed on Issued claim
+
+Command: `cargo test -p openrail-tests --test c5_lifecycle_tests test_c5_close_writeoff_enforces_rules_and_emits_event`
+
+```diff
+--- a/contracts/openrail/src/claims.rs
++++ b/contracts/openrail/src/claims.rs
+@@ -98,4 +98,0 @@
+-        require!(
+-            claim.status == Status::PartiallyPaid,
+-            "cannot writeoff claim not partially paid"
+-        );
+```
+
+Failure (tail):
+
+```text
+test test_c5_close_writeoff_enforces_rules_and_emits_event ... FAILED
+thread 'test_c5_close_writeoff_enforces_rules_and_emits_event' panicked at contracts/tests/tests/c5_lifecycle_tests.rs:174:5:
+assertion failed: wo_issued.is_failure()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 59.10s
+```
+
+### C5-M5: release surplus allowed by non-owner
+
+Command: `cargo test -p openrail-tests --test c5_lifecycle_tests test_c5_release_surplus_enforces_rules_and_emits_event`
+
+```diff
+--- a/contracts/openrail/src/claims.rs
++++ b/contracts/openrail/src/claims.rs
+@@ -143,4 +143,0 @@
+-        require!(
+-            env::predecessor_account_id() == claim.owner_id,
+-            "Unauthorized: owner only"
+-        );
+```
+
+Failure (tail):
+
+```text
+test test_c5_release_surplus_enforces_rules_and_emits_event ... FAILED
+thread 'test_c5_release_surplus_enforces_rules_and_emits_event' panicked at contracts/tests/tests/c5_lifecycle_tests.rs:287:5:
+assertion failed: rel_bob.is_failure()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 63.85s
 ```

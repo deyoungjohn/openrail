@@ -247,6 +247,7 @@ impl Contract {
         since: u64,
         is_retry: bool,
         open_transfer_window: Option<bool>,
+        is_surplus: Option<bool>,
     ) {
         self.handle_on_distributed(
             token_id,
@@ -255,6 +256,7 @@ impl Contract {
             since,
             is_retry,
             open_transfer_window.unwrap_or(false),
+            is_surplus.unwrap_or(false),
         );
     }
 

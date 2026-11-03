@@ -218,7 +218,10 @@ impl MockIntents {
         token_id: &str,
         amount: u128,
     ) {
-        if receiver_id.as_str().contains("fail") || receiver_id.as_str().contains("reject") {
+        if receiver_id.as_str().contains("fail")
+            || receiver_id.as_str().contains("reject")
+            || receiver_id.as_str().contains("nonexistent")
+        {
             env::panic_str("intents mock: simulated transfer failure");
         }
 
