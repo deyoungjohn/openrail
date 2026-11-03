@@ -3,7 +3,7 @@
 use crate::claims::compute_outstanding;
 use crate::events::{
     AnomalyEvent, BookedEvent, DistributedEvent, DistributionFailedEvent, LockClearedEvent,
-    ReconcileFailedEvent,
+    ReconcileFailedEvent, SurplusReleasedEvent, TransferWindowEvent,
 };
 use crate::hooks::{Booking, BookingInput};
 use crate::types::{Claim, Leg, Lock, Status, TokenId};
@@ -37,6 +37,8 @@ pub struct OnBalancesArgs {
     pub token_id: String,
     pub prev_lock: Lock,
     pub since: u64,
+    #[serde(default)]
+    pub open_transfer_window: bool,
 }
 
 /// Payload for distribution callback.
@@ -48,6 +50,10 @@ pub struct OnDistributedArgs {
     pub prev_lock: Lock,
     pub since: u64,
     pub is_retry: bool,
+    #[serde(default)]
+    pub open_transfer_window: bool,
+    #[serde(default)]
+    pub is_surplus: bool,
 }
 
 #[near(serializers = [json])]
@@ -82,6 +88,20 @@ impl Contract {
     /// to cover `mt_batch_balance_of` (10 Tgas) and `on_balances` callback (220 Tgas),
     /// which forwards up to 6 legs at 12 Tgas inner each.
     pub(crate) fn internal_reconcile(&mut self, token_id: String) {
+        self.internal_reconcile_with_options(token_id, false);
+    }
+
+    /// Reconciles balances for a claim, optionally opening the transfer window on completion.
+    pub(crate) fn internal_reconcile_with_options(
+        &mut self,
+        token_id: String,
+        open_transfer_window: bool,
+    ) {
+        require!(
+            env::prepaid_gas() >= Gas::from_tgas(230),
+            "insufficient gas for reconcile"
+        );
+
         let claim = self
             .claims
             .get_mut(&token_id)
@@ -118,6 +138,7 @@ impl Contract {
             token_id,
             prev_lock,
             since: current_block,
+            open_transfer_window,
         };
         let callback_bytes =
             near_sdk::serde_json::to_vec(&callback_args).expect("serialize callback args");
@@ -135,7 +156,13 @@ impl Contract {
     }
 
     /// Callback after balance query on `intents.near` resolves (Blueprint 2.5).
-    pub(crate) fn handle_on_balances(&mut self, token_id: String, prev_lock: Lock, since: u64) {
+    pub(crate) fn handle_on_balances(
+        &mut self,
+        token_id: String,
+        prev_lock: Lock,
+        since: u64,
+        open_transfer_window: bool,
+    ) {
         let claim = self
             .claims
             .get_mut(&token_id)
@@ -224,7 +251,17 @@ impl Contract {
 
         // Idempotent reconcile: zero delta changes no state (beyond anomaly last_seen reset)
         if total_delta == 0 {
-            restore_lock(claim, prev_lock);
+            if open_transfer_window {
+                let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                claim.lock = Lock::TransferWindow { until };
+                TransferWindowEvent {
+                    token_id: token_id.clone(),
+                    until,
+                }
+                .emit();
+            } else {
+                restore_lock(claim, prev_lock);
+            }
             return;
         }
 
@@ -366,7 +403,17 @@ impl Contract {
             .collect();
 
         if legs_to_forward.is_empty() {
-            restore_lock(claim, prev_lock);
+            if open_transfer_window {
+                let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                claim.lock = Lock::TransferWindow { until };
+                TransferWindowEvent {
+                    token_id: token_id.clone(),
+                    until,
+                }
+                .emit();
+            } else {
+                restore_lock(claim, prev_lock);
+            }
             return;
         }
 
@@ -378,11 +425,13 @@ impl Contract {
             prev_lock,
             since,
             false,
+            open_transfer_window,
+            false,
         );
     }
 
     /// Dispatches forwards to the vault sub-account and schedules `on_distributed`.
-    fn dispatch_distribution_forwards(
+    pub(crate) fn dispatch_distribution_forwards(
         &mut self,
         token_id: &str,
         claim_account: AccountId,
@@ -390,6 +439,8 @@ impl Contract {
         prev_lock: Lock,
         since: u64,
         is_retry: bool,
+        open_transfer_window: bool,
+        is_surplus: bool,
     ) {
         let mut forward_promises = Vec::with_capacity(legs.len());
 
@@ -429,6 +480,18 @@ impl Contract {
                 .get_mut(token_id)
                 .unwrap_or_else(|| env::panic_str("claim not found"));
             if !is_retry {
+                if open_transfer_window {
+                    let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                    claim.lock = Lock::TransferWindow { until };
+                    TransferWindowEvent {
+                        token_id: token_id.to_string(),
+                        until,
+                    }
+                    .emit();
+                } else {
+                    restore_lock(claim, prev_lock);
+                }
+            } else {
                 restore_lock(claim, prev_lock);
             }
             return;
@@ -446,6 +509,8 @@ impl Contract {
             prev_lock,
             since,
             is_retry,
+            open_transfer_window,
+            is_surplus,
         };
         let callback_bytes =
             near_sdk::serde_json::to_vec(&callback_args).expect("serialize on_distributed args");
@@ -470,13 +535,15 @@ impl Contract {
         prev_lock: Lock,
         since: u64,
         is_retry: bool,
+        open_transfer_window: bool,
+        is_surplus: bool,
     ) {
         let claim = self
             .claims
             .get_mut(&token_id)
             .unwrap_or_else(|| env::panic_str("claim not found"));
 
-        if !is_retry && claim.lock != (Lock::Reconciling { since }) {
+        if claim.lock != (Lock::Reconciling { since }) {
             ReconcileFailedEvent {
                 token_id,
                 reason: "stale_callback".to_string(),
@@ -504,9 +571,21 @@ impl Contract {
                 }
                 DistributedEvent {
                     token_id: token_id.clone(),
-                    leg,
+                    leg: leg.clone(),
                 }
                 .emit();
+
+                if is_surplus {
+                    SurplusReleasedEvent {
+                        token_id: token_id.clone(),
+                        amount: leg.amount(),
+                        receiver_id: leg
+                            .receiver()
+                            .cloned()
+                            .unwrap_or_else(|| claim.owner_id.clone()),
+                    }
+                    .emit();
+                }
             } else {
                 // D-S8: failed leg is recorded into undistributed; booking counters stand!
                 let mut und = self
@@ -539,6 +618,18 @@ impl Contract {
         }
 
         if !is_retry {
+            if open_transfer_window {
+                let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                claim.lock = Lock::TransferWindow { until };
+                TransferWindowEvent {
+                    token_id: token_id.clone(),
+                    until,
+                }
+                .emit();
+            } else {
+                restore_lock(claim, prev_lock);
+            }
+        } else {
             restore_lock(claim, prev_lock);
         }
     }
@@ -547,21 +638,34 @@ impl Contract {
     pub(crate) fn internal_retry_distribution(&mut self, token_id: String) {
         let claim = self
             .claims
-            .get(&token_id)
+            .get_mut(&token_id)
             .unwrap_or_else(|| env::panic_str("claim not found"));
+
+        require!(
+            claim.lock.allows_transfer(),
+            "cannot retry while reconciling"
+        );
 
         let undistributed = self.undistributed.remove(&token_id).unwrap_or_default();
 
         require!(!undistributed.is_empty(), "no undistributed legs");
+
+        let prev_lock = claim.lock.clone();
+        let current_block = env::block_height();
+        claim.lock = Lock::Reconciling {
+            since: current_block,
+        };
 
         let claim_account = claim.claim_account.clone();
         self.dispatch_distribution_forwards(
             &token_id,
             claim_account,
             undistributed,
-            Lock::None,
-            0,
+            prev_lock,
+            current_block,
             true,
+            false,
+            false,
         );
     }
 

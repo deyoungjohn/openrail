@@ -23,7 +23,7 @@ pub mod views;
 
 use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
-use near_sdk::{env, near, AccountId, PanicOnDefault};
+use near_sdk::{env, near, require, AccountId, PanicOnDefault};
 use std::collections::HashMap;
 
 pub use types::{
@@ -222,8 +222,19 @@ impl Contract {
 
     /// Private callback executed after balance query resolves (Blueprint 2.5).
     #[private]
-    pub fn on_balances(&mut self, token_id: String, prev_lock: Lock, since: u64) {
-        self.handle_on_balances(token_id, prev_lock, since);
+    pub fn on_balances(
+        &mut self,
+        token_id: String,
+        prev_lock: Lock,
+        since: u64,
+        open_transfer_window: Option<bool>,
+    ) {
+        self.handle_on_balances(
+            token_id,
+            prev_lock,
+            since,
+            open_transfer_window.unwrap_or(false),
+        );
     }
 
     /// Private callback executed after distribution forwards resolve (Blueprint 2.5).
@@ -235,8 +246,18 @@ impl Contract {
         prev_lock: Lock,
         since: u64,
         is_retry: bool,
+        open_transfer_window: Option<bool>,
+        is_surplus: Option<bool>,
     ) {
-        self.handle_on_distributed(token_id, legs, prev_lock, since, is_retry);
+        self.handle_on_distributed(
+            token_id,
+            legs,
+            prev_lock,
+            since,
+            is_retry,
+            open_transfer_window.unwrap_or(false),
+            is_surplus.unwrap_or(false),
+        );
     }
 
     /// Retries failed distribution legs to their originally recorded receivers.
@@ -427,8 +448,7 @@ impl Contract {
     /// Caller: Claim owner.
     /// Requirements: `status == Paid`, `surplus == 0`, `lock == None`.
     pub fn close(&mut self, token_id: String) {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_close(token_id);
     }
 
     /// Closes a partially paid claim recording the shortfall (`PartiallyPaid` -> `Closed`).
@@ -436,8 +456,7 @@ impl Contract {
     /// Caller: Claim owner.
     /// Requirements: `status == PartiallyPaid`, `hooks::check_writeoff` passes.
     pub fn close_writeoff(&mut self, token_id: String) {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_close_writeoff(token_id);
     }
 
     /// Releases accumulated surplus to the current claim owner.
@@ -445,8 +464,7 @@ impl Contract {
     /// Caller: Claim owner.
     /// Deposit: None. Forwards surplus value to owner_id; emits `surplus_released`.
     pub fn release_surplus(&mut self, token_id: String) {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_release_surplus(token_id);
     }
 
     /// Appends a Quote log entry before a payment deposit address is returned.
@@ -546,7 +564,21 @@ impl Contract {
     /// - `credit_total + amount <= amount_due - (booked_total - surplus)` (i.e. `credit <= outstanding`)
     #[allow(dead_code)]
     pub(crate) fn apply_credit(&mut self, token_id: &str, amount: U128, source: u8) {
-        let _ = (token_id, amount, source);
-        env::panic_str("NOT_IMPLEMENTED");
+        let claim = self
+            .claims
+            .get_mut(token_id)
+            .unwrap_or_else(|| env::panic_str("claim not found"));
+        require!(claim.lock == Lock::None, "claim is locked");
+        require!(
+            claim.credit_source.is_none() || claim.credit_source == Some(source),
+            "credit source already set"
+        );
+        let outstanding = crate::claims::compute_outstanding(claim);
+        require!(amount.0 <= outstanding, "credit exceeds outstanding");
+        if claim.credit_source.is_none() && amount.0 > 0 {
+            claim.credit_source = Some(source);
+        }
+        claim.credit_total = U128(claim.credit_total.0.saturating_add(amount.0));
+        claim.update_status_paid_rule();
     }
 }

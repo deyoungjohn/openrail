@@ -50,13 +50,12 @@ fn sample_points(n: usize) -> Vec<usize> {
 // 0. Smoke Test: Unimplemented Methods Return NOT_IMPLEMENTED
 // ──────────────────────────────────────────────
 
-/// Unimplemented contract methods return NOT_IMPLEMENTED.
-/// Note per review: when C4 lands, this smoke test will fail and C4 author deletes it.
+/// Verifies C1..C5 methods are implemented (no NOT_IMPLEMENTED stubs remain).
 #[tokio::test]
 async fn smoke_scale_stubs_return_not_implemented() -> Result<()> {
     let env = Env::new().await?;
 
-    // Note: C2 and C4 are implemented; test C5 stub (close)
+    // All C1..C5 methods are implemented. Calling `close` executes real claim check.
     let close_res = env
         .alice
         .call(env.root.id(), "close")
@@ -67,8 +66,8 @@ async fn smoke_scale_stubs_return_not_implemented() -> Result<()> {
     assert!(close_res.is_failure());
     let failure = format!("{:?} {}", close_res.failures(), close_res.logs().join(" "));
     assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "close must fail with NOT_IMPLEMENTED, got: {failure}"
+        failure.contains("claim not found"),
+        "close must fail with claim not found, got: {failure}"
     );
 
     Ok(())

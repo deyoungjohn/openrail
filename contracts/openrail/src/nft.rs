@@ -1,6 +1,6 @@
 //! NEP-171 / NEP-177 / NEP-178 / NEP-181 bodies and the Blueprint 2.4 transfer rules.
 
-use crate::events::{NftTransferEvent, TransferWindowEvent};
+use crate::events::NftTransferEvent;
 use crate::hooks;
 use crate::types::{Claim, Hex32, JsonToken, Lock, NFTContractMetadata, Status};
 use crate::Contract;
@@ -427,7 +427,7 @@ impl Contract {
     }
 
     pub(crate) fn internal_prepare_transfer(&mut self, token_id: String) {
-        let mut claim = claim_or_panic(self, &token_id);
+        let claim = claim_or_panic(self, &token_id);
         require!(
             env::predecessor_account_id() == claim.owner_id,
             "Unauthorized: owner only"
@@ -438,9 +438,6 @@ impl Contract {
         if let Err(refusal) = hooks::dispatch_check_transfer(&claim, &claim.owner_id) {
             env::panic_str(&format!("Rule 8: hook transfer check refused: {refusal}"));
         }
-        let until = env::block_height() + TRANSFER_WINDOW_BLOCKS;
-        claim.lock = Lock::TransferWindow { until };
-        self.claims.insert(token_id.clone(), claim);
-        TransferWindowEvent { token_id, until }.emit();
+        self.internal_reconcile_with_options(token_id, true);
     }
 }

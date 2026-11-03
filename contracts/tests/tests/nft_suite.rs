@@ -797,10 +797,72 @@ async fn nft_transfer_call_receiver_moved_on_no_takeback() -> Result<()> {
     Ok(())
 }
 
-/// TODO(#38): `prepare_transfer` must run reconcile first and open the window in its callback.
+/// `prepare_transfer` runs reconcile before opening the transfer window in its callback.
 #[tokio::test]
-#[ignore = "C4-prepare: needs the #38 reconcile flow and open_transfer_window callback"]
 async fn prepare_transfer_reconciles_before_window() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim_with_details(
+            &env.alice,
+            0,
+            Some(Debtor::Near(env.bob.id().clone())),
+            Hex32::default(),
+            1_000_000,
+            1_800_000_000,
+            None,
+        )
+        .await?;
+    assert!(issue_res.is_success());
+
+    env.bob
+        .call(env.root.id(), "acknowledge_near")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Deposit funds into the claim account on intents.near without calling reconcile
+    let _ = env.fund_claim("c-1", 500_000, None).await?;
+
+    let before: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(before.status, openrail::types::Status::Issued);
+    assert_eq!(before.booked_total.0, 0);
+    assert_eq!(before.lock, Lock::None);
+
+    // Calling prepare_transfer triggers reconcile and opens the transfer window in callback
+    let prep_res = env
+        .alice
+        .call(env.root.id(), "prepare_transfer")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(prep_res.is_success());
+
+    let after: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(after.status, openrail::types::Status::PartiallyPaid);
+    assert_eq!(after.booked_total.0, 500_000);
+    assert!(matches!(after.lock, Lock::TransferWindow { .. }));
+
+    // Verifies transfer_window event was emitted
+    let window_events = env.assert_event(&prep_res, "transfer_window");
+    assert!(
+        !window_events.is_empty(),
+        "transfer_window event must be emitted"
+    );
+
     Ok(())
 }
 
