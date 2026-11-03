@@ -41,28 +41,30 @@ Reads never need a flag.
 
 ## Read commands
 
-| Command                                                            | JSON result                                                         |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| `invoices get <id> --json`                                         | `InvoiceDetail` (`invoice` + live `claim`, including `kind_rules`). |
-| `invoices list [--status] [--limit] [--cursor] --json`             | `{data: Invoice[], next_cursor}`.                                   |
-| `payments get <id> --json`                                         | `Payment` (`swap_details` holds provider fields).                   |
-| `receipts list <invoice-id> --json`                                | `{data: Receipt[]}`.                                                |
-| `routes --json`                                                    | `{data: Route[]}`.                                                  |
-| `webhooks list --json`                                             | `{data: WebhookEndpoint[]}` (no secrets).                           |
-| `webhooks deliveries <id> --json`                                  | `{data: WebhookDelivery[]}`.                                        |
-| `keys list --json`                                                 | `{data: ApiKey[]}` (prefix only, no secret).                        |
-| `statements --from 2026-11-01 --to 2026-11-30 --format csv --json` | base64 statement envelope.                                          |
-| `auth session --json`                                              | `{account_id, expires_at}`; 401 if the key is not a session token.  |
+| Command                                                            | JSON result                                                            |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `invoices get <id> --json`                                         | `InvoiceDetail` (`invoice` + live `claim`, including `kind_rules`).    |
+| `invoices list [--status] [--limit] [--cursor] --json`             | `{data: Invoice[], next_cursor}`.                                      |
+| `payments get <id> --json`                                         | `Payment` (`swap_details` holds provider fields).                      |
+| `receipts list <invoice-id> --json`                                | `{data: Receipt[]}`.                                                   |
+| `routes --json`                                                    | `{data: Route[]}`.                                                     |
+| `webhooks list --json`                                             | `{data: WebhookEndpoint[]}` (no secrets).                              |
+| `webhooks deliveries <id> --json`                                  | `{data: WebhookDelivery[]}`.                                           |
+| `keys list --json`                                                 | `{data: ApiKey[]}` (prefix only, no secret).                           |
+| `statements --from 2026-11-01 --to 2026-11-30 --format csv --json` | base64 statement envelope.                                             |
+| `auth session --json`                                              | `{account_id, expires_at}`; 401 if the key is not an `or_sess_` token. |
+| `whoami --json`                                                    | `Business` profile for the API key.                                    |
 
-## Writes that need `--execute`
+## Write commands
 
-| Command                                                               | Notes                            |
-| --------------------------------------------------------------------- | -------------------------------- |
-| `invoices send <id> --to you@example.com`                             | emails the pay link.             |
-| `webhooks create --url URL --events invoice.paid,invoice.closed`      | returns the signing secret once. |
-| `webhooks test <id>`                                                  | sends a signed test event.       |
-| `keys create --name Production --scopes invoices:read,invoices:write` | returns the key secret once.     |
-| `keys rotate <id>` / `keys revoke <id>`                               | old key stops working.           |
+| Command                                                               | Notes                                                      |
+| --------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `invoices create ...`                                                 | executes; add `--dry-run` to preview.                      |
+| `invoices send <id> --to you@example.com`                             | emails the pay link; `--dry-run` previews.                 |
+| `webhooks create --url URL --events invoice.paid,invoice.closed`      | returns the signing secret once.                           |
+| `webhooks test <id>`                                                  | sends a signed test event.                                 |
+| `keys create --name Production --scopes invoices:read,invoices:write` | returns the key secret once.                               |
+| `keys rotate <id> --yes` / `keys revoke <id> --yes`                   | old key stops working; without `--yes` prints the request. |
 
 `--idempotency-key KEY` is forwarded on every write.
 
