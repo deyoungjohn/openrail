@@ -8,7 +8,7 @@ Ubuntu 24.04 LTS, x86_64, 2 GB RAM or more. Apply:
 
 ```bash
 sudo apt update
-sudo apt install -y curl ca-certificates xz-utils gnupg debian-keyring debian-archive-keyring apt-transport-https
+sudo apt install -y curl ca-certificates xz-utils gnupg debian-keyring debian-archive-keyring apt-transport-https sqlite3 fail2ban unattended-upgrades
 ```
 
 Put swap pressure low and persist it:
@@ -28,6 +28,25 @@ sudo ufw enable
 ```
 
 Ports `3000`, `3001`, `8080`, and `8787` stay private on loopback; never add firewall rules for them.
+
+## 1b. SSH and updates
+
+Before disabling password login, confirm that your public key works in a second session. Then:
+
+```bash
+sudo install -d -m 0755 /etc/ssh/sshd_config.d
+printf '%s\n' \
+  'PubkeyAuthentication yes' \
+  'PasswordAuthentication no' \
+  'KbdInteractiveAuthentication no' \
+  'PermitRootLogin no' | sudo tee /etc/ssh/sshd_config.d/99-openrail.conf
+sudo sshd -t
+sudo systemctl reload ssh
+sudo systemctl enable --now fail2ban
+sudo dpkg-reconfigure --priority=low unattended-upgrades
+```
+
+In the AWS security group, restrict SSH (22) to the human's IP, not `0.0.0.0/0`. Keep 80/443 open.
 
 ## 2. Node 22.23.0 and pnpm 12.8.1
 
@@ -69,8 +88,9 @@ for name in web api watcher issuer indexer; do
 done
 
 sudo install -d -m 0755 /opt/openrail/releases
-sudo install -d -m 0750 -o root -g openrail /etc/openrail
+sudo install -d -m 0750 -o root -g root /etc/openrail
 sudo install -d -m 0770 -o root -g openrail /var/lib/openrail
+sudo install -d -m 0700 -o root -g root /var/backups/openrail
 ```
 
 On the developer machine:
@@ -95,15 +115,27 @@ sudo ln -sfn "/opt/openrail/releases/$version" /opt/openrail/current
 
 ## 5. Environment
 
+Each unit reads only its own file. All files are mode `0600 root:root`; systemd reads them as root before dropping to the service user, so a service can never read another service's keys.
+
 ```bash
-sudo install -m 0640 -o root -g openrail \
-  /opt/openrail/current/deploy/env.example /etc/openrail/env
-sudo editor /etc/openrail/env
+for name in api issuer watcher indexer web; do
+  sudo install -m 0600 -o root -g root \
+    "/opt/openrail/current/deploy/env/${name}.env.example" "/etc/openrail/${name}.env"
+done
+sudo editor /etc/openrail/api.env
+sudo editor /etc/openrail/issuer.env
+sudo editor /etc/openrail/watcher.env
+sudo editor /etc/openrail/indexer.env
+sudo editor /etc/openrail/web.env
 ```
 
-Fill every value that the services need. Never commit or paste the filled file. Required for the API and issuer: `NEAR_ROOT_ACCOUNT`, `NEAR_RPC_URL`, `ISSUER_URL=http://127.0.0.1:8787`, `ISSUER_SERVICE_KEY`, `ISSUER_ACCOUNT_ID`, `ISSUER_PRIVATE_KEY`, `RELAY_PRIVATE_KEY`, `DATABASE_URL=/var/lib/openrail/api.sqlite`, `WEB_ORIGIN=https://openrail.incepture.dev`, `COOKIE_DOMAIN=openrail.incepture.dev`.
+- `api.env`: no NEAR key and no 1Click secret beyond its API credentials; it needs `NEAR_ROOT_ACCOUNT`, `NEAR_RPC_URL`, `ISSUER_URL=http://127.0.0.1:8787`, `ISSUER_SERVICE_KEY`, `DATABASE_URL=/var/lib/openrail/api.sqlite`, `WEB_ORIGIN=https://openrail.incepture.dev`, `COOKIE_DOMAIN=openrail.incepture.dev`, `PAY_BASE_URL=https://openrail.incepture.dev`.
+- `issuer.env`: `ISSUER_ACCOUNT_ID`, `ISSUER_PRIVATE_KEY`, `RELAY_PRIVATE_KEY`, `ISSUER_SERVICE_KEY`, `ISSUER_PORT=8787`.
+- `watcher.env`: `WATCHER_ACCOUNT_ID`, `WATCHER_PRIVATE_KEY`, `WATCHER_HEALTH_PORT=8080`, intervals, `ALERT_WEBHOOK_URL`.
+- `indexer.env`: `INDEXER_DB_PATH=/var/lib/openrail/indexer.sqlite`, `NEARBLOCKS_*`.
+- `web.env`: only `NEXT_PUBLIC_*` public build values.
 
-`NEXT_PUBLIC_*` values are baked by `deploy/build.sh`; changing them needs a new pack.
+Never commit or paste a filled file. `NEXT_PUBLIC_*` values are baked by `deploy/build.sh`; changing them needs a new pack.
 
 ## 6. Units and Caddy
 
@@ -111,11 +143,14 @@ Fill every value that the services need. Never commit or paste the filled file. 
 sudo install -m 0644 /opt/openrail/current/deploy/systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now openrail-web.service openrail-api.service openrail-watcher.service openrail-issuer.service
+sudo systemctl enable --now openrail-backup.timer
 
 sudo install -m 0644 /opt/openrail/current/deploy/Caddyfile /etc/caddy/Caddyfile
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
+
+The `MemoryMax` values are ceilings (web 650M, API 450M, indexer 450M, watcher and issuer 300M; 2.15 GB in total). They are not expected to be reached together on a 2 GB host; watch `systemctl status` and `free -m` and lower the web/API ceilings if swapping starts.
 
 `openrail-indexer.service` is installed but not enabled until the indexer entrypoint lands. Then:
 
@@ -135,7 +170,24 @@ sudo systemctl restart systemd-journald
 sudo journalctl --vacuum-size=500M
 ```
 
-## 8. Health
+## 8. Backups and restore
+
+`openrail-backup.timer` runs `deploy/backup.sh` nightly at 03:15 UTC. It uses `sqlite3 .backup` for `/var/lib/openrail/api.sqlite` and `indexer.sqlite`, writes mode 0600 files to `/var/backups/openrail`, and deletes backups older than 7 days.
+
+Restore:
+
+```bash
+sudo systemctl stop openrail-api.service openrail-indexer.service
+sudo install -m 0600 -o openrail-api -g openrail \
+  /var/backups/openrail/api-<timestamp>.sqlite /var/lib/openrail/api.sqlite
+sudo install -m 0600 -o openrail-indexer -g openrail \
+  /var/backups/openrail/indexer-<timestamp>.sqlite /var/lib/openrail/indexer.sqlite
+sudo systemctl start openrail-api.service openrail-indexer.service
+```
+
+The API database contains hashed API keys and sessions; keep the backups root-only.
+
+## 9. Health
 
 ```bash
 sudo /opt/openrail/current/deploy/healthcheck.sh
@@ -170,7 +222,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now openrail-healthcheck.timer
 ```
 
-## 9. Release updates
+## 10. Release updates
 
 Build and copy a new tarball, extract it to a new `/opt/openrail/releases/<commit>`, set the same ownership, flip `/opt/openrail/current`, then:
 

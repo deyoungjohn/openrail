@@ -34,9 +34,12 @@ check_unit caddy.service
 if systemctl is-enabled --quiet openrail-indexer.service 2>/dev/null; then
   check_unit openrail-indexer.service
 fi
+if systemctl is-enabled --quiet openrail-backup.timer 2>/dev/null; then
+  check_unit openrail-backup.timer
+fi
 
 check_http web http://127.0.0.1:3000/
-check_http api http://127.0.0.1:3001/health
+check_http api http://127.0.0.1:3001/v1/health
 check_http watcher http://127.0.0.1:8080/health
 check_http issuer http://127.0.0.1:8787/health
 

@@ -8,7 +8,7 @@ Type=simple
 User=openrail-web
 Group=openrail
 WorkingDirectory=/opt/openrail/current
-EnvironmentFile=/etc/openrail/env
+EnvironmentFile=/etc/openrail/web.env
 Environment=NODE_OPTIONS=--max-old-space-size=200
 Environment=NODE_ENV=production
 Environment=PORT=3000

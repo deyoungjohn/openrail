@@ -8,7 +8,7 @@ Type=simple
 User=openrail-watcher
 Group=openrail
 WorkingDirectory=/opt/openrail/current
-EnvironmentFile=/etc/openrail/env
+EnvironmentFile=/etc/openrail/watcher.env
 Environment=NODE_OPTIONS=--max-old-space-size=200
 Environment=NODE_ENV=production
 Environment=WATCHER_HEALTH_PORT=8080

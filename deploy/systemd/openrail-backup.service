@@ -1,0 +1,16 @@
+[Unit]
+Description=Openrail SQLite backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/openrail/current
+ExecStart=/opt/openrail/current/deploy/backup.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/openrail /var/lib/openrail
