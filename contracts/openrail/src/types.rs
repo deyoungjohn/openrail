@@ -353,6 +353,13 @@ pub enum Status {
     Closed,
 }
 
+impl Status {
+    /// Returns true if this status is terminal (cannot transition further).
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Status::Cancelled | Status::Closed)
+    }
+}
+
 /// Concurrency lock on a claim (Blueprint 2.1, 2.3).
 ///
 /// Enforces safety and serial execution across asynchronous callbacks.
@@ -368,6 +375,18 @@ pub enum Lock {
     TransferWindow { until: u64 },
     /// Module-defined lock; bounded until block height.
     Module { id: String, until: u64 },
+}
+
+impl Lock {
+    /// Returns true if no lock is held.
+    pub fn is_none(&self) -> bool {
+        matches!(self, Lock::None)
+    }
+
+    /// Returns true if this lock permits transfer / reconcile actions.
+    pub fn allows_transfer(&self) -> bool {
+        matches!(self, Lock::None | Lock::TransferWindow { .. })
+    }
 }
 
 /// Distribution leg for net payment value (Blueprint 1.4, 2.1, 2.5).
@@ -441,6 +460,14 @@ impl Leg {
         match self {
             Self::Pay { asset, .. } => asset.as_ref(),
             Self::Hold { asset, .. } => asset.as_ref(),
+        }
+    }
+
+    /// Sets the assigned settlement asset.
+    pub fn set_asset(&mut self, token_id: TokenId) {
+        match self {
+            Self::Pay { asset, .. } => *asset = Some(token_id),
+            Self::Hold { asset, .. } => *asset = Some(token_id),
         }
     }
 }
@@ -565,6 +592,22 @@ pub struct Claim {
 
     /// Block height at which claim was issued. Written by `issue`; immutable.
     pub created_block: u64,
+}
+
+impl Claim {
+    /// Updates claim status according to the Paid rule (Blueprint 2.3).
+    pub fn update_status_paid_rule(&mut self) {
+        if self.status.is_terminal() {
+            return;
+        }
+        let booked_net = self.booked_total.0.saturating_sub(self.surplus.0);
+        let total_discharged = booked_net.saturating_add(self.credit_total.0);
+        if total_discharged >= self.amount_due.0 {
+            self.status = Status::Paid;
+        } else if total_discharged > 0 {
+            self.status = Status::PartiallyPaid;
+        }
+    }
 }
 
 pub use crate::hooks::KindRules;

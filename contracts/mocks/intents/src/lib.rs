@@ -196,6 +196,13 @@ impl MockIntents {
         self.balances.insert(key, current + amount.0);
     }
 
+    /// TEST ONLY: Burns tokens directly from an account (simulating balance drop / anomaly).
+    pub fn mt_burn(&mut self, account_id: AccountId, token_id: String, amount: U128) {
+        let key = balance_key(&account_id, &token_id);
+        let current = self.balances.get(&key).copied().unwrap_or(0);
+        self.balances.insert(key, current.saturating_sub(amount.0));
+    }
+
     /// TEST ONLY: Returns recorded transfers.
     pub fn transfers(&self) -> Vec<Value> {
         self.transfers
@@ -211,6 +218,10 @@ impl MockIntents {
         token_id: &str,
         amount: u128,
     ) {
+        if receiver_id.as_str().contains("fail") || receiver_id.as_str().contains("reject") {
+            env::panic_str("intents mock: simulated transfer failure");
+        }
+
         let sender_key = balance_key(sender_id, token_id);
         let sender_bal = self.balances.get(&sender_key).copied().unwrap_or(0);
         require!(

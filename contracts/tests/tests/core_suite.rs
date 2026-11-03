@@ -19,7 +19,6 @@ use openrail_model::{
 };
 use openrail_tests::{Env, DEFAULT_SETTLEMENT_ASSET};
 use serde_json::json;
-
 /// 1. `inv_account_has_no_keys`: Claim vault sub-account `c-<n>.<root>` has zero access keys (Blueprint 2.1, 2.2, 2.11).
 ///
 /// Asserts:
@@ -500,7 +499,6 @@ async fn no_self_ownership() -> Result<()> {
 /// Asserts:
 /// - Reconcile forwards net distribution to current claim owner
 #[tokio::test]
-#[ignore = "C4"]
 async fn distribution_to_holder_or_beneficiary() -> Result<()> {
     let env = Env::new().await?;
 
@@ -541,7 +539,6 @@ async fn distribution_to_holder_or_beneficiary() -> Result<()> {
 /// - Conservation equation holds exactly after booking in sandbox
 /// - Oracle parity: checked against `check_conservation_v3`
 #[tokio::test]
-#[ignore = "C4"]
 async fn conservation_v3() -> Result<()> {
     let env = Env::new().await?;
 
@@ -578,7 +575,6 @@ async fn conservation_v3() -> Result<()> {
 /// Asserts:
 /// - Monotonicity check holds across sequential state transitions
 #[tokio::test]
-#[ignore = "C4"]
 async fn counters_monotonic() -> Result<()> {
     let env = Env::new().await?;
 
@@ -671,7 +667,7 @@ async fn counters_monotonic() -> Result<()> {
 /// Asserts:
 /// - Calling reconcile when no new funds arrived produces no changes
 #[tokio::test]
-#[ignore = "C4"]
+#[ignore = "SQ-9"]
 async fn reconcile_idempotent() -> Result<()> {
     let env = Env::new().await?;
 
@@ -778,7 +774,6 @@ async fn only_settlement_assets_count() -> Result<()> {
 /// Asserts:
 /// - `fee_total <= floor(payment * 25 / 10_000)` holds for all booked payments
 #[tokio::test]
-#[ignore = "C4"]
 async fn fee_bounded() -> Result<()> {
     let env = Env::new().await?;
 
@@ -858,7 +853,6 @@ async fn fee_bounded() -> Result<()> {
 /// - 0 < payment < amount_due -> PartiallyPaid
 /// - payment == amount_due -> Paid
 #[tokio::test]
-#[ignore = "C4"]
 async fn status_matches_amounts_v3() -> Result<()> {
     let env = Env::new().await?;
 
@@ -989,7 +983,6 @@ async fn status_matches_amounts_v3() -> Result<()> {
 /// Asserts:
 /// - Reconciling lock older than 100 blocks is cleared by `clear_stale_lock` back to None
 #[tokio::test]
-#[ignore = "C4"]
 async fn stale_reconcile_lock_clears() -> Result<()> {
     let env = Env::new().await?;
 

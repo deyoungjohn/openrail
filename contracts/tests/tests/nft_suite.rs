@@ -895,7 +895,6 @@ async fn nft_events_nep297() -> Result<()> {
 /// - `reconcile` executes: net payment (997,500 USDC after 25 bps protocol fee) is forwarded to CAROL (new owner), not Alice
 /// - Oracle parity: `openrail-model` matches the cut-off distribution rule
 #[tokio::test]
-#[ignore = "C4"]
 async fn payee_follows_token_real() -> Result<()> {
     let env = Env::new().await?;
 

@@ -11,8 +11,7 @@ use serde_json::{json, Value};
 use crate::env::Env;
 use crate::gas::GasReport;
 
-pub const DEFAULT_SETTLEMENT_ASSET: &str =
-    "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+pub const DEFAULT_SETTLEMENT_ASSET: &str = "nep141:usdc.near";
 
 impl Env {
     /// Issues a new claim on behalf of `caller` on the root contract.
@@ -93,6 +92,32 @@ impl Env {
             .transact()
             .await
             .context("transact mt_mint")?;
+
+        Ok(res)
+    }
+
+    /// Burns tokens from a claim's vault on `intents.near` (simulating balance drop / anomaly).
+    pub async fn burn_claim_balance(
+        &self,
+        token_id: &str,
+        amount: u128,
+        asset: Option<&str>,
+    ) -> Result<ExecutionFinalResult> {
+        let claim_account_id = format!("{token_id}.{}", self.root.id());
+        let asset_id = asset.unwrap_or(DEFAULT_SETTLEMENT_ASSET);
+
+        let res = self
+            .parent
+            .call(self.intents.id(), "mt_burn")
+            .args_json(json!({
+                "account_id": claim_account_id,
+                "token_id": asset_id,
+                "amount": U128(amount),
+            }))
+            .max_gas()
+            .transact()
+            .await
+            .context("transact mt_burn")?;
 
         Ok(res)
     }
