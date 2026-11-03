@@ -43,10 +43,13 @@ Status tags used in these docs: **built** (code and tests in this repository),
 7. Try to transfer while a reconcile is running → see the refusal with the rule
    number in plain words. **built**; the rule tests are in the contract suite.
 8. Cash out to another chain → see the route cost first, then the arrival.
-   **tested** (K11; see
-   [`evidence/pay-report-2026-10-31T19-13-15-901Z.json`](../../../evidence/pay-report-2026-10-31T19-13-15-901Z.json)).
+   **built**; the G1 mainnet run will exercise it ("tested by the G1 mainnet run",
+   report `reports/G1.json`; link the report after the run).
 9. Read [`TRUST.md`](TRUST.md), [`COSTS.md`](COSTS.md) and
    [`LIMITATIONS.md`](LIMITATIONS.md). **built**
+10. If the watcher is down, call `reconcile` yourself with 250 Tgas:
+    `near call openrail.near reconcile '{"token_id":"c-1"}' --accountId <YOUR_ACCOUNT> --gas 250000000000000`
+    → see the `booked` event when the claim's balance rose. **built** (permissionless)
 
 ## Tests
 

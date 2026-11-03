@@ -36,12 +36,12 @@ account state; the report links every transaction.
 
 ## Pay-link and cash-out cost
 
-| Measurement               | Denominator                 | Value     | Source                                                                                                                  |
-| ------------------------- | --------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------- |
-| USDC-route spread         | per pay link                | _pending_ | [`evidence/K2prime-partB-2026-10-29T19-11-58Z.json`](../../../evidence/K2prime-partB-2026-10-29T19-11-58Z.json)         |
-| ETH/SOL tolerance         | per volatile-asset pay link | _pending_ | [`evidence/pay-report-2026-10-31T19-13-15-901Z.json`](../../../evidence/pay-report-2026-10-31T19-13-15-901Z.json)       |
-| Cash-out route cost       | per cash-out                | _pending_ | `reports/` T2 report                                                                                                    |
-| Payment-to-booked latency | per booked payment          | _pending_ | [`evidence/K12-partB-amended-2026-10-29T12-13-42Z.json`](../../../evidence/K12-partB-amended-2026-10-29T12-13-42Z.json) |
+| Measurement               | Denominator                            | Value                                                                                        | Source                                                                                                                        |
+| ------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| USDC-route spread         | per USDC route probe                   | 0%                                                                                           | [`evidence/K2prime-partA-routes-2026-10-29T03-08-53Z.json`](../../../evidence/K2prime-partA-routes-2026-10-29T03-08-53Z.json) |
+| ETH/SOL tolerance         | per volatile-asset pay link            | quoted 1% tolerance; unused part not refunded (amountIn 2.025734 for 2.000000 out, refund 0) | [`evidence/pay-report-2026-10-31T19-13-15-901Z.json`](../../../evidence/pay-report-2026-10-31T19-13-15-901Z.json)             |
+| Cash-out route cost       | per cash-out                           | _pending_                                                                                    | `reports/` T2 report                                                                                                          |
+| Payment-to-booked latency | per booked payment (5 timed checkouts) | p50 30.472 s                                                                                 | [`evidence/K12-partB-amended-2026-10-29T12-13-42Z.json`](../../../evidence/K12-partB-amended-2026-10-29T12-13-42Z.json)       |
 
 Method: quote amounts and provider responses are recorded with the transaction
 hashes; the report states the denominator used for each row.

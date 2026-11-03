@@ -22,6 +22,4 @@ Status: **built** facts unless marked **exploring**.
   invoices only through the mock path. **built**
 - The SQLite invoice/payment/receipt cache is an interim indexer boundary; the
   indexer can replace its internals without changing routes. **built**
-- The indexer service is not built yet; statements and receipts currently read
-  from the API's SQLite cache. **exploring**
 - A watcher outage delays bookings; it does not lose funds. **built**
