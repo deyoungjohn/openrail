@@ -13,7 +13,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_ROOT = "openrail.near";
 const DEFAULT_FEE = "fees.openrail.near";
 const DEFAULT_VAULT = "HXX9ic98ura2nYQqGxgpT1BMiUgWNogMWZEq5UbejU5r";
-const DEFAULT_ALLOWANCE = "0.25 NEAR";
+const DEFAULT_WATCHER_ALLOWANCE = "1 NEAR";
+const DEFAULT_ISSUER_ALLOWANCE = "1 NEAR";
+const DEFAULT_RELAYER_ALLOWANCE = "0.5 NEAR";
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 type Routes = { settlementAssets: string[] };
@@ -116,7 +118,31 @@ requiredEnv([
 const root = process.env.NEAR_ROOT_ACCOUNT?.trim() || DEFAULT_ROOT;
 const fee = process.env.FEE_ACCOUNT?.trim() || DEFAULT_FEE;
 const network = process.env.NEAR_ENV?.trim() || "mainnet";
-const allowance = process.env.KEY_ALLOWANCE_NEAR?.trim() || DEFAULT_ALLOWANCE;
+function nearAmount(name: string, fallback: string): string {
+  const raw = process.env[name]?.trim() || fallback;
+  const match = /^([0-9]+(?:\.[0-9]+)?)\s*(?:NEAR)?$/i.exec(raw);
+  if (!match) fail(`${name} must be a NEAR amount such as "1" or "0.5 NEAR"`);
+  return `${match[1]} NEAR`;
+}
+
+const watcherAllowance = nearAmount("WATCHER_KEY_ALLOWANCE_NEAR", DEFAULT_WATCHER_ALLOWANCE);
+const issuerAllowance = nearAmount("ISSUER_KEY_ALLOWANCE_NEAR", DEFAULT_ISSUER_ALLOWANCE);
+const relayerAllowance = nearAmount("RELAYER_KEY_ALLOWANCE_NEAR", DEFAULT_RELAYER_ALLOWANCE);
+const balanceRaw = process.env.ACCOUNT_BALANCE_NEAR?.trim();
+if (balanceRaw) {
+  const balance = Number(balanceRaw.replace(/\s*NEAR$/i, ""));
+  if (!Number.isFinite(balance) || balance <= 0)
+    fail("ACCOUNT_BALANCE_NEAR must be a positive number");
+  for (const [name, allowance] of [
+    ["WATCHER_KEY_ALLOWANCE_NEAR", watcherAllowance],
+    ["ISSUER_KEY_ALLOWANCE_NEAR", issuerAllowance],
+    ["RELAYER_KEY_ALLOWANCE_NEAR", relayerAllowance],
+  ] as const) {
+    if (Number(allowance.split(" ")[0]) > balance) {
+      fail(`${name} (${allowance}) exceeds ACCOUNT_BALANCE_NEAR (${balanceRaw})`);
+    }
+  }
+}
 const wasmRel = "target/near/openrail/openrail.wasm";
 const wasmPath = join(ROOT, wasmRel);
 const vaultBase58 = process.env.VAULT_GLOBAL_HASH?.trim() || DEFAULT_VAULT;
@@ -174,7 +200,13 @@ const setConfig = [
   `sign-as ${root} ${nearNetwork}`,
 ].join(" ");
 
-function addKey(account: string, publicKey: string, functions: string, label: string): string {
+function addKey(
+  account: string,
+  publicKey: string,
+  functions: string,
+  allowance: string,
+  label: string,
+): string {
   return [
     `# ${label}`,
     `near account add-key ${account} grant-function-call-access`,
@@ -205,6 +237,7 @@ console.log(
     watcherAccount || watchers[0],
     process.env.WATCHER_PUBLIC_KEY!,
     "reconcile,retry_distribution,clear_stale_lock",
+    watcherAllowance,
     "watcher",
   ),
 );
@@ -213,6 +246,7 @@ console.log(
     issuerAccount || issuers[0],
     process.env.ISSUER_PUBLIC_KEY!,
     "issue_for,log_quote",
+    issuerAllowance,
     "issuer",
   ),
 );
@@ -221,6 +255,7 @@ console.log(
     process.env.RELAYER_ACCOUNT_ID!,
     process.env.RELAYER_PUBLIC_KEY!,
     "acknowledge_evm",
+    relayerAllowance,
     "relayer",
   ),
 );
