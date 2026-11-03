@@ -90,7 +90,7 @@ export function Modal({
       >
         <div
           className={cn(
-            "surface-card flex max-h-full flex-col overflow-hidden shadow-[var(--shadow-pop)]",
+            "surface-card flex max-h-full flex-col overflow-hidden",
             "transition-[opacity,transform] duration-[var(--dur-slow)]",
             variant === "drawer" ? "w-full max-w-md" : "w-full max-w-lg",
             shown
