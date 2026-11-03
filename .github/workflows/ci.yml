@@ -179,6 +179,8 @@ jobs:
     needs: [changes, contract]
     if: always() && (needs.changes.result == 'success') && (needs.contract.result == 'success' || needs.contract.result == 'skipped') && ((github.event_name == 'push') || (needs.changes.outputs.core == 'true'))
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    env:
+      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
         with:

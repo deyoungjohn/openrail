@@ -19,6 +19,8 @@ jobs:
     name: nightly-proptest
     timeout-minutes: 40
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    env:
+      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,6 +68,8 @@ jobs:
     name: nightly-scale
     timeout-minutes: 40
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    env:
+      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
         with:
