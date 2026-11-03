@@ -127,16 +127,20 @@ function ApiKeysPanel() {
   };
 
   const columns: Column<ApiKey>[] = [
-    { key: "name", header: "Name", render: (k) => <span className="font-medium">{k.name}</span> },
+    {
+      key: "name",
+      header: t.cols.name,
+      render: (k) => <span className="font-medium">{k.name}</span>,
+    },
     {
       key: "prefix",
-      header: "Key",
+      header: t.cols.key,
       render: (k) => <code className="font-mono text-[13px]">{k.prefix}</code>,
     },
-    { key: "scopes", header: "Scopes", render: (k) => k.scopes.join(", ") || "—" },
+    { key: "scopes", header: t.cols.scopes, render: (k) => k.scopes.join(", ") || "—" },
     {
       key: "used",
-      header: "Last used",
+      header: t.cols.lastUsed,
       render: (k) =>
         k.revoked_at ? t.revoked : k.last_used_at ? t.lastUsed(when(k.last_used_at)) : t.neverUsed,
     },
@@ -156,7 +160,7 @@ function ApiKeysPanel() {
                 setRotate(k);
               }}
             >
-              Rotate
+              {t.rotateShort}
             </Button>
             <Button
               variant="secondary"
@@ -167,7 +171,7 @@ function ApiKeysPanel() {
                 setRevoke(k);
               }}
             >
-              Revoke
+              {t.revokeShort}
             </Button>
           </span>
         ),
@@ -572,15 +576,19 @@ function EventsPanel() {
   const columns: Column<(typeof rows)[number]>[] = [
     {
       key: "type",
-      header: "Type",
+      header: t.cols.type,
       render: (e) => <code className="font-mono text-[13px]">{e.type}</code>,
     },
     {
       key: "id",
-      header: "Event",
+      header: t.cols.event,
       render: (e) => <code className="font-mono text-[13px]">{e.id}</code>,
     },
-    { key: "time", header: "Time", render: (e) => when(new Date(e.created * 1000).toISOString()) },
+    {
+      key: "time",
+      header: t.cols.time,
+      render: (e) => when(new Date(e.created * 1000).toISOString()),
+    },
   ];
   return (
     <Card

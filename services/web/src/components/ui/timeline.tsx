@@ -1,5 +1,6 @@
 import { Check, Circle, Loader2, X } from "lucide-react";
 import type { ReactNode } from "react";
+import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
 import type { ViewState } from "./card";
 import { EmptyState, ErrorState, Skeleton } from "./state";
@@ -32,7 +33,7 @@ export function Timeline({
     );
   if (state === "error") return <ErrorState body={errorBody} />;
   if (state === "empty" || steps.length === 0)
-    return <EmptyState title="No activity yet" body="Steps appear here once a payment starts." />;
+    return <EmptyState title={copy.timeline.emptyTitle} body={copy.timeline.emptyBody} />;
 
   return (
     <ol className="space-y-0">

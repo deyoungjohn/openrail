@@ -35,7 +35,7 @@ test("refuses with the rule number in plain words", async ({ page }) => {
 
 test("document is hashed in the browser; only the fingerprint is shown", async ({ page }) => {
   await page.goto("/app/invoices/c-3/transfer");
-  await page.getByLabel("Assignment document").setInputFiles({
+  await page.getByLabel("Sale agreement").setInputFiles({
     name: "assignment.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("hello"),
@@ -47,7 +47,7 @@ test("sale flow: prepare, then sign, then done (fixture mode)", async ({ page })
   await page.goto("/app/invoices/c-3/transfer");
   await expect(page.getByRole("button", { name: "Sign sale" })).toBeDisabled();
   await page.getByLabel("Buyer account").fill("fund.near");
-  await page.getByLabel("Assignment document").setInputFiles({
+  await page.getByLabel("Sale agreement").setInputFiles({
     name: "assignment.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("hello"),
@@ -92,5 +92,5 @@ test("keyboard: the sale form is reachable in order", async ({ page }) => {
   await page.getByLabel("Buyer account").focus();
   await page.keyboard.type("fund.near");
   await page.keyboard.press("Tab");
-  await expect(page.getByLabel("Assignment document")).toBeFocused();
+  await expect(page.getByLabel("Sale agreement")).toBeFocused();
 });
