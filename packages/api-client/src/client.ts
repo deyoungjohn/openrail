@@ -137,6 +137,7 @@ export class OpenrailClient {
   };
 
   payments = {
+    list: (): Promise<SuccessBody<"listPayments">> => this.call("GET", "/v1/payments"),
     get: (id: string): Promise<SuccessBody<"getPayment">> =>
       this.call("GET", `/v1/payments/${encodeURIComponent(id)}`),
   };

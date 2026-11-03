@@ -154,6 +154,7 @@ export function createCashoutPort(): CashoutPort {
         destination_chain: request.destinationChain,
         destination_address: request.address,
         amount_out: response.quote.amountOut ?? request.amount,
+        min_amount_in: response.quote.minAmountIn ?? request.amount,
         route_cost_usd: "0.00",
         deposit_address: response.quote.depositAddress ?? "",
         deposit_type: "INTENTS",

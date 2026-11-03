@@ -70,6 +70,11 @@ The mock stays available with `MOCK=1 pnpm --filter @openrail/api start` for UI 
 - `Authorization: Bearer or_pk_live_...` is the browser key: pay-session creation only.
 - `Authorization: Bearer or_sess_...` is a **dashboard session** from NEP-413 sign-in
   (7 days sliding, capped at 30 days, scoped to one business account).
+- API-key scopes: `invoices:read`, `invoices:write`, `payments:read`,
+  `receipts:read`, `webhooks:write`, and `pay_sessions:create`. A new secret key
+  defaults to the first five; a publishable key has exactly `pay_sessions:create`.
+  Each endpoint enforces its scope and returns `403 insufficient_scope` with
+  `missing scope: <name>`; dashboard sessions hold all scopes.
 - Every `POST` accepts `Idempotency-Key`. The same key with the same body returns
   the first response; the same key with another body returns `409`.
 - Public hosted-page reads (`/v1/pay/sessions/{id}`, `/v1/pay/claims/{token_id}`,
@@ -91,17 +96,18 @@ The fixtures for `400`, `401`, `404` and `409` are in `fixtures/api/`.
 
 ## Core routes
 
-| Method | Path                         | Purpose                                                       |
-| ------ | ---------------------------- | ------------------------------------------------------------- |
-| `POST` | `/v1/invoices`               | Create an invoice and issue the claim through the issuer key. |
-| `GET`  | `/v1/invoices`               | List invoices for the authenticated business.                 |
-| `GET`  | `/v1/invoices/{id}`          | Invoice plus the live claim view.                             |
-| `POST` | `/v1/invoices/{id}/send`     | Email the pay link.                                           |
-| `GET`  | `/v1/invoices/{id}/receipts` | Receipts rendered from `booked` events only.                  |
-| `GET`  | `/v1/payments/{id}`          | Payment state; provider fields live under `swap_details`.     |
-| `POST` | `/v1/webhook_endpoints`      | Register a webhook (secret shown once).                       |
-| `GET`  | `/v1/events`                 | Indexed events.                                               |
-| `GET`  | `/v1/routes`                 | Allow-listed chains and assets.                               |
+| Method | Path                         | Purpose                                                                                                                    |
+| ------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/v1/invoices`               | Create an invoice and issue the claim through the issuer key.                                                              |
+| `GET`  | `/v1/invoices`               | List invoices for the authenticated business.                                                                              |
+| `GET`  | `/v1/invoices/{id}`          | Invoice plus the live claim view.                                                                                          |
+| `POST` | `/v1/invoices/{id}/send`     | Email the pay link.                                                                                                        |
+| `GET`  | `/v1/invoices/{id}/receipts` | Receipts rendered from `booked` events only.                                                                               |
+| `GET`  | `/v1/payments`               | Payments for the business (`id`, `invoice_id`, base-unit `amount`, `origin_chain`, `origin_asset`, `status`, `booked_at`). |
+| `GET`  | `/v1/payments/{id}`          | Payment state; provider fields live under `swap_details`.                                                                  |
+| `POST` | `/v1/webhook_endpoints`      | Register a webhook (secret shown once).                                                                                    |
+| `GET`  | `/v1/events`                 | Indexed events.                                                                                                            |
+| `GET`  | `/v1/routes`                 | Allow-listed chains and assets.                                                                                            |
 
 ## Dashboard sign-in
 
@@ -115,22 +121,26 @@ The server checks the signature and that the public key belongs to the account.
 
 ## Developers, business and reporting
 
-| Method       | Path                                     | Purpose                                                                                    |
-| ------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `GET`/`POST` | `/v1/api_keys`                           | List keys, or create one (secret shown once).                                              |
-| `POST`       | `/v1/api_keys/{id}/rotate`               | Rotate; the old key stops working.                                                         |
-| `DELETE`     | `/v1/api_keys/{id}`                      | Revoke a key.                                                                              |
-| `GET`/`POST` | `/v1/webhook_endpoints`                  | List endpoints or create one (secret shown once).                                          |
-| `DELETE`     | `/v1/webhook_endpoints/{id}`             | Delete an endpoint.                                                                        |
-| `POST`       | `/v1/webhook_endpoints/{id}/test`        | Send a test event.                                                                         |
-| `GET`        | `/v1/webhook_endpoints/{id}/deliveries`  | Delivery log with attempts and status codes.                                               |
-| `GET`/`PUT`  | `/v1/business`                           | Business profile: legal name, payout account, contact.                                     |
-| `GET`        | `/v1/business/storage_credit`            | Contract balance plus the account and amount for the user's `deposit_storage_credit` call. |
-| `GET`        | `/v1/statements?from&to&format=csv\|pdf` | Statement as a base64 envelope; totals reconcile with `claim()`.                           |
-| `GET`        | `/v1/invoices/{id}/pdf`                  | Invoice PDF as a base64 envelope.                                                          |
-| `GET`        | `/v1/invoices/{id}/open_quotes`          | Open quotes from the payment log; never reuse an expired one.                              |
-| `POST`       | `/v1/cashout/quote`                      | Route cost and the 1Click deposit address for the holder's `mt_transfer`.                  |
-| `GET`        | `/v1/receipts/{booking_tx_hash}`         | Public receipt built from the `booked` event (no key).                                     |
+| Method       | Path                                              | Purpose                                                                                             |
+| ------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `GET`/`POST` | `/v1/api_keys`                                    | List keys, or create one (secret shown once).                                                       |
+| `POST`       | `/v1/api_keys/{id}/rotate`                        | Rotate; the old key stops working.                                                                  |
+| `DELETE`     | `/v1/api_keys/{id}`                               | Revoke a key.                                                                                       |
+| `GET`/`POST` | `/v1/webhook_endpoints`                           | List endpoints or create one (secret shown once).                                                   |
+| `DELETE`     | `/v1/webhook_endpoints/{id}`                      | Delete an endpoint.                                                                                 |
+| `POST`       | `/v1/webhook_endpoints/{id}/test`                 | Send a test event.                                                                                  |
+| `GET`        | `/v1/webhook_endpoints/{id}/deliveries`           | Delivery log with attempts and status codes.                                                        |
+| `GET`/`PUT`  | `/v1/business`                                    | Business profile: legal name, payout account, contact.                                              |
+| `GET`        | `/v1/business/storage_credit`                     | Contract balance plus the account and amount for the user's `deposit_storage_credit` call.          |
+| `GET`        | `/v1/statements?from&to&format=csv\|pdf&token_id` | Statement as a base64 envelope; `token_id` limits it to one claim; totals reconcile with `claim()`. |
+| `GET`        | `/v1/invoices/{id}/pdf`                           | Invoice PDF as a base64 envelope.                                                                   |
+| `GET`        | `/v1/invoices/{id}/open_quotes`                   | Open quotes from the payment log; never reuse an expired one.                                       |
+| `POST`       | `/v1/cashout/quote`                               | Route cost and the 1Click deposit address for the holder's `mt_transfer`.                           |
+| `GET`        | `/v1/receipts/{booking_tx_hash}`                  | Public receipt built from the `booked` event (no key).                                              |
+
+Invoice objects carry `outstanding` and `paid_total` (base-unit strings);
+receipts carry `booking_tx_hash`; the cash-out quote carries `source_asset`,
+`deposit_address`, `amount` (the quoted `amountIn`), and `min_amount_in`.
 
 ## Hosted-page routes
 

@@ -154,7 +154,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "description": "Stable machine-readable code, e.g. invoice_not_found."
+            "description": "Stable machine-readable code; insufficient_scope means a missing key scope (named in message)."
           },
           "message": {
             "type": "string"
@@ -597,7 +597,9 @@
           "ack_url",
           "created_at",
           "created_block",
-          "terms"
+          "terms",
+          "outstanding",
+          "paid_total"
         ],
         "properties": {
           "id": {
@@ -669,6 +671,12 @@
           },
           "terms": {
             "$ref": "#/components/schemas/Terms"
+          },
+          "outstanding": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "paid_total": {
+            "$ref": "#/components/schemas/U128"
           }
         }
       },
@@ -811,7 +819,8 @@
           "terms_hash",
           "payment_instruction_v1",
           "origin_tx",
-          "near_tx_hashes"
+          "near_tx_hashes",
+          "booking_tx_hash"
         ],
         "properties": {
           "id": {
@@ -865,6 +874,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "booking_tx_hash": {
+            "type": "string"
           }
         }
       },
@@ -1556,7 +1568,7 @@
           "scopes": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ApiKeyScope"
             }
           },
           "created_at": {
@@ -1609,8 +1621,16 @@
           "scopes": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "$ref": "#/components/schemas/ApiKeyScope"
+            },
+            "default": [
+              "invoices:read",
+              "invoices:write",
+              "payments:read",
+              "receipts:read",
+              "webhooks:write"
+            ],
+            "description": "Defaults to all five secret-key scopes. Publishable keys are created separately with pay_sessions:create."
           }
         }
       },
@@ -1634,7 +1654,7 @@
           "scopes": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ApiKeyScope"
             }
           },
           "created_at": {
@@ -1969,7 +1989,8 @@
           "deposit_type",
           "swap_type",
           "route_id",
-          "deadline"
+          "deadline",
+          "min_amount_in"
         ],
         "properties": {
           "amount": {
@@ -2006,6 +2027,9 @@
           "deadline": {
             "type": "string",
             "format": "date-time"
+          },
+          "min_amount_in": {
+            "$ref": "#/components/schemas/U128"
           }
         }
       },
@@ -2096,6 +2120,66 @@
             "const": true
           }
         }
+      },
+      "PaymentListItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "invoice_id",
+          "amount",
+          "origin_chain",
+          "origin_asset",
+          "status",
+          "booked_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "invoice_id": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "origin_chain": {
+            "type": "string"
+          },
+          "origin_asset": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "booked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaymentList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentListItem"
+            }
+          }
+        }
+      },
+      "ApiKeyScope": {
+        "type": "string",
+        "enum": [
+          "invoices:read",
+          "invoices:write",
+          "payments:read",
+          "receipts:read",
+          "webhooks:write",
+          "pay_sessions:create"
+        ],
+        "description": "Secret keys default to the five non-pay-session scopes; publishable keys have exactly pay_sessions:create."
       }
     }
   },
@@ -2168,6 +2252,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2217,6 +2311,16 @@
           },
           "401": {
             "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2285,6 +2389,16 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2383,6 +2497,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2444,6 +2568,16 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2519,6 +2653,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2559,6 +2703,16 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2621,6 +2775,16 @@
           },
           "409": {
             "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2804,6 +2968,16 @@
           },
           "409": {
             "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3469,6 +3643,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3550,6 +3734,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3617,6 +3811,16 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3820,6 +4024,15 @@
               "type": "string",
               "enum": ["csv", "pdf"]
             }
+          },
+          {
+            "name": "token_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter the statement to one claim.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3920,6 +4133,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3981,6 +4204,16 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4245,6 +4478,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/payments": {
+      "get": {
+        "operationId": "listPayments",
+        "summary": "List payments for the authenticated business",
+        "tags": ["Payments"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payments.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

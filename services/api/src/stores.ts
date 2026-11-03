@@ -10,6 +10,7 @@ export interface ApiStore {
   listInvoices(accountId?: string): InvoiceRecord[];
   getInvoice(idOrToken: string): InvoiceRecord | undefined;
   saveInvoice(record: InvoiceRecord): void;
+  listPayments(accountId?: string): Record<string, unknown>[];
   getPayment(id: string): Record<string, unknown> | undefined;
   savePayment(id: string, body: Record<string, unknown>): void;
   getReceipt(idOrHash: string): Record<string, unknown> | undefined;
@@ -118,6 +119,7 @@ export function createMemoryStores(): Stores {
         invoices.set(record.id, record);
         invoiceAccounts.set(record.id, record.issuer_id);
       },
+      listPayments: () => [...payments.values()],
       getPayment: (id) => payments.get(id),
       savePayment: (id, body) => payments.set(id, body),
       getReceipt(idOrHash) {
@@ -259,6 +261,12 @@ export function createSqliteStores(path: string): Stores {
       db.prepare(
         "INSERT INTO invoices (id, token_id, account_id, body) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET body = excluded.body",
       ).run(record.id, record.token_id, record.issuer_id, JSON.stringify(record));
+    },
+    listPayments() {
+      return db
+        .prepare("SELECT body FROM payments ORDER BY rowid")
+        .all()
+        .map((row) => parseJson<Record<string, unknown>>(row.body));
     },
     getPayment(id) {
       const row = db.prepare("SELECT body FROM payments WHERE id = ?").get(id);

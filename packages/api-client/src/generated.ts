@@ -149,6 +149,8 @@ export interface Invoice {
   created_at: string;
   created_block: number;
   terms: Terms;
+  outstanding: U128;
+  paid_total: U128;
 }
 
 export interface InvoiceList {
@@ -204,6 +206,7 @@ export interface Receipt {
     amount?: U128;
   };
   near_tx_hashes: string[];
+  booking_tx_hash: string;
 }
 
 export interface ReceiptList {
@@ -402,7 +405,7 @@ export interface ApiKey {
   id: string;
   name: string;
   prefix: string;
-  scopes: string[];
+  scopes: ApiKeyScope[];
   created_at: string;
   last_used_at?: string | null;
   revoked_at?: string | null;
@@ -414,7 +417,7 @@ export interface ApiKeyList {
 
 export interface CreateApiKeyRequest {
   name: string;
-  scopes?: string[];
+  scopes?: ApiKeyScope[];
 }
 
 export interface ApiKeyCreated {
@@ -422,7 +425,7 @@ export interface ApiKeyCreated {
   name: string;
   prefix: string;
   secret: string;
-  scopes: string[];
+  scopes: ApiKeyScope[];
   created_at: string;
 }
 
@@ -532,6 +535,7 @@ export interface CashoutQuote {
   swap_type: "EXACT_OUTPUT";
   route_id: string;
   deadline: string;
+  min_amount_in: U128;
 }
 
 export interface PublicReceipt {
@@ -567,6 +571,28 @@ export interface LogoutResponse {
   ok: true;
 }
 
+export interface PaymentListItem {
+  id: string;
+  invoice_id: string;
+  amount: U128;
+  origin_chain: string;
+  origin_asset: string;
+  status: PaymentStatus;
+  booked_at: string;
+}
+
+export interface PaymentList {
+  data: PaymentListItem[];
+}
+
+export type ApiKeyScope =
+  | "invoices:read"
+  | "invoices:write"
+  | "payments:read"
+  | "receipts:read"
+  | "webhooks:write"
+  | "pay_sessions:create";
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -579,6 +605,7 @@ export interface operations {
       "201": Invoice;
       "400": Error;
       "401": Error;
+      "403": Error;
       "409": Error;
     };
   };
@@ -594,6 +621,7 @@ export interface operations {
       "200": InvoiceList;
       "400": Error;
       "401": Error;
+      "403": Error;
     };
   };
   getInvoice: {
@@ -606,6 +634,7 @@ export interface operations {
       "200": InvoiceDetail;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -623,6 +652,7 @@ export interface operations {
       "200": SendInvoiceResponse;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
       "409": Error;
     };
@@ -637,6 +667,7 @@ export interface operations {
       "200": ReceiptList;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -650,6 +681,7 @@ export interface operations {
       "200": Payment;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -658,6 +690,7 @@ export interface operations {
       "200": WebhookEndpointList;
       "400": Error;
       "401": Error;
+      "403": Error;
     };
   };
   createWebhookEndpoint: {
@@ -671,6 +704,7 @@ export interface operations {
       "201": WebhookEndpoint;
       "400": Error;
       "401": Error;
+      "403": Error;
       "409": Error;
     };
   };
@@ -706,6 +740,7 @@ export interface operations {
       "201": PaySession;
       "400": Error;
       "401": Error;
+      "403": Error;
       "409": Error;
     };
   };
@@ -841,6 +876,7 @@ export interface operations {
       "200": DeletedResource;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -857,6 +893,7 @@ export interface operations {
       "200": WebhookTestResult;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
       "409": Error;
     };
@@ -875,6 +912,7 @@ export interface operations {
       "200": WebhookDeliveryList;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -906,6 +944,7 @@ export interface operations {
         from?: string;
         to?: string;
         format?: "csv" | "pdf";
+        token_id?: string;
       };
     };
     responses: {
@@ -924,6 +963,7 @@ export interface operations {
       "200": PdfDocument;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -937,6 +977,7 @@ export interface operations {
       "200": OpenQuoteList;
       "400": Error;
       "401": Error;
+      "403": Error;
       "404": Error;
     };
   };
@@ -997,6 +1038,14 @@ export interface operations {
     };
     responses: {
       "200": LogoutResponse;
+    };
+  };
+  listPayments: {
+    responses: {
+      "200": PaymentList;
+      "400": Error;
+      "401": Error;
+      "403": Error;
     };
   };
 }

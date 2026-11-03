@@ -37,7 +37,9 @@
           "Payment of any amount to any address listed in this invoice or at its pay link discharges this invoice to that extent.",
           "The debtor consents to the assignment of the right to receive payment; the payment addresses do not change on assignment."
         ]
-      }
+      },
+      "outstanding": "12500000",
+      "paid_total": "0"
     }
   ],
   "next_cursor": null

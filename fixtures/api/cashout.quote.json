@@ -9,5 +9,6 @@
   "deposit_type": "INTENTS",
   "swap_type": "EXACT_OUTPUT",
   "route_id": "R1",
-  "deadline": "2026-11-02T11:00:00Z"
+  "deadline": "2026-11-02T11:00:00Z",
+  "min_amount_in": "2020000"
 }

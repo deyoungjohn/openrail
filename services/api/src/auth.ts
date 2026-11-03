@@ -13,6 +13,14 @@ import {
 export type KeyKind = "secret" | "publishable";
 export type AuthKind = KeyKind | "session";
 
+export const SECRET_KEY_SCOPES = [
+  "invoices:read",
+  "invoices:write",
+  "payments:read",
+  "receipts:read",
+  "webhooks:write",
+] as const;
+
 export interface ApiKeyRecord {
   id: string;
   accountId: string;

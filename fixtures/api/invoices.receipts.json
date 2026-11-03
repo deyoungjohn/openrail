@@ -19,7 +19,8 @@
       "near_tx_hashes": [
         "8cDysV69qchx9emuEFBV2m4SWWMUKQjKtY7ZLDbJTu1J",
         "AbQhhqYR2xXFXmUsKMTbUTnJ1Wgj2WxbTNPDDx3415Gk"
-      ]
+      ],
+      "booking_tx_hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     }
   ]
 }

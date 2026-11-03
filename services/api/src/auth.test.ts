@@ -123,6 +123,16 @@ describe("NEP-413 sign-in", () => {
     expect(() => store.authenticate(session.sessionToken)).toThrow("session_expired");
   });
 
+  it("keeps scopes when a key is rotated", () => {
+    const store = new AuthStore(clock);
+    const { record } = store.createApiKey("acme.openrail.near", "Scoped", "secret", [
+      "invoices:read",
+    ]);
+    const rotated = store.rotateApiKey(record.id);
+    expect(rotated.record.scopes).toEqual(["invoices:read"]);
+    expect(rotated.record.id).toBe(record.id);
+  });
+
   it("hashes the borsh NEP-413 payload deterministically", () => {
     const payload = {
       message: "hello",
