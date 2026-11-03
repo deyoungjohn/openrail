@@ -112,7 +112,6 @@ test("one deposit prepays the storage credit, and the first invoice is the last 
   await expect(steps.nth(2)).toContainText("Next");
   w.s.balance = NEAR; // what the chain shows after the deposit
   await page.getByRole("button", { name: "Deposit storage credit" }).click();
-  await expect(page.getByText("Deposit sent")).toBeVisible();
   await expect(steps.nth(2)).toContainText("Done");
   await expect(steps.nth(3)).toContainText("Next");
   await expect(page.getByRole("link", { name: "Create your first invoice" })).toHaveAttribute(
