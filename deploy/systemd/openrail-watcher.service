@@ -1,0 +1,51 @@
+[Unit]
+Description=Openrail chain watcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openrail-watcher
+Group=openrail
+WorkingDirectory=/opt/openrail/current
+EnvironmentFile=/etc/openrail/watcher.env
+Environment=NODE_OPTIONS=--max-old-space-size=200
+Environment=NODE_ENV=production
+Environment=WATCHER_HEALTH_PORT=8080
+ExecStart=/usr/local/bin/pnpm --filter @openrail/watcher start
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+MemoryMax=300M
+TasksMax=256
+LimitNOFILE=65535
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openrail-watcher
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/lib/openrail /opt/openrail/current/reports
+
+[Install]
+WantedBy=multi-user.target
