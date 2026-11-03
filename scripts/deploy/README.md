@@ -90,3 +90,14 @@ NEAR_SANDBOX_BIN_PATH="$HOME/.near/sandbox" scripts/deploy/rehearse.sh
 → when `release_surplus` is implemented (ag2 #71), step 8 overpays, reconciles, releases the surplus, and checks the surplus is zero; while the method is still the `NOT_IMPLEMENTED` stub it prints that it skipped.
 
 Prerequisites: `cargo`, `pnpm`, `curl`, and the `near-sandbox` binary. The script rebuilds `target/near/openrail/openrail.wasm` from the current checkout first, so a stale wasm cannot mask a failure. The human then runs the `scripts/deploy/plan.sh` commands against mainnet.
+
+
+## G1 mainnet run
+
+`scripts/deploy/g1-plan.sh` prints the seven-step G1 mainnet run and the deploy/config checks to perform first. It is read-only: it never signs, sends, reads a private key, or sets a send flag. The human runs each printed command and records every transaction hash in `reports/G1.json`.
+
+```bash
+scripts/deploy/g1-plan.sh
+```
+
+Placeholders are written as `<API_KEY>`, `<TOKEN_ID>`, `<EVM_ADDRESS>`, `<EVM_ACK_SIGNATURE>`, `<BUYER_ACCOUNT>`, `<SELLER_ACCOUNT>`, `<THIRD_ACCOUNT>`, `<64_HEX_ASSIGNMENT_DOC>`, and `<POLYGON_ADDRESS>`. `API_BASE_URL`, `WEB_BASE_URL`, `NEAR_ROOT_ACCOUNT`, and `OPEN_CMD` may be overridden; the defaults are the production hosts.
