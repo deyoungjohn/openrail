@@ -71,6 +71,11 @@ export interface IndexerPort {
     accountId: string,
     query: { from?: string; to?: string; format: "csv" | "pdf"; tokenId?: string },
   ): Promise<Record<string, unknown>>;
+  listEvents(query: {
+    after?: string;
+    type?: string;
+    limit?: number;
+  }): Promise<{ data: Record<string, unknown>[]; next_cursor?: string | null }>;
 }
 
 export interface CashoutPort {
@@ -1011,6 +1016,21 @@ export class ApiApp {
 
     if (path === "/v1/events" && method === "GET") {
       this.requireAuth(request);
+      if (this.deps.indexer !== undefined) {
+        const limit = Number(request.query.get("limit") ?? "50");
+        return {
+          status: 200,
+          body: await this.deps.indexer.listEvents({
+            ...(request.query.get("cursor") === null
+              ? {}
+              : { after: request.query.get("cursor") ?? undefined }),
+            ...(request.query.get("type") === null
+              ? {}
+              : { type: request.query.get("type") ?? undefined }),
+            limit: Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50,
+          }),
+        };
+      }
       return { status: 200, body: { data: this.store.listEvents() } };
     }
 

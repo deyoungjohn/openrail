@@ -27,9 +27,9 @@ pnpm --filter @openrail/api start
 
 The real server needs `NEAR_ROOT_ACCOUNT`, `NEAR_RPC_URL`, `ISSUER_URL` and the
 1Click names already listed in `.env.example`. `DATABASE_URL` (SQLite path),
-`API_RECIPIENT`, `PAY_BASE_URL`, `WEB_ORIGIN`, `COOKIE_DOMAIN`,
-`ISSUER_SERVICE_KEY`, `STORAGE_CREDIT_BALANCE` and `STORAGE_CREDIT_AMOUNT` are
-also in `.env.example`. The API process holds **no NEAR key**: `ISSUER_URL`
+`INDEXER_URL` (receipts, statements and events), `API_RECIPIENT`,
+`PAY_BASE_URL`, `WEB_ORIGIN`, `COOKIE_DOMAIN`, `ISSUER_SERVICE_KEY`,
+`STORAGE_CREDIT_BALANCE` and `STORAGE_CREDIT_AMOUNT` are also in `.env.example`. The API process holds **no NEAR key**: `ISSUER_URL`
 points at the separate issuer service, which holds the restricted function-call key.
 
 S1b implements:
@@ -55,8 +55,9 @@ S1b implements:
   capped at 30 days, stored as a sha256 hash so restarts keep it;
   `GET /v1/auth/session` and `POST /v1/auth/logout`.
 - SQLite stores (`DATABASE_URL`, `node:sqlite`, schema_migrations): API keys,
-  sessions, challenges, idempotency (24 h expiry), webhook endpoints/deliveries,
-  business profiles, and the invoice/payment/receipt cache behind the indexer port.
+  sessions, challenges, idempotency (24 h expiry), webhook endpoints/deliveries and
+  outbox, business profiles, and the API's own invoice/payment cache. Receipt,
+  statement and event reads come from the indexer (`INDEXER_URL`).
 - CORS: exact `WEB_ORIGIN` with credentials, never `*`; cookie-authenticated
   state-changing requests require `Origin` and `Content-Type: application/json`.
 - `@openrail/api-client` is bundler-friendly (extensionless imports,

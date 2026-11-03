@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "id": 7,
+      "event_key": "openrail:booked:0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "block_height": 123456,
+      "block_hash": "8cDysV69qchx9emuEFBV2m4SWWMUKQjKtY7ZLDbJTu1J",
+      "time": "2026-11-02T10:01:35Z",
+      "tx_hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "event": "booked",
+      "token_id": "c-1",
+      "data": { "token_id": "c-1", "payment": "12500000" }
+    }
+  ],
+  "next_cursor": 7
+}

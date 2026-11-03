@@ -1,5 +1,6 @@
 /** Production wiring for S1b. Keys live in the issuer service; this process has none. */
 import {
+  createLogger,
   createOneClickClientFromEnv,
   defaultSettlementAsset,
   getEnv,
@@ -21,7 +22,9 @@ import { AuthStore } from "./auth.js";
 import { IdempotencyStore } from "./idempotency.js";
 import { loadSpec } from "./mock.js";
 import type { QuoteProvider } from "./quote.js";
+import { createHttpIndexer } from "./indexer-client.js";
 import { createSqliteStores } from "./stores.js";
+import { WebhookWorker } from "./webhook-worker.js";
 
 async function rpc<T>(url: string, method: string, params: unknown): Promise<T> {
   const response = await fetch(url, {
@@ -169,12 +172,14 @@ export function createCashoutPort(): CashoutPort {
 export async function createApiAppFromEnv(): Promise<ApiApp> {
   const rootAccount = requireEnv("NEAR_ROOT_ACCOUNT");
   const issuerUrl = requireEnv("ISSUER_URL");
+  const indexerUrl = requireEnv("INDEXER_URL");
   const rpcUrl = getEnv("NEAR_RPC_URL");
   if (rpcUrl === undefined) requireEnv("NEAR_RPC_URL");
   const databasePath = (getEnv("DATABASE_URL") ?? "data/openrail.sqlite").replace(/^file:/, "");
   mkdirSync(dirname(databasePath), { recursive: true });
   const stores = createSqliteStores(databasePath);
-  return new ApiApp({
+  const indexer = createHttpIndexer(indexerUrl);
+  const app = new ApiApp({
     config: {
       rootAccount,
       recipient: getEnv("API_RECIPIENT") ?? "api.openrail.near",
@@ -187,7 +192,21 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     issuer: createHttpIssuer(issuerUrl),
     accessKey: createAccessKeyPort(rpcUrl as string),
     cashout: createCashoutPort(),
+    indexer,
     quoteProvider: createQuoteProvider(),
     spec: loadSpec(),
   });
+  const logger = createLogger("api-webhooks");
+  const worker = new WebhookWorker({
+    events: indexer,
+    store: stores.api,
+    logger: (message, data) => logger.info(message, data ?? {}),
+  });
+  const timer = setInterval(() => {
+    void worker.runOnce().catch((error: unknown) => {
+      logger.error("webhook poll failed", error instanceof Error ? error.message : String(error));
+    });
+  }, 15_000);
+  timer.unref();
+  return app;
 }

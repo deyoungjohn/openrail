@@ -6,6 +6,16 @@ import type { PaySession } from "./quote.js";
 import type { WebhookEndpointRecord } from "./webhooks.js";
 import type { StoredResponse } from "./idempotency.js";
 
+export interface OutboxRow {
+  endpointId: string;
+  eventId: string;
+  event: string;
+  attempt: number;
+  nextAttemptAt: number;
+  expiresAt: number;
+  delivered: boolean;
+}
+
 export interface ApiStore {
   listInvoices(accountId?: string): InvoiceRecord[];
   getInvoice(idOrToken: string): InvoiceRecord | undefined;
@@ -27,6 +37,22 @@ export interface ApiStore {
   deleteWebhookEndpoint(id: string): void;
   addDelivery(endpointId: string, delivery: Record<string, unknown>): void;
   listDeliveries(endpointId: string): Record<string, unknown>[];
+  outboxEnqueue(
+    endpointId: string,
+    eventId: string,
+    event: string,
+    nextAttemptAt: number,
+    expiresAt: number,
+  ): boolean;
+  outboxDue(now: number): OutboxRow[];
+  outboxMarkDelivered(endpointId: string, eventId: string): void;
+  outboxReschedule(
+    endpointId: string,
+    eventId: string,
+    attempt: number,
+    nextAttemptAt: number,
+  ): void;
+  outboxExpire(endpointId: string, eventId: string): void;
   getPaySession(id: string): PaySession | undefined;
   savePaySession(session: PaySession): void;
   getOpenQuotes(tokenId: string): Record<string, unknown>[];
@@ -90,6 +116,7 @@ export function createMemoryStores(): Stores {
   const endpoints = new Map<string, WebhookEndpointRecord>();
   const endpointAccounts = new Map<string, string>();
   const deliveries = new Map<string, Record<string, unknown>[]>();
+  const outbox = new Map<string, OutboxRow>();
   const paySessions = new Map<string, PaySession>();
   const openQuotes = new Map<string, Record<string, unknown>[]>();
   const businesses = new Map<string, BusinessRecord>();
@@ -157,6 +184,38 @@ export function createMemoryStores(): Stores {
         deliveries.set(endpointId, list);
       },
       listDeliveries: (endpointId) => deliveries.get(endpointId) ?? [],
+      outboxEnqueue(endpointId, eventId, event, nextAttemptAt, expiresAt) {
+        const key = `${endpointId}\u0000${eventId}`;
+        if (outbox.has(key)) return false;
+        outbox.set(key, {
+          endpointId,
+          eventId,
+          event,
+          attempt: 0,
+          nextAttemptAt,
+          expiresAt,
+          delivered: false,
+        });
+        return true;
+      },
+      outboxDue(now) {
+        return [...outbox.values()].filter((row) => !row.delivered && row.nextAttemptAt <= now);
+      },
+      outboxMarkDelivered(endpointId, eventId) {
+        const row = outbox.get(`${endpointId}\u0000${eventId}`);
+        if (row !== undefined) row.delivered = true;
+      },
+      outboxReschedule(endpointId, eventId, attempt, nextAttemptAt) {
+        const row = outbox.get(`${endpointId}\u0000${eventId}`);
+        if (row !== undefined) {
+          row.attempt = attempt;
+          row.nextAttemptAt = nextAttemptAt;
+        }
+      },
+      outboxExpire(endpointId, eventId) {
+        const row = outbox.get(`${endpointId}\u0000${eventId}`);
+        if (row !== undefined) row.delivered = true;
+      },
       getPaySession: (id) => paySessions.get(id),
       savePaySession: (session) => paySessions.set(session.id, session),
       getOpenQuotes: (tokenId) => openQuotes.get(tokenId) ?? [],
@@ -231,6 +290,7 @@ export function createSqliteStores(path: string): Stores {
     CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, token_id TEXT NOT NULL, booking_hash TEXT UNIQUE, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS webhook_endpoints (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS webhook_deliveries (id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, body TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS webhook_outbox (endpoint_id TEXT NOT NULL, event_id TEXT NOT NULL, event TEXT NOT NULL, attempt INTEGER NOT NULL, next_attempt_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (endpoint_id, event_id));
     CREATE TABLE IF NOT EXISTS pay_sessions (id TEXT PRIMARY KEY, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS open_quotes (token_id TEXT PRIMARY KEY, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS business_profiles (account_id TEXT PRIMARY KEY, body TEXT NOT NULL);
@@ -325,6 +385,45 @@ export function createSqliteStores(path: string): Stores {
         .prepare("SELECT body FROM webhook_deliveries WHERE endpoint_id = ?")
         .all(endpointId)
         .map((row) => parseJson<Record<string, unknown>>(row.body));
+    },
+    outboxEnqueue(endpointId, eventId, event, nextAttemptAt, expiresAt) {
+      const result = db
+        .prepare(
+          "INSERT OR IGNORE INTO webhook_outbox (endpoint_id, event_id, event, attempt, next_attempt_at, expires_at, delivered) VALUES (?, ?, ?, 0, ?, ?, 0)",
+        )
+        .run(endpointId, eventId, event, nextAttemptAt, expiresAt);
+      return Number(result.changes ?? 0) > 0;
+    },
+    outboxDue(now) {
+      return db
+        .prepare(
+          "SELECT endpoint_id, event_id, event, attempt, next_attempt_at, expires_at FROM webhook_outbox WHERE delivered = 0 AND next_attempt_at <= ? ORDER BY next_attempt_at",
+        )
+        .all(now)
+        .map((row) => ({
+          endpointId: String(row.endpoint_id),
+          eventId: String(row.event_id),
+          event: String(row.event),
+          attempt: Number(row.attempt),
+          nextAttemptAt: Number(row.next_attempt_at),
+          expiresAt: Number(row.expires_at),
+          delivered: Number(row.delivered) === 1,
+        }));
+    },
+    outboxMarkDelivered(endpointId, eventId) {
+      db.prepare(
+        "UPDATE webhook_outbox SET delivered = 1 WHERE endpoint_id = ? AND event_id = ?",
+      ).run(endpointId, eventId);
+    },
+    outboxReschedule(endpointId, eventId, attempt, nextAttemptAt) {
+      db.prepare(
+        "UPDATE webhook_outbox SET attempt = ?, next_attempt_at = ? WHERE endpoint_id = ? AND event_id = ?",
+      ).run(attempt, nextAttemptAt, endpointId, eventId);
+    },
+    outboxExpire(endpointId, eventId) {
+      db.prepare(
+        "UPDATE webhook_outbox SET delivered = 1 WHERE endpoint_id = ? AND event_id = ?",
+      ).run(endpointId, eventId);
     },
     getPaySession(id) {
       const row = db.prepare("SELECT body FROM pay_sessions WHERE id = ?").get(id);
