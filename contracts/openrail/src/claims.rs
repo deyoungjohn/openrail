@@ -1,6 +1,6 @@
 //! Claims state management and domain invariants (Blueprint 2.1, 2.3).
 
-use crate::types::Claim;
+use crate::types::{Claim, Lock, Status};
 use crate::Contract;
 use near_sdk::{env, require, AccountId, Gas, NearToken};
 
@@ -66,5 +66,135 @@ impl Contract {
                 }
             }
         }
+    }
+
+    /// Formally closes a fully paid claim (`Paid` -> `Closed`).
+    ///
+    /// Caller: Claim owner.
+    /// Requirements: `status == Paid`, `surplus == 0`, `lock == None`.
+    pub(crate) fn internal_close(&mut self, token_id: String) {
+        let mut claim = self
+            .claims
+            .get(&token_id)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("claim not found"));
+
+        require!(
+            env::predecessor_account_id() == claim.owner_id,
+            "Unauthorized: owner only"
+        );
+        require!(claim.status == Status::Paid, "claim is not Paid");
+        require!(claim.surplus.0 == 0, "claim has unreleased surplus");
+        require!(claim.lock == Lock::None, "claim is locked");
+
+        claim.status = Status::Closed;
+        self.claims.insert(token_id.clone(), claim);
+
+        crate::events::CloseEvent { token_id }.emit();
+    }
+
+    /// Closes a partially paid claim recording the shortfall (`PartiallyPaid` -> `Closed`).
+    ///
+    /// Caller: Claim owner.
+    /// Requirements: `status == PartiallyPaid`, `hooks::check_writeoff` passes.
+    pub(crate) fn internal_close_writeoff(&mut self, token_id: String) {
+        let mut claim = self
+            .claims
+            .get(&token_id)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("claim not found"));
+
+        require!(
+            env::predecessor_account_id() == claim.owner_id,
+            "Unauthorized: owner only"
+        );
+        require!(
+            claim.status == Status::PartiallyPaid,
+            "claim is not PartiallyPaid"
+        );
+        require!(claim.lock == Lock::None, "claim is locked");
+
+        if let Err(refusal) = crate::hooks::dispatch_check_writeoff(&claim) {
+            env::panic_str(&format!("writeoff refused: {refusal}"));
+        }
+
+        let shortfall = compute_outstanding(&claim);
+        claim.status = Status::Closed;
+        self.claims.insert(token_id.clone(), claim);
+
+        crate::events::WriteoffEvent {
+            token_id,
+            shortfall: near_sdk::json_types::U128(shortfall),
+        }
+        .emit();
+    }
+
+    /// Releases accumulated surplus to the current claim owner.
+    ///
+    /// Caller: Claim owner.
+    /// Deposit: None. Forwards surplus value to owner_id; emits `surplus_released`.
+    pub(crate) fn internal_release_surplus(&mut self, token_id: String) {
+        let mut claim = self
+            .claims
+            .get(&token_id)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("claim not found"));
+
+        require!(
+            env::predecessor_account_id() == claim.owner_id,
+            "Unauthorized: owner only"
+        );
+        require!(claim.lock == Lock::None, "claim is locked");
+        require!(claim.surplus.0 > 0, "no surplus to release");
+
+        let amount = claim.surplus;
+        let mut remaining = amount.0;
+
+        // Allocate surplus across available balances in settlement assets
+        for asset in &claim.settlement_assets {
+            if remaining == 0 {
+                break;
+            }
+            let avail = claim
+                .last_seen_balance
+                .get(asset)
+                .copied()
+                .unwrap_or(near_sdk::json_types::U128(0))
+                .0;
+            if avail > 0 {
+                let take = std::cmp::min(remaining, avail);
+                claim
+                    .last_seen_balance
+                    .insert(asset.clone(), near_sdk::json_types::U128(avail - take));
+                remaining -= take;
+
+                let forward_args = crate::reconcile::VaultForwardArgs {
+                    token_id: asset.clone(),
+                    amount: take.to_string(),
+                    receiver_id: claim.owner_id.clone(),
+                    gas_tgas: crate::reconcile::VAULT_FORWARD_INNER_TGAS,
+                };
+                let forward_bytes = near_sdk::serde_json::to_vec(&forward_args)
+                    .expect("serialize vault forward args");
+                env::promise_create(
+                    claim.claim_account.clone(),
+                    "forward",
+                    &forward_bytes,
+                    NearToken::ZERO,
+                    crate::reconcile::GAS_FOR_VAULT_FORWARD,
+                );
+            }
+        }
+
+        claim.surplus = near_sdk::json_types::U128(0);
+        let owner_id = claim.owner_id.clone();
+        self.claims.insert(token_id.clone(), claim);
+
+        crate::events::SurplusReleasedEvent {
+            token_id,
+            amount,
+            receiver_id: owner_id,
+        }
+        .emit();
     }
 }

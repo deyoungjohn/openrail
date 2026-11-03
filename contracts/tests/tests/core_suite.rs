@@ -192,7 +192,6 @@ async fn terms_immutable() -> Result<()> {
 /// - Designated Near debtor (Bob) successfully acknowledges invoice
 /// - Second acknowledgment call by Bob fails (AlreadyAcknowledged / write-once)
 #[tokio::test]
-#[ignore = "C3"]
 async fn ack_only_by_debtor_once() -> Result<()> {
     let env = Env::new().await?;
 
@@ -1009,7 +1008,6 @@ async fn stale_reconcile_lock_clears() -> Result<()> {
 /// - Unpaid claim can be cancelled by owner
 /// - Partially paid or paid claim cannot be cancelled
 #[tokio::test]
-#[ignore = "C5"]
 async fn cancel_only_unpaid() -> Result<()> {
     let env = Env::new().await?;
 
@@ -1075,7 +1073,6 @@ async fn cancel_only_unpaid() -> Result<()> {
 /// Asserts:
 /// - Payments arriving after claim is Closed book 0 to payment and 100% to surplus
 #[tokio::test]
-#[ignore = "C5"]
 async fn closed_addresses_stay_live() -> Result<()> {
     let env = Env::new().await?;
 
@@ -1215,7 +1212,6 @@ async fn closed_addresses_stay_live() -> Result<()> {
 /// Asserts:
 /// - Illegal status transitions (e.g. Paid -> Issued, Cancelled -> Paid) return InvariantViolation
 #[tokio::test]
-#[ignore = "C5"]
 async fn transitions_enforced() -> Result<()> {
     let env = Env::new().await?;
 

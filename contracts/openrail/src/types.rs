@@ -360,6 +360,9 @@ impl Status {
     }
 }
 
+/// Default transfer window duration in blocks (Blueprint 2.3).
+pub const TRANSFER_WINDOW_BLOCKS: u64 = 1_800;
+
 /// Concurrency lock on a claim (Blueprint 2.1, 2.3).
 ///
 /// Enforces safety and serial execution across asynchronous callbacks.

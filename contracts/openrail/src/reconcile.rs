@@ -3,7 +3,7 @@
 use crate::claims::compute_outstanding;
 use crate::events::{
     AnomalyEvent, BookedEvent, DistributedEvent, DistributionFailedEvent, LockClearedEvent,
-    ReconcileFailedEvent,
+    ReconcileFailedEvent, TransferWindowEvent,
 };
 use crate::hooks::{Booking, BookingInput};
 use crate::types::{Claim, Leg, Lock, Status, TokenId};
@@ -37,6 +37,8 @@ pub struct OnBalancesArgs {
     pub token_id: String,
     pub prev_lock: Lock,
     pub since: u64,
+    #[serde(default)]
+    pub open_transfer_window: bool,
 }
 
 /// Payload for distribution callback.
@@ -48,6 +50,8 @@ pub struct OnDistributedArgs {
     pub prev_lock: Lock,
     pub since: u64,
     pub is_retry: bool,
+    #[serde(default)]
+    pub open_transfer_window: bool,
 }
 
 #[near(serializers = [json])]
@@ -82,6 +86,15 @@ impl Contract {
     /// to cover `mt_batch_balance_of` (10 Tgas) and `on_balances` callback (220 Tgas),
     /// which forwards up to 6 legs at 12 Tgas inner each.
     pub(crate) fn internal_reconcile(&mut self, token_id: String) {
+        self.internal_reconcile_with_options(token_id, false);
+    }
+
+    /// Reconciles balances for a claim, optionally opening the transfer window on completion.
+    pub(crate) fn internal_reconcile_with_options(
+        &mut self,
+        token_id: String,
+        open_transfer_window: bool,
+    ) {
         let claim = self
             .claims
             .get_mut(&token_id)
@@ -118,6 +131,7 @@ impl Contract {
             token_id,
             prev_lock,
             since: current_block,
+            open_transfer_window,
         };
         let callback_bytes =
             near_sdk::serde_json::to_vec(&callback_args).expect("serialize callback args");
@@ -135,7 +149,13 @@ impl Contract {
     }
 
     /// Callback after balance query on `intents.near` resolves (Blueprint 2.5).
-    pub(crate) fn handle_on_balances(&mut self, token_id: String, prev_lock: Lock, since: u64) {
+    pub(crate) fn handle_on_balances(
+        &mut self,
+        token_id: String,
+        prev_lock: Lock,
+        since: u64,
+        open_transfer_window: bool,
+    ) {
         let claim = self
             .claims
             .get_mut(&token_id)
@@ -224,7 +244,17 @@ impl Contract {
 
         // Idempotent reconcile: zero delta changes no state (beyond anomaly last_seen reset)
         if total_delta == 0 {
-            restore_lock(claim, prev_lock);
+            if open_transfer_window {
+                let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                claim.lock = Lock::TransferWindow { until };
+                TransferWindowEvent {
+                    token_id: token_id.clone(),
+                    until,
+                }
+                .emit();
+            } else {
+                restore_lock(claim, prev_lock);
+            }
             return;
         }
 
@@ -366,7 +396,17 @@ impl Contract {
             .collect();
 
         if legs_to_forward.is_empty() {
-            restore_lock(claim, prev_lock);
+            if open_transfer_window {
+                let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                claim.lock = Lock::TransferWindow { until };
+                TransferWindowEvent {
+                    token_id: token_id.clone(),
+                    until,
+                }
+                .emit();
+            } else {
+                restore_lock(claim, prev_lock);
+            }
             return;
         }
 
@@ -378,6 +418,7 @@ impl Contract {
             prev_lock,
             since,
             false,
+            open_transfer_window,
         );
     }
 
@@ -390,6 +431,7 @@ impl Contract {
         prev_lock: Lock,
         since: u64,
         is_retry: bool,
+        open_transfer_window: bool,
     ) {
         let mut forward_promises = Vec::with_capacity(legs.len());
 
@@ -429,7 +471,17 @@ impl Contract {
                 .get_mut(token_id)
                 .unwrap_or_else(|| env::panic_str("claim not found"));
             if !is_retry {
-                restore_lock(claim, prev_lock);
+                if open_transfer_window {
+                    let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                    claim.lock = Lock::TransferWindow { until };
+                    TransferWindowEvent {
+                        token_id: token_id.to_string(),
+                        until,
+                    }
+                    .emit();
+                } else {
+                    restore_lock(claim, prev_lock);
+                }
             }
             return;
         }
@@ -446,6 +498,7 @@ impl Contract {
             prev_lock,
             since,
             is_retry,
+            open_transfer_window,
         };
         let callback_bytes =
             near_sdk::serde_json::to_vec(&callback_args).expect("serialize on_distributed args");
@@ -470,6 +523,7 @@ impl Contract {
         prev_lock: Lock,
         since: u64,
         is_retry: bool,
+        open_transfer_window: bool,
     ) {
         let claim = self
             .claims
@@ -539,7 +593,17 @@ impl Contract {
         }
 
         if !is_retry {
-            restore_lock(claim, prev_lock);
+            if open_transfer_window {
+                let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                claim.lock = Lock::TransferWindow { until };
+                TransferWindowEvent {
+                    token_id: token_id.clone(),
+                    until,
+                }
+                .emit();
+            } else {
+                restore_lock(claim, prev_lock);
+            }
         }
     }
 
@@ -562,6 +626,7 @@ impl Contract {
             Lock::None,
             0,
             true,
+            false,
         );
     }
 
