@@ -11,6 +11,7 @@ import { AddressError, validateRefundAddress } from "./addresses.js";
 import {
   AuthError,
   AuthStore,
+  SECRET_KEY_SCOPES,
   verifyNep413,
   type AuthContext,
   type Nep413Verifier,
@@ -513,7 +514,7 @@ export class ApiApp {
             context.accountId,
             body.name ?? "Untitled",
             "secret",
-            body.scopes ?? [],
+            body.scopes ?? [...SECRET_KEY_SCOPES],
           );
           return {
             status: 201,

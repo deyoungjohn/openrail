@@ -70,6 +70,9 @@ The mock stays available with `MOCK=1 pnpm --filter @openrail/api start` for UI 
 - `Authorization: Bearer or_pk_live_...` is the browser key: pay-session creation only.
 - `Authorization: Bearer or_sess_...` is a **dashboard session** from NEP-413 sign-in
   (7 days sliding, capped at 30 days, scoped to one business account).
+- API-key scopes: `invoices:read`, `invoices:write`, `payments:read`,
+  `receipts:read`, `webhooks:write`, and `pay_sessions:create`. A new secret key
+  defaults to the first five; a publishable key has exactly `pay_sessions:create`.
 - Every `POST` accepts `Idempotency-Key`. The same key with the same body returns
   the first response; the same key with another body returns `409`.
 - Public hosted-page reads (`/v1/pay/sessions/{id}`, `/v1/pay/claims/{token_id}`,

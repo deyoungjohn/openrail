@@ -405,7 +405,7 @@ export interface ApiKey {
   id: string;
   name: string;
   prefix: string;
-  scopes: string[];
+  scopes: ApiKeyScope[];
   created_at: string;
   last_used_at?: string | null;
   revoked_at?: string | null;
@@ -417,7 +417,7 @@ export interface ApiKeyList {
 
 export interface CreateApiKeyRequest {
   name: string;
-  scopes?: string[];
+  scopes?: ApiKeyScope[];
 }
 
 export interface ApiKeyCreated {
@@ -425,7 +425,7 @@ export interface ApiKeyCreated {
   name: string;
   prefix: string;
   secret: string;
-  scopes: string[];
+  scopes: ApiKeyScope[];
   created_at: string;
 }
 
@@ -584,6 +584,14 @@ export interface PaymentListItem {
 export interface PaymentList {
   data: PaymentListItem[];
 }
+
+export type ApiKeyScope =
+  | "invoices:read"
+  | "invoices:write"
+  | "payments:read"
+  | "receipts:read"
+  | "webhooks:write"
+  | "pay_sessions:create";
 
 export interface operations {
   createInvoice: {

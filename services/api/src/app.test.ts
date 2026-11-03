@@ -152,6 +152,21 @@ describe("invoice route", () => {
     expect(bad.status).toBe(400);
   });
 
+  it("defaults a new secret key to all five scopes", async () => {
+    const { app, secret } = harness();
+    const response = await app.handle(
+      request("POST", "/v1/api_keys", { name: "Production" }, secret),
+    );
+    expect(response.status).toBe(201);
+    expect((response.body as { scopes: string[] }).scopes).toEqual([
+      "invoices:read",
+      "invoices:write",
+      "payments:read",
+      "receipts:read",
+      "webhooks:write",
+    ]);
+  });
+
   it("lists payments for the business", async () => {
     const { app, secret } = harness();
     app.store.savePayment("pay_1", {
