@@ -3,6 +3,7 @@ name = "openrail"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+repository = "https://github.com/deyoungjohn/openrail"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -26,3 +27,17 @@ near-sdk = { version = "=5.30.0", features = ["unstable", "unit-testing"] }
 # Pure-Rust ECDSA recovery for the EIP-712 vectors (production uses env::ecrecover).
 k256 = { version = "0.13", features = ["ecdsa"] }
 serde = { version = "1", features = ["derive"] }
+
+[package.metadata.near.reproducible_build]
+image = "sourcescan/cargo-near:0.22.0-rust-1.99.0"
+image_digest = "sha256:019ada43394e78aab2814ecd1fccfc50f1300618028b23ffdcc55ab51c5b8980"
+passed_env = []
+container_build_command = [
+    "cargo",
+    "near",
+    "build",
+    "non-reproducible-wasm",
+    "--locked",
+    "--features",
+    "standing,checkout,advance,proof,agent,shopify,subscriptions",
+]
