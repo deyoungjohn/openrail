@@ -65,5 +65,4 @@ exist for that screen, with the reason.
 - The keyboard check tabs through a page and checks the focus ring and that focus is not trapped. It
   does not check the logical order of every control; the sale form has an order test of its own.
 - Loading is proved by holding an answer back. A very fast real API shows the skeleton only briefly.
-- Reduced motion is handled in the stylesheet (`prefers-reduced-motion`) and is not asserted by a test.
 - The tests run against fixtures and the mock API, not the live API.

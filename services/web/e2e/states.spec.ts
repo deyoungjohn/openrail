@@ -320,3 +320,40 @@ test.describe("keyboard: every control is reachable and shows the focus ring", (
       await keyboardWalk(page, min);
     });
 });
+
+test.describe("reduced motion: prefers-reduced-motion turns every animation and transition into an instant change", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  const probe = (page: Page) =>
+    page.evaluate(() => {
+      const longest = (el: Element, prop: "animationDuration" | "transitionDuration") => {
+        const durations = getComputedStyle(el)[prop].split(",");
+        return Math.max(...durations.map((v) => parseFloat(v) * (v.includes("ms") ? 1 : 1000)));
+      };
+      const all = Array.from(document.querySelectorAll("main, main *, button, a"));
+      return {
+        animation: Math.max(...all.map((e) => longest(e, "animationDuration"))),
+        transition: Math.max(...all.map((e) => longest(e, "transitionDuration"))),
+      };
+    });
+
+  test("a signed-in screen and a public page", async ({ page, context }) => {
+    await signIn(context);
+    await mockApi(page, base());
+    for (const path of ["/app", "/app/invoices/new", "/pay/c-1"]) {
+      await page.goto(path);
+      await page.getByRole("heading", { level: 1 }).first().waitFor();
+      const d = await probe(page);
+      expect(d.animation, `${path} animation`).toBeLessThanOrEqual(1);
+      expect(d.transition, `${path} transition`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test("the modal opens without a delay", async ({ page }) => {
+    await page.goto("/_dev/components");
+    await page.getByRole("button", { name: "Open modal" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    const d = await probe(page);
+    expect(d.transition).toBeLessThanOrEqual(1);
+  });
+});
