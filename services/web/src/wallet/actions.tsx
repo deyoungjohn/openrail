@@ -63,6 +63,7 @@ export function useActions(): Actions {
                 args: {},
                 gas: TGAS(30),
                 deposit: depositYocto,
+              }),
             cashOut: (a) =>
               call({
                 receiverId: INTENTS_CONTRACT,
