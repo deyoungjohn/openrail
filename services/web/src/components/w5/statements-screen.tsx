@@ -1,6 +1,7 @@
 "use client";
 
 import { Download } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
@@ -98,6 +99,8 @@ function Result({ s, from, to }: { s: Statement; from: string; to: string }) {
 
 export function StatementsScreen() {
   const t = copy.statements;
+  // `?token_id=c-1` scopes the statement to one invoice (SQ-13).
+  const [tokenId, setTokenId] = useState<string | null>(useSearchParams().get("token_id"));
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
   const [format, setFormat] = useState<"csv" | "pdf">("csv");
@@ -112,7 +115,14 @@ export function StatementsScreen() {
     setState("loading");
     setResult(null);
     try {
-      setResult(await dashClient.statements.get({ from, to, format }));
+      setResult(
+        await dashClient.statements.get({
+          from,
+          to,
+          format,
+          ...(tokenId ? { token_id: tokenId } : {}),
+        }),
+      );
       setState("idle");
     } catch {
       setState("failed");
@@ -151,6 +161,14 @@ export function StatementsScreen() {
             <option value="pdf">{t.pdf}</option>
           </Select>
         </div>
+        {tokenId ? (
+          <p className="flex flex-wrap items-center gap-3 text-[14px]">
+            <span className="font-medium">{t.scopeOne(tokenId)}</span>
+            <Button variant="secondary" size="sm" onClick={() => setTokenId(null)}>
+              {t.scopeAll}
+            </Button>
+          </p>
+        ) : null}
         {problem ? (
           <p role="alert" className="text-danger-text text-[14px]">
             {problem}

@@ -568,6 +568,8 @@ export const copy = {
     fingerprint: "Fingerprint",
     matches: "Fingerprint matches the file.",
     mismatch: "The fingerprint doesn't match the file. Don't use it. Get the statement again.",
+    scopeOne: (id: string) => `This invoice only: ${id}`,
+    scopeAll: "Show all invoices",
     download: (name: string) => `Download ${name}`,
     previewCaption: "Statement preview",
     previewMore: (shown: number, total: number) =>
