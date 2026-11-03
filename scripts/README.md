@@ -12,6 +12,7 @@
 | `leak-check.sh` | `leak-check` | P0.2 |
 | `abi-check.sh` | `abi-check` | P0.2 |
 | `docs.sh` | `docs` | P0.2 |
+| `gate-run.sh` | none | P1.0 / I1 (nightly & gate runner: proptests 1,000, scale 5,000, mutation spot checks) |
 | `enabled-features` | none | P0.1 (prints the enabled module ids, comma-separated; `--all` lists every id) |
 
 ## CI Runner

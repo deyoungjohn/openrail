@@ -2,8 +2,19 @@ use openrail_model::strategy::*;
 use openrail_model::*;
 use proptest::prelude::*;
 
+fn config() -> ProptestConfig {
+    let cases = std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(1000);
+    ProptestConfig {
+        cases,
+        ..ProptestConfig::default()
+    }
+}
+
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1000))]
+    #![proptest_config(config())]
 
     #[test]
     fn test_scenario_invariants((issue_action, actions) in arb_scenario()) {

@@ -1,0 +1,32 @@
+name: e2e-web
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-web:
+    name: e2e-web
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build web package
+        run: pnpm --filter @openrail/web build
+      - name: Install Playwright Chromium
+        run: pnpm --filter @openrail/web exec playwright install --with-deps chromium
+      - name: Run web e2e suite
+        run: pnpm --filter @openrail/web test:e2e:web

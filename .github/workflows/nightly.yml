@@ -48,16 +48,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build contract wasm
         run: cargo near build non-reproducible-wasm --manifest-path contracts/openrail/Cargo.toml
-      - name: Record Proptest Seed
+      - name: Run workspace tests with 1,000 proptest cases
         run: |
-          # 32-byte hex seed (64 characters) for proptest reproducibility
-          SEED=$(head -c 32 /dev/urandom | xxd -p -c 32)
-          echo "PROPTEST_SEED=$SEED" >> "$GITHUB_ENV"
           echo "### Nightly Proptest Run" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Proptest cases:** ${{ env.PROPTEST_CASES }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Recorded seed:** \`$SEED\`" >> "$GITHUB_STEP_SUMMARY"
-      - name: Run workspace tests with 1,000 proptest cases
-        run: cargo test --workspace
+          cargo test --workspace
 
   nightly-scale:
     name: nightly-scale
@@ -97,3 +92,22 @@ jobs:
           echo "### Nightly Scale Run" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Scale claims:** ${{ env.SCALE_CLAIMS }}" >> "$GITHUB_STEP_SUMMARY"
           cargo test -p openrail-tests --test scale_suite -- --nocapture
+
+  nightly-e2e-web:
+    name: nightly-e2e-web
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build web package
+        run: pnpm --filter @openrail/web build
+      - name: Install Playwright Chromium
+        run: pnpm --filter @openrail/web exec playwright install --with-deps chromium
+      - name: Run web e2e suite
+        run: pnpm --filter @openrail/web test:e2e:web
