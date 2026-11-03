@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatUsd, formatUsdc, middleTruncate, usdParts } from "./format";
+import {
+  formatDate,
+  formatUsd,
+  formatUsdc,
+  formatUsdcExact,
+  middleTruncate,
+  usdParts,
+} from "./format";
 
 describe("formatUsd", () => {
   it("groups thousands and always shows two decimals", () => {
@@ -33,12 +40,33 @@ describe("middleTruncate", () => {
   });
 });
 
-describe("formatUsdc and formatDate", () => {
-  it("shows whole cents as dollars and never hides sub-cent USDC", () => {
+describe("formatUsdc rounds a sub-cent amount up to the next cent (summaries)", () => {
+  it("leaves whole cents alone", () => {
     expect(formatUsdc(1_250_000_000n)).toBe("$1,250.00");
-    expect(formatUsdc(1_000_137n)).toBe("$1.000137");
+    expect(formatUsdc(10_000n)).toBe("$0.01");
+    expect(formatUsdc(0n)).toBe("$0.00");
   });
+  it("rounds any fraction of a cent up, never down", () => {
+    expect(formatUsdc(1_000_137n)).toBe("$1.01");
+    expect(formatUsdc(1n)).toBe("$0.01");
+    expect(formatUsdc(9_999n)).toBe("$0.01");
+    expect(formatUsdc(4_987_500n)).toBe("$4.99");
+    expect(formatUsdc(12_500n)).toBe("$0.02");
+  });
+  it("rounds a negative amount away from zero too", () => {
+    expect(formatUsdc(-1_000_137n)).toBe("-$1.01");
+  });
+});
 
+describe("formatUsdcExact keeps every digit (what a person signs, and claim counters)", () => {
+  it("shows whole cents as dollars and sub-cent USDC with all 6 decimals", () => {
+    expect(formatUsdcExact(1_250_000_000n)).toBe("$1,250.00");
+    expect(formatUsdcExact(1_000_137n)).toBe("$1.000137");
+    expect(formatUsdcExact(4_987_500n)).toBe("$4.987500");
+  });
+});
+
+describe("formatDate", () => {
   it("formats unix seconds in UTC", () => {
     expect(formatDate(1_800_086_400)).toBe("Jan 16, 2027");
   });
