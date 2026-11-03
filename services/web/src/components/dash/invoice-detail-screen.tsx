@@ -198,6 +198,9 @@ export function InvoiceDetailScreen({ id }: { id: string }) {
           >
             {t.copyLink}
           </Button>
+          <Link href={`/app/statements?token_id=${encodeURIComponent(invoice.token_id)}`}>
+            <Button variant="secondary">{t.statement}</Button>
+          </Link>
           <Link href={`/app/invoices/${encodeURIComponent(invoice.token_id)}/transfer`}>
             <Button variant="secondary">{t.sell}</Button>
           </Link>

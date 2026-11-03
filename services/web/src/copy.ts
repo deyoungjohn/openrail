@@ -448,6 +448,7 @@ export const copy = {
     paymentsEmptyBody: "Payments show here with their proof once your client pays.",
     paidIn: "Paid in",
     viewReceipt: "View receipt",
+    statement: "Statement for this invoice",
     on: "on",
     yourTx: "Client's transaction",
     payoutTx: "Payout transaction",

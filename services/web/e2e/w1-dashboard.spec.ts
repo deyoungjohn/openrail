@@ -309,6 +309,15 @@ test.describe("claim detail", () => {
     );
   });
 
+  test("links to a statement for this invoice only", async ({ page }) => {
+    await mockApi(page, handlers);
+    await page.goto("/app/invoices/inv_01J00000000000000000000000");
+    await expect(page.getByRole("link", { name: "Statement for this invoice" })).toHaveAttribute(
+      "href",
+      "/app/statements?token_id=c-1",
+    );
+  });
+
   test("each payment links to its public receipt by booking hash", async ({ page }) => {
     await mockApi(page, handlers);
     await page.goto("/app/invoices/inv_01J00000000000000000000000");
