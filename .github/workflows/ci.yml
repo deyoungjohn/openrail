@@ -24,7 +24,7 @@ jobs:
     name: changes
     timeout-minutes: 15
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
@@ -35,11 +35,6 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ runner.environment == 'github-hosted' }}
-      - name: Clean untracked files on self-hosted
-        if: runner.environment != 'github-hosted'
-        run: git clean -fd
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: filter
         with:
@@ -89,14 +84,9 @@ jobs:
     name: quick
     timeout-minutes: 15
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ runner.environment == 'github-hosted' }}
-      - name: Clean untracked files on self-hosted
-        if: runner.environment != 'github-hosted'
-        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -107,7 +97,6 @@ jobs:
           rustup show active-toolchain || rustup toolchain install
           rustup target add wasm32-unknown-unknown
       - name: Rust cache
-        if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
       - name: Secret scan
@@ -123,14 +112,9 @@ jobs:
     timeout-minutes: 30
     needs: changes
     if: (github.event_name == 'push') || (needs.changes.outputs.contracts == 'true')
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ runner.environment == 'github-hosted' }}
-      - name: Clean untracked files on self-hosted
-        if: runner.environment != 'github-hosted'
-        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -141,17 +125,15 @@ jobs:
           rustup show active-toolchain || rustup toolchain install
           rustup target add wasm32-unknown-unknown
       - name: Rust cache
-        if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
       - name: Cache cargo-near binary
-        if: runner.environment == 'github-hosted'
         id: cargo-near-cache
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cargo-near
           key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
       - name: Install cargo-near (pinned)
-        if: runner.environment == 'github-hosted' && steps.cargo-near-cache.outputs.cache-hit != 'true'
+        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
           cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
@@ -178,16 +160,11 @@ jobs:
     timeout-minutes: 40
     needs: [changes, contract]
     if: always() && (needs.changes.result == 'success') && (needs.contract.result == 'success' || needs.contract.result == 'skipped') && ((github.event_name == 'push') || (needs.changes.outputs.core == 'true'))
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
-    env:
-      TMPDIR: ${{ runner.temp }}
+    runs-on: ubuntu-latest
     steps:
+      - name: Set sandbox temp directory
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ runner.environment == 'github-hosted' }}
-      - name: Clean untracked files on self-hosted
-        if: runner.environment != 'github-hosted'
-        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -198,17 +175,15 @@ jobs:
           rustup show active-toolchain || rustup toolchain install
           rustup target add wasm32-unknown-unknown
       - name: Rust cache
-        if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
       - name: Cache cargo-near binary
-        if: runner.environment == 'github-hosted'
         id: cargo-near-cache
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cargo-near
           key: cargo-near-${{ env.CARGO_NEAR_VERSION }}-${{ runner.os }}
       - name: Install cargo-near (pinned)
-        if: runner.environment == 'github-hosted' && steps.cargo-near-cache.outputs.cache-hit != 'true'
+        if: steps.cargo-near-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
           cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
@@ -225,18 +200,12 @@ jobs:
     timeout-minutes: 15
     needs: changes
     if: (github.event_name == 'push') || (needs.changes.outputs.modules == 'true')
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ runner.environment == 'github-hosted' }}
-      - name: Clean untracked files on self-hosted
-        if: runner.environment != 'github-hosted'
-        run: git clean -fd
       - name: Rust toolchain (from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - name: Rust cache
-        if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
       - name: Test each module sequentially
         run: |
@@ -251,14 +220,9 @@ jobs:
     timeout-minutes: 15
     needs: changes
     if: (github.event_name == 'push') || (needs.changes.outputs.modules == 'true')
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ runner.environment == 'github-hosted' }}
-      - name: Clean untracked files on self-hosted
-        if: runner.environment != 'github-hosted'
-        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -267,7 +231,6 @@ jobs:
       - name: Rust toolchain (from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - name: Rust cache
-        if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
       - name: Every enabled module
@@ -279,14 +242,9 @@ jobs:
     timeout-minutes: 15
     needs: changes
     if: (github.event_name == 'push') || (needs.changes.outputs.web == 'true')
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ runner.environment == 'github-hosted' }}
-      - name: Clean untracked files on self-hosted
-        if: runner.environment != 'github-hosted'
-        run: git clean -fd
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -304,14 +262,9 @@ jobs:
     name: e2e
     timeout-minutes: 15
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ runner.environment == 'github-hosted' }}
-      - name: Clean untracked files on self-hosted
-        if: runner.environment != 'github-hosted'
-        run: git clean -fd
       - run: echo "TODO owner I1, end-to-end suite"
 
   # Aggregate status check keeping a single unified check name that passes when required jobs succeed or are cleanly skipped
@@ -320,7 +273,7 @@ jobs:
     timeout-minutes: 15
     needs: [changes, quick, contract, core-only, each-module, all-enabled, web, e2e]
     if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
     steps:
       - name: Verify all required jobs passed or were skipped cleanly
         env:

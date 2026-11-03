@@ -14,17 +14,9 @@
 | `docs.sh` | `docs` | P0.2 |
 | `enabled-features` | none | P0.1 (prints the enabled module ids, comma-separated; `--all` lists every id) |
 
-## CI Runner Modes
+## CI Runner
 
-The GitHub Actions workflows (`ci.yml` and `nightly.yml`) are runner-agnostic and operate in two modes based on `vars.CI_RUNNER`:
-1. **GitHub-Hosted (`ubuntu-latest`)**:
-   - Default when `vars.CI_RUNNER` is unset or empty.
-   - Installs native libraries (`libudev-dev`, `pkg-config`) via `sudo apt-get`.
-   - Uses `Swatinem/rust-cache` and `actions/cache` for `cargo-near` binaries.
-   - Uses default workspace `target/` directories.
-2. **Self-Hosted (`["self-hosted", "openrail"]`)**:
-   - Activated when `vars.CI_RUNNER` is configured to `["self-hosted","openrail"]`.
-   - Runs as isolated user `ghrunner` (mode 750 protection from host user credentials; see `tools/setup-ci-runner.sh`).
-   - Bypasses `sudo` steps and caching actions; all dependencies (rustup, cargo-near 0.22.0, node 22, pnpm) are pre-installed on the runner.
-   - Uses `clean: false` on checkout with `git clean -fd` to keep workspace `target/` directories intact between runs.
-   - Applies `CARGO_BUILD_JOBS=6`, `RUST_TEST_THREADS=4`, job timeouts, and sequential execution for heavy jobs to avoid machine starvation.
+The GitHub Actions workflows (`ci.yml` and `nightly.yml`) run on GitHub-hosted `ubuntu-latest` runners:
+- Uses `Swatinem/rust-cache` and `actions/cache` for `cargo-near` binaries.
+- Sets `TMPDIR=$RUNNER_TEMP` on sandbox test jobs to avoid shared lockfile contention.
+- Applies `CARGO_BUILD_JOBS=6`, `RUST_TEST_THREADS=4`, job timeouts, and sequential execution for heavy jobs.
