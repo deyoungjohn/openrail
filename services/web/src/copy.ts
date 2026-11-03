@@ -594,7 +594,8 @@ export const copy = {
     costShare: (p: string) => `${p} of this cash-out`,
     costHigh:
       "The route costs a large share of this cash-out. A bigger amount costs less in proportion.",
-    youReceive: "You receive",
+    youReceive: "You receive exactly",
+    bufferNote: "Up to 1% extra is held while the cash-out runs, and comes back to you.",
     on: (chain: string) => `on ${chain}`,
     to: "To",
     expiresIn: "Quote valid for",

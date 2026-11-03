@@ -214,6 +214,7 @@ export function CashoutScreen() {
                 </dd>
               </div>
             </dl>
+            <p className="caption">{t.bufferNote}</p>
             {highCost(share) ? <p className="caption">{t.costHigh}</p> : null}
           </section>
 

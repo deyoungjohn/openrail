@@ -222,7 +222,11 @@ test.describe("cash out", () => {
     const cost = page.getByRole("region", { name: "What it costs" });
     await expect(cost).toContainText("$0.30");
     await expect(cost).toContainText("15.0% of this cash-out");
+    await expect(cost).toContainText("You receive exactly");
     await expect(cost).toContainText("1.998 USDC");
+    await expect(cost).toContainText(
+      "Up to 1% extra is held while the cash-out runs, and comes back to you.",
+    );
     expect(calls.find((c) => c.key === "POST /v1/cashout/quote")!.body).toEqual({
       amount: "2000000",
       destination_chain: "base",
