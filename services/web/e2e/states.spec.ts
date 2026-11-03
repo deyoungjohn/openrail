@@ -296,7 +296,9 @@ test.describe("keyboard: every control is reachable and shows the focus ring", (
       await mockApi(page, base());
       await page.goto(path);
       await page.getByRole("heading", { level: 1 }).waitFor();
-      await page.waitForTimeout(700);
+      // Wait for the data to arrive: a page still showing skeletons has fewer stops.
+      await expect(page.locator("main .skeleton")).toHaveCount(0);
+      await page.waitForTimeout(300);
       await keyboardWalk(page, min);
     });
 
@@ -312,7 +314,9 @@ test.describe("keyboard: every control is reachable and shows the focus ring", (
       await mockApi(page, base());
       await page.goto(path);
       await page.getByRole("heading", { level: 1 }).first().waitFor();
-      await page.waitForTimeout(700);
+      // Wait for the data to arrive: a page still showing skeletons has fewer stops.
+      await expect(page.locator("main .skeleton")).toHaveCount(0);
+      await page.waitForTimeout(300);
       await keyboardWalk(page, min);
     });
 });
