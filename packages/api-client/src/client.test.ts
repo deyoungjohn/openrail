@@ -65,6 +65,16 @@ describe("typed client", () => {
     expect(url.searchParams.get("status")).toBe("Issued");
   });
 
+  it("lists payments", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(fixture("payments.list.json")));
+    const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });
+
+    const payments = await client.payments.list();
+
+    expect(payments.data[0]?.amount).toBe("12500000");
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.openrail.near/v1/payments");
+  });
+
   it("raises ApiError with the documented code and rule", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(fixture("error.404.json"), 404));
     const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });

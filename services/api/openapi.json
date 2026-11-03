@@ -597,7 +597,9 @@
           "ack_url",
           "created_at",
           "created_block",
-          "terms"
+          "terms",
+          "outstanding",
+          "paid_total"
         ],
         "properties": {
           "id": {
@@ -669,6 +671,12 @@
           },
           "terms": {
             "$ref": "#/components/schemas/Terms"
+          },
+          "outstanding": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "paid_total": {
+            "$ref": "#/components/schemas/U128"
           }
         }
       },
@@ -811,7 +819,8 @@
           "terms_hash",
           "payment_instruction_v1",
           "origin_tx",
-          "near_tx_hashes"
+          "near_tx_hashes",
+          "booking_tx_hash"
         ],
         "properties": {
           "id": {
@@ -865,6 +874,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "booking_tx_hash": {
+            "type": "string"
           }
         }
       },
@@ -1969,7 +1981,8 @@
           "deposit_type",
           "swap_type",
           "route_id",
-          "deadline"
+          "deadline",
+          "min_amount_in"
         ],
         "properties": {
           "amount": {
@@ -2006,6 +2019,9 @@
           "deadline": {
             "type": "string",
             "format": "date-time"
+          },
+          "min_amount_in": {
+            "$ref": "#/components/schemas/U128"
           }
         }
       },
@@ -2094,6 +2110,54 @@
           "ok": {
             "type": "boolean",
             "const": true
+          }
+        }
+      },
+      "PaymentListItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "invoice_id",
+          "amount",
+          "origin_chain",
+          "origin_asset",
+          "status",
+          "booked_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "invoice_id": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "origin_chain": {
+            "type": "string"
+          },
+          "origin_asset": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "booked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaymentList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentListItem"
+            }
           }
         }
       }
@@ -3820,6 +3884,15 @@
               "type": "string",
               "enum": ["csv", "pdf"]
             }
+          },
+          {
+            "name": "token_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter the statement to one claim.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4245,6 +4318,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/payments": {
+      "get": {
+        "operationId": "listPayments",
+        "summary": "List payments for the authenticated business",
+        "tags": ["Payments"],
+        "security": [
+          {
+            "secretKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payments.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

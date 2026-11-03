@@ -152,6 +152,22 @@ describe("invoice route", () => {
     expect(bad.status).toBe(400);
   });
 
+  it("lists payments for the business", async () => {
+    const { app, secret } = harness();
+    app.store.savePayment("pay_1", {
+      id: "pay_1",
+      invoice_id: "inv_1",
+      amount: "12500000",
+      origin_chain: "base",
+      origin_asset: "nep141:usdc",
+      status: "success",
+      booked_at: "2026-11-02T10:00:00Z",
+    });
+    const response = await app.handle(request("GET", "/v1/payments", undefined, secret));
+    expect(response.status).toBe(200);
+    expect((response.body as { data: { id: string }[] }).data[0]?.id).toBe("pay_1");
+  });
+
   it("adds kind_rules to the claim view", async () => {
     const { app, secret } = harness();
     await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));

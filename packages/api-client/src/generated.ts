@@ -149,6 +149,8 @@ export interface Invoice {
   created_at: string;
   created_block: number;
   terms: Terms;
+  outstanding: U128;
+  paid_total: U128;
 }
 
 export interface InvoiceList {
@@ -204,6 +206,7 @@ export interface Receipt {
     amount?: U128;
   };
   near_tx_hashes: string[];
+  booking_tx_hash: string;
 }
 
 export interface ReceiptList {
@@ -532,6 +535,7 @@ export interface CashoutQuote {
   swap_type: "EXACT_OUTPUT";
   route_id: string;
   deadline: string;
+  min_amount_in: U128;
 }
 
 export interface PublicReceipt {
@@ -565,6 +569,20 @@ export interface AuthSessionInfo {
 
 export interface LogoutResponse {
   ok: true;
+}
+
+export interface PaymentListItem {
+  id: string;
+  invoice_id: string;
+  amount: U128;
+  origin_chain: string;
+  origin_asset: string;
+  status: PaymentStatus;
+  booked_at: string;
+}
+
+export interface PaymentList {
+  data: PaymentListItem[];
 }
 
 export interface operations {
@@ -906,6 +924,7 @@ export interface operations {
         from?: string;
         to?: string;
         format?: "csv" | "pdf";
+        token_id?: string;
       };
     };
     responses: {
@@ -997,6 +1016,13 @@ export interface operations {
     };
     responses: {
       "200": LogoutResponse;
+    };
+  };
+  listPayments: {
+    responses: {
+      "200": PaymentList;
+      "400": Error;
+      "401": Error;
     };
   };
 }

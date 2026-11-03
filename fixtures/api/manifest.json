@@ -304,6 +304,14 @@
       "status": 200,
       "schema": "LogoutResponse",
       "mock": true
+    },
+    {
+      "file": "payments.list.json",
+      "method": "GET",
+      "path": "/v1/payments",
+      "status": 200,
+      "schema": "PaymentList",
+      "mock": true
     }
   ]
 }

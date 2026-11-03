@@ -1,0 +1,13 @@
+{
+  "data": [
+    {
+      "id": "pay_01J00000000000000000000000",
+      "invoice_id": "inv_01J00000000000000000000000",
+      "amount": "12500000",
+      "origin_chain": "base",
+      "origin_asset": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+      "status": "success",
+      "booked_at": "2026-11-02T10:01:35Z"
+    }
+  ]
+}

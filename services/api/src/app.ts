@@ -90,6 +90,8 @@ export interface InvoiceRecord {
   debtor: { Near: string } | { Evm: string } | null;
   terms_hash: string;
   amount_due: string;
+  outstanding: string;
+  paid_total: string;
   amount_usd: string;
   due_date: string;
   invoice_number: string;
@@ -606,7 +608,11 @@ export class ApiApp {
         return {
           status: 200,
           body: {
-            invoice: this.invoiceView(invoice),
+            invoice: {
+              ...this.invoiceView(invoice),
+              outstanding: String(claim.outstanding ?? invoice.outstanding),
+              paid_total: String(claim.booked_total ?? invoice.paid_total),
+            },
             claim: { ...claim, kind_rules: kindRules(Number(claim.kind ?? 0)) },
           },
         };
@@ -839,7 +845,10 @@ export class ApiApp {
       this.requireAuth(request);
       const format = request.query.get("format") === "pdf" ? "pdf" : "csv";
       const context = this.requireAuth(request);
-      const invoices = this.store.listInvoices(context.accountId);
+      const tokenId = request.query.get("token_id");
+      const invoices = this.store
+        .listInvoices(context.accountId)
+        .filter((invoice) => tokenId === null || invoice.token_id === tokenId);
       const csv = [
         "invoice_number,amount_usd,due_date,status",
         ...invoices.map(
@@ -978,6 +987,11 @@ export class ApiApp {
       };
     }
 
+    if (path === "/v1/payments" && method === "GET") {
+      const context = this.requireAuth(request);
+      return { status: 200, body: { data: this.store.listPayments(context.accountId) } };
+    }
+
     const paymentMatch = /^\/v1\/payments\/([^/]+)$/.exec(path);
     if (paymentMatch !== null && method === "GET") {
       this.requireAuth(request);
@@ -1052,6 +1066,8 @@ export class ApiApp {
       debtor,
       terms_hash: hash,
       amount_due: amountDue,
+      outstanding: amountDue,
+      paid_total: "0",
       amount_usd: terms.amount_usd,
       due_date: terms.due_date.slice(0, 10),
       invoice_number: terms.invoice_number,
