@@ -23,23 +23,19 @@ use serde_json::json;
 async fn smoke_scale_stubs_return_not_implemented() -> Result<()> {
     let env = Env::new().await?;
 
-    // Note: reconcile is implemented in C4; test C2 stub
-    let res = env
+    // Note: C2 and C4 are implemented; test C5 stub (close)
+    let close_res = env
         .alice
-        .call(env.root.id(), "nft_transfer")
-        .args_json(json!({
-            "receiver_id": env.bob.id(),
-            "token_id": "c-1"
-        }))
-        .deposit(near_workspaces::types::NearToken::from_yoctonear(1))
+        .call(env.root.id(), "close")
+        .args_json(json!({ "token_id": "c-1" }))
         .max_gas()
         .transact()
         .await?;
-    assert!(res.is_failure());
-    let failure = format!("{:?} {}", res.failures(), res.logs().join(" "));
+    assert!(close_res.is_failure());
+    let failure = format!("{:?} {}", close_res.failures(), close_res.logs().join(" "));
     assert!(
         failure.contains("NOT_IMPLEMENTED"),
-        "nft_transfer must fail with NOT_IMPLEMENTED, got: {failure}"
+        "close must fail with NOT_IMPLEMENTED, got: {failure}"
     );
 
     Ok(())
