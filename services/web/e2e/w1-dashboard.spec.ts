@@ -10,13 +10,24 @@ test.beforeEach(async ({ context }) => {
 const day = (offset: number) =>
   new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 const base = fixture("invoices.list").data[0];
-const inv = (id: string, over: Record<string, unknown>) => ({
-  ...base,
-  id,
-  token_id: id.replace("inv_", "c-"),
-  invoice_number: id.replace("inv_", "INV-"),
-  ...over,
-});
+// USDC base units for an API amount like "250.50".
+const units = (usd: string) => (BigInt(usd.replace(".", "")) * 10_000n).toString();
+const inv = (id: string, over: Record<string, unknown>) => {
+  const merged = {
+    ...base,
+    id,
+    token_id: id.replace("inv_", "c-"),
+    invoice_number: id.replace("inv_", "INV-"),
+    ...over,
+  } as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const paid = merged.status === "Paid";
+  // Keep the SQ-10 fields consistent with the amount unless a test sets them.
+  return {
+    ...merged,
+    outstanding: over.outstanding ?? (paid ? "0" : units(merged.amount_usd)),
+    paid_total: over.paid_total ?? (paid ? units(merged.amount_usd) : "0"),
+  };
+};
 
 const LIST = {
   data: [

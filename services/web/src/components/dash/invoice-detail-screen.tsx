@@ -49,6 +49,16 @@ function Payments({ invoiceId }: { invoiceId: string }) {
               </p>
               <p className="caption">{t.yourTx}</p>
               <AddressChip value={p.origin_tx.hash} chain={chain ?? undefined} />
+              {p.booking_tx_hash ? (
+                <p>
+                  <Link
+                    href={`/r/${encodeURIComponent(p.booking_tx_hash)}`}
+                    className="text-accent text-[14px] hover:underline"
+                  >
+                    {t.viewReceipt}
+                  </Link>
+                </p>
+              ) : null}
               {p.near_tx_hashes.map((h) => (
                 <div key={h}>
                   <p className="caption">{t.payoutTx}</p>

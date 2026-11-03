@@ -7,6 +7,39 @@ test.skip(!process.env.SCREENSHOTS, "set SCREENSHOTS=1");
 
 const DETAIL = fixture("invoices.get");
 const handlers = {
+  "GET /v1/payments": {
+    body: {
+      data: [
+        {
+          id: "p1",
+          invoice_id: "i",
+          amount: "12500000",
+          origin_chain: "base",
+          origin_asset: "a",
+          status: "success",
+          booked_at: "2026-10-03T10:00:00Z",
+        },
+        {
+          id: "p2",
+          invoice_id: "i",
+          amount: "250000000",
+          origin_chain: "arbitrum",
+          origin_asset: "a",
+          status: "success",
+          booked_at: "2026-11-01T10:00:00Z",
+        },
+        {
+          id: "p3",
+          invoice_id: "i",
+          amount: "40000000",
+          origin_chain: "solana",
+          origin_asset: "a",
+          status: "success",
+          booked_at: "2026-11-02T10:00:00Z",
+        },
+      ],
+    },
+  },
   "GET /v1/business": { body: fixture("business.get") },
   "GET /v1/business/storage_credit": { body: fixture("business.storage_credit") },
   "GET /v1/invoices": { body: fixture("invoices.list") },

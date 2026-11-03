@@ -3,14 +3,16 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
-import { Cell, Pie, PieChart } from "recharts";
+import { Bar, BarChart, Cell, Pie, PieChart, XAxis } from "recharts";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { formatUsd } from "@/lib/format";
-import { summarize } from "@/lib/invoice-model";
+import { paymentsByChain, paymentsByMonth, summarize } from "@/lib/invoice-model";
+import { formatUsdc } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
+import { CHAINS } from "../ui/chain-badge";
 import { KpiTile } from "../ui/kpi-tile";
 import { InvoiceTable } from "./invoice-table";
 
@@ -21,6 +23,85 @@ const CREATE = (
     </Button>
   </Link>
 );
+
+const CHAIN_COLORS = [
+  "var(--accent)",
+  "var(--info)",
+  "var(--success)",
+  "var(--warning)",
+  "var(--text-muted)",
+];
+
+function Payments() {
+  const d = copy.dash;
+  const [pay, retry] = useAsync(() => dashClient.payments.list(), []);
+  const rows = pay.state === "ready" ? pay.data.data : [];
+  const chains = paymentsByChain(rows);
+  const months = paymentsByMonth(rows);
+  const state = pay.state === "ready" ? (chains.length === 0 ? "empty" : "ready") : pay.state;
+  const summary = months.map((m) => `${m.month}: ${formatUsdc(m.units)}`).join(", ");
+
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-3">
+      <div className="lg:col-span-2">
+        <Card
+          title={d.byMonth}
+          state={state}
+          emptyTitle={d.noPayments}
+          emptyBody={d.noPaymentsBody}
+          errorBody={d.loadError}
+          onRetry={retry}
+        >
+          <BarChart
+            width={560}
+            height={200}
+            data={months.map((m) => ({ month: m.month, usdc: Number(m.units) / 1_000_000 }))}
+            role="img"
+            aria-label={summary}
+            className="max-w-full"
+          >
+            <XAxis
+              dataKey="month"
+              tickLine={false}
+              axisLine={false}
+              stroke="var(--text-muted)"
+              fontSize={12}
+            />
+            <Bar
+              dataKey="usdc"
+              fill="var(--accent)"
+              radius={[4, 4, 0, 0]}
+              isAnimationActive={false}
+            />
+          </BarChart>
+          <p className="caption">{summary}</p>
+        </Card>
+      </div>
+      <Card
+        title={d.paidFrom}
+        state={state}
+        emptyTitle={d.noPayments}
+        emptyBody={d.noPaymentsBody}
+        errorBody={d.loadError}
+        onRetry={retry}
+      >
+        <ul className="space-y-2">
+          {chains.map((c, i) => (
+            <li key={c.chain} className="flex items-center gap-2 text-[14px]">
+              <span
+                aria-hidden
+                className="size-2.5 rounded-full"
+                style={{ background: CHAIN_COLORS[Math.min(i, CHAIN_COLORS.length - 1)] }}
+              />
+              <span>{CHAINS[c.chain as keyof typeof CHAINS] ?? c.chain}</span>
+              <span className="tabular ml-auto font-medium">{formatUsdc(c.units)}</span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  );
+}
 
 export function DashboardScreen() {
   const d = copy.dash;
@@ -161,6 +242,7 @@ export function DashboardScreen() {
               </Card>
             </div>
           </div>
+          <Payments />
         </>
       )}
     </div>
