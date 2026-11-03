@@ -305,3 +305,14 @@ for (const scheme of ["light", "dark"] as const) {
     await axeClean(page);
   });
 }
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`create key dialog at 360px, ${scheme}: no WCAG AA violations`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockApi(page, base());
+    await page.goto("/app/developers");
+    await page.getByRole("button", { name: "Create key" }).click();
+    await expect(page.getByRole("dialog").getByRole("group", { name: "Scopes" })).toBeVisible();
+    await axeClean(page);
+  });
+}

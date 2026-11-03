@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
+import { API_KEY_SCOPES, DEFAULT_SCOPES, scopesProblem } from "@/lib/api-scopes";
 import { useAsync } from "@/lib/use-async";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
@@ -106,6 +107,7 @@ function ApiKeysPanel() {
   const [keys, reload] = useAsync(() => dashClient.apiKeys.list(), []);
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
+  const [scopes, setScopes] = useState<string[]>(DEFAULT_SCOPES);
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -181,6 +183,7 @@ function ApiKeysPanel() {
           icon={<Plus size={16} strokeWidth={1.5} aria-hidden />}
           onClick={() => {
             setName("");
+            setScopes(DEFAULT_SCOPES);
             setShown(false);
             setFailed(false);
             setCreateOpen(true);
@@ -205,12 +208,12 @@ function ApiKeysPanel() {
           onSubmit={async (e) => {
             e.preventDefault();
             setShown(true);
-            if (name.trim() === "") return;
+            if (name.trim() === "" || scopesProblem(scopes) !== null) return;
             setBusy(true);
             setFailed(false);
             try {
               const k = await dashClient.apiKeys.create(
-                { name: name.trim() },
+                { name: name.trim(), scopes: API_KEY_SCOPES.filter((x) => scopes.includes(x)) },
                 { idempotencyKey: idem.current },
               );
               idem.current = crypto.randomUUID();
@@ -230,6 +233,26 @@ function ApiKeysPanel() {
             onChange={(e) => setName(e.target.value)}
             error={shown && name.trim() === "" ? t.badKeyName : undefined}
           />
+          <fieldset className="space-y-2">
+            <legend className="text-[14px] leading-5 font-medium">{t.scopes}</legend>
+            <p className="caption">{t.scopesHelp}</p>
+            {API_KEY_SCOPES.map((sc) => (
+              <label key={sc} className="flex items-center gap-2 text-[14px]">
+                <input
+                  type="checkbox"
+                  checked={scopes.includes(sc)}
+                  onChange={(e) =>
+                    setScopes((l) => (e.target.checked ? [...l, sc] : l.filter((x) => x !== sc)))
+                  }
+                  className="size-4 accent-[var(--accent)]"
+                />
+                <code className="font-mono text-[13px]">{sc}</code>
+              </label>
+            ))}
+            {shown && scopesProblem(scopes) ? (
+              <p className="text-danger-text text-[14px]">{scopesProblem(scopes)}</p>
+            ) : null}
+          </fieldset>
           {failed ? (
             <p role="alert" className="text-danger-text text-[14px]">
               {t.actionFailed}
