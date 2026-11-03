@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -260,12 +261,30 @@ jobs:
 
   e2e:
     name: e2e
+    needs: changes
     timeout-minutes: 15
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "TODO owner I1, end-to-end suite"
+      - if: github.event_name == 'push' || needs.changes.outputs.web == 'true'
+        uses: pnpm/action-setup@v4
+      - if: github.event_name == 'push' || needs.changes.outputs.web == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: github.event_name == 'push' || needs.changes.outputs.web == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: github.event_name == 'push' || needs.changes.outputs.web == 'true'
+        name: Build web package
+        run: pnpm --filter @openrail/web build
+      - if: github.event_name == 'push' || needs.changes.outputs.web == 'true'
+        name: Run signed-in smoke tests on mock API
+        run: pnpm --filter @openrail/web test:e2e:smoke
+      - if: github.event_name == 'pull_request' && needs.changes.outputs.web != 'true'
+        name: Skip smoke test
+        run: echo 'Skipping smoke test - web files were not changed in this pull request.'
 
   # Aggregate status check keeping a single unified check name that passes when required jobs succeed or are cleanly skipped
   ci-ok:
