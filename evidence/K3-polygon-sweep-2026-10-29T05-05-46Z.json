@@ -36,7 +36,7 @@
     {
       "chain": "near",
       "hash": "AwN37rTDuZwg7TQYWV7c3A84NsqoU5DY9iP8XoPuZV9r",
-      "purpose": "inv-2.owed-test.nearhackathons.near.sign via vault -> v1.signer"
+      "purpose": "inv-2.owed-test.nhk.near.sign via vault -> v1.signer"
     },
     {
       "chain": "polygon",

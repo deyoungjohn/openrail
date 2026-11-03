@@ -27,8 +27,8 @@
     "fee_gain_raw": "25000",
     "invoice_state": {
       "token_id": "inv-1",
-      "owner_id": "holder2.nearhackathons.near",
-      "invoice_account": "inv-1.k4.owed-test.nearhackathons.near",
+      "owner_id": "holder2.nhk.near",
+      "invoice_account": "inv-1.k4.owed-test.nhk.near",
       "amount_due": "100000000",
       "booked_total": "10000000",
       "distributed_total": "9975000",

@@ -12,7 +12,7 @@
     "max_signing_seconds_below_window": 49
   },
   "measurements": {
-    "invoice": "inv-2.owed-test.nearhackathons.near",
+    "invoice": "inv-2.owed-test.nhk.near",
     "mpc_contract": "v1.signer",
     "solana_address": "6oEGUW2K2KZiE6bJMzwiuJ4pRr15enKswDc8WM5QZPhu",
     "samples_seconds": [

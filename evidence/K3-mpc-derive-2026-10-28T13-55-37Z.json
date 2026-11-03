@@ -16,7 +16,7 @@
   "measurements": {
     "rpc_host": "free.rpc.fastnear.com",
     "mpc_contract": "v1.signer",
-    "predecessor": "inv-1.owed-test.nearhackathons.near",
+    "predecessor": "inv-1.owed-test.nhk.near",
     "addresses": {
       "evm": "0x5edfd837433dd294b3658403f8ff448fd42cbb6c",
       "sol": "D94AAm6jp3u8U8GotLzuAd2coPZYVBRajjNetR2iNm7J"

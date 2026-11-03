@@ -29,7 +29,7 @@
   ],
   "observations": [
     "K2' part B execution: mode=LIVE",
-    "recipient=inv-1.owed-test.nearhackathons.near, refundTo=0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
+    "recipient=inv-1.owed-test.nhk.near, refundTo=0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
     "planned spend: $20 USDC across base, arbitrum",
     "Broadcasted 2 origin transfers successfully.",
     "Recovery available via scripts/recover_funds.ts."

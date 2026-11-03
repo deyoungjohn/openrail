@@ -45,7 +45,7 @@
     {
       "chain": "near",
       "hash": "4BXKcPhBru6B8xyhFBNh468C1P3A27kt1ytyQcd12vCS",
-      "purpose": "inv-2.owed-test.nearhackathons.near.sign Ed25519 via vault -> v1.signer"
+      "purpose": "inv-2.owed-test.nhk.near.sign Ed25519 via vault -> v1.signer"
     },
     {
       "chain": "solana",
