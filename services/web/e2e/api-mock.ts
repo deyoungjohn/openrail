@@ -17,6 +17,8 @@ const CORS = {
 export interface Handler {
   status?: number;
   body: unknown;
+  /** Hold the answer back, to look at a loading state. */
+  delayMs?: number;
 }
 export type Handlers = Record<string, Handler | ((req: { body: any; url: URL }) => Handler)>;
 
@@ -42,6 +44,7 @@ export async function mockApi(page: Page, handlers: Handlers) {
       });
     calls.push({ key: entry[0], body });
     const h = typeof entry[1] === "function" ? entry[1]({ body, url }) : entry[1];
+    if (h.delayMs) await new Promise((r) => setTimeout(r, h.delayMs));
     return route.fulfill({
       status: h.status ?? 200,
       headers: { ...CORS, "content-type": "application/json" },

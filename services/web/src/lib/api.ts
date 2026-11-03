@@ -17,6 +17,8 @@ export const mockApi: OpenrailApi = {
   async getClaim(tokenId) {
     await wait(300);
     if (tokenId === "c-error") throw new Error("MOCK_ERROR");
+    // Fixture mode only: hold the answer back so a test can look at the loading state.
+    if (tokenId === "c-slow") await wait(8000);
     return mockClaims[tokenId] ?? null;
   },
   async getPaymentLog(tokenId) {
