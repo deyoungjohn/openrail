@@ -4,4 +4,4 @@ Get paid in stablecoins: send an invoice link, your client pays in what they hol
 
 Designed and tested before 1 Nov; see `evidence/`.
 
-Work in progress for the NEAR Hackathon (1–14 Nov 2026). This README is regenerated from `docs/src` as the product is built.
+Work in progress. This README is regenerated from `docs/src` as the product is built.

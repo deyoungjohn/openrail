@@ -36,7 +36,7 @@
     {
       "chain": "near",
       "hash": "ExmpBFRvTfJxuPh96tyyD5PmQs23Hjk2LbWkU1xhDihb",
-      "purpose": "inv-2.owed-test.nearhackathons.near.sign via vault -> v1.signer"
+      "purpose": "inv-2.owed-test.nhk.near.sign via vault -> v1.signer"
     },
     {
       "chain": "optimism",

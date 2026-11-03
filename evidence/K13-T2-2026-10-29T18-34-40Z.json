@@ -13,13 +13,13 @@
     "wasm_imports_clean": true
   },
   "measurements": {
-    "contract": "k13.owed-test.nearhackathons.near",
-    "invoice_account": "inv-1.k13.owed-test.nearhackathons.near",
+    "contract": "k13.owed-test.nhk.near",
+    "invoice_account": "inv-1.k13.owed-test.nhk.near",
     "wasm_bytes": 268935,
     "storage_locked_near": 2.6893499999999997,
     "round1": {
       "ok": true,
-      "payee": "owed-test.nearhackathons.near",
+      "payee": "owed-test.nhk.near",
       "payee_gain_raw": "1995000",
       "expected_raw": "1995000",
       "status": "PartiallyPaid",
@@ -28,7 +28,7 @@
     },
     "round2": {
       "ok": true,
-      "payee": "holder2.nearhackathons.near",
+      "payee": "holder2.nhk.near",
       "payee_gain_raw": "1995000",
       "status": "Paid",
       "reconcile_gas_tgas": 22.899713667587

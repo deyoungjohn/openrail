@@ -15,8 +15,8 @@
     "overhead_usd_lte": 0.2
   },
   "measurements": {
-    "contract": "k15.owed-test.nearhackathons.near",
-    "invoice": "inv-1.k15.owed-test.nearhackathons.near",
+    "contract": "k15.owed-test.nhk.near",
+    "invoice": "inv-1.k15.owed-test.nhk.near",
     "wasm_bytes": 239647,
     "storage_locked_near": 2.39647,
     "derived_evm": "0x13d0fdf666d345d8d4ab83897ac0ee10f710d162",

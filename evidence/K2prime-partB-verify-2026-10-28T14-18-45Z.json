@@ -49,7 +49,7 @@
   },
   "tx": [],
   "observations": [
-    "account read: inv-1.owed-test.nearhackathons.near; balances are the raw mt_balance_of on intents.near (public view), not a formatted dollar value",
+    "account read: inv-1.owed-test.nhk.near; balances are the raw mt_balance_of on intents.near (public view), not a formatted dollar value",
     "minutes = block time of the last nearTxHash (the public transfer intent, from NearBlocks v3) minus the origin-chain block time; the status updatedAt is a heartbeat and is NOT used (it was 27 minutes after the credit)",
     "each swap shows two NEAR txs: ft_deposit to intents.near (bridged credit to the deposit-address account), then execute_intents with a public transfer intent to the invoice account",
     "the Intents credit landed on a NEAR account that did not exist; recovery needs the account to exist and be controllable by the parent (design impact: issue(n) must run before recovery, ideally before the payer sees the deposit address)",

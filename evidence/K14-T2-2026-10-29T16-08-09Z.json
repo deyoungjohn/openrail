@@ -13,7 +13,7 @@
     "wallet_digest_equals_contract_digest": true
   },
   "measurements": {
-    "contract": "k14.owed-test.nearhackathons.near",
+    "contract": "k14.owed-test.nhk.near",
     "token_id": "inv-1",
     "chain_id": 1,
     "debtor_evm": "0x12dcbbc7f96b87220e90b46d9528db156b1da841",

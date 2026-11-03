@@ -26,7 +26,7 @@
   },
   "tx": [],
   "observations": [
-    "real native USDC on NEAR (17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1); owner holder2.nearhackathons.near",
+    "real native USDC on NEAR (17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1); owner holder2.nhk.near",
     "the advance stays in the owner account (case A) or in claimable (case B); recover with PHASE=withdraw and release_storage.ts"
   ],
   "fallback_triggered": null,

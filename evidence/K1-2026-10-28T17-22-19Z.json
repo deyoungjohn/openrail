@@ -21,8 +21,8 @@
     "code_hash": "3YBy8dfo5CtT5jaVEZHsTMHCWqwWHM68RfmYPRwXA1ha",
     "vault_bytes": 6568,
     "global_publish_burn_near": 0.6567999999999999,
-    "parent_account": "owed-test.nearhackathons.near",
-    "invoice_account": "inv-2.owed-test.nearhackathons.near"
+    "parent_account": "owed-test.nhk.near",
+    "invoice_account": "inv-2.owed-test.nhk.near"
   },
   "tx": [
     {
@@ -51,11 +51,11 @@
     "vault 6568 bytes, factory 6304 bytes",
     "vault already published by a previous run (code hash 3YBy8dfo5CtT5jaVEZHsTMHCWqwWHM68RfmYPRwXA1ha); not publishing (and burning) again",
     "vault code hash on mainnet: 3YBy8dfo5CtT5jaVEZHsTMHCWqwWHM68RfmYPRwXA1ha",
-    "issue(2) created inv-2.owed-test.nearhackathons.near on attempt 1; cost = parent total-balance delta of the attempt that worked, including the 0.01 NEAR transferred to it: 0.017233 NEAR",
-    "access keys of inv-2.owed-test.nearhackathons.near: 0",
-    "inv-2.owed-test.nearhackathons.near now exists keyless; Intents balances credited to it are recoverable with scripts/recover_funds.ts (forward, signed by the parent)",
-    "forward from non-parent k1probe.owed-test.nearhackathons.near: failed=true {\"index\":0,\"kind\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: Unauthorized: caller is not parent account\"}}}}",
-    "probe account k1probe.owed-test.nearhackathons.near deleted, funds returned to parent"
+    "issue(2) created inv-2.owed-test.nhk.near on attempt 1; cost = parent total-balance delta of the attempt that worked, including the 0.01 NEAR transferred to it: 0.017233 NEAR",
+    "access keys of inv-2.owed-test.nhk.near: 0",
+    "inv-2.owed-test.nhk.near now exists keyless; Intents balances credited to it are recoverable with scripts/recover_funds.ts (forward, signed by the parent)",
+    "forward from non-parent k1probe.owed-test.nhk.near: failed=true {\"index\":0,\"kind\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: Unauthorized: caller is not parent account\"}}}}",
+    "probe account k1probe.owed-test.nhk.near deleted, funds returned to parent"
   ],
   "fallback_triggered": null,
   "spend_usd": 0

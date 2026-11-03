@@ -24,7 +24,7 @@
   ],
   "observations": [
     "K2' part B execution: mode=LIVE",
-    "recipient=holder2.nearhackathons.near, refundTo=0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
+    "recipient=holder2.nhk.near, refundTo=0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
     "planned spend: $11 USDC across base",
     "Broadcasted 1 origin transfers successfully.",
     "Recovery available via scripts/recover_funds.ts."

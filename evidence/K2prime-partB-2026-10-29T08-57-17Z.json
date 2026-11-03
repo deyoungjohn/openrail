@@ -22,7 +22,7 @@
   "tx": [],
   "observations": [
     "K2' part B execution: mode=DRY_RUN",
-    "recipient=holder2.nearhackathons.near, refundTo=0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
+    "recipient=holder2.nhk.near, refundTo=0x12DCBbc7f96B87220e90B46d9528Db156B1Da841",
     "planned spend: $11 USDC across base",
     "dry quote base: simulated successfully (output ~$10.993631000000)",
     "Dry run completed. Zero value moved. Ready for human operator execution."

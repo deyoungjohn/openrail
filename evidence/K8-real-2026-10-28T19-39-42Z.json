@@ -30,7 +30,7 @@
         "latency_ms": 2125,
         "provider_status": "SUCCESS",
         "credit_amount": "10000000",
-        "credit_receiver": "inv-1.owed-test.nearhackathons.near",
+        "credit_receiver": "inv-1.owed-test.nhk.near",
         "invoice_booked_total": null,
         "origin_confirmed": true,
         "trace_sha256": "0xa28b77805ff10df4b6ca0d3e3e307dffb24854ca10e5e5993392f4a751a37f21"
@@ -42,7 +42,7 @@
         "latency_ms": 741,
         "provider_status": "SUCCESS",
         "credit_amount": "10000000",
-        "credit_receiver": "inv-1.owed-test.nearhackathons.near",
+        "credit_receiver": "inv-1.owed-test.nhk.near",
         "invoice_booked_total": null,
         "origin_confirmed": true,
         "trace_sha256": "0x25c7dd72c83bebff1cfa7ee694d360c6991d0ba0749a166856eb34f453d6d4b3"
@@ -54,7 +54,7 @@
         "latency_ms": 800,
         "provider_status": "SUCCESS",
         "credit_amount": "10000000",
-        "credit_receiver": "inv-1.k4.owed-test.nearhackathons.near",
+        "credit_receiver": "inv-1.k4.owed-test.nhk.near",
         "invoice_booked_total": "10000000",
         "origin_confirmed": true,
         "trace_sha256": "0x8939ff08b4c930dc35f59c39e859580bba65d2c90661f53d438aa773b8dcd7cc"
