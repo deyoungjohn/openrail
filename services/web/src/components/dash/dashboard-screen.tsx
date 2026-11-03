@@ -3,7 +3,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
-import { Bar, BarChart, Cell, Pie, PieChart, XAxis } from "recharts";
+import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, XAxis } from "recharts";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { formatUsd } from "@/lib/format";
@@ -43,7 +43,7 @@ function Payments() {
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-3">
-      <div className="lg:col-span-2">
+      <div className="min-w-0 lg:col-span-2">
         <Card
           title={d.byMonth}
           state={state}
@@ -52,28 +52,28 @@ function Payments() {
           errorBody={d.loadError}
           onRetry={retry}
         >
-          <BarChart
-            width={560}
-            height={200}
-            data={months.map((m) => ({ month: m.month, usdc: Number(m.units) / 1_000_000 }))}
-            role="img"
-            aria-label={summary}
-            className="max-w-full"
-          >
-            <XAxis
-              dataKey="month"
-              tickLine={false}
-              axisLine={false}
-              stroke="var(--text-muted)"
-              fontSize={12}
-            />
-            <Bar
-              dataKey="usdc"
-              fill="var(--accent)"
-              radius={[4, 4, 0, 0]}
-              isAnimationActive={false}
-            />
-          </BarChart>
+          <div className="h-[200px] w-full" role="img" aria-label={summary}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={months.map((m) => ({ month: m.month, usdc: Number(m.units) / 1_000_000 }))}
+                className="max-w-full"
+              >
+                <XAxis
+                  dataKey="month"
+                  tickLine={false}
+                  axisLine={false}
+                  stroke="var(--text-muted)"
+                  fontSize={12}
+                />
+                <Bar
+                  dataKey="usdc"
+                  fill="var(--accent)"
+                  radius={[4, 4, 0, 0]}
+                  isAnimationActive={false}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
           <p className="caption">{summary}</p>
         </Card>
       </div>
@@ -148,7 +148,7 @@ export function DashboardScreen() {
           </div>
 
           <div className="grid items-start gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2">
+            <div className="min-w-0 lg:col-span-2">
               <Card
                 title={d.latest}
                 state={
@@ -165,7 +165,7 @@ export function DashboardScreen() {
                 </p>
               </Card>
             </div>
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               <Card
                 title={d.statusMix}
                 info={d.statusMixInfo}

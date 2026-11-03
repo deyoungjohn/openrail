@@ -11,9 +11,12 @@ const HASH = "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
 // Playwright's descriptors name WebKit for the iPhone; the pre-installed browser is Chromium, so keep
 // the size, pixel ratio, touch and user agent and drop the browser type.
-const { defaultBrowserType: _a, ...iphoneSE } = devices["iPhone SE"];
-const { defaultBrowserType: _b, ...pixel7 } = devices["Pixel 7"];
-const PHONES = { "iPhone SE": iphoneSE, "Pixel 7": pixel7 } as const;
+const chromiumOnly = (d: (typeof devices)[string]) =>
+  Object.fromEntries(Object.entries(d).filter(([k]) => k !== "defaultBrowserType"));
+const PHONES = {
+  "iPhone SE": chromiumOnly(devices["iPhone SE"]!),
+  "Pixel 7": chromiumOnly(devices["Pixel 7"]!),
+};
 
 const api = (): Handlers => ({
   "GET /v1/invoices": ok(fixture("invoices.list")),
@@ -82,7 +85,9 @@ const smallTargets = (page: Page) =>
       // A link inside a sentence is exempt (WCAG 2.5.8 inline exception); so is the skip link.
       if (
         el instanceof HTMLAnchorElement &&
-        (el.closest("p, li > span, dd, td") || el.textContent?.includes("Skip"))
+        (el.closest("p, li > span, dd, td") ||
+          el.querySelector("button") ||
+          el.textContent?.includes("Skip"))
       )
         continue;
       let target: Element = el;

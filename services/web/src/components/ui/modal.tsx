@@ -81,8 +81,12 @@ export function Modal({
     >
       <div
         className={cn(
-          "flex h-full w-full p-4",
-          variant === "drawer" ? "items-stretch justify-end" : "items-center justify-center",
+          "flex h-full w-full",
+          // A drawer slides in from the right. A dialog is centred, and on a phone it is a bottom sheet:
+          // full width, on the bottom edge, never taller than 90% of the screen.
+          variant === "drawer"
+            ? "items-stretch justify-end p-4"
+            : "items-end justify-center sm:items-center sm:p-4",
         )}
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
@@ -90,14 +94,17 @@ export function Modal({
       >
         <div
           className={cn(
-            "surface-card flex max-h-full flex-col overflow-hidden",
+            "surface-card flex flex-col overflow-hidden",
+            variant === "drawer" && "max-h-full",
             "transition-[opacity,transform] duration-[var(--dur-slow)]",
-            variant === "drawer" ? "w-full max-w-md" : "w-full max-w-lg",
+            variant === "drawer"
+              ? "w-full max-w-md"
+              : "max-h-[90dvh] w-full max-w-lg max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0",
             shown
               ? "translate-x-0 translate-y-0 opacity-100 ease-[var(--ease)]"
               : cn(
                   "opacity-0 ease-[var(--ease-exit)]",
-                  variant === "drawer" ? "translate-x-8" : "translate-y-2",
+                  variant === "drawer" ? "translate-x-8" : "translate-y-4",
                 ),
           )}
         >

@@ -29,7 +29,10 @@ export function Card({
   children?: ReactNode;
 }) {
   return (
-    <section aria-label={title || undefined} className={cn("surface-card p-6", className)}>
+    <section
+      aria-label={title || undefined}
+      className={cn("surface-card min-w-0 p-4 sm:p-6", className)}
+    >
       {title ? (
         <header className="mb-4 flex items-center gap-2">
           <h3 className="text-[18px] leading-[26px] font-semibold">{title}</h3>

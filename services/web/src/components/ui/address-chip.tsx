@@ -35,14 +35,22 @@ export function AddressChip({
   return (
     <span className="inline-flex max-w-full items-center gap-1.5 align-middle">
       {chain ? <ChainIcon chain={chain} size={18} /> : null}
-      <code title={value} className="font-mono text-[13px] leading-5 font-normal break-all">
+      {/* On paper there is no hover and no copy button, so the whole value is printed: the shortened
+          text is hidden and the full value comes from data-full. One element, so screen readers and
+          tests see the value once. */}
+      <code
+        title={value}
+        data-full={value}
+        className="font-mono text-[13px] leading-5 font-normal break-all print:text-[0px] print:before:text-[11px] print:before:leading-4 print:before:content-[attr(data-full)]"
+      >
         {middleTruncate(value, head, tail)}
       </code>
+      {/* On paper there is no hover and no copy button, so the whole value is written out. */}
       <button
         type="button"
         onClick={onCopy}
         aria-label={copied ? copy.address.copied : `${copy.address.copy} ${middleTruncate(value)}`}
-        className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text"
+        className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text print:hidden"
       >
         {copied ? (
           <Check size={16} strokeWidth={1.5} aria-hidden />
@@ -56,7 +64,7 @@ export function AddressChip({
           target="_blank"
           rel="noreferrer noopener"
           aria-label={`${copy.address.view}: ${middleTruncate(value)}`}
-          className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text"
+          className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text print:hidden"
         >
           <ExternalLink size={16} strokeWidth={1.5} aria-hidden />
         </a>

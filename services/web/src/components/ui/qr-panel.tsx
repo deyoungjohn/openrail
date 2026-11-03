@@ -1,10 +1,12 @@
 "use client";
 
 import { QRCodeSVG } from "qrcode.react";
+import { useState } from "react";
 import { copy } from "@/copy";
 import type { ViewState } from "./card";
 import { AddressChip } from "./address-chip";
 import type { ChainId } from "./chain-badge";
+import { Button } from "./button";
 import { ErrorState, Skeleton } from "./state";
 
 export function QrPanel({
@@ -22,6 +24,16 @@ export function QrPanel({
   qrValue?: string;
   state?: ViewState;
 }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be blocked; the address is on screen and in the code.
+    }
+  };
   return (
     <div className="surface-card flex flex-col items-center gap-4 p-6 text-center">
       {state === "loading" ? (
@@ -50,6 +62,10 @@ export function QrPanel({
             <p className="caption">{copy.qr.address}</p>
             <AddressChip value={address} chain={chain} head={8} tail={6} />
           </div>
+          {/* A thumb-sized button, so copying the address needs no tiny target. */}
+          <Button variant="secondary" className="w-full" onClick={() => void onCopy()}>
+            {copied ? copy.address.copied : copy.qr.copy}
+          </Button>
         </>
       )}
     </div>

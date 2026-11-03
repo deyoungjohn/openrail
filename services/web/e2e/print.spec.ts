@@ -36,22 +36,32 @@ test.describe("receipt print view", () => {
     expect(colours.fg).toBe("rgb(0, 0, 0)");
   });
 
-  test("every hash is printed in full, not shortened", async ({ page }) => {
-    const text = await page.locator("main").innerText();
-    expect(text).toContain(RECEIPT.receipt.terms_hash);
-    expect(text).toContain(HASH);
-    for (const h of RECEIPT.receipt.near_tx_hashes as string[]) expect(text).toContain(h);
+  test("every hash and address is printed in full, not shortened", async ({ page }) => {
+    const chips = await page.locator("main code[data-full]").evaluateAll((els) =>
+      els.map((el) => ({
+        full: el.getAttribute("data-full")!,
+        before: getComputedStyle(el, "::before").content.replace(/^"|"$/g, ""),
+        ownSize: getComputedStyle(el).fontSize,
+      })),
+    );
+    expect(chips.length).toBeGreaterThan(3);
+    for (const c of chips) {
+      expect(c.before).toBe(c.full);
+      expect(c.ownSize).toBe("0px"); // the shortened text itself is not printed
+    }
+    const fulls = chips.map((c) => c.full);
+    expect(fulls).toContain(RECEIPT.receipt.terms_hash);
+    expect(fulls).toContain(HASH);
+    for (const h of RECEIPT.receipt.near_tx_hashes as string[]) expect(fulls).toContain(h);
   });
 
   test("links print their address, so a paper copy can still be checked", async ({ page }) => {
-    const links = await page
-      .locator("main a[href^=http]")
-      .evaluateAll((as) =>
-        as.map((a) => ({
-          href: (a as HTMLAnchorElement).href,
-          after: getComputedStyle(a, "::after").content,
-        })),
-      );
+    const links = await page.locator("main a[href^=http]").evaluateAll((as) =>
+      as.map((a) => ({
+        href: (a as HTMLAnchorElement).href,
+        after: getComputedStyle(a, "::after").content,
+      })),
+    );
     expect(links.length).toBeGreaterThan(0);
     for (const l of links) expect(l.after).toContain(l.href);
   });
