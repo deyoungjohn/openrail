@@ -242,7 +242,7 @@ export class NearClient {
   async view<T>(request: ViewRequest): Promise<T> {
     return this.query<T>(
       {
-        request_type: "call",
+        request_type: "call_function",
         finality: "final",
         account_id: request.contractId,
         method_name: request.methodName,
@@ -256,7 +256,7 @@ export class NearClient {
   async batchBalanceOf(request: BatchBalanceRequest): Promise<string[]> {
     const result = await this.query<unknown>(
       {
-        request_type: "call",
+        request_type: "call_function",
         finality: "final",
         account_id: request.contractId ?? this.intentsContractId,
         method_name: "mt_batch_balance_of",

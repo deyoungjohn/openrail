@@ -109,7 +109,7 @@ function makeFetch(options: FakeOptions = {}): {
       if (params.request_type === "view_account") {
         return rpcResult({ amount: (2n * 10n ** 24n).toString() });
       }
-      if (params.request_type === "call") {
+      if (params.request_type === "call_function") {
         if (quota && url.includes("primary") && params.method_name === "config") {
           quota = false;
           return jsonResponse({ error: { message: "daily request limit exceeded" } }, 429);
