@@ -61,10 +61,72 @@ test.describe("API keys", () => {
     await dialog.getByRole("button", { name: "Create key" }).click();
     await expect(dialog.getByText("or_sk_live_example_shown_once")).toBeVisible();
     await expect(dialog.getByText("You won't see this key again")).toBeVisible();
-    expect(calls.find((c) => c.key === "POST /v1/api_keys")!.body).toMatchObject({ name: "CI" });
+    expect(calls.find((c) => c.key === "POST /v1/api_keys")!.body).toEqual({
+      name: "CI",
+      scopes: [
+        "invoices:read",
+        "invoices:write",
+        "payments:read",
+        "receipts:read",
+        "webhooks:write",
+      ],
+    });
     await dialog.getByRole("button", { name: "I have copied it" }).click();
     await expect(page.getByText("or_sk_live_example_shown_once")).toHaveCount(0);
     await expect(page.getByRole("region", { name: "API keys" })).toContainText("2 keys");
+  });
+
+  test("the scope picker offers the five secret-key scopes, all on, and sends only the ones left on", async ({
+    page,
+  }) => {
+    const calls = await mockApi(page, {
+      ...base(),
+      "POST /v1/api_keys": { status: 201, body: fixture("api_keys.create") },
+    });
+    await page.goto("/app/developers");
+    await page.getByRole("button", { name: "Create key" }).click();
+    const dialog = page.getByRole("dialog");
+    const boxes = dialog.getByRole("group", { name: "Scopes" }).getByRole("checkbox");
+    await expect(boxes).toHaveCount(5);
+    for (const name of [
+      "invoices:read",
+      "invoices:write",
+      "payments:read",
+      "receipts:read",
+      "webhooks:write",
+    ])
+      await expect(dialog.getByRole("checkbox", { name })).toBeChecked();
+    await dialog.getByLabel("Key name").fill("Read only");
+    await dialog.getByRole("checkbox", { name: "invoices:write" }).uncheck();
+    await dialog.getByRole("checkbox", { name: "webhooks:write" }).uncheck();
+    await dialog.getByRole("button", { name: "Create key" }).click();
+    await expect(dialog.getByText("or_sk_live_example_shown_once")).toBeVisible();
+    expect(calls.find((c) => c.key === "POST /v1/api_keys")!.body).toEqual({
+      name: "Read only",
+      scopes: ["invoices:read", "payments:read", "receipts:read"],
+    });
+  });
+
+  test("a key needs at least one scope", async ({ page }) => {
+    const calls = await mockApi(page, {
+      ...base(),
+      "POST /v1/api_keys": { status: 201, body: fixture("api_keys.create") },
+    });
+    await page.goto("/app/developers");
+    await page.getByRole("button", { name: "Create key" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Key name").fill("None");
+    for (const name of [
+      "invoices:read",
+      "invoices:write",
+      "payments:read",
+      "receipts:read",
+      "webhooks:write",
+    ])
+      await dialog.getByRole("checkbox", { name }).uncheck();
+    await dialog.getByRole("button", { name: "Create key" }).click();
+    await expect(dialog.getByText("Pick at least one scope")).toBeVisible();
+    expect(calls.filter((c) => c.key === "POST /v1/api_keys")).toHaveLength(0);
   });
 
   test("rotating asks first, then shows the new secret once", async ({ page }) => {
