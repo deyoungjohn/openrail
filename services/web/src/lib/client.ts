@@ -5,3 +5,8 @@ export const client = new OpenrailClient({
   baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8787",
   apiKey: process.env.NEXT_PUBLIC_API_PUBLISHABLE_KEY,
 });
+
+// Dashboard calls carry the HttpOnly session cookie (the client sends credentials by default).
+export const dashClient = new OpenrailClient({
+  baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8787",
+});
