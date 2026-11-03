@@ -9,12 +9,15 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_NEAR_VERSION: "0.22.0"
+  CARGO_BUILD_JOBS: "6"
+  RUST_TEST_THREADS: "4"
   PROPTEST_CASES: "1000"
   SCALE_CLAIMS: "5000"
 
 jobs:
   nightly-proptest:
     name: nightly-proptest
+    timeout-minutes: 40
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
@@ -35,11 +38,6 @@ jobs:
       - name: Rust cache
         if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
-      - name: Setup runner target directory
-        if: runner.environment != 'github-hosted'
-        run: |
-          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Cache cargo-near binary
         if: runner.environment == 'github-hosted'
         id: cargo-near-cache
@@ -66,6 +64,7 @@ jobs:
 
   nightly-scale:
     name: nightly-scale
+    timeout-minutes: 40
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
@@ -86,11 +85,6 @@ jobs:
       - name: Rust cache
         if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
-      - name: Setup runner target directory
-        if: runner.environment != 'github-hosted'
-        run: |
-          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Cache cargo-near binary
         if: runner.environment == 'github-hosted'
         id: cargo-near-cache

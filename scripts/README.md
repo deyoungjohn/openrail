@@ -26,4 +26,5 @@ The GitHub Actions workflows (`ci.yml` and `nightly.yml`) are runner-agnostic an
    - Activated when `vars.CI_RUNNER` is configured to `["self-hosted","openrail"]`.
    - Runs as isolated user `ghrunner` (mode 750 protection from host user credentials; see `tools/setup-ci-runner.sh`).
    - Bypasses `sudo` steps and caching actions; all dependencies (rustup, cargo-near 0.22.0, node 22, pnpm) are pre-installed on the runner.
-   - Isolates concurrent builds across jobs using `CARGO_TARGET_DIR=$HOME/target-ci/<job>`.
+   - Uses `clean: false` on checkout with `git clean -fd` to keep workspace `target/` directories intact between runs.
+   - Applies `CARGO_BUILD_JOBS=6`, `RUST_TEST_THREADS=4`, job timeouts, and sequential execution for heavy jobs to avoid machine starvation.

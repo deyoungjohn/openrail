@@ -15,11 +15,14 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_NEAR_VERSION: "0.22.0"
+  CARGO_BUILD_JOBS: "6"
+  RUST_TEST_THREADS: "4"
 
 jobs:
   # Detect file changes to avoid redundant heavy jobs on web-only or docs-only PRs
   changes:
     name: changes
+    timeout-minutes: 15
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     permissions:
@@ -84,6 +87,7 @@ jobs:
   # Quick checks: secrets scan, docs build, and lint (format + clippy + eslint) merged
   quick:
     name: quick
+    timeout-minutes: 15
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
@@ -105,11 +109,6 @@ jobs:
       - name: Rust cache
         if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
-      - name: Setup runner target directory
-        if: runner.environment != 'github-hosted'
-        run: |
-          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - name: Secret scan
         run: make secret-scan
@@ -121,6 +120,7 @@ jobs:
   # Unified contract validation: build once with cargo-near, then run wasm, abi, and leak checks
   contract:
     name: contract
+    timeout-minutes: 30
     needs: changes
     if: (github.event_name == 'push') || (needs.changes.outputs.contracts == 'true')
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
@@ -143,11 +143,6 @@ jobs:
       - name: Rust cache
         if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
-      - name: Setup runner target directory
-        if: runner.environment != 'github-hosted'
-        run: |
-          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Cache cargo-near binary
         if: runner.environment == 'github-hosted'
         id: cargo-near-cache
@@ -177,10 +172,12 @@ jobs:
         run: make leak-check
 
   # Core tests: contract workspace tests, unit tests, ts packages, and type checking
+  # Runs after contract (if contract runs) to avoid simultaneous heavy compilation on a single runner
   core-only:
     name: core-only
-    needs: changes
-    if: (github.event_name == 'push') || (needs.changes.outputs.core == 'true')
+    timeout-minutes: 40
+    needs: [changes, contract]
+    if: always() && (needs.changes.result == 'success') && (needs.contract.result == 'success' || needs.contract.result == 'skipped') && ((github.event_name == 'push') || (needs.changes.outputs.core == 'true'))
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
@@ -201,11 +198,6 @@ jobs:
       - name: Rust cache
         if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
-      - name: Setup runner target directory
-        if: runner.environment != 'github-hosted'
-        run: |
-          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Cache cargo-near binary
         if: runner.environment == 'github-hosted'
         id: cargo-near-cache
@@ -228,6 +220,7 @@ jobs:
   # Sequential loop over each module in one job instead of seven parallel matrix jobs
   each-module:
     name: each-module
+    timeout-minutes: 15
     needs: changes
     if: (github.event_name == 'push') || (needs.changes.outputs.modules == 'true')
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
@@ -243,11 +236,6 @@ jobs:
       - name: Rust cache
         if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
-      - name: Setup runner target directory
-        if: runner.environment != 'github-hosted'
-        run: |
-          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - name: Test each module sequentially
         run: |
           for mod in $(scripts/enabled-features --all); do
@@ -258,6 +246,7 @@ jobs:
   # All enabled modules together
   all-enabled:
     name: all-enabled
+    timeout-minutes: 15
     needs: changes
     if: (github.event_name == 'push') || (needs.changes.outputs.modules == 'true')
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
@@ -278,11 +267,6 @@ jobs:
       - name: Rust cache
         if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@v2
-      - name: Setup runner target directory
-        if: runner.environment != 'github-hosted'
-        run: |
-          mkdir -p "$HOME/target-ci/${{ runner.name }}-${{ github.job }}"
-          echo "CARGO_TARGET_DIR=$HOME/target-ci/${{ runner.name }}-${{ github.job }}" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - name: Every enabled module
         run: cargo test -p openrail --features "$(scripts/enabled-features)"
@@ -290,6 +274,7 @@ jobs:
   # Web verification: test, typecheck, and build web service
   web:
     name: web
+    timeout-minutes: 15
     needs: changes
     if: (github.event_name == 'push') || (needs.changes.outputs.web == 'true')
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
@@ -315,6 +300,7 @@ jobs:
 
   e2e:
     name: e2e
+    timeout-minutes: 15
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
@@ -329,6 +315,7 @@ jobs:
   # Aggregate status check keeping a single unified check name that passes when required jobs succeed or are cleanly skipped
   ci-ok:
     name: ci-ok
+    timeout-minutes: 15
     needs: [changes, quick, contract, core-only, each-module, all-enabled, web, e2e]
     if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
