@@ -134,6 +134,36 @@ test.describe("statements", () => {
     expect(calls.filter((c) => c.key === "GET /v1/statements")).toHaveLength(1);
   });
 
+  test("a statement for one invoice sends its token id and says so", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const calls = await mockApi(page, {
+      "GET /v1/statements": ({ url }) => ({
+        body: statement({ token_id: url.searchParams.get("token_id") }),
+      }),
+    });
+    await page.goto("/app/statements?token_id=c-1");
+    await expect(page.getByText("This invoice only: c-1")).toBeVisible();
+    await request(page);
+    await expect(page.getByText("Fingerprint matches")).toBeVisible();
+    expect(calls.filter((c) => c.key === "GET /v1/statements")).toHaveLength(1);
+    await page.getByRole("button", { name: "Show all invoices" }).click();
+    await expect(page.getByText("This invoice only: c-1")).toHaveCount(0);
+  });
+
+  test("without a token id the request is for the whole period", async ({ page }) => {
+    let seen: string | null = "unset";
+    await mockApi(page, {
+      "GET /v1/statements": ({ url }) => {
+        seen = url.searchParams.get("token_id");
+        return { body: statement() };
+      },
+    });
+    await page.goto("/app/statements");
+    await request(page);
+    await expect(page.getByText("Fingerprint matches")).toBeVisible();
+    expect(seen).toBeNull();
+  });
+
   test("warns when the fingerprint does not match the file", async ({ page }) => {
     await mockApi(page, {
       "GET /v1/statements": { body: statement({ sha256: `0x${"b".repeat(64)}` }) },
