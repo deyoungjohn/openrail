@@ -312,6 +312,14 @@
       "status": 200,
       "schema": "PaymentList",
       "mock": true
+    },
+    {
+      "file": "health.json",
+      "method": "GET",
+      "path": "/v1/health",
+      "status": 200,
+      "schema": "Health",
+      "mock": true
     }
   ]
 }

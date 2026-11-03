@@ -191,6 +191,15 @@ describe("typed client", () => {
     expect(fetchImpl.mock.calls[1]?.[0]).toBe("https://api.openrail.near/v1/auth/logout");
   });
 
+  it("reads the health probe", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(fixture("health.json")));
+    const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });
+
+    const health = await client.health();
+    expect(health.ok).toBe(true);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.openrail.near/v1/health");
+  });
+
   it("serves the OpenAPI document", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ openapi: "3.1.0" }));
     const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });

@@ -395,6 +395,9 @@ export class ApiApp {
 
   private async route(request: ApiRequest): Promise<ApiResponse> {
     const { method, path } = request;
+    if (method === "GET" && path === "/v1/health") {
+      return { status: 200, body: { ok: true, mock: false } };
+    }
     if (method === "GET" && path === "/v1/openapi.json") {
       return { status: 200, body: this.deps.spec ?? {} };
     }
