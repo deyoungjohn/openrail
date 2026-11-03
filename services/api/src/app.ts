@@ -23,6 +23,7 @@ import { renderInvoicePdfBase64 } from "./pdf.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
 import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
+import { UnsafeWebhookUrl, validateWebhookUrl } from "./webhook-url.js";
 
 export interface ApiConfig {
   rootAccount: string;
@@ -71,6 +72,11 @@ export interface IndexerPort {
     accountId: string,
     query: { from?: string; to?: string; format: "csv" | "pdf"; tokenId?: string },
   ): Promise<Record<string, unknown>>;
+  listEvents(query: {
+    after?: string;
+    type?: string;
+    limit?: number;
+  }): Promise<{ data: Record<string, unknown>[]; next_cursor?: string | null }>;
 }
 
 export interface CashoutPort {
@@ -181,6 +187,7 @@ export interface ApiDeps {
   quoteProvider?: QuoteProvider;
   spec?: Record<string, unknown>;
   webhookFetch?: (input: string, init?: RequestInit) => Promise<Response>;
+  webhookUrlValidator?: (url: string) => Promise<unknown>;
 }
 
 function nowIso(clock: () => Date): string {
@@ -950,11 +957,20 @@ export class ApiApp {
           if (body.url === undefined || body.events === undefined) {
             throw new ApiError(400, "invalid_request", "url and events required");
           }
+          try {
+            await (this.deps.webhookUrlValidator ?? validateWebhookUrl)(body.url);
+          } catch (error) {
+            if (error instanceof UnsafeWebhookUrl) {
+              throw new ApiError(400, "invalid_webhook_url", error.message);
+            }
+            throw error;
+          }
           const endpoint: WebhookEndpointRecord & { secret: string } = {
             id: id("whe"),
             url: body.url,
             secret: `whsec_${randomBytes(24).toString("base64url")}`,
             events: body.events,
+            created_at: nowIso(this.clock),
           };
           this.store.saveWebhookEndpoint(context.accountId, endpoint);
           void context;
@@ -992,7 +1008,14 @@ export class ApiApp {
               created: Math.floor(this.clock().getTime() / 1000),
               data: { test: true },
             },
-            { fetchImpl: this.deps.webhookFetch },
+            {
+              ...(this.deps.webhookFetch === undefined
+                ? {}
+                : { fetchImpl: this.deps.webhookFetch }),
+              ...(this.deps.webhookUrlValidator === undefined
+                ? {}
+                : { validateUrl: this.deps.webhookUrlValidator }),
+            },
           );
           return {
             status: 200,
@@ -1011,6 +1034,21 @@ export class ApiApp {
 
     if (path === "/v1/events" && method === "GET") {
       this.requireAuth(request);
+      if (this.deps.indexer !== undefined) {
+        const limit = Number(request.query.get("limit") ?? "50");
+        return {
+          status: 200,
+          body: await this.deps.indexer.listEvents({
+            ...(request.query.get("cursor") === null
+              ? {}
+              : { after: request.query.get("cursor") ?? undefined }),
+            ...(request.query.get("type") === null
+              ? {}
+              : { type: request.query.get("type") ?? undefined }),
+            limit: Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50,
+          }),
+        };
+      }
       return { status: 200, body: { data: this.store.listEvents() } };
     }
 

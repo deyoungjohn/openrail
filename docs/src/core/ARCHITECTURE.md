@@ -15,9 +15,9 @@ Openrail is three layers:
      calls the issuer over a local authenticated port. **built**
    - `watcher` reads batched claim balances, reconciles on a rise, retries failed
      distributions and clears stale locks. **built and tested in the sandbox**
-   - `indexer` records contract events for history, statements and receipts.
-     **exploring**: not built in this tree; the API uses its SQLite store behind
-     the indexer port until it lands.
+   - `indexer` records contract events for history, statements and receipts,
+     and the API reads receipts, statements and events from it over HTTP.
+     **built**
    - `web` is the dashboard and the hosted pay, acknowledgement and receipt
      pages. **built**
    - `cli` is the JSON-first command-line client. **built**

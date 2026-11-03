@@ -353,6 +353,12 @@
               "code": "internal_error",
               "message": "internal error"
             }
+          },
+          {
+            "error": {
+              "code": "invalid_webhook_url",
+              "message": "webhook URL must use https"
+            }
           }
         ]
       },

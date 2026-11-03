@@ -68,6 +68,16 @@ describe("SQLite stores", () => {
     second.close?.();
   });
 
+  it("persists the webhook worker cursor", () => {
+    const path = databasePath();
+    const first = createSqliteStores(path);
+    first.api.setWorkerState("webhook_cursor", "42");
+    first.close?.();
+    const second = createSqliteStores(path);
+    expect(second.api.getWorkerState("webhook_cursor")).toBe("42");
+    second.close?.();
+  });
+
   it("expires idempotency entries after 24 h", () => {
     const path = databasePath();
     const stores = createSqliteStores(path);

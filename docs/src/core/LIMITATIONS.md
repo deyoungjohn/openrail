@@ -20,6 +20,6 @@ Status: **built** facts unless marked **exploring**.
   audited by Openrail. **exploring**
 - The issuer service is a separate process; without it the real API can create
   invoices only through the mock path. **built**
-- The SQLite invoice/payment/receipt cache is an interim indexer boundary; the
-  indexer can replace its internals without changing routes. **built**
+- The SQLite invoice/payment cache is an interim boundary; receipts, statements
+  and events already read from the indexer. **built**
 - A watcher outage delays bookings; it does not lose funds. **built**
