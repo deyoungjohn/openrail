@@ -98,6 +98,11 @@ export const mockAuth: AuthApi = {
     await wait(250);
     const v = readCookie();
     if (v === "__error") throw new Error("MOCK_SESSION_ERROR");
+    // Fixture mode only: hold the check back so a test can look at the loading state.
+    if (v === "__slow") {
+      await wait(8000);
+      return null;
+    }
     return v ? { account_id: v, expires_at: week().toISOString() } : null;
   },
   async signIn() {
