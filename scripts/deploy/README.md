@@ -77,13 +77,16 @@ The reproducible build pins its Rust image and feature list in `contracts/openra
 
 ## Sandbox rehearsal
 
-`scripts/deploy/rehearse.sh` runs the runbook against the local NEAR sandbox: deploy + `new`, add the issuer/relay/watcher function-call keys, issue one invoice through the real issuer service, pay it through the mock intents contract, reconcile with the watcher key, and read the receipt from the real indexer service. It prints every equivalent command and the final receipt JSON; no mainnet connection and no secrets are printed.
+`scripts/deploy/rehearse.sh` runs the runbook against the local NEAR sandbox: deploy + `new`, add the issuer/relay/watcher function-call keys, issue two invoices through the real issuer service, pay them through the mock intents contract, reconcile them through the real watcher service, force one forward to fail, read both receipts from the real indexer service, create the missing account, and let the watcher retry the failed distribution. It prints every equivalent command and the receipt JSON; no mainnet connection and no secrets are printed.
+
+The failure leg is sandbox fault injection: the second claim is sold to a missing account and its claim vault is temporarily replaced with a stub that has no `forward` method, so the forward fails while the booking remains (D-S8). The watcher retries after the vault is restored; the recorded payee is never redirected.
 
 ```bash
 NEAR_SANDBOX_BIN_PATH="$HOME/.near/sandbox" scripts/deploy/rehearse.sh
 ```
 
-→ prints the sandbox RPC URL, the deploy/config command, the three `add-key` commands, the issuer `curl`, the mock `mt_mint` and `reconcile` calls, and the indexer receipt.
+→ prints the sandbox RPC URL, the deploy/config command, the three `add-key` commands, both issuer `curl` calls, the mock `mt_mint` calls, the watcher service, the failed-forward and retry steps, and both indexer receipts.
 → exits non-zero if any service, transaction, or receipt step fails.
+→ when `release_surplus` is implemented (ag2 #71), step 8 overpays, reconciles, releases the surplus, and checks the surplus is zero; while the method is still the `NOT_IMPLEMENTED` stub it prints that it skipped.
 
 Prerequisites: `cargo`, `pnpm`, `curl`, and the `near-sandbox` binary. The script rebuilds `target/near/openrail/openrail.wasm` from the current checkout first, so a stale wasm cannot mask a failure. The human then runs the `scripts/deploy/plan.sh` commands against mainnet.

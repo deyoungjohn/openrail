@@ -52,7 +52,7 @@ function makeFetch(returnTokenId = false): { fetchImpl: FetchLike; broadcasts: s
       if (params.request_type === "view_access_key") {
         return reply({ nonce: 1, block_hash: ZERO_HASH });
       }
-      if (params.request_type === "call" && params.method_name === "claim") {
+      if (params.request_type === "call_function" && params.method_name === "claim") {
         return callResult({ ack: null });
       }
     }
