@@ -46,6 +46,8 @@ jobs:
           sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
           cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
       - run: pnpm install --frozen-lockfile
+      - name: Build contract wasm
+        run: cargo near build non-reproducible-wasm --manifest-path contracts/openrail/Cargo.toml
       - name: Record Proptest Seed
         run: |
           # 32-byte hex seed (64 characters) for proptest reproducibility
@@ -88,6 +90,8 @@ jobs:
           sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
           cargo install cargo-near --version "$CARGO_NEAR_VERSION" --locked
       - run: pnpm install --frozen-lockfile
+      - name: Build contract wasm
+        run: cargo near build non-reproducible-wasm --manifest-path contracts/openrail/Cargo.toml
       - name: Run scale suite at 5,000 claims
         run: |
           echo "### Nightly Scale Run" >> "$GITHUB_STEP_SUMMARY"
