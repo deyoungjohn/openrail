@@ -220,7 +220,6 @@ async fn scale_reconcile_gas_constant() -> Result<()> {
 
 /// Transfer gas is constant O(1) independent of total claims on the contract (Blueprint 2.11 & K16).
 #[tokio::test]
-#[ignore = "C2"]
 async fn scale_transfer_gas_constant() -> Result<()> {
     let env = Env::new().await?;
 
@@ -234,6 +233,16 @@ async fn scale_transfer_gas_constant() -> Result<()> {
         .await?;
     let token_2: String = res2.json()?;
 
+    for token in [&token_1, &token_2] {
+        env.alice
+            .call(env.root.id(), "acknowledge_near")
+            .args_json(json!({ "token_id": token }))
+            .max_gas()
+            .transact()
+            .await?
+            .into_result()?;
+    }
+
     // Transfer claim 1
     let tx1 = env
         .alice
@@ -241,6 +250,7 @@ async fn scale_transfer_gas_constant() -> Result<()> {
         .args_json(json!({
             "receiver_id": env.bob.id(),
             "token_id": token_1,
+            "memo": "1111111111111111111111111111111111111111111111111111111111111111",
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -256,6 +266,7 @@ async fn scale_transfer_gas_constant() -> Result<()> {
         .args_json(json!({
             "receiver_id": env.bob.id(),
             "token_id": token_2,
+            "memo": "1111111111111111111111111111111111111111111111111111111111111111",
         }))
         .deposit(NearToken::from_yoctonear(1))
         .max_gas()
@@ -282,7 +293,6 @@ async fn scale_transfer_gas_constant() -> Result<()> {
 
 /// `nft_tokens_for_owner` (limit 50) works at any index (Blueprint 2.11 & K16).
 #[tokio::test]
-#[ignore = "C2"]
 async fn scale_nft_tokens_for_owner_pagination() -> Result<()> {
     let env = Env::new().await?;
 

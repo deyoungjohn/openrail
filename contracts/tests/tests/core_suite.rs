@@ -20,63 +20,6 @@ use openrail_model::{
 use openrail_tests::{Env, DEFAULT_SETTLEMENT_ASSET};
 use serde_json::json;
 
-/// 0. Smoke test verifying frozen interface stubs return NOT_IMPLEMENTED for core methods.
-#[tokio::test]
-async fn smoke_core_stubs_return_not_implemented() -> Result<()> {
-    let env = Env::new().await?;
-
-    // reconcile returns NOT_IMPLEMENTED
-    let rec_res = env
-        .alice
-        .call(env.root.id(), "reconcile")
-        .args_json(json!({ "token_id": "c-1" }))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(rec_res.is_failure());
-    let failure = format!("{:?} {}", rec_res.failures(), rec_res.logs().join(" "));
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "reconcile must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    // cancel returns NOT_IMPLEMENTED
-    let cancel_res = env
-        .alice
-        .call(env.root.id(), "cancel")
-        .args_json(json!({ "token_id": "c-1" }))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(cancel_res.is_failure());
-    let failure = format!(
-        "{:?} {}",
-        cancel_res.failures(),
-        cancel_res.logs().join(" ")
-    );
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "cancel must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    // acknowledge_near returns NOT_IMPLEMENTED
-    let ack_res = env
-        .alice
-        .call(env.root.id(), "acknowledge_near")
-        .args_json(json!({ "token_id": "c-1" }))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(ack_res.is_failure());
-    let failure = format!("{:?} {}", ack_res.failures(), ack_res.logs().join(" "));
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "acknowledge_near must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    Ok(())
-}
-
 /// 1. `inv_account_has_no_keys`: Claim vault sub-account `c-<n>.<root>` has zero access keys (Blueprint 2.1, 2.2, 2.11).
 ///
 /// Asserts:
@@ -356,7 +299,6 @@ async fn ack_only_by_debtor_once() -> Result<()> {
 /// - Transfer back to issuer succeeds without ack
 /// - Transfer to third party succeeds after ack
 #[tokio::test]
-#[ignore = "C2"]
 async fn no_sale_without_ack() -> Result<()> {
     let env = Env::new().await?;
 
@@ -403,7 +345,6 @@ async fn no_sale_without_ack() -> Result<()> {
 /// - Reconcile initiates lock `Reconciling`
 /// - Transfer attempted while locked fails with Rule 1
 #[tokio::test]
-#[ignore = "C2"]
 async fn no_transfer_under_lock() -> Result<()> {
     let env = Env::new().await?;
 
@@ -419,7 +360,7 @@ async fn no_transfer_under_lock() -> Result<()> {
                 token_id: "c-1".to_string(),
                 kind: 0,
                 issuer_id: env.alice.id().to_string(),
-                debtor: None,
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -462,7 +403,6 @@ async fn no_transfer_under_lock() -> Result<()> {
 /// Asserts:
 /// - Transfer attempted on a cancelled/paid claim fails with Rule 2
 #[tokio::test]
-#[ignore = "C2"]
 async fn no_transfer_when_settled() -> Result<()> {
     let env = Env::new().await?;
 
@@ -478,7 +418,7 @@ async fn no_transfer_when_settled() -> Result<()> {
                 token_id: "c-1".to_string(),
                 kind: 0,
                 issuer_id: env.alice.id().to_string(),
-                debtor: None,
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
@@ -524,7 +464,6 @@ async fn no_transfer_when_settled() -> Result<()> {
 /// Asserts:
 /// - Transfer to `c-1.openrail.near` fails with Rule 5 panic
 #[tokio::test]
-#[ignore = "C2"]
 async fn no_self_ownership() -> Result<()> {
     let env = Env::new().await?;
 

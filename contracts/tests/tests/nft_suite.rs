@@ -10,119 +10,12 @@
 use anyhow::Result;
 use near_sdk::json_types::U128;
 use near_workspaces::types::NearToken;
-use openrail::types::{Debtor, Hex32, JsonToken};
+use openrail::types::{ClaimView, Debtor, Hex32, JsonToken, Lock};
 use openrail_model::{
     Action, Debtor as ModelDebtor, Hex32 as ModelHex32, Model, ModelError, Status,
 };
 use openrail_tests::{Env, DEFAULT_SETTLEMENT_ASSET};
 use serde_json::json;
-
-/// 0. Verification that current contract stubs return NOT_IMPLEMENTED.
-///
-/// Runs immediately on the Phase 0 frozen interface without `#[ignore]`.
-#[tokio::test]
-async fn smoke_nft_stubs_return_not_implemented() -> Result<()> {
-    let env = Env::new().await?;
-
-    // 1. nft_transfer returns NOT_IMPLEMENTED
-    let transfer_res = env
-        .alice
-        .call(env.root.id(), "nft_transfer")
-        .args_json(json!({
-            "receiver_id": env.bob.id(),
-            "token_id": "c-1",
-            "approval_id": null,
-            "memo": "0000000000000000000000000000000000000000000000000000000000000000",
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(transfer_res.is_failure());
-    let failure = format!(
-        "{:?} {}",
-        transfer_res.failures(),
-        transfer_res.logs().join(" ")
-    );
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "nft_transfer must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    // 3. nft_transfer_call returns NOT_IMPLEMENTED
-    let transfer_call_res = env
-        .alice
-        .call(env.root.id(), "nft_transfer_call")
-        .args_json(json!({
-            "receiver_id": env.bob.id(),
-            "token_id": "c-1",
-            "approval_id": null,
-            "memo": null,
-            "msg": "test",
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(transfer_call_res.is_failure());
-    let failure = format!(
-        "{:?} {}",
-        transfer_call_res.failures(),
-        transfer_call_res.logs().join(" ")
-    );
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "nft_transfer_call must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    // 4. nft_approve returns NOT_IMPLEMENTED
-    let approve_res = env
-        .alice
-        .call(env.root.id(), "nft_approve")
-        .args_json(json!({
-            "token_id": "c-1",
-            "account_id": env.bob.id(),
-            "msg": null,
-        }))
-        .deposit(NearToken::from_millinear(5))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(approve_res.is_failure());
-    let failure = format!(
-        "{:?} {}",
-        approve_res.failures(),
-        approve_res.logs().join(" ")
-    );
-    assert!(
-        failure.contains("NOT_IMPLEMENTED"),
-        "nft_approve must fail with NOT_IMPLEMENTED, got: {failure}"
-    );
-
-    // 5. nft_token view returns NOT_IMPLEMENTED
-    let token_view_res = env
-        .root
-        .view("nft_token")
-        .args_json(json!({ "token_id": "c-1" }))
-        .await;
-    assert!(token_view_res.is_err());
-    let err_msg = format!("{:?}", token_view_res.err().unwrap());
-    assert!(
-        err_msg.contains("NOT_IMPLEMENTED"),
-        "nft_token view must fail with NOT_IMPLEMENTED, got: {err_msg}"
-    );
-
-    // 6. nft_metadata view returns NOT_IMPLEMENTED
-    let metadata_res = env.root.view("nft_metadata").args_json(json!({})).await;
-    assert!(metadata_res.is_err());
-    let err_msg = format!("{:?}", metadata_res.err().unwrap());
-    assert!(
-        err_msg.contains("NOT_IMPLEMENTED"),
-        "nft_metadata view must fail with NOT_IMPLEMENTED, got: {err_msg}"
-    );
-
-    Ok(())
-}
 
 /// 1. `nft_mint_on_issue`: An issue call mints the NEP-171 token to the issuer (Blueprint 2.2, 2.11).
 ///
@@ -135,7 +28,6 @@ async fn smoke_nft_stubs_return_not_implemented() -> Result<()> {
 /// - Emits NEP-297 `nft_mint` event conforming to schema
 /// - Oracle parity: `openrail-model` step_issue produces identical state
 #[tokio::test]
-#[ignore = "C2"]
 async fn nft_mint_on_issue() -> Result<()> {
     let env = Env::new().await?;
 
@@ -245,7 +137,6 @@ async fn nft_mint_on_issue() -> Result<()> {
 /// - Transfer with exactly 1 yocto succeeds
 /// - Oracle parity: `openrail-model` rejects attached_yocto != 1 with TransferRuleViolation(6, _)
 #[tokio::test]
-#[ignore = "C2"]
 async fn nft_transfer_requires_one_yocto() -> Result<()> {
     let env = Env::new().await?;
 
@@ -304,12 +195,21 @@ async fn nft_transfer_requires_one_yocto() -> Result<()> {
                 token_id: "c-1".to_string(),
                 kind: 0,
                 issuer_id: env.alice.id().to_string(),
-                debtor: None,
+                debtor: Some(ModelDebtor::Near(env.alice.id().to_string())),
                 terms_hash: ModelHex32::default(),
                 amount_due: 1_000_000,
                 due_date: 1_800_000_000,
             },
             100,
+        )
+        .unwrap();
+    model
+        .step(
+            Action::AcknowledgeNear {
+                token_id: "c-1".to_string(),
+                caller: env.alice.id().to_string(),
+            },
+            101,
         )
         .unwrap();
 
@@ -319,15 +219,15 @@ async fn nft_transfer_requires_one_yocto() -> Result<()> {
                 caller: env.alice.id().to_string(),
                 token_id: "c-1".to_string(),
                 new_owner: env.bob.id().to_string(),
-                memo_assignment_doc_hash: None,
+                memo_assignment_doc_hash: Some(ModelHex32([1u8; 32])),
                 attached_yocto: 0,
             },
-            101,
+            102,
         )
         .unwrap_err();
     assert_eq!(
         err_0,
-        ModelError::TransferRuleViolation(6, "exactly 1 yoctoNEAR required".to_string())
+        ModelError::TransferRuleViolation(6, "exactly 1 yocto must be attached".to_string())
     );
 
     let err_2 = model
@@ -336,15 +236,15 @@ async fn nft_transfer_requires_one_yocto() -> Result<()> {
                 caller: env.alice.id().to_string(),
                 token_id: "c-1".to_string(),
                 new_owner: env.bob.id().to_string(),
-                memo_assignment_doc_hash: None,
+                memo_assignment_doc_hash: Some(ModelHex32([1u8; 32])),
                 attached_yocto: 2,
             },
-            101,
+            103,
         )
         .unwrap_err();
     assert_eq!(
         err_2,
-        ModelError::TransferRuleViolation(6, "exactly 1 yoctoNEAR required".to_string())
+        ModelError::TransferRuleViolation(6, "exactly 1 yocto must be attached".to_string())
     );
 
     Ok(())
@@ -358,7 +258,6 @@ async fn nft_transfer_requires_one_yocto() -> Result<()> {
 /// - Approved Bob transfers token to Carol successfully
 /// - Approvals clear on transfer: Bob cannot transfer token again
 #[tokio::test]
-#[ignore = "C2"]
 async fn nft_transfer_only_owner_or_approved() -> Result<()> {
     let env = Env::new().await?;
 
@@ -369,13 +268,20 @@ async fn nft_transfer_only_owner_or_approved() -> Result<()> {
         .issue_claim_with_details(
             &env.alice,
             0,
-            None,
+            Some(Debtor::Near(env.alice.id().clone())),
             Hex32::default(),
             1_000_000,
             1_800_000_000,
             None,
         )
         .await?;
+    env.alice
+        .call(env.root.id(), "acknowledge_near")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
 
     // 1. Unapproved Bob attempts transfer -> must fail
     let unauth_res = env
@@ -500,7 +406,6 @@ async fn nft_transfer_only_owner_or_approved() -> Result<()> {
 /// - Rule 6: exactly 1 yocto required ("Rule 6: exactly 1 yoctoNEAR required")
 /// - Oracle parity: `openrail-model` matches every rule enforcement error code
 #[tokio::test]
-#[ignore = "C2"]
 async fn nft_transfer_rules_enforced() -> Result<()> {
     let env = Env::new().await?;
 
@@ -669,7 +574,6 @@ async fn nft_transfer_rules_enforced() -> Result<()> {
 /// - Previous owner is restored in storage and in `nft_token`
 /// - Emits NEP-297 `nft_transfer` refund event back to previous owner
 #[tokio::test]
-#[ignore = "C2"]
 async fn nft_transfer_call_refund_restores_owner() -> Result<()> {
     let env = Env::new().await?;
 
@@ -680,13 +584,20 @@ async fn nft_transfer_call_refund_restores_owner() -> Result<()> {
         .issue_claim_with_details(
             &env.alice,
             0,
-            None,
+            Some(Debtor::Near(env.alice.id().clone())),
             Hex32::default(),
             1_000_000,
             1_800_000_000,
             None,
         )
         .await?;
+    env.alice
+        .call(env.root.id(), "acknowledge_near")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
 
     // Call nft_transfer_call targeting a receiver account that does NOT implement nft_on_transfer (e.g. env.bob),
     // which causes the cross-contract call to fail and triggers the resolve refund!
@@ -733,7 +644,6 @@ async fn nft_transfer_call_refund_restores_owner() -> Result<()> {
 /// - During `nft_transfer_call` execution, lock state remains active
 /// - If transfer refunds, transfer window remains valid if block < until
 #[tokio::test]
-#[ignore = "C2"]
 async fn nft_transfer_call_keeps_locks() -> Result<()> {
     let env = Env::new().await?;
 
@@ -742,13 +652,20 @@ async fn nft_transfer_call_keeps_locks() -> Result<()> {
         .issue_claim_with_details(
             &env.alice,
             0,
-            None,
+            Some(Debtor::Near(env.alice.id().clone())),
             Hex32::default(),
             1_000_000,
             1_800_000_000,
             None,
         )
         .await?;
+    env.alice
+        .call(env.root.id(), "acknowledge_near")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
 
     // Prepare transfer -> sets TransferWindow
     let prep_res = env
@@ -759,6 +676,13 @@ async fn nft_transfer_call_keeps_locks() -> Result<()> {
         .transact()
         .await?;
     assert!(prep_res.is_success());
+    let before: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(matches!(before.lock, Lock::TransferWindow { .. }));
 
     // Execute nft_transfer_call that refunds
     let res = env
@@ -785,7 +709,98 @@ async fn nft_transfer_call_keeps_locks() -> Result<()> {
         .await?
         .json()?;
     assert_eq!(token.owner_id, env.alice.id().clone());
+    let after: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(
+        after.lock, before.lock,
+        "refund restores the prepared window lock"
+    );
 
+    Ok(())
+}
+
+/// 6b. A receiver that moves the token on inside `nft_on_transfer` keeps it; resolve must not take it back.
+#[tokio::test]
+async fn nft_transfer_call_receiver_moved_on_no_takeback() -> Result<()> {
+    let env = Env::new().await?;
+    let buyer = env.worker.dev_create_account().await?;
+    let receiver = env
+        .worker
+        .dev_deploy(&openrail_tests::wasms::mock_nft_receiver_wasm()?)
+        .await?;
+
+    let _ = env
+        .issue_claim_with_details(
+            &env.alice,
+            0,
+            Some(Debtor::Near(env.alice.id().clone())),
+            Hex32::default(),
+            1_000_000,
+            1_800_000_000,
+            None,
+        )
+        .await?;
+    env.alice
+        .call(env.root.id(), "acknowledge_near")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let memo = "6666666666666666666666666666666666666666666666666666666666666666";
+    let res = env
+        .alice
+        .call(env.root.id(), "nft_transfer_call")
+        .args_json(json!({
+            "receiver_id": receiver.id(),
+            "token_id": "c-1",
+            "approval_id": null,
+            "memo": memo,
+            "msg": json!({
+                "receiver_id": buyer.id(),
+                "memo": "7777777777777777777777777777777777777777777777777777777777777777",
+            })
+            .to_string(),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
+    let token: JsonToken = env
+        .root
+        .view("nft_token")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(
+        token.owner_id,
+        buyer.id().clone(),
+        "resolve must not reclaim a moved token"
+    );
+    let claim: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(
+        matches!(claim.lock, Lock::None),
+        "a successful transfer releases the window"
+    );
+
+    Ok(())
+}
+
+/// TODO(#38): `prepare_transfer` must run reconcile first and open the window in its callback.
+#[tokio::test]
+#[ignore = "C4-prepare: needs the #38 reconcile flow and open_transfer_window callback"]
+async fn prepare_transfer_reconciles_before_window() -> Result<()> {
     Ok(())
 }
 
@@ -796,7 +811,6 @@ async fn nft_transfer_call_keeps_locks() -> Result<()> {
 /// - `nft_transfer` event emitted on `nft_transfer` conforms to `nft_transfer.schema.json`
 /// - All standard fields (`standard == "nep171"`, `version == "1.0.0"`, `event`, `data`) validated
 #[tokio::test]
-#[ignore = "C2"]
 async fn nft_events_nep297() -> Result<()> {
     let env = Env::new().await?;
 
@@ -821,6 +835,15 @@ async fn nft_events_nep297() -> Result<()> {
         !mint_events.is_empty(),
         "nft_mint event must be emitted and validate against schema"
     );
+
+    // Acknowledgement is required before a sale (Rule 3); Bob is the debtor.
+    env.bob
+        .call(env.root.id(), "acknowledge_near")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
 
     // 2. Transfer claim -> must emit valid nft_transfer event
     let transfer_res = env

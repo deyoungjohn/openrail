@@ -7,12 +7,14 @@
 
 #![allow(clippy::too_many_arguments)]
 
+pub mod ack;
 pub mod claims;
 pub mod eip712;
 pub mod events;
 pub mod hooks;
 pub mod issue;
 pub mod modules;
+pub mod nft;
 pub mod svg;
 pub mod terms;
 pub mod types;
@@ -20,7 +22,7 @@ pub mod views;
 
 use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
-use near_sdk::{env, near, AccountId, PanicOnDefault, PromiseOrValue};
+use near_sdk::{env, near, AccountId, PanicOnDefault};
 use std::collections::HashMap;
 
 pub use types::{
@@ -38,6 +40,10 @@ pub const STORAGE_PREFIX_CLAIMS: &[u8] = b"c:";
 pub const STORAGE_PREFIX_OWNER_INDEX: &[u8] = b"o:";
 /// Storage prefix for token metadata map.
 pub const STORAGE_PREFIX_TOKEN_METADATA: &[u8] = b"t:";
+/// Storage prefix for NEP-178 approvals per token.
+pub const STORAGE_PREFIX_APPROVALS: &[u8] = b"a:";
+/// Storage prefix for in-flight `nft_transfer_call` previous-lock state.
+pub const STORAGE_PREFIX_TRANSFER_CALL_STATE: &[u8] = b"w:";
 /// Storage prefix for per-key append-only payment log entries (`LookupMap<(String, u64), Quote>`).
 pub const STORAGE_PREFIX_PAYMENT_LOG: &[u8] = b"l:";
 /// Storage prefix for payment log per-token count (`LookupMap<String, u64>`).
@@ -75,6 +81,8 @@ pub struct Contract {
     pub claims: LookupMap<String, Claim>,
     pub owner_index: LookupMap<AccountId, Vec<String>>,
     pub token_metadata: LookupMap<String, TokenMetadata>,
+    pub approvals: LookupMap<String, HashMap<AccountId, u64>>,
+    pub transfer_call_state: LookupMap<String, (Lock, Option<Hex32>)>,
     pub payment_log: LookupMap<(String, u64), Quote>,
     pub payment_log_count: LookupMap<String, u64>,
     pub quote_dedup: LookupMap<(String, String), ()>,
@@ -95,6 +103,8 @@ impl Contract {
             claims: LookupMap::new(STORAGE_PREFIX_CLAIMS),
             owner_index: LookupMap::new(STORAGE_PREFIX_OWNER_INDEX),
             token_metadata: LookupMap::new(STORAGE_PREFIX_TOKEN_METADATA),
+            approvals: LookupMap::new(STORAGE_PREFIX_APPROVALS),
+            transfer_call_state: LookupMap::new(STORAGE_PREFIX_TRANSFER_CALL_STATE),
             payment_log: LookupMap::new(STORAGE_PREFIX_PAYMENT_LOG),
             payment_log_count: LookupMap::new(STORAGE_PREFIX_PAYMENT_LOG_COUNT),
             quote_dedup: LookupMap::new(STORAGE_PREFIX_QUOTE_DEDUP),
@@ -182,8 +192,7 @@ impl Contract {
     /// Caller: Must match `claim.debtor == Near(predecessor)`.
     /// Deposit: None. Write-once: sets `ack` and emits `ack` event.
     pub fn acknowledge_near(&mut self, token_id: String) {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_acknowledge_near(token_id);
     }
 
     /// Debtor acknowledgment via EIP-712 signature on EVM key.
@@ -192,8 +201,7 @@ impl Contract {
     /// Deposit: None. Verifies EIP-712 signature with `env::ecrecover`;
     ///         recovered address must equal `claim.debtor == Evm(address)`.
     pub fn acknowledge_evm(&mut self, token_id: String, chain_id: u64, sig: HexBytes) {
-        let _ = (token_id, chain_id, sig);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_acknowledge_evm(token_id, chain_id, sig);
     }
 
     // ──────────────────────────────────────────
@@ -233,11 +241,11 @@ impl Contract {
     ///
     /// Caller: Claim owner only.
     /// Deposit: None.
-    /// Effect: Runs reconcile; callback opens `TransferWindow { until: now + 1800 blocks }`
-    ///         if `hooks::check_transfer` passes.
+    /// Effect: Opens `TransferWindow { until: block + 1,800 }` when the core transfer
+    ///         rules and `hooks::check_transfer` pass. Reconcile-first is C4; this path is
+    ///         deliberately synchronous until #38 exposes a post-reconcile window callback.
     pub fn prepare_transfer(&mut self, token_id: String) {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_prepare_transfer(token_id);
     }
 
     // ──────────────────────────────────────────
@@ -257,8 +265,7 @@ impl Contract {
         approval_id: Option<u64>,
         memo: Option<String>,
     ) {
-        let _ = (receiver_id, token_id, approval_id, memo);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_transfer(receiver_id, token_id, approval_id, memo);
     }
 
     /// Transfers claim ownership and calls `nft_on_transfer` on receiver.
@@ -274,9 +281,8 @@ impl Contract {
         approval_id: Option<u64>,
         memo: Option<String>,
         msg: String,
-    ) -> PromiseOrValue<bool> {
-        let _ = (receiver_id, token_id, approval_id, memo, msg);
-        env::panic_str("NOT_IMPLEMENTED");
+    ) -> bool {
+        self.internal_nft_transfer_call(receiver_id, token_id, approval_id, memo, msg)
     }
 
     /// Callback resolving `nft_transfer_call`.
@@ -291,13 +297,12 @@ impl Contract {
         token_id: String,
         approved_account_ids: Option<HashMap<AccountId, u64>>,
     ) -> bool {
-        let _ = (
+        self.internal_nft_resolve_transfer(
             previous_owner_id,
             receiver_id,
             token_id,
             approved_account_ids,
-        );
-        env::panic_str("NOT_IMPLEMENTED");
+        )
     }
 
     // ──────────────────────────────────────────
@@ -315,8 +320,7 @@ impl Contract {
         account_id: AccountId,
         msg: Option<String>,
     ) -> Option<u64> {
-        let _ = (token_id, account_id, msg);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_approve(token_id, account_id, msg)
     }
 
     /// Revokes an approved account for the specified claim.
@@ -325,8 +329,7 @@ impl Contract {
     /// Deposit: Exactly 1 yoctoNEAR.
     #[payable]
     pub fn nft_revoke(&mut self, token_id: String, account_id: AccountId) {
-        let _ = (token_id, account_id);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_revoke(token_id, account_id);
     }
 
     /// Revokes all approved accounts for the specified claim.
@@ -335,8 +338,7 @@ impl Contract {
     /// Deposit: Exactly 1 yoctoNEAR.
     #[payable]
     pub fn nft_revoke_all(&mut self, token_id: String) {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_revoke_all(token_id);
     }
 
     /// Checks if an account is approved for transfer.
@@ -346,8 +348,7 @@ impl Contract {
         approved_account_id: AccountId,
         approval_id: Option<u64>,
     ) -> bool {
-        let _ = (token_id, approved_account_id, approval_id);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_is_approved(token_id, approved_account_id, approval_id)
     }
 
     // ──────────────────────────────────────────
@@ -356,30 +357,27 @@ impl Contract {
 
     /// Returns contract-level metadata (spec "nft-1.0.0").
     pub fn nft_metadata(&self) -> NFTContractMetadata {
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_metadata()
     }
 
     /// Returns token details including owner and metadata.
     pub fn nft_token(&self, token_id: String) -> Option<JsonToken> {
-        let _ = token_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_token(&token_id)
     }
 
     /// Returns total number of active tokens.
     pub fn nft_total_supply(&self) -> U128 {
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_total_supply()
     }
 
     /// Enumerates tokens paginated.
     pub fn nft_tokens(&self, from_index: Option<U128>, limit: Option<u64>) -> Vec<JsonToken> {
-        let _ = (from_index, limit);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_tokens(from_index, limit)
     }
 
     /// Returns number of tokens owned by the given account.
     pub fn nft_supply_for_owner(&self, account_id: AccountId) -> U128 {
-        let _ = account_id;
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_supply_for_owner(&account_id)
     }
 
     /// Enumerates tokens owned by the given account paginated.
@@ -389,8 +387,7 @@ impl Contract {
         from_index: Option<U128>,
         limit: Option<u64>,
     ) -> Vec<JsonToken> {
-        let _ = (account_id, from_index, limit);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_nft_tokens_for_owner(&account_id, from_index, limit)
     }
 
     // ──────────────────────────────────────────
@@ -404,8 +401,7 @@ impl Contract {
     ///               and `hooks::check_cancel` passes.
     /// Post-ack: Requires debtor co-signature (EVM EIP-712 or NEAR caller).
     pub fn cancel(&mut self, token_id: String, debtor_cosig: Option<DebtorCosig>) {
-        let _ = (token_id, debtor_cosig);
-        env::panic_str("NOT_IMPLEMENTED");
+        self.internal_cancel(token_id, debtor_cosig);
     }
 
     /// Formally closes a fully paid claim (`Paid` -> `Closed`).

@@ -2623,6 +2623,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "openrail-mock-nft-receiver"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+ "serde_json",
+]
+
+[[package]]
 name = "openrail-mock-signer"
 version = "0.1.0"
 dependencies = [

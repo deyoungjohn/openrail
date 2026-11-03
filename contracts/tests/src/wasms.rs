@@ -18,6 +18,7 @@ static VAULT_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
 static INTENTS_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
 static SIGNER_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
 static USDC_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
+static NFT_RECEIVER_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
 
 /// Compiles a crate into wasm32-unknown-unknown with `--cfg near`.
 fn compile_wasm(
@@ -213,5 +214,21 @@ pub fn mock_usdc_wasm() -> Result<Vec<u8>> {
 
     let bytes = compile_wasm(&manifest, "sandbox-mock-usdc", "openrail_mock_usdc.wasm")?;
     let _ = USDC_WASM_CACHE.set(bytes.clone());
+    Ok(bytes)
+}
+
+/// Returns the sandbox-only NEP-171 re-transferring receiver bytecode.
+pub fn mock_nft_receiver_wasm() -> Result<Vec<u8>> {
+    if let Some(cached) = NFT_RECEIVER_WASM_CACHE.get() {
+        return Ok(cached.clone());
+    }
+
+    let root = workspace_root();
+    let bytes = compile_wasm(
+        &root.join("contracts/mocks/nft_receiver/Cargo.toml"),
+        "sandbox-mock-nft-receiver",
+        "openrail_mock_nft_receiver.wasm",
+    )?;
+    let _ = NFT_RECEIVER_WASM_CACHE.set(bytes.clone());
     Ok(bytes)
 }
