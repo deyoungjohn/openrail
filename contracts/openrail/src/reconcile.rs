@@ -95,6 +95,11 @@ impl Contract {
         token_id: String,
         open_transfer_window: bool,
     ) {
+        require!(
+            env::prepaid_gas() >= Gas::from_tgas(230),
+            "insufficient gas for reconcile"
+        );
+
         let claim = self
             .claims
             .get_mut(&token_id)
@@ -482,6 +487,8 @@ impl Contract {
                 } else {
                     restore_lock(claim, prev_lock);
                 }
+            } else {
+                restore_lock(claim, prev_lock);
             }
             return;
         }
@@ -530,7 +537,7 @@ impl Contract {
             .get_mut(&token_id)
             .unwrap_or_else(|| env::panic_str("claim not found"));
 
-        if !is_retry && claim.lock != (Lock::Reconciling { since }) {
+        if claim.lock != (Lock::Reconciling { since }) {
             ReconcileFailedEvent {
                 token_id,
                 reason: "stale_callback".to_string(),
@@ -604,6 +611,8 @@ impl Contract {
             } else {
                 restore_lock(claim, prev_lock);
             }
+        } else {
+            restore_lock(claim, prev_lock);
         }
     }
 
@@ -611,20 +620,31 @@ impl Contract {
     pub(crate) fn internal_retry_distribution(&mut self, token_id: String) {
         let claim = self
             .claims
-            .get(&token_id)
+            .get_mut(&token_id)
             .unwrap_or_else(|| env::panic_str("claim not found"));
+
+        require!(
+            claim.lock.allows_transfer(),
+            "cannot retry while reconciling"
+        );
 
         let undistributed = self.undistributed.remove(&token_id).unwrap_or_default();
 
         require!(!undistributed.is_empty(), "no undistributed legs");
+
+        let prev_lock = claim.lock.clone();
+        let current_block = env::block_height();
+        claim.lock = Lock::Reconciling {
+            since: current_block,
+        };
 
         let claim_account = claim.claim_account.clone();
         self.dispatch_distribution_forwards(
             &token_id,
             claim_account,
             undistributed,
-            Lock::None,
-            0,
+            prev_lock,
+            current_block,
             true,
             false,
         );

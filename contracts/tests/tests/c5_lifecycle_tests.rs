@@ -318,3 +318,129 @@ async fn test_c5_release_surplus_enforces_rules_and_emits_event() -> Result<()> 
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_c5_reconcile_gas_check() -> Result<()> {
+    let env = Env::new().await?;
+
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
+    // 1. Reconcile with 100 Tgas fails with "insufficient gas for reconcile"
+    let rec_low_gas = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .gas(near_workspaces::types::Gas::from_tgas(100))
+        .transact()
+        .await?;
+    assert!(rec_low_gas.is_failure());
+    let failure = format!("{:?}", rec_low_gas.failures());
+    assert!(
+        failure.contains("insufficient gas for reconcile"),
+        "Must fail with 'insufficient gas for reconcile', got: {failure}"
+    );
+
+    // 2. Reconcile with 250 Tgas succeeds
+    let rec_ok_gas = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .gas(near_workspaces::types::Gas::from_tgas(250))
+        .transact()
+        .await?;
+    assert!(rec_ok_gas.is_success());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_c5_retry_distribution_rejected_during_reconcile() -> Result<()> {
+    let env = Env::new().await?;
+
+    let amount_due = 1_000_000u128;
+    let _ = env
+        .issue_claim(&env.alice, 0, amount_due, 1_800_000_000)
+        .await?;
+
+    // Set fee account to an account that rejects transfer in mock intents to create an undistributed leg
+    let _ = env
+        .root
+        .call("set_config")
+        .args_json(json!({
+            "fee_account": "fail-fees.near",
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let _ = env.fund_claim("c-1", amount_due, None).await?;
+
+    let rec_res = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_res.is_success());
+
+    let cv: openrail::types::ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(!cv.undistributed.is_empty(), "Must have undistributed leg");
+
+    // Patch state of claim c-1 to have Lock::Reconciling
+    let records = env.root.view_state().await?;
+    let mut patched = false;
+    for (k, v) in records {
+        if let Ok(mut claim) =
+            <openrail::types::Claim as near_sdk::borsh::BorshDeserialize>::try_from_slice(&v)
+        {
+            if claim.token_id == "c-1" {
+                claim.lock = openrail::types::Lock::Reconciling { since: 50 };
+                let updated = near_sdk::borsh::to_vec(&claim).unwrap();
+                env.worker.patch_state(env.root.id(), &k, &updated).await?;
+                patched = true;
+                break;
+            }
+        }
+    }
+    assert!(patched, "Claim state record must be found and patched");
+
+    // Verify claim lock is now Reconciling
+    let view_locked: openrail::types::ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(matches!(
+        view_locked.lock,
+        openrail::types::Lock::Reconciling { .. }
+    ));
+
+    // Calling retry_distribution must fail because claim is Reconciling
+    let retry_res = env
+        .alice
+        .call(env.root.id(), "retry_distribution")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(retry_res.is_failure());
+    let failure = format!("{:?}", retry_res.failures());
+    assert!(
+        failure.contains("cannot retry while reconciling"),
+        "Must fail with 'cannot retry while reconciling', got: {failure}"
+    );
+
+    Ok(())
+}
