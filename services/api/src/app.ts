@@ -64,6 +64,15 @@ export interface AccessKeyPort {
   has(accountId: string, publicKey: string): Promise<boolean>;
 }
 
+export interface IndexerPort {
+  listReceipts(accountId: string, tokenId: string): Promise<Record<string, unknown>[]>;
+  getReceipt(bookingTxHash: string): Promise<Record<string, unknown> | undefined>;
+  getStatement(
+    accountId: string,
+    query: { from?: string; to?: string; format: "csv" | "pdf"; tokenId?: string },
+  ): Promise<Record<string, unknown>>;
+}
+
 export interface CashoutPort {
   quote(request: {
     amount: string;
@@ -165,6 +174,7 @@ export interface ApiDeps {
   issuer: IssuerPort;
   accessKey: AccessKeyPort;
   cashout: CashoutPort;
+  indexer?: IndexerPort;
   verifier?: Nep413Verifier;
   routes?: RouteFile;
   clock?: () => Date;
@@ -642,14 +652,14 @@ export class ApiApp {
         });
       }
       if (action === "receipts" && method === "GET") {
-        this.requireScope(this.requireAuth(request), "receipts:read");
+        const context = this.requireAuth(request);
+        this.requireScope(context, "receipts:read");
         const invoice = this.invoiceBy(invoiceId);
-        return {
-          status: 200,
-          body: {
-            data: this.store.listReceipts(invoice.token_id),
-          },
-        };
+        const receipts =
+          this.deps.indexer === undefined
+            ? this.store.listReceipts(invoice.token_id)
+            : await this.deps.indexer.listReceipts(context.accountId, invoice.token_id);
+        return { status: 200, body: { data: receipts } };
       }
       if (action === "pdf" && method === "GET") {
         this.requireScope(this.requireAuth(request), "invoices:read");
@@ -858,13 +868,27 @@ export class ApiApp {
     }
 
     if (path === "/v1/statements" && method === "GET") {
-      this.requireAuth(request);
-      const format = request.query.get("format") === "pdf" ? "pdf" : "csv";
       const context = this.requireAuth(request);
-      const tokenId = request.query.get("token_id");
+      const format = request.query.get("format") === "pdf" ? "pdf" : "csv";
+      const tokenId = request.query.get("token_id") ?? undefined;
+      if (this.deps.indexer !== undefined) {
+        return {
+          status: 200,
+          body: await this.deps.indexer.getStatement(context.accountId, {
+            ...(request.query.get("from") === null
+              ? {}
+              : { from: request.query.get("from") ?? undefined }),
+            ...(request.query.get("to") === null
+              ? {}
+              : { to: request.query.get("to") ?? undefined }),
+            format,
+            ...(tokenId === undefined ? {} : { tokenId }),
+          }),
+        };
+      }
       const invoices = this.store
         .listInvoices(context.accountId)
-        .filter((invoice) => tokenId === null || invoice.token_id === tokenId);
+        .filter((invoice) => tokenId === undefined || invoice.token_id === tokenId);
       const csv = [
         "invoice_number,amount_usd,due_date,status",
         ...invoices.map(
@@ -992,13 +1016,17 @@ export class ApiApp {
 
     const receiptMatch = /^\/v1\/receipts\/([^/]+)$/.exec(path);
     if (receiptMatch !== null && method === "GET") {
-      const receipt = this.store.getReceipt(receiptMatch[1] ?? "");
+      const bookingTxHash = receiptMatch[1] ?? "";
+      const receipt =
+        this.deps.indexer === undefined
+          ? this.store.getReceipt(bookingTxHash)
+          : await this.deps.indexer.getReceipt(bookingTxHash);
       if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
       return {
         status: 200,
         body: {
           receipt,
-          verify_url: `${this.deps.config.payBaseUrl}/r/${receiptMatch[1]}`,
+          verify_url: `${this.deps.config.payBaseUrl}/r/${bookingTxHash}`,
           claim_account: String(receipt.token_id ?? "") + ".openrail.near",
         },
       };
