@@ -434,6 +434,15 @@ describe("session cookie", () => {
   });
 });
 
+describe("health route", () => {
+  it("answers without auth", async () => {
+    const { app } = harness();
+    const response = await app.handle(request("GET", "/v1/health", undefined, ""));
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true, mock: false });
+  });
+});
+
 describe("meta route", () => {
   it("serves the OpenAPI document", async () => {
     const { app } = harness();

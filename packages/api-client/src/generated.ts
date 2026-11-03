@@ -593,6 +593,11 @@ export type ApiKeyScope =
   | "webhooks:write"
   | "pay_sessions:create";
 
+export interface Health {
+  ok: true;
+  mock: boolean;
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -1046,6 +1051,11 @@ export interface operations {
       "400": Error;
       "401": Error;
       "403": Error;
+    };
+  };
+  getHealth: {
+    responses: {
+      "200": Health;
     };
   };
 }

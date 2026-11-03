@@ -94,6 +94,27 @@ Every error response is:
 `code` is stable; `rule` is present only when a contract rule refused the request.
 The fixtures for `400`, `401`, `404` and `409` are in `fixtures/api/`.
 
+## Error codes
+
+| Code                                                                                                                                                         | HTTP | Meaning                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------------------------------------------------------ |
+| `invalid_request`                                                                                                                                            | 400  | Missing or malformed field.                            |
+| `invalid_terms`                                                                                                                                              | 400  | Canonical terms validation failed.                     |
+| `invalid_refund_address`                                                                                                                                     | 400  | Missing or wrong-chain `refund_to` / cash-out address. |
+| `unknown_route`                                                                                                                                              | 400  | Route is not allow-listed.                             |
+| `unsupported_chain`                                                                                                                                          | 422  | Chain is not supported for this action.                |
+| `quote_failed`                                                                                                                                               | 502  | The provider returned no deposit address.              |
+| `invoice_not_found`, `claim_not_found`, `payment_not_found`, `receipt_not_found`, `pay_session_not_found`, `webhook_endpoint_not_found`, `api_key_not_found` | 404  | Resource does not exist for this business.             |
+| `idempotency_key_reuse`                                                                                                                                      | 409  | Same key with a different body.                        |
+| `unauthorized`, `invalid_api_key`, `session_expired`, `invalid_nonce`, `challenge_expired`, `wrong_account`, `invalid_signature`, `wrong_signer`             | 401  | Authentication failed.                                 |
+| `already_acknowledged`                                                                                                                                       | 409  | The claim already has an acknowledgement.              |
+| `contract_wallet`                                                                                                                                            | 422  | EIP-1271 contract wallets are not supported.           |
+| `insufficient_scope`                                                                                                                                         | 403  | Missing key scope; the message names it.               |
+| `csrf_origin`, `csrf_content_type`                                                                                                                           | 403  | Cookie-authenticated request failed the CSRF checks.   |
+| `forbidden`                                                                                                                                                  | 403  | Key kind is not allowed on this endpoint.              |
+| `not_found`                                                                                                                                                  | 404  | Unknown route.                                         |
+| `internal_error`                                                                                                                                             | 500  | Unexpected server error.                               |
+
 ## Core routes
 
 | Method | Path                         | Purpose                                                                                                                    |

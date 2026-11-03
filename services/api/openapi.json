@@ -172,7 +172,189 @@
           "error": {
             "$ref": "#/components/schemas/ErrorDetail"
           }
-        }
+        },
+        "examples": [
+          {
+            "error": {
+              "code": "invalid_request",
+              "message": "invoice_number required"
+            }
+          },
+          {
+            "error": {
+              "code": "invalid_terms",
+              "message": "TERMS_INVALID: amount_usd must be a string with exactly two decimals"
+            }
+          },
+          {
+            "error": {
+              "code": "invalid_refund_address",
+              "message": "missing or invalid origin-chain refund address"
+            }
+          },
+          {
+            "error": {
+              "code": "unknown_route",
+              "message": "route R99 is not allow-listed"
+            }
+          },
+          {
+            "error": {
+              "code": "unsupported_chain",
+              "message": "unsupported_chain"
+            }
+          },
+          {
+            "error": {
+              "code": "quote_failed",
+              "message": "provider returned no deposit address"
+            }
+          },
+          {
+            "error": {
+              "code": "invoice_not_found",
+              "message": "Invoice not found"
+            }
+          },
+          {
+            "error": {
+              "code": "claim_not_found",
+              "message": "claim_not_found"
+            }
+          },
+          {
+            "error": {
+              "code": "payment_not_found",
+              "message": "payment_not_found"
+            }
+          },
+          {
+            "error": {
+              "code": "receipt_not_found",
+              "message": "receipt_not_found"
+            }
+          },
+          {
+            "error": {
+              "code": "pay_session_not_found",
+              "message": "pay_session_not_found"
+            }
+          },
+          {
+            "error": {
+              "code": "webhook_endpoint_not_found",
+              "message": "webhook_endpoint_not_found"
+            }
+          },
+          {
+            "error": {
+              "code": "api_key_not_found",
+              "message": "api_key_not_found"
+            }
+          },
+          {
+            "error": {
+              "code": "idempotency_key_reuse",
+              "message": "IDEMPOTENCY_KEY_REUSE: same key with a different body"
+            }
+          },
+          {
+            "error": {
+              "code": "unauthorized",
+              "message": "unauthorized"
+            }
+          },
+          {
+            "error": {
+              "code": "invalid_api_key",
+              "message": "invalid_api_key"
+            }
+          },
+          {
+            "error": {
+              "code": "session_expired",
+              "message": "session_expired"
+            }
+          },
+          {
+            "error": {
+              "code": "invalid_nonce",
+              "message": "nonce must be 32 bytes"
+            }
+          },
+          {
+            "error": {
+              "code": "challenge_expired",
+              "message": "challenge_expired"
+            }
+          },
+          {
+            "error": {
+              "code": "wrong_account",
+              "message": "wrong_account"
+            }
+          },
+          {
+            "error": {
+              "code": "invalid_signature",
+              "message": "invalid_signature"
+            }
+          },
+          {
+            "error": {
+              "code": "wrong_signer",
+              "message": "wrong_signer"
+            }
+          },
+          {
+            "error": {
+              "code": "already_acknowledged",
+              "message": "already_acknowledged"
+            }
+          },
+          {
+            "error": {
+              "code": "contract_wallet",
+              "message": "contract_wallet"
+            }
+          },
+          {
+            "error": {
+              "code": "insufficient_scope",
+              "message": "missing scope: invoices:write"
+            }
+          },
+          {
+            "error": {
+              "code": "csrf_origin",
+              "message": "cookie-authenticated request needs an allowed Origin"
+            }
+          },
+          {
+            "error": {
+              "code": "csrf_content_type",
+              "message": "cookie-authenticated POST needs application/json"
+            }
+          },
+          {
+            "error": {
+              "code": "forbidden",
+              "message": "publishable keys may only create pay sessions"
+            }
+          },
+          {
+            "error": {
+              "code": "not_found",
+              "message": "not_found"
+            }
+          },
+          {
+            "error": {
+              "code": "internal_error",
+              "message": "internal error"
+            }
+          }
+        ]
       },
       "Debtor": {
         "oneOf": [
@@ -2180,6 +2362,19 @@
           "pay_sessions:create"
         ],
         "description": "Secret keys default to the five non-pay-session scopes; publishable keys have exactly pay_sessions:create."
+      },
+      "Health": {
+        "type": "object",
+        "required": ["ok", "mock"],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "mock": {
+            "type": "boolean"
+          }
+        }
       }
     }
   },
@@ -4532,6 +4727,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Liveness/readiness probe",
+        "tags": ["Meta"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service is up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
                 }
               }
             }
