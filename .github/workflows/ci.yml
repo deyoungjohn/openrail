@@ -280,6 +280,9 @@ jobs:
         name: Build web package
         run: pnpm --filter @openrail/web build
       - if: github.event_name == 'push' || needs.changes.outputs.web == 'true'
+        name: Install Playwright Chromium
+        run: pnpm --filter @openrail/web exec playwright install --with-deps chromium
+      - if: github.event_name == 'push' || needs.changes.outputs.web == 'true'
         name: Run signed-in smoke tests on mock API
         run: pnpm --filter @openrail/web test:e2e:smoke
       - if: github.event_name == 'pull_request' && needs.changes.outputs.web != 'true'

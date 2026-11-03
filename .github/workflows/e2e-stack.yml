@@ -50,5 +50,7 @@ jobs:
         run: cargo near build non-reproducible-wasm --manifest-path contracts/openrail/Cargo.toml
       - name: Build web package
         run: pnpm --filter @openrail/web build
+      - name: Install Playwright Chromium
+        run: pnpm --filter @openrail/web exec playwright install --with-deps chromium
       - name: Run full-stack e2e suite
         run: pnpm --filter @openrail/web test:e2e:stack
