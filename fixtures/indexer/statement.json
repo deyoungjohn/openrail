@@ -1,0 +1,10 @@
+{
+  "format": "csv",
+  "filename": "statement-2026-11-01-2026-11-30.csv",
+  "content_type": "text/csv",
+  "content_base64": "aW52b2ljZV9udW1iZXIsYW1vdW50X2R1cwpJTlYtMjAyNi0wMDEsMTI1MDAwMDAK",
+  "sha256": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "generated_at": "2026-11-02T10:10:00Z",
+  "from": "2026-11-01",
+  "to": "2026-11-30"
+}
