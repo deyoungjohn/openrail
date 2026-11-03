@@ -10,7 +10,7 @@
 use anyhow::Result;
 use near_sdk::json_types::U128;
 use near_workspaces::types::NearToken;
-use openrail::types::{Debtor, Hex32, JsonToken};
+use openrail::types::{ClaimView, Debtor, Hex32, JsonToken, Lock};
 use openrail_model::{
     Action, Debtor as ModelDebtor, Hex32 as ModelHex32, Model, ModelError, Status,
 };
@@ -676,6 +676,13 @@ async fn nft_transfer_call_keeps_locks() -> Result<()> {
         .transact()
         .await?;
     assert!(prep_res.is_success());
+    let before: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(matches!(before.lock, Lock::TransferWindow { .. }));
 
     // Execute nft_transfer_call that refunds
     let res = env
@@ -702,7 +709,98 @@ async fn nft_transfer_call_keeps_locks() -> Result<()> {
         .await?
         .json()?;
     assert_eq!(token.owner_id, env.alice.id().clone());
+    let after: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(
+        after.lock, before.lock,
+        "refund restores the prepared window lock"
+    );
 
+    Ok(())
+}
+
+/// 6b. A receiver that moves the token on inside `nft_on_transfer` keeps it; resolve must not take it back.
+#[tokio::test]
+async fn nft_transfer_call_receiver_moved_on_no_takeback() -> Result<()> {
+    let env = Env::new().await?;
+    let buyer = env.worker.dev_create_account().await?;
+    let receiver = env
+        .worker
+        .dev_deploy(&openrail_tests::wasms::mock_nft_receiver_wasm()?)
+        .await?;
+
+    let _ = env
+        .issue_claim_with_details(
+            &env.alice,
+            0,
+            Some(Debtor::Near(env.alice.id().clone())),
+            Hex32::default(),
+            1_000_000,
+            1_800_000_000,
+            None,
+        )
+        .await?;
+    env.alice
+        .call(env.root.id(), "acknowledge_near")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let memo = "6666666666666666666666666666666666666666666666666666666666666666";
+    let res = env
+        .alice
+        .call(env.root.id(), "nft_transfer_call")
+        .args_json(json!({
+            "receiver_id": receiver.id(),
+            "token_id": "c-1",
+            "approval_id": null,
+            "memo": memo,
+            "msg": json!({
+                "receiver_id": buyer.id(),
+                "memo": "7777777777777777777777777777777777777777777777777777777777777777",
+            })
+            .to_string(),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
+    let token: JsonToken = env
+        .root
+        .view("nft_token")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(
+        token.owner_id,
+        buyer.id().clone(),
+        "resolve must not reclaim a moved token"
+    );
+    let claim: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(
+        matches!(claim.lock, Lock::None),
+        "a successful transfer releases the window"
+    );
+
+    Ok(())
+}
+
+/// TODO(#38): `prepare_transfer` must run reconcile first and open the window in its callback.
+#[tokio::test]
+#[ignore = "C4-prepare: needs the #38 reconcile flow and open_transfer_window callback"]
+async fn prepare_transfer_reconciles_before_window() -> Result<()> {
     Ok(())
 }
 

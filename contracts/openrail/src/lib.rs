@@ -42,6 +42,8 @@ pub const STORAGE_PREFIX_OWNER_INDEX: &[u8] = b"o:";
 pub const STORAGE_PREFIX_TOKEN_METADATA: &[u8] = b"t:";
 /// Storage prefix for NEP-178 approvals per token.
 pub const STORAGE_PREFIX_APPROVALS: &[u8] = b"a:";
+/// Storage prefix for in-flight `nft_transfer_call` previous-lock state.
+pub const STORAGE_PREFIX_TRANSFER_CALL_STATE: &[u8] = b"w:";
 /// Storage prefix for per-key append-only payment log entries (`LookupMap<(String, u64), Quote>`).
 pub const STORAGE_PREFIX_PAYMENT_LOG: &[u8] = b"l:";
 /// Storage prefix for payment log per-token count (`LookupMap<String, u64>`).
@@ -80,6 +82,7 @@ pub struct Contract {
     pub owner_index: LookupMap<AccountId, Vec<String>>,
     pub token_metadata: LookupMap<String, TokenMetadata>,
     pub approvals: LookupMap<String, HashMap<AccountId, u64>>,
+    pub transfer_call_state: LookupMap<String, (Lock, Option<Hex32>)>,
     pub payment_log: LookupMap<(String, u64), Quote>,
     pub payment_log_count: LookupMap<String, u64>,
     pub quote_dedup: LookupMap<(String, String), ()>,
@@ -101,6 +104,7 @@ impl Contract {
             owner_index: LookupMap::new(STORAGE_PREFIX_OWNER_INDEX),
             token_metadata: LookupMap::new(STORAGE_PREFIX_TOKEN_METADATA),
             approvals: LookupMap::new(STORAGE_PREFIX_APPROVALS),
+            transfer_call_state: LookupMap::new(STORAGE_PREFIX_TRANSFER_CALL_STATE),
             payment_log: LookupMap::new(STORAGE_PREFIX_PAYMENT_LOG),
             payment_log_count: LookupMap::new(STORAGE_PREFIX_PAYMENT_LOG_COUNT),
             quote_dedup: LookupMap::new(STORAGE_PREFIX_QUOTE_DEDUP),

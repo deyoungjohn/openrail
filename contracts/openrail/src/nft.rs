@@ -84,10 +84,8 @@ impl Contract {
         );
 
         let rules = hooks::dispatch_kind_rules(claim.kind);
+        require!(rules.sellable, crate::ERR_RULE_7_NOT_SELLABLE);
         let sale = is_sale(claim, receiver);
-        if sale {
-            require!(rules.sellable, crate::ERR_RULE_7_NOT_SELLABLE);
-        }
         require!(
             receiver != &claim.claim_account,
             crate::ERR_RULE_5_RECEIVER_NOT_CLAIM
@@ -122,6 +120,7 @@ impl Contract {
         if is_sale(claim, receiver) {
             claim.assignment_doc_hash = parse_assignment_hash(memo);
         }
+        claim.lock = Lock::None;
         self.claims.insert(claim.token_id.clone(), claim.clone());
         self.set_approvals(&claim.token_id, HashMap::new());
 
@@ -167,8 +166,16 @@ impl Contract {
             .is_owner_or_approved(&claim, &caller, approval_id)
             .unwrap_or_else(|| env::panic_str("Unauthorized: owner or approved account only"));
         self.assert_transfer_rules(&claim, &receiver_id, &memo);
+        let previous_lock = claim.lock.clone();
+        let previous_assignment = claim.assignment_doc_hash;
         let (previous_owner, previous_approvals) =
             self.move_token(&mut claim, &receiver_id, &memo, authorized);
+        claim.lock = Lock::TransferWindow {
+            until: env::block_height() + TRANSFER_WINDOW_BLOCKS,
+        };
+        self.claims.insert(token_id.clone(), claim);
+        self.transfer_call_state
+            .insert(token_id.clone(), (previous_lock, previous_assignment));
 
         let call_args = near_sdk::serde_json::json!({
             "sender_id": caller,
@@ -215,17 +222,25 @@ impl Contract {
             Ok(bytes) => near_sdk::serde_json::from_slice::<bool>(&bytes).unwrap_or(true),
             Err(_) => true,
         };
-        if !refund {
-            return false;
-        }
+        let previous = self.transfer_call_state.remove(&token_id);
         let Some(mut claim) = self.claims.get(&token_id).cloned() else {
             return false;
         };
-        // The receiver's ownership is reverted to the previous owner.
+        if claim.owner_id != receiver_id {
+            // The receiver moved the token on inside `nft_on_transfer`; nothing to refund.
+            return true;
+        }
+        if !refund {
+            claim.lock = Lock::None;
+            self.claims.insert(token_id, claim);
+            return false;
+        }
+        // The receiver still owns the token and asked for a refund: restore the sender.
         self.internal_remove_owner_token(&receiver_id, &token_id);
         self.internal_add_owner_token(&previous_owner_id, &token_id);
         claim.owner_id = previous_owner_id.clone();
-        claim.assignment_doc_hash = None;
+        claim.assignment_doc_hash = previous.as_ref().and_then(|(_, assignment)| *assignment);
+        claim.lock = previous.map(|(lock, _)| lock).unwrap_or(Lock::None);
         self.claims.insert(token_id.clone(), claim);
         self.set_approvals(&token_id, approved_account_ids.unwrap_or_default());
         NftTransferEvent {
