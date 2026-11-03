@@ -238,7 +238,7 @@ export class NearClient {
     return JSON.parse(new TextDecoder().decode(bytes)) as T;
   }
 
-  /** A read-only contract call (`query` + `call`, finality final). */
+  /** A read-only contract call (`query` + `call_function`, finality final). */
   async view<T>(request: ViewRequest): Promise<T> {
     return this.query<T>(
       {
