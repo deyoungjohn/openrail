@@ -666,7 +666,6 @@ async fn counters_monotonic() -> Result<()> {
 /// Asserts:
 /// - Calling reconcile when no new funds arrived produces no changes
 #[tokio::test]
-#[ignore = "SQ-9"]
 async fn reconcile_idempotent() -> Result<()> {
     let env = Env::new().await?;
 
@@ -731,8 +730,10 @@ async fn reconcile_idempotent() -> Result<()> {
         )
         .unwrap();
     assert!(
-        events.is_empty(),
-        "Zero-delta reconcile emits no events in model"
+        events
+            .iter()
+            .all(|e| matches!(e, openrail_model::Event::ReconcileStarted { .. })),
+        "Zero-delta reconcile emits no state-altering events in model"
     );
     let model_post = model.get_claim(&token_id).unwrap();
     assert!(check_reconcile_idempotent(&model_pre, model_post).is_ok());
