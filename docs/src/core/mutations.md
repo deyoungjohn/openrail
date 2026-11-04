@@ -16,13 +16,14 @@ The working tree was clean after restoring all mutations (`git diff --exit-code`
 
 ## C2 — NEP-171 transfers
 
-| ID    | Break                               | Test                                  | Result          |
-| ----- | ----------------------------------- | ------------------------------------- | --------------- |
-| C2-M1 | exact 1 yocto removed               | `nft_transfer_requires_one_yocto`     | FAILED (caught) |
-| C2-M2 | ack rule removed                    | `nft_transfer_rules_enforced`         | FAILED (caught) |
-| C2-M3 | assignment memo rule removed        | `nft_transfer_rules_enforced`         | FAILED (caught) |
-| C2-M4 | claim-account receiver rule removed | `no_self_ownership`                   | FAILED (caught) |
-| C2-M5 | approvals not cleared on transfer   | `nft_transfer_only_owner_or_approved` | FAILED (caught) |
+| ID    | Break                                        | Test                                                          | Result          |
+| ----- | -------------------------------------------- | ------------------------------------------------------------- | --------------- |
+| C2-M1 | exact 1 yocto removed                        | `nft_transfer_requires_one_yocto`                             | FAILED (caught) |
+| C2-M2 | ack rule removed                             | `nft_transfer_rules_enforced`                                 | FAILED (caught) |
+| C2-M3 | assignment memo rule removed                 | `nft_transfer_rules_enforced`                                 | FAILED (caught) |
+| C2-M4 | claim-account receiver rule removed          | `no_self_ownership`                                           | FAILED (caught) |
+| C2-M5 | approvals not cleared on transfer            | `nft_transfer_only_owner_or_approved`                         | FAILED (caught) |
+| C2-M6 | owner index swap-remove reverse key disabled | `nft_owner_index_enumeration_and_pagination_across_transfers` | FAILED (caught) |
 
 ### C2-M1: exact 1 yocto removed
 
@@ -160,6 +161,32 @@ Failure (tail):
 test nft_transfer_only_owner_or_approved ... FAILED
 thread 'nft_transfer_only_owner_or_approved' (3296308) panicked at contracts/tests/tests/nft_suite.rs:371:5:
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 58.54s
+```
+
+### C2-M6: owner index swap-remove reverse key disabled
+
+Command: `cargo test -p openrail-tests --test nft_suite nft_owner_index_enumeration_and_pagination_across_transfers`
+
+```diff
+--- a/contracts/openrail/src/claims.rs
++++ b/contracts/openrail/src/claims.rs
+@@ -126,6 +126,5 @@
+         // Execute uniform swap-write then remove so gas cost is constant regardless of idx == last_idx.
+         env::storage_write(&idx_i_key, &last_token);
+-        env::storage_write(&last_k_key, &idx.to_le_bytes());
+         env::storage_remove(&last_i_key);
+         env::storage_remove(&k_key);
+```
+
+Failure (tail):
+
+```text
+test nft_owner_index_enumeration_and_pagination_across_transfers ... FAILED
+thread 'nft_owner_index_enumeration_and_pagination_across_transfers' (1928423) panicked at contracts/tests/tests/nft_suite.rs:1292:5:
+assertion `left == right` failed
+  left: ["c-1", "c-8", "c-3", "c-4", "c-5", "c-6"]
+ right: ["c-1", "c-7", "c-3", "c-4", "c-5", "c-6"]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 59.66s
 ```
 
 ## C3 — acknowledgement

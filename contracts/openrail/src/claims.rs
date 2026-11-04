@@ -34,6 +34,119 @@ pub fn compute_outstanding(claim: &Claim) -> u128 {
     claim.amount_due.0.saturating_sub(discharged)
 }
 
+/// An `IterableSet`/`UnorderedSet`-style storage set backed by a unique storage prefix.
+///
+/// Stores:
+/// - `{prefix}:n` -> `u64` count of elements (8-byte little-endian)
+/// - `{prefix}:i:{idx_le}` -> element `String` at index `0 <= idx < count`
+/// - `{prefix}:k:{token_id}` -> `u64` index of `token_id` (8-byte little-endian)
+///
+/// Provides O(1) `insert`, O(1) `remove` (swap-remove with uniform storage operations),
+/// O(1) `len`, and O(limit) `iter_range(from, limit)` pagination without loading skipped elements.
+pub(crate) struct IndexedTokenSet {
+    prefix: Vec<u8>,
+}
+
+impl IndexedTokenSet {
+    /// Per-owner token set with unique storage prefix `b"o:{owner}"`.
+    pub(crate) fn for_owner(owner: &AccountId) -> Self {
+        let mut prefix =
+            Vec::with_capacity(crate::STORAGE_PREFIX_OWNER_INDEX.len() + owner.as_bytes().len());
+        prefix.extend_from_slice(crate::STORAGE_PREFIX_OWNER_INDEX);
+        prefix.extend_from_slice(owner.as_bytes());
+        Self { prefix }
+    }
+
+    /// Global active token set with storage prefix `b"ti:"`.
+    pub(crate) fn global() -> Self {
+        Self {
+            prefix: crate::STORAGE_PREFIX_TOKEN_INDEX.to_vec(),
+        }
+    }
+
+    fn len_key(&self) -> Vec<u8> {
+        let mut key = Vec::with_capacity(self.prefix.len() + 2);
+        key.extend_from_slice(&self.prefix);
+        key.extend_from_slice(b":n");
+        key
+    }
+
+    fn item_at_key(&self, idx: u64) -> Vec<u8> {
+        let mut key = Vec::with_capacity(self.prefix.len() + 3 + 8);
+        key.extend_from_slice(&self.prefix);
+        key.extend_from_slice(b":i:");
+        key.extend_from_slice(&idx.to_le_bytes());
+        key
+    }
+
+    fn index_of_bytes_key(&self, token_id: &[u8]) -> Vec<u8> {
+        let mut key = Vec::with_capacity(self.prefix.len() + 3 + token_id.len());
+        key.extend_from_slice(&self.prefix);
+        key.extend_from_slice(b":k:");
+        key.extend_from_slice(token_id);
+        key
+    }
+
+    pub(crate) fn len(&self) -> u64 {
+        env::storage_read(&self.len_key())
+            .and_then(|bytes| bytes.try_into().ok().map(u64::from_le_bytes))
+            .unwrap_or(0)
+    }
+
+    pub(crate) fn get(&self, idx: u64) -> Option<String> {
+        env::storage_read(&self.item_at_key(idx)).and_then(|bytes| String::from_utf8(bytes).ok())
+    }
+
+    pub(crate) fn insert(&mut self, token_id: &str) -> bool {
+        let k_key = self.index_of_bytes_key(token_id.as_bytes());
+        if env::storage_has_key(&k_key) {
+            return false;
+        }
+        let idx = self.len();
+        let i_key = self.item_at_key(idx);
+        let n_key = self.len_key();
+        env::storage_write(&i_key, token_id.as_bytes());
+        env::storage_write(&k_key, &idx.to_le_bytes());
+        env::storage_write(&n_key, &(idx + 1).to_le_bytes());
+        true
+    }
+
+    pub(crate) fn remove(&mut self, token_id: &str) -> bool {
+        let k_key = self.index_of_bytes_key(token_id.as_bytes());
+        let Some(idx_bytes) = env::storage_read(&k_key) else {
+            return false;
+        };
+        let idx = u64::from_le_bytes(idx_bytes.try_into().expect("valid u64 index"));
+        let len = self.len();
+        let last_idx = len.checked_sub(1).expect("non-empty set on remove");
+        let last_i_key = self.item_at_key(last_idx);
+        let last_token = env::storage_read(&last_i_key).expect("last token must exist");
+        let last_k_key = self.index_of_bytes_key(&last_token);
+        let idx_i_key = self.item_at_key(idx);
+
+        // Execute uniform swap-write then remove so gas cost is constant regardless of idx == last_idx.
+        env::storage_write(&idx_i_key, &last_token);
+        env::storage_write(&last_k_key, &idx.to_le_bytes());
+        env::storage_remove(&last_i_key);
+        env::storage_remove(&k_key);
+
+        let n_key = self.len_key();
+        env::storage_write(&n_key, &last_idx.to_le_bytes());
+        true
+    }
+
+    pub(crate) fn iter_range(
+        &self,
+        from: usize,
+        limit: usize,
+    ) -> impl Iterator<Item = String> + '_ {
+        let total = self.len() as usize;
+        let start = from.min(total);
+        let end = start.saturating_add(limit).min(total);
+        (start..end).filter_map(move |idx| self.get(idx as u64))
+    }
+}
+
 impl Contract {
     /// Asserts that the caller is the contract itself (`<root>`).
     pub(crate) fn assert_root_only(&self) {
@@ -43,29 +156,21 @@ impl Contract {
         );
     }
 
-    /// Adds a token ID to the owner's index list.
-    #[allow(dead_code)]
-    pub(crate) fn internal_add_owner_token(&mut self, owner: &AccountId, token_id: &str) {
-        let mut tokens = self.owner_index.get(owner).cloned().unwrap_or_default();
-        if !tokens.iter().any(|t| t == token_id) {
-            tokens.push(token_id.to_string());
-            self.owner_index.insert(owner.clone(), tokens);
-        }
+    /// Adds a token ID to the global token index set.
+    pub(crate) fn internal_add_global_token(&mut self, token_id: &str) {
+        IndexedTokenSet::global().insert(token_id);
     }
 
-    /// Removes a token ID from the owner's index list.
+    /// Adds a token ID to the owner's per-account token set.
+    #[allow(dead_code)]
+    pub(crate) fn internal_add_owner_token(&mut self, owner: &AccountId, token_id: &str) {
+        IndexedTokenSet::for_owner(owner).insert(token_id);
+    }
+
+    /// Removes a token ID from the owner's per-account token set.
     #[allow(dead_code)]
     pub(crate) fn internal_remove_owner_token(&mut self, owner: &AccountId, token_id: &str) {
-        if let Some(mut tokens) = self.owner_index.get(owner).cloned() {
-            if let Some(pos) = tokens.iter().position(|t| t == token_id) {
-                tokens.swap_remove(pos);
-                if tokens.is_empty() {
-                    self.owner_index.remove(owner);
-                } else {
-                    self.owner_index.insert(owner.clone(), tokens);
-                }
-            }
-        }
+        IndexedTokenSet::for_owner(owner).remove(token_id);
     }
 
     /// Formally closes a fully paid claim (`Paid` -> `Closed`).

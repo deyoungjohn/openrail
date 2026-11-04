@@ -277,6 +277,7 @@ impl Contract {
                 .get(&args.token_id)
                 .cloned()
                 .expect("claim must exist in state");
+            self.internal_add_global_token(&args.token_id);
             self.internal_add_owner_token(&claim.owner_id, &args.token_id);
 
             NftMintEvent {

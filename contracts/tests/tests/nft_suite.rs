@@ -1142,3 +1142,222 @@ async fn payee_follows_token_real() -> Result<()> {
 
     Ok(())
 }
+
+/// 9. `nft_owner_index_enumeration_and_pagination_across_transfers`:
+/// Issues and transfers many tokens to one owner and verifies swap-remove enumeration order,
+/// per-owner supply, and `nft_tokens_for_owner` / `nft_tokens` pagination.
+#[tokio::test]
+async fn nft_owner_index_enumeration_and_pagination_across_transfers() -> Result<()> {
+    let env = Env::new().await?;
+    let memo_hash = "8888888888888888888888888888888888888888888888888888888888888888";
+
+    // 1. Alice issues 8 claims (c-1..=c-8) with Bob as debtor
+    for i in 1..=8u64 {
+        let res = env
+            .issue_claim_with_details(
+                &env.alice,
+                0,
+                Some(Debtor::Near(env.bob.id().clone())),
+                Hex32::default(),
+                1_000_000 + i as u128,
+                1_800_000_000 + i,
+                None,
+            )
+            .await?;
+        assert!(res.is_success());
+    }
+
+    // 2. Bob issues 4 claims (c-9..=c-12) with Alice as debtor
+    for i in 9..=12u64 {
+        let res = env
+            .issue_claim_with_details(
+                &env.bob,
+                0,
+                Some(Debtor::Near(env.alice.id().clone())),
+                Hex32::default(),
+                1_000_000 + i as u128,
+                1_800_000_000 + i,
+                None,
+            )
+            .await?;
+        assert!(res.is_success());
+    }
+
+    let total_supply: U128 = env
+        .root
+        .view("nft_total_supply")
+        .args_json(json!({}))
+        .await?
+        .json()?;
+    assert_eq!(total_supply.0, 12);
+
+    let alice_supply: U128 = env
+        .root
+        .view("nft_supply_for_owner")
+        .args_json(json!({ "account_id": env.alice.id() }))
+        .await?
+        .json()?;
+    assert_eq!(alice_supply.0, 8);
+
+    // 3. Verify Alice's initial pagination (pages of 3)
+    let alice_p0: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.alice.id(), "from_index": "0", "limit": 3 }))
+        .await?
+        .json()?;
+    let alice_p1: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.alice.id(), "from_index": "3", "limit": 3 }))
+        .await?
+        .json()?;
+    let alice_p2: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.alice.id(), "from_index": "6", "limit": 3 }))
+        .await?
+        .json()?;
+    let alice_p3: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.alice.id(), "from_index": "9", "limit": 3 }))
+        .await?
+        .json()?;
+
+    let ids = |tokens: &[JsonToken]| -> Vec<String> {
+        tokens.iter().map(|t| t.token_id.clone()).collect()
+    };
+    assert_eq!(ids(&alice_p0), vec!["c-1", "c-2", "c-3"]);
+    assert_eq!(ids(&alice_p1), vec!["c-4", "c-5", "c-6"]);
+    assert_eq!(ids(&alice_p2), vec!["c-7", "c-8"]);
+    assert!(alice_p3.is_empty());
+
+    // 4. Acknowledge c-2 and c-8 (by Bob) and c-9..=c-12 (by Alice), then transfer to Carol.
+    // Removing c-2 (index 1) swaps c-8 (index 7) into index 1; removing c-8 next exercises the
+    // updated reverse index for the swapped element and swaps c-7 (index 6) into index 1.
+    for tid in ["c-2", "c-8"] {
+        env.bob
+            .call(env.root.id(), "acknowledge_near")
+            .args_json(json!({ "token_id": tid }))
+            .max_gas()
+            .transact()
+            .await?
+            .into_result()?;
+        env.alice
+            .call(env.root.id(), "nft_transfer")
+            .args_json(json!({
+                "receiver_id": env.carol.id(),
+                "token_id": tid,
+                "approval_id": null,
+                "memo": memo_hash,
+            }))
+            .deposit(NearToken::from_yoctonear(1))
+            .max_gas()
+            .transact()
+            .await?
+            .into_result()?;
+    }
+
+    for tid in ["c-9", "c-10", "c-11", "c-12"] {
+        env.alice
+            .call(env.root.id(), "acknowledge_near")
+            .args_json(json!({ "token_id": tid }))
+            .max_gas()
+            .transact()
+            .await?
+            .into_result()?;
+        env.bob
+            .call(env.root.id(), "nft_transfer")
+            .args_json(json!({
+                "receiver_id": env.carol.id(),
+                "token_id": tid,
+                "approval_id": null,
+                "memo": memo_hash,
+            }))
+            .deposit(NearToken::from_yoctonear(1))
+            .max_gas()
+            .transact()
+            .await?
+            .into_result()?;
+    }
+
+    // 5. Verify Alice's swap-remove order after removing c-2 (idx 1 <- c-8) and c-8 (idx 1 <- c-7)
+    let alice_after: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.alice.id(), "from_index": "0", "limit": 10 }))
+        .await?
+        .json()?;
+    assert_eq!(
+        ids(&alice_after),
+        vec!["c-1", "c-7", "c-3", "c-4", "c-5", "c-6"]
+    );
+
+    // 6. Verify Bob now has 0 tokens
+    let bob_supply: U128 = env
+        .root
+        .view("nft_supply_for_owner")
+        .args_json(json!({ "account_id": env.bob.id() }))
+        .await?
+        .json()?;
+    assert_eq!(bob_supply.0, 0);
+    let bob_tokens: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.bob.id() }))
+        .await?
+        .json()?;
+    assert!(bob_tokens.is_empty());
+
+    // 7. Verify Carol's 6 transferred tokens and pagination (pages of 2)
+    let carol_supply: U128 = env
+        .root
+        .view("nft_supply_for_owner")
+        .args_json(json!({ "account_id": env.carol.id() }))
+        .await?
+        .json()?;
+    assert_eq!(carol_supply.0, 6);
+
+    let carol_p0: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.carol.id(), "from_index": "0", "limit": 2 }))
+        .await?
+        .json()?;
+    let carol_p1: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.carol.id(), "from_index": "2", "limit": 2 }))
+        .await?
+        .json()?;
+    let carol_p2: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.carol.id(), "from_index": "4", "limit": 2 }))
+        .await?
+        .json()?;
+    let carol_p3: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.carol.id(), "from_index": "6", "limit": 2 }))
+        .await?
+        .json()?;
+
+    assert_eq!(ids(&carol_p0), vec!["c-2", "c-8"]);
+    assert_eq!(ids(&carol_p1), vec!["c-9", "c-10"]);
+    assert_eq!(ids(&carol_p2), vec!["c-11", "c-12"]);
+    assert!(carol_p3.is_empty());
+
+    // 8. Verify global nft_tokens pagination still enumerates c-1..=c-12 in order with updated owners
+    let global_tail: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens")
+        .args_json(json!({ "from_index": "8", "limit": 4 }))
+        .await?
+        .json()?;
+    assert_eq!(ids(&global_tail), vec!["c-9", "c-10", "c-11", "c-12"]);
+    assert!(global_tail.iter().all(|t| &t.owner_id == env.carol.id()));
+
+    Ok(())
+}
