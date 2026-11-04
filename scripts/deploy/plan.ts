@@ -191,8 +191,10 @@ const config = {
 };
 
 const nearNetwork = `network-config ${network} sign-with-keychain send`;
+// The deploy only runs if the file on disk still has the hash this plan was made from.
+const hashGuard = `echo '${hex(codeHashHex)}  ${wasmRel}' | sha256sum -c -`;
 const deploy = [
-  `near contract deploy ${root} use-file ${wasmRel}`,
+  `${hashGuard} && near contract deploy ${root} use-file ${wasmRel}`,
   `with-init-call new json-args ${shellJson(config)}`,
   `prepaid-gas '300 Tgas' attached-deposit '0 NEAR' ${nearNetwork}`,
 ].join(" ");
@@ -213,11 +215,13 @@ function addKey(
 ): string {
   return [
     `# ${label}`,
-    `near account add-key ${account} grant-function-call-access`,
-    `--allowance '${allowance}' --contract-account-id ${root}`,
-    `--function-names '${functions}'`,
-    `use-manually-provided-public-key ${publicKey} ${nearNetwork}`,
-  ].join(" ");
+    [
+      `near account add-key ${account} grant-function-call-access`,
+      `--allowance '${allowance}' --contract-account-id ${root}`,
+      `--function-names '${functions}'`,
+      `use-manually-provided-public-key ${publicKey} ${nearNetwork}`,
+    ].join(" "),
+  ].join("\n");
 }
 
 const planLines: string[] = [];
@@ -377,6 +381,23 @@ check(
   `${wasm.length} bytes (the gate run measured about 400 KB)`,
 );
 check("PASS", "enabled features match the reproducible build command", enabled || "(none)");
+try {
+  const out = execFileSync("node", ["scripts/wasm-check.mjs", wasmRel], {
+    cwd: ROOT,
+    encoding: "utf8",
+  }).trim();
+  check(
+    "PASS",
+    "wasm import check (no gas_key or universal_state import)",
+    out.replace(/\s+/g, " ").slice(0, 160),
+  );
+} catch (e) {
+  check(
+    "FAIL",
+    "wasm import check (no gas_key or universal_state import)",
+    String((e as Error).message).slice(0, 300),
+  );
+}
 
 // 3. the chain today.
 const rootAcc = await viewAccount(root);
