@@ -9,7 +9,7 @@ import {
   type ContractPort,
   type IssuerPort,
 } from "./app.js";
-import { AuthStore, hashApiKey } from "./auth.js";
+import { AuthStore, hashApiKey, SECRET_KEY_SCOPES } from "./auth.js";
 import { hmacSha256Hex } from "./crypto.js";
 import { IdempotencyStore } from "./idempotency.js";
 import {
@@ -118,7 +118,9 @@ describe("Service-level invariant tests (Blueprint 2.8 & 2.11)", () => {
   describe("API and issuance invariants", () => {
     it("idempotency_same_key_same_response", async () => {
       const { app, auth, calls } = makeApp();
-      const { secret: sk } = auth.createApiKey("alice.near", "test_sk", "secret", ["admin"]);
+      const { secret: sk } = auth.createApiKey("alice.near", "test_sk", "secret", [
+        ...SECRET_KEY_SCOPES,
+      ]);
 
       const invoiceBody = {
         invoice_number: "INV-2026-001",
@@ -156,7 +158,9 @@ describe("Service-level invariant tests (Blueprint 2.8 & 2.11)", () => {
 
     it("idempotency_key_body_mismatch_409", async () => {
       const { app, auth } = makeApp();
-      const { secret: sk } = auth.createApiKey("alice.near", "test_sk", "secret", ["admin"]);
+      const { secret: sk } = auth.createApiKey("alice.near", "test_sk", "secret", [
+        ...SECRET_KEY_SCOPES,
+      ]);
 
       const bodyA = {
         invoice_number: "INV-2026-001",
@@ -295,13 +299,13 @@ describe("Service-level invariant tests (Blueprint 2.8 & 2.11)", () => {
         "alice.near",
         "my_secret_key",
         "secret",
-        ["admin"],
+        [...SECRET_KEY_SCOPES],
       );
       const { secret: pk, record: pkRecord } = auth.createApiKey(
         "alice.near",
         "my_publishable_key",
         "publishable",
-        ["pay"],
+        ["pay_sessions:create"],
       );
 
       expect(sk).toMatch(/^or_sk_live_/);
@@ -353,7 +357,9 @@ describe("Service-level invariant tests (Blueprint 2.8 & 2.11)", () => {
     it("route_allowlisted", async () => {
       const routes = loadRoutes();
       const { app, auth } = makeApp({ routes });
-      const { secret: pk } = auth.createApiKey("alice.near", "pk", "publishable");
+      const { secret: pk } = auth.createApiKey("alice.near", "pk", "publishable", [
+        "pay_sessions:create",
+      ]);
 
       // R1 through R13 are all allowlisted
       for (let i = 1; i <= 13; i++) {
@@ -544,7 +550,9 @@ describe("Service-level invariant tests (Blueprint 2.8 & 2.11)", () => {
 
       // 4. API layer integration check
       const { app, auth } = makeApp();
-      const { secret: pk } = auth.createApiKey("alice.near", "pk", "publishable");
+      const { secret: pk } = auth.createApiKey("alice.near", "pk", "publishable", [
+        "pay_sessions:create",
+      ]);
 
       // Sending Solana address for Base route (R1) returns 400 invalid_refund_address
       const res = await app.handle({
