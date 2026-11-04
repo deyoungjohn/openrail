@@ -178,7 +178,7 @@ impl Env {
 
         let alice = parent
             .create_subaccount("alice")
-            .initial_balance(NearToken::from_near(100))
+            .initial_balance(NearToken::from_near(1_000))
             .transact()
             .await?
             .into_result()
@@ -186,7 +186,7 @@ impl Env {
 
         let bob = parent
             .create_subaccount("bob")
-            .initial_balance(NearToken::from_near(100))
+            .initial_balance(NearToken::from_near(1_000))
             .transact()
             .await?
             .into_result()

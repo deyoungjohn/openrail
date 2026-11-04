@@ -362,13 +362,7 @@ impl Contract {
     }
 
     pub(crate) fn internal_nft_total_supply(&self) -> U128 {
-        let mut count = 0u128;
-        for n in 1..self.next_token_id {
-            if self.claims.contains_key(&crate::claims::format_token_id(n)) {
-                count += 1;
-            }
-        }
-        U128(count)
+        U128(crate::claims::IndexedTokenSet::global().len() as u128)
     }
 
     pub(crate) fn internal_nft_tokens(
@@ -378,31 +372,14 @@ impl Contract {
     ) -> Vec<JsonToken> {
         let from = from_index.map(|value| value.0 as usize).unwrap_or(0);
         let limit = limit.unwrap_or(DEFAULT_LIMIT).max(1) as usize;
-        let mut out = Vec::new();
-        let mut seen = 0usize;
-        for n in 1..self.next_token_id {
-            let token_id = crate::claims::format_token_id(n);
-            let Some(view) = self.token_view(&token_id) else {
-                continue;
-            };
-            if seen >= from {
-                out.push(view);
-                if out.len() >= limit {
-                    break;
-                }
-            }
-            seen += 1;
-        }
-        out
+        crate::claims::IndexedTokenSet::global()
+            .iter_range(from, limit)
+            .filter_map(|token_id| self.token_view(&token_id))
+            .collect()
     }
 
     pub(crate) fn internal_nft_supply_for_owner(&self, account_id: &AccountId) -> U128 {
-        U128(
-            self.owner_index
-                .get(account_id)
-                .map(|tokens| tokens.len() as u128)
-                .unwrap_or(0),
-        )
+        U128(crate::claims::IndexedTokenSet::for_owner(account_id).len() as u128)
     }
 
     pub(crate) fn internal_nft_tokens_for_owner(
@@ -413,16 +390,9 @@ impl Contract {
     ) -> Vec<JsonToken> {
         let from = from_index.map(|value| value.0 as usize).unwrap_or(0);
         let limit = limit.unwrap_or(DEFAULT_LIMIT).max(1) as usize;
-        let tokens = self
-            .owner_index
-            .get(account_id)
-            .cloned()
-            .unwrap_or_default();
-        tokens
-            .iter()
-            .skip(from)
-            .filter_map(|token_id| self.token_view(token_id))
-            .take(limit)
+        crate::claims::IndexedTokenSet::for_owner(account_id)
+            .iter_range(from, limit)
+            .filter_map(|token_id| self.token_view(&token_id))
             .collect()
     }
 

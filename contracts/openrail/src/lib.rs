@@ -37,8 +37,10 @@ pub use types::{
 
 /// Storage prefix for claims map (`LookupMap<String, Claim>`).
 pub const STORAGE_PREFIX_CLAIMS: &[u8] = b"c:";
-/// Storage prefix for owner token index.
+/// Storage prefix for per-owner token index sets (`b"o:"` + owner bytes).
 pub const STORAGE_PREFIX_OWNER_INDEX: &[u8] = b"o:";
+/// Storage prefix for the global token index set (`b"ti:"`).
+pub const STORAGE_PREFIX_TOKEN_INDEX: &[u8] = b"ti:";
 /// Storage prefix for token metadata map.
 pub const STORAGE_PREFIX_TOKEN_METADATA: &[u8] = b"t:";
 /// Storage prefix for NEP-178 approvals per token.
@@ -80,7 +82,6 @@ pub const ERR_RULE_8_HOOK_REFUSED: &str = "Rule 8: hook transfer check refused";
 #[derive(PanicOnDefault)]
 pub struct Contract {
     pub claims: LookupMap<String, Claim>,
-    pub owner_index: LookupMap<AccountId, Vec<String>>,
     pub token_metadata: LookupMap<String, TokenMetadata>,
     pub approvals: LookupMap<String, HashMap<AccountId, u64>>,
     pub transfer_call_state: LookupMap<String, (Lock, Option<Hex32>)>,
@@ -102,7 +103,6 @@ impl Contract {
     pub fn new(config: Config) -> Self {
         Self {
             claims: LookupMap::new(STORAGE_PREFIX_CLAIMS),
-            owner_index: LookupMap::new(STORAGE_PREFIX_OWNER_INDEX),
             token_metadata: LookupMap::new(STORAGE_PREFIX_TOKEN_METADATA),
             approvals: LookupMap::new(STORAGE_PREFIX_APPROVALS),
             transfer_call_state: LookupMap::new(STORAGE_PREFIX_TRANSFER_CALL_STATE),
