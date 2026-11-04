@@ -182,7 +182,7 @@ const codeHashBase58 = encodeBase58(codeHashHex);
 
 const config = {
   settlement_assets: [...new Set(routes.settlementAssets)],
-  vault_code_hash: hex(vaultBytes),
+  vault_code_hash: `0x${hex(vaultBytes)}`,
   fee_account: fee,
   watchers,
   quote_writers: quoteWriters,
