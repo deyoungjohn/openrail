@@ -11,10 +11,16 @@
 //! Stubs for unimplemented methods are verified in smoke test; C2 and C4 tests marked `#[ignore = "C<n>"]`.
 
 use anyhow::Result;
+use near_sdk::borsh;
+use near_sdk::json_types::U128;
 use near_workspaces::types::NearToken;
-use openrail::types::JsonToken;
+use near_workspaces::Account;
+use openrail::types::{
+    Claim, ClaimView, Debtor, Hex32, JsonToken, Lock, Status, TokenId, TokenMetadata,
+};
 use openrail_tests::{gas::GasReport, Env};
 use serde_json::json;
+use std::collections::HashMap;
 
 /// Read target scale claims count from `SCALE_CLAIMS` environment variable.
 /// Defaults to 5 for fast per-push CI; nightly and gate runs set `SCALE_CLAIMS=5000`.
@@ -44,6 +50,157 @@ fn sample_points(n: usize) -> Vec<usize> {
         pts.push(n);
     }
     pts
+}
+
+/// Seeds claims `start..=end` directly into `openrail.near` contract state via `worker.patch`
+/// in batches of 250 claims (`review/ph1-t1-scale/REVIEW.md`), producing the exact on-chain
+/// key layout (`c:`, `t:`, `o:{owner}:*`, `ti::*`, and `STATE.next_token_id`) as `issue` + `on_issue`.
+async fn seed_claims_range(env: &Env, owner: &Account, start: usize, end: usize) -> Result<()> {
+    if start > end {
+        return Ok(());
+    }
+
+    let settlement_assets: Vec<TokenId> = vec![
+        "nep141:usdc.near".to_string(),
+        "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near".to_string(),
+        "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near".to_string(),
+        "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near".to_string(),
+    ];
+    let owner_bytes = owner.id().as_bytes();
+
+    let mut chunk_start = start;
+    while chunk_start <= end {
+        let chunk_end = (chunk_start + 249).min(end);
+        let mut kv_pairs: Vec<(Vec<u8>, Vec<u8>)> =
+            Vec::with_capacity((chunk_end - chunk_start + 1) * 6 + 3);
+
+        for i in chunk_start..=chunk_end {
+            let token_id = format!("c-{i}");
+            let claim_account = format!("{token_id}.{}", env.root.id()).parse()?;
+            let amount_due = 1_000_000 + i as u128;
+            let due_date = 1_800_000_000 + i as u64;
+
+            let claim = Claim {
+                token_id: token_id.clone(),
+                kind: 0,
+                issuer_id: owner.id().clone(),
+                owner_id: owner.id().clone(),
+                claim_account,
+                debtor: Some(Debtor::Near(owner.id().clone())),
+                terms_hash: Hex32::default(),
+                amount_due: U128(amount_due),
+                due_date,
+                ack: None,
+                status: Status::Issued,
+                lock: Lock::None,
+                settlement_assets: settlement_assets.clone(),
+                booked_total: U128(0),
+                distributed_total: U128(0),
+                fee_total: U128(0),
+                surplus: U128(0),
+                credit_total: U128(0),
+                credit_source: None,
+                last_seen_balance: HashMap::new(),
+                assignment_doc_hash: None,
+                created_block: 1,
+            };
+
+            let metadata = TokenMetadata {
+                title: Some(format!("Invoice {i}")),
+                description: Some(format!(
+                    "{} due {}",
+                    openrail::svg::format_amount(amount_due),
+                    openrail::svg::format_date(due_date)
+                )),
+                media: Some(openrail::svg::svg_data_uri(
+                    &i.to_string(),
+                    amount_due,
+                    due_date,
+                )),
+                media_hash: None,
+                copies: Some(1),
+                issued_at: Some(1_700_000_000_000),
+                expires_at: Some(due_date.saturating_mul(1000)),
+                starts_at: None,
+                updated_at: None,
+                extra: Some(Hex32::default().to_string()),
+                reference: None,
+                reference_hash: None,
+            };
+
+            let token_key_borsh = borsh::to_vec(&token_id)?;
+            let mut claim_key = Vec::with_capacity(2 + token_key_borsh.len());
+            claim_key.extend_from_slice(b"c:");
+            claim_key.extend_from_slice(&token_key_borsh);
+            kv_pairs.push((claim_key, borsh::to_vec(&claim)?));
+
+            let mut meta_key = Vec::with_capacity(2 + token_key_borsh.len());
+            meta_key.extend_from_slice(b"t:");
+            meta_key.extend_from_slice(&token_key_borsh);
+            kv_pairs.push((meta_key, borsh::to_vec(&metadata)?));
+
+            let idx = (i - 1) as u64;
+            let idx_bytes = idx.to_le_bytes();
+
+            let mut owner_i_key = Vec::with_capacity(2 + owner_bytes.len() + 3 + 8);
+            owner_i_key.extend_from_slice(b"o:");
+            owner_i_key.extend_from_slice(owner_bytes);
+            owner_i_key.extend_from_slice(b":i:");
+            owner_i_key.extend_from_slice(&idx_bytes);
+            kv_pairs.push((owner_i_key, token_id.as_bytes().to_vec()));
+
+            let mut owner_k_key = Vec::with_capacity(2 + owner_bytes.len() + 3 + token_id.len());
+            owner_k_key.extend_from_slice(b"o:");
+            owner_k_key.extend_from_slice(owner_bytes);
+            owner_k_key.extend_from_slice(b":k:");
+            owner_k_key.extend_from_slice(token_id.as_bytes());
+            kv_pairs.push((owner_k_key, idx_bytes.to_vec()));
+
+            let mut global_i_key = Vec::with_capacity(6 + 8);
+            global_i_key.extend_from_slice(b"ti::i:");
+            global_i_key.extend_from_slice(&idx_bytes);
+            kv_pairs.push((global_i_key, token_id.as_bytes().to_vec()));
+
+            let mut global_k_key = Vec::with_capacity(6 + token_id.len());
+            global_k_key.extend_from_slice(b"ti::k:");
+            global_k_key.extend_from_slice(token_id.as_bytes());
+            kv_pairs.push((global_k_key, idx_bytes.to_vec()));
+        }
+
+        if chunk_end == end {
+            let count_bytes = (end as u64).to_le_bytes().to_vec();
+            let mut owner_n_key = Vec::with_capacity(2 + owner_bytes.len() + 2);
+            owner_n_key.extend_from_slice(b"o:");
+            owner_n_key.extend_from_slice(owner_bytes);
+            owner_n_key.extend_from_slice(b":n");
+            kv_pairs.push((owner_n_key, count_bytes.clone()));
+            kv_pairs.push((b"ti::n".to_vec(), count_bytes));
+
+            let state_map = env.worker.view_state(env.root.id()).await?;
+            let mut root_state = state_map
+                .get(b"STATE".as_slice())
+                .expect("root STATE must exist")
+                .clone();
+            let state_len = root_state.len();
+            let next_id_bytes = ((end + 1) as u64).to_le_bytes();
+            root_state[state_len - 8..].copy_from_slice(&next_id_bytes);
+            kv_pairs.push((b"STATE".to_vec(), root_state));
+        }
+
+        let refs: Vec<(&[u8], &[u8])> = kv_pairs
+            .iter()
+            .map(|(k, v)| (k.as_slice(), v.as_slice()))
+            .collect();
+        env.worker
+            .patch(env.root.id())
+            .states(refs)
+            .transact()
+            .await?;
+
+        chunk_start = chunk_end + 1;
+    }
+
+    Ok(())
 }
 
 // ──────────────────────────────────────────────
@@ -89,9 +246,13 @@ async fn scale_issue_gas_constant() -> Result<()> {
     let samples = sample_points(n);
 
     let mut gas_at_samples = Vec::new();
+    let mut prev = 0usize;
 
-    // Issue claims sequentially and measure gas burnt at sample points
-    for i in 1..=n {
+    // Seed intermediate claims in bulk and execute real `issue_claim` transactions at sample points
+    for &i in &samples {
+        if i > prev + 1 {
+            seed_claims_range(&env, &env.alice, prev + 1, i - 1).await?;
+        }
         let res = env
             .issue_claim(
                 &env.alice,
@@ -102,11 +263,10 @@ async fn scale_issue_gas_constant() -> Result<()> {
             .await?;
         assert!(res.is_success(), "Issue {i} must succeed");
 
-        if samples.contains(&i) {
-            let report = GasReport::from_result(&res);
-            let gas = report.total_gas.as_gas();
-            gas_at_samples.push((i, gas));
-        }
+        let report = GasReport::from_result(&res);
+        let gas = report.total_gas.as_gas();
+        gas_at_samples.push((i, gas));
+        prev = i;
     }
 
     assert!(
@@ -149,8 +309,12 @@ async fn scale_storage_per_claim_constant() -> Result<()> {
     let samples = sample_points(n);
 
     let mut storage_deltas_at_samples = Vec::new();
+    let mut prev = 0usize;
 
-    for i in 1..=n {
+    for &i in &samples {
+        if i > prev + 1 {
+            seed_claims_range(&env, &env.alice, prev + 1, i - 1).await?;
+        }
         let pre_account = env.worker.view_account(env.root.id()).await?;
         let pre_storage = pre_account.storage_usage;
 
@@ -164,13 +328,12 @@ async fn scale_storage_per_claim_constant() -> Result<()> {
             .await?;
         assert!(res.is_success(), "Issue {i} must succeed");
 
-        if samples.contains(&i) {
-            let post_account = env.worker.view_account(env.root.id()).await?;
-            let post_storage = post_account.storage_usage;
+        let post_account = env.worker.view_account(env.root.id()).await?;
+        let post_storage = post_account.storage_usage;
 
-            let delta = post_storage.saturating_sub(pre_storage);
-            storage_deltas_at_samples.push((i, delta));
-        }
+        let delta = post_storage.saturating_sub(pre_storage);
+        storage_deltas_at_samples.push((i, delta));
+        prev = i;
     }
 
     // Blueprint 2.11: storage per claim is constant (K16).
@@ -224,7 +387,11 @@ async fn scale_reconcile_gas_constant() -> Result<()> {
     let samples = sample_points(n);
 
     let mut tokens = Vec::new();
-    for i in 1..=n {
+    let mut prev = 0usize;
+    for &i in &samples {
+        if i > prev + 1 {
+            seed_claims_range(&env, &env.alice, prev + 1, i - 1).await?;
+        }
         let res = env
             .issue_claim(
                 &env.alice,
@@ -234,9 +401,8 @@ async fn scale_reconcile_gas_constant() -> Result<()> {
             )
             .await?;
         let token: String = res.json()?;
-        if samples.contains(&i) {
-            tokens.push((i, token));
-        }
+        tokens.push((i, token));
+        prev = i;
     }
 
     let mut gas_measurements = Vec::new();
@@ -282,7 +448,11 @@ async fn scale_transfer_gas_constant() -> Result<()> {
     let samples = sample_points(n);
 
     let mut tokens = Vec::new();
-    for i in 1..=n {
+    let mut prev = 0usize;
+    for &i in &samples {
+        if i > prev + 1 {
+            seed_claims_range(&env, &env.alice, prev + 1, i - 1).await?;
+        }
         let res = env
             .issue_claim(
                 &env.alice,
@@ -292,9 +462,8 @@ async fn scale_transfer_gas_constant() -> Result<()> {
             )
             .await?;
         let token: String = res.json()?;
-        if samples.contains(&i) {
-            tokens.push((i, token));
-        }
+        tokens.push((i, token));
+        prev = i;
     }
 
     for (_idx, token_id) in &tokens {
@@ -352,17 +521,18 @@ async fn scale_nft_tokens_for_owner_pagination() -> Result<()> {
     let env = Env::new().await?;
     let n = scale_claims_target();
 
-    // Issue claims to alice
-    for i in 1..=n {
-        let _ = env
-            .issue_claim(
-                &env.alice,
-                0,
-                1_000_000 + i as u128,
-                1_800_000_000 + i as u64,
-            )
-            .await?;
+    // Seed claims 1..n in bulk and issue the final claim N via transaction
+    if n > 1 {
+        seed_claims_range(&env, &env.alice, 1, n - 1).await?;
     }
+    let _ = env
+        .issue_claim(
+            &env.alice,
+            0,
+            1_000_000 + n as u128,
+            1_800_000_000 + n as u64,
+        )
+        .await?;
 
     // Page 1: from_index = 0, limit = 2
     let page1: Vec<JsonToken> = env
@@ -391,6 +561,21 @@ async fn scale_nft_tokens_for_owner_pagination() -> Result<()> {
     assert_eq!(page2.len(), 2);
     assert_ne!(page1[0].token_id, page2[0].token_id);
 
+    // Tail page at n - 2 (e.g. 4,998 at n = 5,000)
+    if n >= 50 {
+        let tail_page: Vec<JsonToken> = env
+            .root
+            .view("nft_tokens_for_owner")
+            .args_json(json!({
+                "account_id": env.alice.id(),
+                "from_index": (n - 50).to_string(),
+                "limit": 50,
+            }))
+            .await?
+            .json()?;
+        assert_eq!(tail_page.len(), 50);
+    }
+
     // High index beyond tokens (works at any index, e.g. 5,000) returns empty vector
     let page_empty: Vec<JsonToken> = env
         .root
@@ -403,6 +588,45 @@ async fn scale_nft_tokens_for_owner_pagination() -> Result<()> {
         .await?
         .json()?;
     assert!(page_empty.is_empty());
+
+    // Measure `claims_by_issuer` gas at N claims (page of 50 matching vs full 1..=N scan)
+    let cbi_match = env
+        .alice
+        .call(env.root.id(), "claims_by_issuer")
+        .args_json(json!({
+            "account": env.alice.id(),
+            "from": n.saturating_sub(49).max(1),
+            "limit": 50,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(cbi_match.is_success());
+    let cbi_match_gas = cbi_match.total_gas_burnt.as_gas();
+    let cbi_match_claims: Vec<ClaimView> = cbi_match.json()?;
+    assert_eq!(cbi_match_claims.len(), n.min(50));
+
+    let cbi_scan = env
+        .alice
+        .call(env.root.id(), "claims_by_issuer")
+        .args_json(json!({
+            "account": env.bob.id(),
+            "from": 1,
+            "limit": 50,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    println!(
+        "claims_by_issuer at N={}: matching-page gas={} ({:.2} Tgas), full-scan(1..={}) status={:?} gas={} ({:.2} Tgas)",
+        n,
+        cbi_match_gas,
+        cbi_match_gas as f64 / 1e12,
+        n,
+        cbi_scan.is_success(),
+        cbi_scan.total_gas_burnt.as_gas(),
+        cbi_scan.total_gas_burnt.as_gas() as f64 / 1e12,
+    );
 
     Ok(())
 }
