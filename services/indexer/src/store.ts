@@ -211,6 +211,10 @@ export class IndexerStore {
         verified INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS receipts_tx ON receipts(tx_hash);
+      CREATE TABLE IF NOT EXISTS budget_state (
+        day TEXT PRIMARY KEY,
+        used INTEGER NOT NULL
+      );
     `);
     const cursorColumns = this.db.prepare("PRAGMA table_info(cursor)").all() as unknown as {
       name: string;
@@ -675,6 +679,21 @@ export class IndexerStore {
       throw error;
     }
     return toDelete.length;
+  }
+
+  budgetState(): { day: string; used: number } | null {
+    const row = this.db
+      .prepare("SELECT day, used FROM budget_state ORDER BY day DESC LIMIT 1")
+      .get() as { day: string; used: number } | undefined;
+    return row === undefined ? null : { day: row.day, used: Number(row.used) };
+  }
+
+  setBudgetState(day: string, used: number): void {
+    this.db
+      .prepare(
+        "INSERT INTO budget_state(day, used) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET used=excluded.used",
+      )
+      .run(day, used);
   }
 
   health(): {

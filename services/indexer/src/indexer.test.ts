@@ -28,6 +28,24 @@ function fixture(options: { enricher?: boolean } = {}) {
   return { blocks, store, source, sink, enricher, indexer };
 }
 
+describe("boost", () => {
+  it("pokes into 20 s polling for five minutes and expires", () => {
+    let now = 1_000_000;
+    const indexer = new Indexer({
+      source: new FakeSource(loadBlocks()),
+      store: memoryStore(),
+      logger: silentLogger(),
+      now: () => now,
+    });
+    expect(indexer.health().boost_active).toBe(false);
+    const until = indexer.poke();
+    expect(until).toBe(now + 5 * 60 * 1000);
+    expect(indexer.health().boost_active).toBe(true);
+    now += 5 * 60 * 1000 + 1;
+    expect(indexer.health().boost_active).toBe(false);
+  });
+});
+
 describe("indexer ingestion", () => {
   it("ingests final blocks, advances the cursor and emits each indexed event once", async () => {
     const f = fixture();

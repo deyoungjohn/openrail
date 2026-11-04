@@ -9,6 +9,10 @@ export interface IndexerAppDeps {
   indexer: Indexer;
   claimReader?: ClaimReader;
   rootAccount: string;
+  registerTx?: (
+    hash: string,
+    signer: string,
+  ) => Promise<{ accepted: boolean; reason?: string; events: number }>;
 }
 
 export interface IndexerResponse {
@@ -75,9 +79,35 @@ function receiptJson(row: ReceiptRow, rootAccount: string): unknown {
 
 export function createIndexerApp(deps: IndexerAppDeps) {
   return {
-    async handle(method: string, url: string): Promise<IndexerResponse> {
+    async handle(method: string, url: string, body?: unknown): Promise<IndexerResponse> {
       const parsed = new URL(url, "http://127.0.0.1");
       const path = parsed.pathname;
+      if (method === "POST") {
+        if (path === "/poke") {
+          return { status: 200, body: { ok: true, boost_until: deps.indexer.poke() } };
+        }
+        if (path === "/register-tx") {
+          const input = body as { hash?: unknown; signer?: unknown } | undefined;
+          if (typeof input?.hash !== "string" || typeof input.signer !== "string") {
+            return { status: 400, body: { error: { code: "invalid_request" } } };
+          }
+          if (deps.registerTx === undefined) {
+            return { status: 503, body: { error: { code: "register_tx_not_configured" } } };
+          }
+          const result = await deps.registerTx(input.hash, input.signer);
+          return { status: result.accepted ? 200 : 400, body: result };
+        }
+        if (
+          path === "/health" ||
+          path === "/history" ||
+          path === "/events" ||
+          path === "/statements" ||
+          path.startsWith("/r/")
+        ) {
+          return { status: 405, body: { error: { code: "method_not_allowed" } } };
+        }
+        return { status: 404, body: { error: { code: "not_found" } } };
+      }
       if (method !== "GET") {
         return { status: 405, body: { error: { code: "method_not_allowed" } } };
       }

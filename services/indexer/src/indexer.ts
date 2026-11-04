@@ -5,8 +5,12 @@
 import type { Logger } from "@openrail/shared";
 import type { EventSink, ReceiptEnricher, EventSource } from "./types.js";
 import type { IndexerStore } from "./store.js";
+import type { BudgetGovernor } from "./budget.js";
+import type { TxStatusReader } from "./tx-status.js";
 
-export const DEFAULT_POLL_INTERVAL_MS = 15_000;
+export const DEFAULT_POLL_INTERVAL_MS = 300_000;
+export const BOOST_POLL_INTERVAL_MS = 20_000;
+export const BOOST_DURATION_MS = 5 * 60 * 1000;
 
 export interface IndexerOptions {
   source: EventSource;
@@ -18,6 +22,9 @@ export interface IndexerOptions {
   retentionDays?: number;
   logger: Logger;
   now?: () => number;
+  budget?: BudgetGovernor;
+  rootAccount?: string;
+  txStatus?: TxStatusReader;
 }
 
 export interface SyncResult {
@@ -38,7 +45,11 @@ export class Indexer {
   private readonly retentionDays: number;
   private readonly logger: Logger;
   private readonly now: () => number;
+  private readonly budget?: BudgetGovernor;
+  private readonly rootAccount?: string;
+  private readonly txStatus?: TxStatusReader;
   private lastHead: number | null = null;
+  private boostUntil = 0;
 
   constructor(options: IndexerOptions) {
     this.source = options.source;
@@ -50,6 +61,9 @@ export class Indexer {
     this.retentionDays = Math.max(1, options.retentionDays ?? 30);
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
+    this.budget = options.budget;
+    this.rootAccount = options.rootAccount;
+    this.txStatus = options.txStatus;
   }
 
   private async enrich(event: { event: string; eventKey: string }): Promise<void> {
@@ -130,6 +144,40 @@ export class Indexer {
     return { latest_block: latestBlock, blocks, events, pages, calls };
   }
 
+  /** Raise the polling cadence for five minutes (bounded by the remaining budget). */
+  poke(): number {
+    if (this.budget !== undefined && this.budget.health().remaining <= 0) return 0;
+    this.boostUntil = Math.max(this.boostUntil, this.now() + BOOST_DURATION_MS);
+    return this.boostUntil;
+  }
+
+  /** Verify a reported transaction and ingest its contract receipts. */
+  async registerTx(
+    hash: string,
+    signer: string,
+  ): Promise<{ accepted: boolean; reason?: string; events: number }> {
+    if (this.txStatus === undefined || this.rootAccount === undefined) {
+      return { accepted: false, reason: "register_tx_not_configured", events: 0 };
+    }
+    const status = await this.txStatus.fetch(hash, signer);
+    const receiver = status.receiverId;
+    const validReceiver =
+      receiver === this.rootAccount ||
+      (receiver.startsWith("c-") && receiver.endsWith(`.${this.rootAccount}`));
+    if (!validReceiver) return { accepted: false, reason: "receiver_not_root", events: 0 };
+    const inserted = this.store.ingestBlock({
+      height: status.blockHeight,
+      hash: status.blockHash,
+      timestamp: status.blockTimestamp,
+      receipts: status.receipts,
+    });
+    for (const event of inserted) {
+      await this.emit(event);
+      await this.enrich(event);
+    }
+    return { accepted: true, events: inserted.length };
+  }
+
   /** Deletes prunable operational events; evidence kinds are never touched. */
   prune(nowMs: number = this.now()): number {
     const cutoff = Math.floor(nowMs / 1000) - this.retentionDays * 86_400;
@@ -150,7 +198,8 @@ export class Indexer {
           error instanceof Error ? error.message : String(error),
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, this.pollIntervalMs));
+      const interval = this.now() < this.boostUntil ? BOOST_POLL_INTERVAL_MS : this.pollIntervalMs;
+      await new Promise((resolve) => setTimeout(resolve, interval));
     }
   }
 
@@ -165,12 +214,20 @@ export class Indexer {
     transfers: number;
     calls: Record<string, number>;
     poll_interval_ms: number;
+    boost_until: number;
+    boost_active: boolean;
+    degraded: boolean;
+    nearblocks_budget?: ReturnType<BudgetGovernor["health"]>;
   } {
     return {
       ...this.store.health(),
       last_head: this.lastHead,
       calls: this.source.callCounts?.() ?? {},
       poll_interval_ms: this.pollIntervalMs,
+      boost_until: this.boostUntil,
+      boost_active: this.now() < this.boostUntil,
+      degraded: this.budget?.health().blocked ?? false,
+      ...(this.budget === undefined ? {} : { nearblocks_budget: this.budget.health() }),
     };
   }
 }
