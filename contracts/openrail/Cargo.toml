@@ -29,8 +29,8 @@ k256 = { version = "0.13", features = ["ecdsa"] }
 serde = { version = "1", features = ["derive"] }
 
 [package.metadata.near.reproducible_build]
-image = "sourcescan/cargo-near:0.22.0-rust-1.99.0"
-image_digest = "sha256:019ada43394e78aab2814ecd1fccfc50f1300618028b23ffdcc55ab51c5b8980"
+image = "sourcescan/cargo-near:0.22.0-rust-1.99.1"
+image_digest = "sha256:c9655eaf7436b90c87ea8b25739f91063032c5c30ba24cfeafe72c142943b5bb"
 passed_env = []
 container_build_command = [
     "cargo",
