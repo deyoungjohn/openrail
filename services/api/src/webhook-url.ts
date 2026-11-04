@@ -48,18 +48,54 @@ function blockedV4(address: string): boolean {
   );
 }
 
+function v6Groups(address: string): number[] | undefined {
+  const lower = address.toLowerCase();
+  const halves = lower.split("::");
+  if (halves.length > 2) return undefined;
+  const parse = (part: string): number[] => {
+    if (part === "") return [];
+    const groups: number[] = [];
+    for (const group of part.split(":")) {
+      if (group.includes(".")) {
+        const octets = group.split(".").map((octet) => Number(octet));
+        groups.push(((octets[0] ?? 0) << 8) | (octets[1] ?? 0));
+        groups.push(((octets[2] ?? 0) << 8) | (octets[3] ?? 0));
+      } else {
+        groups.push(Number.parseInt(group || "0", 16));
+      }
+    }
+    return groups;
+  };
+  const head = parse(halves[0] ?? "");
+  const tail = parse(halves[1] ?? "");
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  const groups = [...head, ...Array.from({ length: fill }, () => 0), ...tail];
+  return groups.length === 8 &&
+    groups.every((group) => Number.isInteger(group) && group >= 0 && group <= 0xffff)
+    ? groups
+    : undefined;
+}
+
 function blockedV6(address: string): boolean {
   const lower = address.toLowerCase();
   if (lower === "::" || lower === "::1") return true;
-  if (lower.startsWith("::ffff:")) {
-    const tail = lower.slice("::ffff:".length);
-    return isIP(tail) === 4 ? blockedV4(tail) : true;
+  const groups = v6Groups(lower);
+  if (groups === undefined) return true;
+  if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff) {
+    const mapped = `${groups[6]! >> 8}.${groups[6]! & 0xff}.${groups[7]! >> 8}.${groups[7]! & 0xff}`;
+    return blockedV4(mapped);
   }
-  const first = lower.split(":")[0] ?? "";
-  const value = Number.parseInt(first || "0", 16);
-  if ((value & 0xfe00) === 0xfc00) return true; // fc00::/7
-  if ((value & 0xffc0) === 0xfe80) return true; // fe80::/10
-  if ((value & 0xff00) === 0xff00) return true; // ff00::/8
+  if (
+    groups[0] === 0x0064 &&
+    groups[1] === 0xff9b &&
+    groups.slice(2, 6).every((group) => group === 0)
+  ) {
+    return true; // 64:ff9b::/96
+  }
+  if (groups[0] === 0x2002) return true; // 2002::/16
+  if ((groups[0]! & 0xfe00) === 0xfc00) return true; // fc00::/7
+  if ((groups[0]! & 0xffc0) === 0xfe80) return true; // fe80::/10
+  if ((groups[0]! & 0xff00) === 0xff00) return true; // ff00::/8
   return false;
 }
 
