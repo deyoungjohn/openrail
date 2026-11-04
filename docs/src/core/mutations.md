@@ -1,6 +1,6 @@
 # Contract mutation checks
 
-These are deliberate rule breaks applied to the contract code, each run against the named acceptance test, then restored. C2/C3 are recorded at commit [`cd54fa9`](https://github.com/deyoungjohn/openrail/commit/cd54fa9), based on [`44361a3`](https://github.com/deyoungjohn/openrail/commit/44361a3) (PR [#54](https://github.com/deyoungjohn/openrail/pull/54)); C4 and C5 are recorded on branch `ph1-c5-lifecycle` (PR [#71](https://github.com/deyoungjohn/openrail/pull/71)).
+These are deliberate rule breaks applied to the contract code and runner scripts, each run against the named acceptance test, then restored. C2/C3 are recorded at commit [`cd54fa9`](https://github.com/deyoungjohn/openrail/commit/cd54fa9), based on [`44361a3`](https://github.com/deyoungjohn/openrail/commit/44361a3) (PR [#54](https://github.com/deyoungjohn/openrail/pull/54)); C4 and C5 are recorded on branch `ph1-c5-lifecycle` (PR [#71](https://github.com/deyoungjohn/openrail/pull/71)); G1 runner mutations are recorded on branch `ph1-t2-g1-safety` (PR [#97](https://github.com/deyoungjohn/openrail/pull/97)).
 
 ## Reproduce
 
@@ -712,4 +712,244 @@ Failure (tail):
 test test_c5_close_refuses_non_empty_undistributed_until_retried ... FAILED
 thread 'test_c5_close_refuses_non_empty_undistributed_until_retried' (1894671) panicked at contracts/tests/tests/c5_lifecycle_tests.rs:784:5:
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 12.10s
+```
+
+## G1 runner
+
+Deliberate breaks in `scripts/t2/g1.ts` evaluated against the safety test suite in `scripts/t2/__tests__/g1.safety.test.ts`.
+
+| ID    | Break                                            | Test Filter                               | Result          |
+| ----- | ------------------------------------------------ | ----------------------------------------- | --------------- |
+| G1-M1 | send without confirm flag (`confirmFlag = true`) | `OWED_CONFIRM_MAINNET unset: zero writes` | FAILED (caught) |
+| G1-M2 | ignore spend cap checks (`MAX_SPEND_USD`)        | `confirm flag with MAX_SPEND_USD unset`   | FAILED (caught) |
+| G1-M3 | accept case-insensitive confirmation (`yes`)     | `first answer "yes" is not YES`           | FAILED (caught) |
+| G1-M4 | secret printed to stdout                         | `dry run: no secret value in stdout`      | FAILED (caught) |
+| G1-M5 | resume re-sends step 1                           | `rerun after a failure at write N`        | FAILED (caught) |
+| G1-M6 | `--yes-all` allowed with `NEAR_ENV=mainnet`      | `refused when NEAR_ENV="mainnet"`         | FAILED (caught) |
+
+### G1-M1: send without the confirm flag
+
+Command: `pnpm exec vitest run scripts/t2 -t "OWED_CONFIRM_MAINNET unset"`
+
+```diff
+--- a/scripts/t2/g1.ts
++++ b/scripts/t2/g1.ts
+@@ -756,7 +756,7 @@ export async function runG1(argv: string[] = process.argv.slice(2)): Promise<num
+   if (network !== "mainnet" && network !== "sandbox") fail("NEAR_ENV must be mainnet or sandbox");
+   const sandbox = network === "sandbox";
+   if (options.yesAll && !sandbox) fail("--yes-all is only allowed with NEAR_ENV=sandbox");
+-  const confirmFlag = getEnv("OWED_CONFIRM_MAINNET") === "yes";
++  const confirmFlag = true;
+   const maxRaw = getEnv("MAX_SPEND_USD");
+   if (confirmFlag && maxRaw === undefined) fail("MISSING_ENV: MAX_SPEND_USD");
+   if (maxRaw !== undefined) {
+```
+
+Failure (tail):
+
+```text
+ FAIL  scripts/t2/__tests__/g1.safety.test.ts > g1 safety: dry run by default > OWED_CONFIRM_MAINNET unset: zero writes even if every prompt is answered YES
+AssertionError: expected [ { server: 'http', …(4) }, …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "body": "{\"invoice_number\":\"G1-1793811779907\",\"issuer_legal_name\":\"Openrail\",\"debtor_legal_name\":\"G1 debtor\",\"debtor_type\":\"evm\",\"debtor_key\":\"<EVM_DEBTOR_ADDRESS>\",\"amount_usd\":\"3.00\",\"due_date\":\"2026-11-11\",\"line_items\":[{\"description\":\"G1 core run\",\"quantity\":1,\"unit_amount_usd\":\"3.00\"}]}",
++     "isWrite": true,
++     "method": "POST",
++     "path": "/v1/invoices",
++     "server": "http",
++   },
++   ...
++ ]
+
+ ❯ scripts/t2/__tests__/g1.safety.test.ts:317:26
+    315|       stdin: YES(50),
+    316|     });
+    317|     expect(world.writes).toEqual([]);
+       |                          ^
+```
+
+### G1-M2: ignore MAX_SPEND_USD check
+
+Command: `pnpm exec vitest run scripts/t2 -t "confirm flag with MAX_SPEND_USD unset"`
+
+```diff
+--- a/scripts/t2/g1.ts
++++ b/scripts/t2/g1.ts
+@@ -363,7 +363,7 @@ async function approve(ctx: Ctx, stepNumber: number, name: string, action: strin
+   if (ctx.dryRun || ctx.options.yesAll) return;
+   const answer = await ctx.prompt(`Type YES to run step ${stepNumber} (${name}): `);
+   if (answer !== "YES") throw new StopRun(`step ${stepNumber} skipped`);
+-  if (getEnv("MAX_SPEND_USD") === undefined) fail("MISSING_ENV: MAX_SPEND_USD");
++  // if (getEnv("MAX_SPEND_USD") === undefined) fail("MISSING_ENV: MAX_SPEND_USD");
+ }
+
+ function idempotency(prefix: string): string {
+@@ -758,7 +758,7 @@ export async function runG1(argv: string[] = process.argv.slice(2)): Promise<num
+   if (options.yesAll && !sandbox) fail("--yes-all is only allowed with NEAR_ENV=sandbox");
+   const confirmFlag = getEnv("OWED_CONFIRM_MAINNET") === "yes";
+   const maxRaw = getEnv("MAX_SPEND_USD");
+-  if (confirmFlag && maxRaw === undefined) fail("MISSING_ENV: MAX_SPEND_USD");
++  // if (confirmFlag && maxRaw === undefined) fail("MISSING_ENV: MAX_SPEND_USD");
+   if (maxRaw !== undefined) {
+     const max = Number(maxRaw);
+     if (!Number.isFinite(max) || max <= 0) fail("MAX_SPEND_USD must be a positive number");
+```
+
+Failure (tail):
+
+```text
+ FAIL  scripts/t2/__tests__/g1.safety.test.ts > g1 safety: spend cap > confirm flag with MAX_SPEND_USD unset exits non-zero and sends nothing
+AssertionError: expected +0 not to be +0 // Object.is equality
+ ❯ scripts/t2/__tests__/g1.safety.test.ts:342:24
+    340|       stdin: YES(50),
+    341|     });
+    342|     expect(r.code).not.toBe(0);
+       |                        ^
+    343|     expect(r.stdout + r.stderr).toMatch(/MAX_SPEND_USD/);
+    344|     expect(world.writes).toEqual([]);
+```
+
+### G1-M3: accept a lowercase yes
+
+Command: `pnpm exec vitest run scripts/t2 -t 'first answer "yes" is not YES'`
+
+```diff
+--- a/scripts/t2/g1.ts
++++ b/scripts/t2/g1.ts
+@@ -362,7 +362,7 @@ async function approve(ctx: Ctx, stepNumber: number, name: string, action: strin
+   console.log(action);
+   if (ctx.dryRun || ctx.options.yesAll) return;
+   const answer = await ctx.prompt(`Type YES to run step ${stepNumber} (${name}): `);
+-  if (answer !== "YES") throw new StopRun(`step ${stepNumber} skipped`);
++  if (answer.toUpperCase() !== "YES") throw new StopRun(`step ${stepNumber} skipped`);
+   if (getEnv("MAX_SPEND_USD") === undefined) fail("MISSING_ENV: MAX_SPEND_USD");
+ }
+```
+
+Failure (tail):
+
+```text
+ FAIL  scripts/t2/__tests__/g1.safety.test.ts > g1 safety: typed confirmation > first answer "yes" is not YES: stops with zero writes
+AssertionError: expected +0 not to be +0 // Object.is equality
+ ❯ scripts/t2/__tests__/g1.safety.test.ts:357:26
+    355|     async (answer) => {
+    356|       const r = await run({ env: confirmedEnv(), stdin: `${answer}\n${YES(50)}` });
+    357|       expect(r.code).not.toBe(0);
+       |                          ^
+    358|       expect(world.writes).toEqual([]);
+    359|     },
+```
+
+### G1-M4: print a secret
+
+Command: `pnpm exec vitest run scripts/t2 -t "dry run: no secret value in stdout"`
+
+```diff
+--- a/scripts/t2/g1.ts
++++ b/scripts/t2/g1.ts
+@@ -318,6 +318,7 @@ async function preflight(ctx: Ctx): Promise<void> {
+   if (config === null) console.log("# config unavailable (continuing)");
+   else console.log(`# config ${redactedJson(config)}`);
+   for (const name of ["FEE_ACCOUNT", "WATCHER_ACCOUNT_ID", "ISSUER_ACCOUNT_ID"]) {
++    console.log(`[debug] account=${name} key=${process.env.ISSUER_PRIVATE_KEY}`);
+     const id = getEnv(name);
+     if (id === undefined) continue;
+     try {
+```
+
+Failure (tail):
+
+```text
+ FAIL  scripts/t2/__tests__/g1.safety.test.ts > g1 safety: secrets never leave the process > dry run: no secret value in stdout, stderr, report or state
+AssertionError: ISSUER_PRIVATE_KEY appears in stdout: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ scripts/t2/__tests__/g1.safety.test.ts:447:93
+    445|       for (const [where, text] of haystacks) {
+    446|         // Report the name, never the value, if this fails.
+    447|         expect(text.includes(value), `${name} appears in ${where.replace(r.cwd, "<cwd>")}`).toBe(
+       |                                                                                             ^
+    448|           false,
+    449|         );
+```
+
+### G1-M5: resume re-sends step 1
+
+Command: `pnpm exec vitest run scripts/t2 -t "rerun after a failure at write N re-sends only write N onwards"`
+
+```diff
+--- a/scripts/t2/g1.ts
++++ b/scripts/t2/g1.ts
+@@ -496,7 +496,7 @@ async function sendNear(
+
+ async function step1(ctx: Ctx): Promise<StepState> {
+   const current = step(ctx.state, 1);
+-  if (current.status === "PASS") return current;
++  // if (current.status === "PASS") return current;
+   const body = {
+     invoice_number: getEnv("G1_INVOICE_NUMBER") ?? `G1-${Date.now()}`,
+     issuer_legal_name: getEnv("G1_ISSUER_LEGAL_NAME") ?? "Openrail",
+```
+
+Failure (tail):
+
+```text
+ FAIL  scripts/t2/__tests__/g1.safety.test.ts > g1 safety: resume > rerun after a failure at write N re-sends only write N onwards
+AssertionError: expected 5 to be 4 // Object.is equality
+
+- Expected
++ Received
+
+- 4
++ 5
+
+ ❯ scripts/t2/__tests__/g1.safety.test.ts:605:35
+    603|       expect(second.code).toBe(0);
+    604|       // Write 1 succeeded in run 1 and must not be sent again; the failed write is retried.
+    605|       expect(world.writes.length).toBe(total - 1);
+       |                                   ^
+    606|     },
+    607|     30_000,
+```
+
+### G1-M6: --yes-all allowed on mainnet
+
+Command: `pnpm exec vitest run scripts/t2 -t 'refused when NEAR_ENV="mainnet"'`
+
+```diff
+--- a/scripts/t2/g1.ts
++++ b/scripts/t2/g1.ts
+@@ -755,7 +755,7 @@ export async function runG1(argv: string[] = process.argv.slice(2)): Promise<num
+   const network = (getEnv("NEAR_ENV") ?? "mainnet") as Network;
+   if (network !== "mainnet" && network !== "sandbox") fail("NEAR_ENV must be mainnet or sandbox");
+   const sandbox = network === "sandbox";
+-  if (options.yesAll && !sandbox) fail("--yes-all is only allowed with NEAR_ENV=sandbox");
++  // if (options.yesAll && !sandbox) fail("--yes-all is only allowed with NEAR_ENV=sandbox");
+   const confirmFlag = getEnv("OWED_CONFIRM_MAINNET") === "yes";
+   const maxRaw = getEnv("MAX_SPEND_USD");
+   if (confirmFlag && maxRaw === undefined) fail("MISSING_ENV: MAX_SPEND_USD");
+```
+
+Failure (tail):
+
+```text
+ FAIL  scripts/t2/__tests__/g1.safety.test.ts > g1 safety: --yes-all > refused when NEAR_ENV="mainnet": non-zero, nothing sent
+AssertionError: expected +0 not to be +0 // Object.is equality
+ ❯ scripts/t2/__tests__/g1.safety.test.ts:388:26
+    386|         stdin: "",
+    387|       });
+    388|       expect(r.code).not.toBe(0);
+       |                          ^
+    389|       expect(r.stdout + r.stderr).toMatch(/--yes-all|NEAR_ENV/);
+    390|       expect(world.writes).toEqual([]);
 ```
