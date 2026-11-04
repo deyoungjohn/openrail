@@ -488,13 +488,15 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 19 filtered out;
 
 ## C5 — Claim lifecycle
 
-| ID    | Break                                     | Test                                                     | Result          |
-| ----- | ----------------------------------------- | -------------------------------------------------------- | --------------- |
-| C5-M1 | prepaid gas check on reconcile removed    | `test_c5_reconcile_gas_check`                            | FAILED (caught) |
-| C5-M2 | retry distribution permitted while locked | `test_c5_retry_distribution_rejected_during_reconcile`   | FAILED (caught) |
-| C5-M3 | close allowed with remaining surplus      | `test_c5_close_enforces_rules_and_emits_event`           | FAILED (caught) |
-| C5-M4 | close writeoff allowed on Issued claim    | `test_c5_close_writeoff_enforces_rules_and_emits_event`  | FAILED (caught) |
-| C5-M5 | release surplus allowed by non-owner      | `test_c5_release_surplus_enforces_rules_and_emits_event` | FAILED (caught) |
+| ID    | Break                                     | Test                                                                          | Result          |
+| ----- | ----------------------------------------- | ----------------------------------------------------------------------------- | --------------- |
+| C5-M1 | prepaid gas check on reconcile removed    | `test_c5_reconcile_gas_check`                                                 | FAILED (caught) |
+| C5-M2 | retry distribution permitted while locked | `test_c5_retry_distribution_rejected_during_reconcile`                        | FAILED (caught) |
+| C5-M3 | close allowed with remaining surplus      | `test_c5_close_enforces_rules_and_emits_event`                                | FAILED (caught) |
+| C5-M4 | close writeoff allowed on Issued claim    | `test_c5_close_writeoff_enforces_rules_and_emits_event`                       | FAILED (caught) |
+| C5-M5 | release surplus allowed by non-owner      | `test_c5_release_surplus_enforces_rules_and_emits_event`                      | FAILED (caught) |
+| C5-M6 | stale callback skips promise results      | `test_c5_stale_callback_failed_forward_preserves_undistributed_and_last_seen` | FAILED (caught) |
+| C5-M7 | close ignores undistributed legs          | `test_c5_close_refuses_non_empty_undistributed_until_retried`                 | FAILED (caught) |
 
 ### C5-M1: prepaid gas check on reconcile removed
 
@@ -606,4 +608,81 @@ test test_c5_release_surplus_enforces_rules_and_emits_event ... FAILED
 thread 'test_c5_release_surplus_enforces_rules_and_emits_event' panicked at contracts/tests/tests/c5_lifecycle_tests.rs:287:5:
 assertion failed: rel_bob.is_failure()
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 63.85s
+```
+
+### C5-M6: stale callback returns before reading promise results
+
+Command: `cargo test -p openrail-tests --test c5_lifecycle_tests test_c5_stale_callback_failed_forward_preserves_undistributed_and_last_seen -- --ignored`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -543,13 +543,13 @@
+             .get_mut(&token_id)
+             .unwrap_or_else(|| env::panic_str("claim not found"));
+
+-        let stale = claim.lock != (Lock::Reconciling { since });
+-        if stale {
++        if claim.lock != (Lock::Reconciling { since }) {
+             ReconcileFailedEvent {
+-                token_id: token_id.clone(),
++                token_id,
+                 reason: "stale_callback".to_string(),
+             }
+             .emit();
++            return;
+         }
+
+         let results_count = env::promise_results_count();
+@@ -617,12 +617,6 @@
+             }
+         }
+
+-        if stale {
+-            // A stale callback still reconciles its promise results: failed legs must be
+-            // requeued and last_seen_balance restored, but the lock is left untouched.
+-            return;
+-        }
+-
+         if !is_retry {
+             if open_transfer_window {
+                 let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+```
+
+Failure (tail):
+
+```text
+test test_c5_stale_callback_failed_forward_preserves_undistributed_and_last_seen ... FAILED
+thread 'test_c5_stale_callback_failed_forward_preserves_undistributed_and_last_seen' (1914800) panicked at contracts/tests/tests/c5_lifecycle_tests.rs:676:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 16.06s
+```
+
+### C5-M7: close ignores undistributed legs
+
+Command: `cargo test -p openrail-tests --test c5_lifecycle_tests test_c5_close_refuses_non_empty_undistributed_until_retried -- --ignored`
+
+```diff
+--- a/contracts/openrail/src/claims.rs
++++ b/contracts/openrail/src/claims.rs
+@@ -86,13 +86,6 @@
+         require!(claim.status == Status::Paid, "claim is not Paid");
+         require!(claim.surplus.0 == 0, "claim has unreleased surplus");
+         require!(claim.lock == Lock::None, "claim is locked");
+-        require!(
+-            self.undistributed
+-                .get(&token_id)
+-                .is_none_or(|legs| legs.is_empty()),
+-            "claim has undistributed legs"
+-        );
+-
+         claim.status = Status::Closed;
+         self.claims.insert(token_id.clone(), claim);
+```
+
+Failure (tail):
+
+```text
+test test_c5_close_refuses_non_empty_undistributed_until_retried ... FAILED
+thread 'test_c5_close_refuses_non_empty_undistributed_until_retried' (1894671) panicked at contracts/tests/tests/c5_lifecycle_tests.rs:784:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 12.10s
 ```
