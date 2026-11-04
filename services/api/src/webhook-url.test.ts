@@ -21,6 +21,11 @@ describe("webhook URL validation", () => {
     ["fe80::1", true],
     ["ff02::1", true],
     ["::ffff:127.0.0.1", true],
+    ["::ffff:7f00:1", true],
+    ["64:ff9b::7f00:1", true],
+    ["64:ff9b::a00:1", true],
+    ["2002:7f00:1::", true],
+    ["2002:c0a8:1::", true],
     ["8.8.8.8", false],
     ["2606:4700:4700::1111", false],
   ])("classifies %s as blocked=%s", (address, blocked) => {
