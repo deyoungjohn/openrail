@@ -195,7 +195,7 @@ const nearNetwork = `network-config ${network} sign-with-keychain send`;
 const hashGuard = `echo '${hex(codeHashHex)}  ${wasmRel}' | sha256sum -c -`;
 const deploy = [
   `${hashGuard} && near contract deploy ${root} use-file ${wasmRel}`,
-  `with-init-call new json-args ${shellJson(config)}`,
+  `with-init-call new json-args ${shellJson({ config })}`,
   `prepaid-gas '300 Tgas' attached-deposit '0 NEAR' ${nearNetwork}`,
 ].join(" ");
 
