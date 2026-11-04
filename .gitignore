@@ -17,3 +17,6 @@ evidence-full/
 # Old spike code (read-only reference, never committed)
 spikes/
 docs/dist/
+
+# Local deploy review files (contain account names and balances)
+/deploy-plans/
