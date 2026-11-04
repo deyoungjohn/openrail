@@ -2,6 +2,9 @@
 # Build the server pack on a developer machine. Never run this on the EC2 host.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=deploy/lib/load-env.sh
+. deploy/lib/load-env.sh
+load_openrail_env 'NEXT_PUBLIC_*' || echo "continuing without the env file; NEXT_PUBLIC_* defaults apply" >&2
 
 command -v pnpm >/dev/null 2>&1 || {
   echo "MISSING_TOOL: pnpm" >&2

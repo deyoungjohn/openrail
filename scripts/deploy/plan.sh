@@ -3,6 +3,9 @@
 # Set SKIP_BUILD=1 to reuse an existing target/near/openrail/openrail.wasm.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# shellcheck source=deploy/lib/load-env.sh
+. deploy/lib/load-env.sh
+load_openrail_env WATCHER_ACCOUNT_ID ISSUER_ACCOUNT_ID RELAYER_ACCOUNT_ID WATCHER_PUBLIC_KEY ISSUER_PUBLIC_KEY RELAYER_PUBLIC_KEY FEE_ACCOUNT VAULT_GLOBAL_HASH NEAR_ROOT_ACCOUNT ACCOUNT_BALANCE_NEAR || echo "continuing without the env file; set the variables yourself" >&2
 
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
   if ! command -v docker >/dev/null 2>&1; then

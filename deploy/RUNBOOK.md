@@ -10,11 +10,10 @@ Do the steps in order. Do not skip ahead. Each step ends with a check that tells
 
 Names used below (replace the `<...>` parts once, here, and keep this list open):
 
-| Placeholder   | Meaning                               | Example               |
-| ------------- | ------------------------------------- | --------------------- |
-| `<SERVER_IP>` | the EC2 public IP                     | `52.79.253.146`       |
-| `<KEYFILE>`   | your SSH private key file             | `~/.ssh/openrail.pem` |
-| `<COMMIT>`    | the short commit printed by the build | `a1b2c3d`             |
+| Placeholder   | Meaning                   | Example               |
+| ------------- | ------------------------- | --------------------- |
+| `<SERVER_IP>` | the EC2 public IP         | `52.79.253.146`       |
+| `<KEYFILE>`   | your SSH private key file | `~/.ssh/openrail.pem` |
 
 The contract is already deployed on mainnet. This runbook does not touch it.
 
@@ -34,88 +33,47 @@ pnpm --version
 
 Check: `git status` prints nothing and Node is `v22.23.x`. If Node is a different version, the build refuses to run; install 22.23 with nvm (`nvm install 22.23.0 && nvm use 22.23.0`).
 
-### Step 2. [LAPTOP] Have these four values ready
+### Step 2. [LAPTOP] Create your env file (once)
 
-| Value                             | Where it comes from                                                                                                         |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| 1Click JWT                        | your 1Click account (the API key you use for quotes)                                                                        |
-| NearBlocks API key                | your NearBlocks account (free plan is enough)                                                                               |
-| WalletConnect project ID          | free at https://cloud.reown.com (create a project, copy its ID). Without it, HOT, OKX and Trust wallet login does not work. |
-| Three private keys in the keyring | already there: `issuer-fc-key`, `relayer-fc-key`, `watcher-fc-key`                                                          |
+Everything the scripts need lives in one file: `~/.openrail/openrail.env` (mode 600, folder mode 700). You never `export` a key in the terminal. Each script reads only the names it needs from this file.
 
-Check the keyring items exist (this prints only a length, not the key):
+Have these ready, then run the command. It asks five questions and copies the three private keys out of the keyring without printing them:
 
-```bash
-for n in issuer-fc-key relayer-fc-key watcher-fc-key; do echo "$n: $(secret-tool lookup service openrail name $n | wc -c) characters"; done
-```
-
-Each must say 97 or so, not 0.
-
-### Step 3. [LAPTOP] Create the public values the website is built with
-
-The website bakes some public values in when it is built. They cannot be changed on the server afterwards, so set them now. The pay page also needs a "publishable key" (a public key that can only start a payment). You make it here and register it on the server in Part 5.
+| It asks for                 | Where it comes from                                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| EC2 public IP               | the AWS console                                                                                                             |
+| SSH private key file        | for example `~/.ssh/openrail.pem`                                                                                           |
+| WalletConnect project ID    | free at https://cloud.reown.com (create a project, copy its ID). Without it, HOT, OKX and Trust wallet login does not work. |
+| 1Click JWT (hidden)         | your 1Click account                                                                                                         |
+| NearBlocks API key (hidden) | your NearBlocks account (the free plan is enough)                                                                           |
 
 ```bash
-export NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=<your WalletConnect project ID>
-export NEXT_PUBLIC_API_PUBLISHABLE_KEY="or_pk_live_$(node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))")"
-echo "$NEXT_PUBLIC_API_PUBLISHABLE_KEY" > ~/openrail-publishable-key.txt
-chmod 600 ~/openrail-publishable-key.txt
+./deploy/init-env.sh
 ```
 
-These are already the defaults and need no action: `NEXT_PUBLIC_API_URL=https://api.openrail.incepture.dev`, `NEXT_PUBLIC_NEAR_NETWORK=mainnet`, `NEXT_PUBLIC_ROOT_CONTRACT=openrail.near`, `NEXT_PUBLIC_API_MODE=live`.
+It also generates the shared service key and the public pay-page key. Check that nothing is empty (this must print `ok`):
 
-Keep this same terminal window open for Step 4: the `export` lines only exist in this window.
+```bash
+grep -n -E '^(ISSUER_SERVICE_KEY|ONECLICK_JWT|NEARBLOCKS_API_KEY|ISSUER_PRIVATE_KEY|RELAY_PRIVATE_KEY|WATCHER_PRIVATE_KEY|SERVER_IP|SSH_KEY_FILE|NEXT_PUBLIC_API_PUBLISHABLE_KEY|NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID)=$' ~/.openrail/openrail.env && echo "STILL EMPTY ABOVE: fix it with nano ~/.openrail/openrail.env" || echo ok
+```
 
-### Step 4. [LAPTOP] Build the server pack
+To change a value later, edit the file: `nano ~/.openrail/openrail.env`. It is not in the repository. Never paste it anywhere.
+
+If `init-env.sh` stops with `MISSING_KEYRING_ITEM: <name>`, that key was never stored. Create it with `node tools/genkey.mjs` (in the lab repo) or tell me.
+
+### Step 3. [LAPTOP] Build the server pack
+
+The website bakes its public values (API address, network, contract, WalletConnect ID, pay-page key) in when it is built. The build reads them from your env file. Only names starting with `NEXT_PUBLIC_` are given to the build; the private keys are not.
 
 ```bash
 ./deploy/build.sh
 ```
 
-This takes a few minutes. At the end it prints `server pack ready: dist/openrail-server-<COMMIT>.tar.gz`. Write down `<COMMIT>`.
-
-Check: `ls -lh dist/` shows the `.tar.gz` file (tens of MB).
-
-### Step 5. [LAPTOP] Write the one combined env file
-
-This file holds every setting for every service. It lives outside the repository.
-
-```bash
-umask 077
-cp deploy/env/openrail.env.example ~/openrail.env
-```
-
-Fill in the secrets from the keyring and generate the shared service key (nothing is printed):
-
-```bash
-set_secret() { sed -i "s|^$1=.*|$1=$(secret-tool lookup service openrail name "$2")|" ~/openrail.env; }
-set_secret ISSUER_PRIVATE_KEY issuer-fc-key
-set_secret RELAY_PRIVATE_KEY relayer-fc-key
-set_secret WATCHER_PRIVATE_KEY watcher-fc-key
-sed -i "s|^ISSUER_SERVICE_KEY=.*|ISSUER_SERVICE_KEY=$(openssl rand -hex 32)|" ~/openrail.env
-```
-
-Now add the two API keys by hand. Open the file and fill the two lines `ONECLICK_JWT=` and `NEARBLOCKS_API_KEY=`:
-
-```bash
-nano ~/openrail.env
-```
-
-(Save with Ctrl+O, Enter, then Ctrl+X.)
-
-Check that no secret is still empty. This must print `ok`:
-
-```bash
-grep -n -E '^(ISSUER_SERVICE_KEY|ONECLICK_JWT|NEARBLOCKS_API_KEY|ISSUER_PRIVATE_KEY|RELAY_PRIVATE_KEY|WATCHER_PRIVATE_KEY)=$' ~/openrail.env && echo "STILL EMPTY ABOVE: fix it" || echo ok
-```
-
-Never paste this file anywhere. Do not put it in the repository.
-
----
+This takes a few minutes. Check: it ends with `server pack ready: dist/openrail-server-<version>.tar.gz`.
 
 ## Part 2. First-time setup of the server (once)
 
-### Step 6. [LAPTOP → EC2] Log in
+### Step 4. [LAPTOP → EC2] Log in
 
 ```bash
 ssh -i <KEYFILE> ubuntu@<SERVER_IP>
@@ -123,7 +81,7 @@ ssh -i <KEYFILE> ubuntu@<SERVER_IP>
 
 Everything in Part 2 and Part 4 is typed in this SSH window. Check: the prompt changes to `ubuntu@ip-...`.
 
-### Step 7. [EC2] Check the machine type
+### Step 5. [EC2] Check the machine type
 
 ```bash
 uname -m
@@ -132,7 +90,7 @@ free -m
 
 `uname -m` must print `x86_64`. If it prints `aarch64`, stop: the pack is built for x86 and will not run. Tell me and we rebuild for ARM.
 
-### Step 8. [EC2] Packages, firewall and swap
+### Step 6. [EC2] Packages, firewall and swap
 
 ```bash
 sudo apt update
@@ -148,7 +106,7 @@ sudo systemctl enable --now fail2ban
 
 Ports 3000, 3001, 8080, 8787 and 8788 must stay closed to the outside (they are reached only from the server itself). Check: `sudo ufw status` lists only 22, 80 and 443.
 
-### Step 9. [EC2] Lock down SSH (key-only login)
+### Step 7. [EC2] Lock down SSH (key-only login)
 
 Before this step, keep your current SSH window open. SSH is allowed from any IP on purpose (your IP changes daily), which is only safe with key-only login:
 
@@ -158,9 +116,9 @@ printf '%s\n' 'PubkeyAuthentication yes' 'PasswordAuthentication no' 'KbdInterac
 sudo sshd -t && sudo systemctl reload ssh
 ```
 
-Check: open a second terminal on your laptop and run the `ssh` command from Step 6 again. It must still let you in. If it does not, use the first window to undo the change (`sudo rm /etc/ssh/sshd_config.d/99-openrail.conf && sudo systemctl reload ssh`). Then run `sudo fail2ban-client status sshd` (it should say the jail is active).
+Check: open a second terminal on your laptop and run the `ssh` command from Step 4 again. It must still let you in. If it does not, use the first window to undo the change (`sudo rm /etc/ssh/sshd_config.d/99-openrail.conf && sudo systemctl reload ssh`). Then run `sudo fail2ban-client status sshd` (it should say the jail is active).
 
-### Step 10. [EC2] Install Node 22.23.0 and pnpm
+### Step 8. [EC2] Install Node 22.23.0 and pnpm
 
 ```bash
 cd ~
@@ -176,7 +134,7 @@ pnpm --version
 
 Check: `v22.23.0` and `12.8.1`.
 
-### Step 11. [EC2] Caddy, service users and folders
+### Step 9. [EC2] Caddy, service users and folders
 
 Caddy is already installed if the page "Caddy works!" showed on port 80. If not:
 
@@ -208,14 +166,13 @@ Leave the SSH window open, or type `exit` to come back to the laptop.
 
 ## Part 3. Upload from your laptop
 
-### Step 12. [LAPTOP] Copy the pack and the env file to the server
+### Step 10. [LAPTOP] Copy the pack and the env file to the server
 
 ```bash
-cd ~/openrail
-scp -i <KEYFILE> dist/openrail-server-<COMMIT>.tar.gz ~/openrail.env ubuntu@<SERVER_IP>:~/
+./deploy/upload.sh --env
 ```
 
-Check: both files print 100% and no error.
+It uses `SERVER_IP` and `SSH_KEY_FILE` from your env file and copies the newest pack plus the env file to the server's home folder. Check: both files print 100% and no error.
 
 ---
 
@@ -223,10 +180,11 @@ Check: both files print 100% and no error.
 
 Log in again if you left: `ssh -i <KEYFILE> ubuntu@<SERVER_IP>`.
 
-### Step 13. [EC2] Unpack the pack
+### Step 11. [EC2] Unpack the pack
 
 ```bash
-version="<COMMIT>"
+version="$(ls -t ~/openrail-server-*.tar.gz | head -1 | sed 's/.*openrail-server-\(.*\)\.tar\.gz/\1/')"
+echo "installing $version"
 sudo mkdir -p "/opt/openrail/releases/$version"
 sudo tar -xzf ~/openrail-server-$version.tar.gz -C "/opt/openrail/releases/$version"
 sudo chown -R root:openrail "/opt/openrail/releases/$version"
@@ -239,7 +197,7 @@ ls /opt/openrail/current
 
 Check: the last command lists `deploy packages services config node_modules` and more.
 
-### Step 14. [EC2] Split the env file into one file per service
+### Step 12. [EC2] Split the env file into one file per service
 
 Each service gets only its own settings, so the public API can never read the private keys.
 
@@ -252,7 +210,7 @@ sudo ls -l /etc/openrail
 
 Check: five files (`api.env issuer.env watcher.env indexer.env web.env`), each `-rw-------` owned by `root`. Lines like `not set: EVM_RPC_URL` are fine; they are optional.
 
-### Step 15. [EC2] Install the services and the web server config, then start
+### Step 13. [EC2] Install the services and the web server config, then start
 
 ```bash
 sudo install -m 0644 /opt/openrail/current/deploy/systemd/*.service /opt/openrail/current/deploy/systemd/*.timer /etc/systemd/system/
@@ -263,7 +221,7 @@ sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-### Step 16. [EC2] Check that everything runs
+### Step 14. [EC2] Check that everything runs
 
 ```bash
 sleep 20
@@ -282,17 +240,15 @@ Copy the last lines (they never contain keys) and send them to me. Do not contin
 
 ## Part 5. Register the pay-page key
 
-### Step 17. [LAPTOP] Show the publishable key
+### Step 15. [EC2] Register the pay-page key with the API
+
+The key is in the env file you uploaded and split in Step 12, but only the website build needs it; the API needs to know it. The env file was deleted in Step 12 on purpose, so read the key from your laptop. [LAPTOP]:
 
 ```bash
-cat ~/openrail-publishable-key.txt
+grep '^NEXT_PUBLIC_API_PUBLISHABLE_KEY=' ~/.openrail/openrail.env
 ```
 
-Copy the line (it starts with `or_pk_live_`). It is public by design.
-
-### Step 18. [EC2] Register it with the API
-
-Replace `<THE KEY>` with the line you copied:
+Copy the part after `=` (it starts with `or_pk_live_`; it is public by design). Then [EC2], replacing `<THE KEY>`:
 
 ```bash
 cd /opt/openrail/current
@@ -305,7 +261,7 @@ Check: it prints `registered publishable key` (or `this key was already register
 
 ## Part 6. Verify from outside
 
-### Step 19. [LAPTOP] Test the public addresses
+### Step 16. [LAPTOP] Test the public addresses
 
 ```bash
 curl -s https://api.openrail.incepture.dev/v1/health
@@ -314,13 +270,13 @@ curl -s -o /dev/null -w "web: %{http_code}\n" https://openrail.incepture.dev/
 
 Check: the first prints JSON with an OK status; the second prints `web: 200`. The first request may take a few seconds while Caddy gets the HTTPS certificate. If it still fails after two minutes: `sudo journalctl -u caddy -n 40 --no-pager` on the server.
 
-### Step 20. [BROWSER] Sign in
+### Step 17. [BROWSER] Sign in
 
 Open https://openrail.incepture.dev, choose a NEAR wallet, and sign in (the session should survive a page reload). If sign-in works, the website, API and chain connection work.
 
-### Step 21. Tell me it is up
+### Step 18. Tell me it is up
 
-Send me the output of Step 16 and Step 19. I check the API from outside and then we run the mainnet run (`pnpm t2:g1`, dry run first).
+Send me the output of Step 14 and Step 16. I check the API from outside and then we run the mainnet run (`pnpm t2:g1`, dry run first).
 
 ---
 
@@ -328,9 +284,8 @@ Send me the output of Step 16 and Step 19. I check the API from outside and then
 
 Whenever the code changes:
 
-1. [LAPTOP] Steps 1, 3 (reuse the same `~/openrail-publishable-key.txt` key: `export NEXT_PUBLIC_API_PUBLISHABLE_KEY=$(cat ~/openrail-publishable-key.txt)` and the WalletConnect ID) and 4.
-2. [LAPTOP] Step 12 without the env file: `scp -i <KEYFILE> dist/openrail-server-<COMMIT>.tar.gz ubuntu@<SERVER_IP>:~/`
-3. [EC2] Step 13 with the new `<COMMIT>`, then:
+1. [LAPTOP] `cd ~/openrail && git pull && ./deploy/build.sh && ./deploy/upload.sh`
+2. [EC2] Run Step 11 again (it picks the newest pack by itself), then:
 
 ```bash
 sudo systemctl restart openrail-indexer openrail-issuer openrail-watcher openrail-api openrail-web
@@ -345,15 +300,15 @@ sudo ln -sfn /opt/openrail/releases/<OLD_COMMIT> /opt/openrail/current
 sudo systemctl restart openrail-indexer openrail-issuer openrail-watcher openrail-api openrail-web
 ```
 
-If the env file changed, redo Step 5, upload it with `scp`, then run Step 14 and the restart line.
+If a setting changed: edit `~/.openrail/openrail.env`, run `./deploy/upload.sh --env`, then on the server Step 12 and the restart line. Settings that start with `NEXT_PUBLIC_` need a new build as well.
 
 ## If something goes wrong
 
 | Symptom                                 | Do this                                                                                                                                                     |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `uname -m` is `aarch64`                 | Stop. The pack is for x86 servers.                                                                                                                          |
-| `FAIL openrail-api.service`             | `sudo journalctl -u openrail-api -n 60 --no-pager`; a line starting `MISSING_ENV:` names the missing setting; add it to the combined file and redo Step 14. |
+| `FAIL openrail-api.service`             | `sudo journalctl -u openrail-api -n 60 --no-pager`; a line starting `MISSING_ENV:` names the missing setting; add it to the combined file and redo Step 12. |
 | HTTPS does not work                     | DNS records must be "DNS only" (grey cloud) in Cloudflare; ports 80 and 443 must be open in the AWS security group and `ufw`.                               |
-| Pay page says it cannot start a payment | The publishable key was not registered (Step 18) or the web pack was built without it (Step 3).                                                             |
+| Pay page says it cannot start a payment | The publishable key was not registered (Step 15) or the web pack was built without it (Step 3).                                                             |
 | Receipts do not appear                  | The indexer polls every 5 minutes to stay inside the NearBlocks free plan. Wait, or check `sudo journalctl -u openrail-indexer -n 40 --no-pager`.           |
-| You changed a `NEXT_PUBLIC_*` value     | It only takes effect after a new build (Step 4) and upload.                                                                                                 |
+| You changed a `NEXT_PUBLIC_*` value     | It only takes effect after a new build (Step 3) and upload.                                                                                                 |

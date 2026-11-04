@@ -52,6 +52,8 @@ for svc in "${services[@]}"; do
   echo "$svc.env: $count names written${missing:+, not set: ${missing[*]}}"
 done
 
+laptop_only=" SERVER_IP SSH_KEY_FILE RELAYER_ACCOUNT_ID WATCHER_PUBLIC_KEY ISSUER_PUBLIC_KEY RELAYER_PUBLIC_KEY "
 while read -r name; do
+  [[ "$laptop_only" == *" $name "* ]] && continue
   [[ -n "${used[$name]:-}" ]] || echo "UNUSED: $name is in the combined file but no service reads it (dropped)"
 done < <(grep -oE '^[A-Z][A-Z0-9_]*' "$src" | sort -u)
