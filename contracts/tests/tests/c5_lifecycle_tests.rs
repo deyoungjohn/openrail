@@ -562,7 +562,6 @@ async fn test_c5_retry_distribution_rejected_during_reconcile() -> Result<()> {
 /// `clear_stale_lock` (mocking the stale `on_distributed` callback) must end with the leg in
 /// `undistributed` and `last_seen_balance` unchanged, and a following `reconcile` must book nothing.
 #[tokio::test]
-#[ignore = "C5fix"]
 async fn test_c5_stale_callback_failed_forward_preserves_undistributed_and_last_seen() -> Result<()>
 {
     let env = Env::new().await?;
@@ -730,7 +729,6 @@ async fn test_c5_stale_callback_failed_forward_preserves_undistributed_and_last_
 /// C5 fix 2 (D-S8): `close` on a `Paid` claim with a non-empty `undistributed` must be refused
 /// with a static message, and succeed after `retry_distribution` clears it.
 #[tokio::test]
-#[ignore = "C5fix"]
 async fn test_c5_close_refuses_non_empty_undistributed_until_retried() -> Result<()> {
     let env = Env::new().await?;
 
