@@ -243,7 +243,7 @@ emit("");
 emit("## 3. Restricted function-call keys (public keys only)");
 emit(
   addKey(
-    watcherAccount || watchers[0],
+    watcherAccount || watchers[0]!,
     process.env.WATCHER_PUBLIC_KEY!,
     "reconcile,retry_distribution,clear_stale_lock",
     watcherAllowance,
@@ -252,7 +252,7 @@ emit(
 );
 emit(
   addKey(
-    issuerAccount || issuers[0],
+    issuerAccount || issuers[0]!,
     process.env.ISSUER_PUBLIC_KEY!,
     "issue_for,log_quote",
     issuerAllowance,
@@ -302,14 +302,17 @@ const YOCTO = 10n ** 24n;
 const BYTE_COST = 10n ** 19n;
 const nearOf = (yocto: bigint): string => (Number((yocto * 10000n) / YOCTO) / 10000).toFixed(4);
 
-async function rpc(method: string, params: unknown): Promise<any> {
+async function rpc(method: string, params: unknown): Promise<unknown> {
   const res = await fetch(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: "plan", method, params }),
     signal: AbortSignal.timeout(10_000),
   });
-  const body = (await res.json()) as { result?: unknown; error?: { cause?: { name?: string }; data?: unknown } };
+  const body = (await res.json()) as {
+    result?: unknown;
+    error?: { cause?: { name?: string }; data?: unknown };
+  };
   if (body.error) {
     const name = body.error.cause?.name ?? JSON.stringify(body.error.data ?? body.error);
     throw new Error(String(name));
@@ -320,7 +323,11 @@ async function rpc(method: string, params: unknown): Promise<any> {
 type Account = { amount: string; locked: string; code_hash: string; storage_usage: number };
 async function viewAccount(id: string): Promise<Account | "missing" | "unreachable"> {
   try {
-    return (await rpc("query", { request_type: "view_account", finality: "final", account_id: id })) as Account;
+    return (await rpc("query", {
+      request_type: "view_account",
+      finality: "final",
+      account_id: id,
+    })) as Account;
   } catch (e) {
     return (e as Error).message.includes("UNKNOWN_ACCOUNT") ? "missing" : "unreachable";
   }
@@ -330,28 +337,56 @@ async function viewAccount(id: string): Promise<Account | "missing" | "unreachab
 const head = git("rev-parse", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const dirty = git("status", "--porcelain");
-check(dirty ? "FAIL" : "PASS", "git tree clean", dirty ? `uncommitted changes:\n${dirty}` : `HEAD ${head.slice(0, 12)} on ${branch}`);
+check(
+  dirty ? "FAIL" : "PASS",
+  "git tree clean",
+  dirty ? `uncommitted changes:\n${dirty}` : `HEAD ${head.slice(0, 12)} on ${branch}`,
+);
 const originMain = git("rev-parse", "origin/main");
 if (!originMain) check("WARN", "HEAD is origin/main", "no origin/main ref; run git fetch");
 else if (originMain === head) check("PASS", "HEAD is origin/main", head.slice(0, 12));
-else check("WARN", "HEAD is origin/main", `HEAD ${head.slice(0, 12)} differs from origin/main ${originMain.slice(0, 12)} (run git fetch && git pull; a reproducible build needs a pushed commit)`);
+else
+  check(
+    "WARN",
+    "HEAD is origin/main",
+    `HEAD ${head.slice(0, 12)} differs from origin/main ${originMain.slice(0, 12)} (run git fetch && git pull; a reproducible build needs a pushed commit)`,
+  );
 
 // 2. wasm identity: it must be newer than the last commit that touched contract code.
-const lastContractCommit = Number(git("log", "-1", "--format=%ct", "--", "contracts/openrail", "contracts/vault", "Cargo.lock", "Cargo.toml") || "0");
+const lastContractCommit = Number(
+  git(
+    "log",
+    "-1",
+    "--format=%ct",
+    "--",
+    "contracts/openrail",
+    "contracts/vault",
+    "Cargo.lock",
+    "Cargo.toml",
+  ) || "0",
+);
 const wasmMtime = Math.floor(statSync(wasmPath).mtimeMs / 1000);
 check(
   wasmMtime >= lastContractCommit ? "PASS" : "FAIL",
   "wasm is newer than the last contract commit",
   `wasm built ${new Date(wasmMtime * 1000).toISOString()}; last contract commit ${new Date(lastContractCommit * 1000).toISOString()}`,
 );
-check(wasm.length > 50_000 && wasm.length < 1_500_000 ? "PASS" : "FAIL", "wasm size is plausible", `${wasm.length} bytes (the gate run measured about 400 KB)`);
+check(
+  wasm.length > 50_000 && wasm.length < 1_500_000 ? "PASS" : "FAIL",
+  "wasm size is plausible",
+  `${wasm.length} bytes (the gate run measured about 400 KB)`,
+);
 check("PASS", "enabled features match the reproducible build command", enabled || "(none)");
 
 // 3. the chain today.
 const rootAcc = await viewAccount(root);
 const needStorage = BigInt(wasm.length) * BYTE_COST;
 if (rootAcc === "unreachable") {
-  check("WARN", `${root} on chain`, `could not read ${rpcUrl}; verify with: near account view-account-summary ${root} network-config ${network} now`);
+  check(
+    "WARN",
+    `${root} on chain`,
+    `could not read ${rpcUrl}; verify with: near account view-account-summary ${root} network-config ${network} now`,
+  );
 } else if (rootAcc === "missing") {
   check("FAIL", `${root} on chain`, "account does not exist");
 } else {
@@ -368,7 +403,7 @@ if (rootAcc === "unreachable") {
   );
   const free = BigInt(rootAcc.amount) - BigInt(rootAcc.storage_usage) * BYTE_COST;
   const extra = hasCode ? 0n : needStorage; // a first deploy locks the code size in storage
-  const margin = 5n * YOCTO / 10n;
+  const margin = (5n * YOCTO) / 10n;
   check(
     free >= extra + margin ? "PASS" : "FAIL",
     `${root} balance covers the deploy`,
@@ -378,7 +413,11 @@ if (rootAcc === "unreachable") {
 
 // 4. the vault code the contract will clone must exist on chain as a global contract.
 try {
-  const res = (await rpc("query", { request_type: "view_global_contract_code", finality: "final", code_hash: vaultBase58 })) as { code_base64: string };
+  const res = (await rpc("query", {
+    request_type: "view_global_contract_code",
+    finality: "final",
+    code_hash: vaultBase58,
+  })) as { code_base64: string };
   const code = Buffer.from(res.code_base64, "base64");
   const actual = encodeBase58(createHash("sha256").update(code).digest());
   check(
@@ -406,10 +445,12 @@ const roles: [string, string, string?][] = [
 ];
 const allowanceOf: Record<string, bigint> = {};
 const addAllowance = (acct: string, a: string): void => {
-  allowanceOf[acct] = (allowanceOf[acct] ?? 0n) + BigInt(Math.round(Number(a.split(" ")[0]) * 1000)) * (YOCTO / 1000n);
+  allowanceOf[acct] =
+    (allowanceOf[acct] ?? 0n) +
+    BigInt(Math.round(Number(a.split(" ")[0]) * 1000)) * (YOCTO / 1000n);
 };
-addAllowance(watcherAccount || watchers[0], watcherAllowance);
-addAllowance(issuerAccount || issuers[0], issuerAllowance);
+addAllowance(watcherAccount || watchers[0]!, watcherAllowance);
+addAllowance(issuerAccount || issuers[0]!, issuerAllowance);
 addAllowance(process.env.RELAYER_ACCOUNT_ID!, relayerAllowance);
 for (const [label, id] of roles) {
   const acc = await viewAccount(id);
@@ -425,14 +466,22 @@ for (const [label, id] of roles) {
     );
   }
 }
-const keys = [process.env.WATCHER_PUBLIC_KEY!, process.env.ISSUER_PUBLIC_KEY!, process.env.RELAYER_PUBLIC_KEY!];
+const keys = [
+  process.env.WATCHER_PUBLIC_KEY!,
+  process.env.ISSUER_PUBLIC_KEY!,
+  process.env.RELAYER_PUBLIC_KEY!,
+];
 check(
-  keys.every((k) => /^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(k)) && new Set(keys).size === 3 ? "PASS" : "FAIL",
+  keys.every((k) => /^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(k)) && new Set(keys).size === 3
+    ? "PASS"
+    : "FAIL",
   "three distinct ed25519 public keys",
   keys.map((k) => k.slice(0, 16) + "...").join(", "),
 );
 check(
-  new Set([root, fee, ...watchers, ...issuers]).size === 1 + 1 + watchers.length + issuers.length ? "PASS" : "WARN",
+  new Set([root, fee, ...watchers, ...issuers]).size === 1 + 1 + watchers.length + issuers.length
+    ? "PASS"
+    : "WARN",
   "no role reuses the root or fee account",
   `root ${root}, fee ${fee}`,
 );
@@ -444,7 +493,11 @@ const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const outDir = join(ROOT, "deploy-plans");
 mkdirSync(outDir, { recursive: true });
 const outPath = join(outDir, `deploy-plan-${stamp}.md`);
-const verdict = fails ? `DO NOT DEPLOY: ${fails} failed check(s)` : warns ? `REVIEW: ${warns} warning(s), read each one` : "ALL CHECKS PASSED";
+const verdict = fails
+  ? `DO NOT DEPLOY: ${fails} failed check(s)`
+  : warns
+    ? `REVIEW: ${warns} warning(s), read each one`
+    : "ALL CHECKS PASSED";
 const file = [
   `# Openrail deploy review (${network}), ${new Date().toISOString()}`,
   "",

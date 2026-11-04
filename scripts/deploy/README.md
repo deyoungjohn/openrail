@@ -43,6 +43,13 @@ Never export a private key for this script. It only needs public keys; the near 
    ```
 
    → build output, wasm size, sha256 in hex and base58, and the full command list.
+   → a review file `deploy-plans/deploy-plan-<UTC>.md` (git-ignored) with a verdict, what will be deployed, and these checks. **Read it before running any command.** The script exits with code 2 and prints `DO NOT DEPLOY` if a check fails.
+     - git tree clean, HEAD equals `origin/main`, and the wasm is newer than the last contract commit (so it is not a stale build);
+     - what `NEAR_ROOT_ACCOUNT` holds on chain now (an existing contract means the deploy would replace it), and whether its balance covers the code storage;
+     - the vault global contract exists on chain, and the sha256 of the code it returns matches the pinned hash;
+     - the fee, watcher, issuer and relayer accounts exist, and their balances cover the key allowances;
+     - three distinct ed25519 public keys.
+   Chain reads are public, read-only RPC calls (`NEAR_RPC_URL` overrides the endpoint). A read that fails is a WARN, never a PASS. After the deploy, the file tells you which code hash the chain must report.
    → `SKIP_BUILD=1 scripts/deploy/plan.sh` reuses `target/near/openrail/openrail.wasm`.
 
 2. Review the printed `Config`:
