@@ -291,6 +291,12 @@ async fn scale_issue_gas_constant() -> Result<()> {
         );
     }
 
+    let parts: Vec<String> = gas_at_samples
+        .iter()
+        .map(|(idx, gas)| format!("c-{idx}={gas} ({:.2} Tgas)", *gas as f64 / 1e12))
+        .collect();
+    println!("scale_issue_gas at N={n}: {}", parts.join(", "));
+
     Ok(())
 }
 
@@ -371,6 +377,12 @@ async fn scale_storage_per_claim_constant() -> Result<()> {
         }
     }
 
+    let parts: Vec<String> = storage_deltas_at_samples
+        .iter()
+        .map(|(idx, delta)| format!("c-{idx}={delta} B"))
+        .collect();
+    println!("scale_storage_per_claim at N={n}: {}", parts.join(", "));
+
     Ok(())
 }
 
@@ -431,6 +443,53 @@ async fn scale_reconcile_gas_constant() -> Result<()> {
             relative_diff * 100.0
         );
     }
+
+    let noop_parts: Vec<String> = gas_measurements
+        .iter()
+        .map(|(idx, gas)| format!("c-{idx}={} ({:.2} Tgas)", *gas as u64, *gas / 1e12))
+        .collect();
+    println!(
+        "scale_reconcile_noop_gas at N={n}: {}",
+        noop_parts.join(", ")
+    );
+
+    let mut booked_gas_measurements = Vec::new();
+    for (idx, token_id) in &tokens {
+        let amount = 1_000_000 + *idx as u128;
+        let _ = env.fund_claim(token_id, amount, None).await?;
+        let rec = env
+            .alice
+            .call(env.root.id(), "reconcile")
+            .args_json(json!({ "token_id": token_id }))
+            .max_gas()
+            .transact()
+            .await?;
+        assert!(rec.is_success());
+        let gas = rec.total_gas_burnt.as_gas();
+        booked_gas_measurements.push((*idx, gas));
+    }
+
+    let booked_baseline = booked_gas_measurements[0].1 as f64;
+    for &(idx, gas) in booked_gas_measurements.iter().skip(1) {
+        let relative_diff = (gas as f64 - booked_baseline).abs() / booked_baseline;
+        assert!(
+            relative_diff < 0.05,
+            "Booked reconcile gas change must be < 5% (O(1) guarantee). Baseline: {}, Claim {}: {} ({:.2}% change)",
+            booked_baseline as u64,
+            idx,
+            gas,
+            relative_diff * 100.0
+        );
+    }
+
+    let booked_parts: Vec<String> = booked_gas_measurements
+        .iter()
+        .map(|(idx, gas)| format!("c-{idx}={gas} ({:.2} Tgas)", *gas as f64 / 1e12))
+        .collect();
+    println!(
+        "scale_reconcile_booked_gas at N={n}: {}",
+        booked_parts.join(", ")
+    );
 
     Ok(())
 }
@@ -507,6 +566,12 @@ async fn scale_transfer_gas_constant() -> Result<()> {
             relative_diff * 100.0
         );
     }
+
+    let parts: Vec<String> = gas_measurements
+        .iter()
+        .map(|(idx, gas)| format!("c-{idx}={} ({:.2} Tgas)", *gas as u64, *gas / 1e12))
+        .collect();
+    println!("scale_nft_transfer_gas at N={n}: {}", parts.join(", "));
 
     Ok(())
 }
