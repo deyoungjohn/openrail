@@ -46,7 +46,7 @@ sudo systemctl enable --now fail2ban
 sudo dpkg-reconfigure --priority=low unattended-upgrades
 ```
 
-In the AWS security group, restrict SSH (22) to the human's IP, not `0.0.0.0/0`. Keep 80/443 open.
+In the AWS security group, SSH (22) is open to `0.0.0.0/0` by decision of the human, whose IP changes daily (satellite, ethernet, phone hotspot). That is acceptable only with the settings above: key-only login, no root login, fail2ban running, and a passphrase on the private key. Check `sudo fail2ban-client status sshd` after install. Keep 80/443 open.
 
 ## 2. Node 22.23.0 and pnpm 12.8.1
 
@@ -100,7 +100,13 @@ On the developer machine:
 # dist/openrail-server-<commit>.tar.gz
 ```
 
-Copy that tarball to the server, then:
+The server never clones the repository: it has 2 GB of RAM and no build tools, so the pack is built here and copied over. Copy the tarball (use your own key file and host):
+
+```bash
+scp -i ~/.ssh/<key>.pem dist/openrail-server-<commit>.tar.gz ubuntu@<server-ip>:~/
+```
+
+Then, on the server:
 
 ```bash
 version="<commit>"
@@ -114,6 +120,14 @@ sudo ln -sfn "/opt/openrail/releases/$version" /opt/openrail/current
 ```
 
 ## 5. Environment
+
+Keep one combined file of `NAME=value` lines on your machine (outside the repository, mode 0600; the keys can come from the GNOME keyring) and split it on the server:
+
+```bash
+sudo /opt/openrail/current/deploy/split-env.sh /path/to/openrail.env
+```
+
+It writes `/etc/openrail/{api,issuer,watcher,indexer,web}.env`, each holding only the names in its own `deploy/env/<service>.env.example`, so a compromise of the internet-facing API cannot read the issuer or watcher private keys. It reports names that are missing and names that no service uses. Rerun it after every edit of the combined file, then restart the services. The manual route is below.
 
 Each unit reads only its own file. All files are mode `0600 root:root`; systemd reads them as root before dropping to the service user, so a service can never read another service's keys.
 
