@@ -13,7 +13,8 @@
     "gen:ack-vectors": "tsx scripts/gen-ack-vectors.ts",
     "gen:modules": "tsx scripts/gen-modules.ts",
     "typecheck": "pnpm -r exec tsc --noEmit",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "t2:g1": "tsx scripts/t2/g1.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -25,5 +26,8 @@
     "typescript-eslint": "8.72.1",
     "viem": "2.57.14",
     "vitest": "5.0.5"
+  },
+  "dependencies": {
+    "@openrail/shared": "workspace:*"
   }
 }
