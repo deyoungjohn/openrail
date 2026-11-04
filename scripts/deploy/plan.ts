@@ -378,11 +378,23 @@ if (rootAcc === "unreachable") {
 
 // 4. the vault code the contract will clone must exist on chain as a global contract.
 try {
-  await rpc("query", { request_type: "view_global_contract_code", finality: "final", account_id_or_hash: { hash: vaultBase58 } });
-  check("PASS", "vault global contract exists on chain", vaultBase58);
+  const res = (await rpc("query", { request_type: "view_global_contract_code", finality: "final", code_hash: vaultBase58 })) as { code_base64: string };
+  const code = Buffer.from(res.code_base64, "base64");
+  const actual = encodeBase58(createHash("sha256").update(code).digest());
+  check(
+    actual === vaultBase58 ? "PASS" : "FAIL",
+    "vault global contract exists on chain",
+    `${vaultBase58}, ${code.length} bytes on chain (the vault published on 2 Nov is 7,361 bytes), sha256 of the returned code ${actual === vaultBase58 ? "matches" : "DOES NOT MATCH"}`,
+  );
 } catch (e) {
   const msg = (e as Error).message;
-  check("WARN", "vault global contract exists on chain", `could not confirm (${msg}). Confirm yourself before deploying: the vault hash must be the 7,361-byte vault published on 2 Nov`);
+  check(
+    msg.includes("NO_GLOBAL_CONTRACT_CODE") ? "FAIL" : "WARN",
+    "vault global contract exists on chain",
+    msg.includes("NO_GLOBAL_CONTRACT_CODE")
+      ? `no global contract with hash ${vaultBase58}: every claim account would fail to be created`
+      : `could not confirm (${msg}); confirm yourself before deploying`,
+  );
 }
 
 // 5. the other accounts named in the plan.
