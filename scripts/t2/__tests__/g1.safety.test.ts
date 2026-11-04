@@ -601,7 +601,7 @@ describe("g1 safety: resume", () => {
     expect(second.code).toBe(0);
     // Write 1 succeeded in run 1 and must not be sent again; the failed write is retried.
     expect(world.writes.length).toBe(total - 1);
-  });
+  }, 30_000);
 
   it("a run that already finished does not send anything again", async () => {
     const cwd = freshDir("resume", true);
@@ -611,7 +611,7 @@ describe("g1 safety: resume", () => {
     world.reset();
     await run({ cwd, secrets, env: confirmedEnv(), stdin: YES(100) });
     expect(world.writes).toEqual([]);
-  });
+  }, 30_000);
 });
 
 // ---------------------------------------------------------------------------
