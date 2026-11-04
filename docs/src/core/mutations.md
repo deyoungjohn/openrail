@@ -309,6 +309,7 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out;
 | C4-M3 | protocol fee set to 0 bps            | `test_c4_mutation_break_3_exact_fee_25_bps`                            | FAILED (caught) |
 | C4-M4 | D-S8 violation: unbooking failed leg | `test_c4_mutation_break_4_d_s8_failed_leg_preserves_status_and_booked` | FAILED (caught) |
 | C4-M5 | anomaly on falling balance removed   | `test_c4_mutation_break_5_falling_balance_anomaly_delta_zero`          | FAILED (caught) |
+| C4-M6 | emit a booking event on zero delta   | `reconcile_idempotent`                                                 | FAILED (caught) |
 
 ### C4-M1: stale callback guard disabled
 
@@ -449,6 +450,40 @@ test test_c4_mutation_break_5_falling_balance_anomaly_delta_zero ... FAILED
 thread 'test_c4_mutation_break_5_falling_balance_anomaly_delta_zero' panicked at contracts/tests/tests/c4_reconcile_tests.rs:688:5:
 assertion failed: !booked: Anomaly reconcile must not emit any Booked event
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 65.12s
+```
+
+### C4-M6: emit a booking event on zero delta
+
+Command: `cargo test -p openrail-tests --test core_suite reconcile_idempotent`
+
+```diff
+--- a/contracts/openrail/src/reconcile.rs
++++ b/contracts/openrail/src/reconcile.rs
+@@ -251,6 +251,15 @@ impl Contract {
+
+         // Idempotent reconcile: zero delta changes no state (beyond anomaly last_seen reset)
+         if total_delta == 0 {
++            BookedEvent {
++                token_id: token_id.clone(),
++                payment: U128(0),
++                surplus: U128(0),
++                fee: U128(0),
++                credit: U128(0),
++                legs: Vec::new(),
++            }
++            .emit();
+             if open_transfer_window {
+                 let until = env::block_height() + crate::types::TRANSFER_WINDOW_BLOCKS;
+                 claim.lock = Lock::TransferWindow { until };
+```
+
+Failure (tail):
+
+```text
+test reconcile_idempotent ... FAILED
+thread 'reconcile_idempotent' (2406575) panicked at contracts/tests/tests/core_suite.rs:709:5:
+Zero-delta reconcile must emit no EVENT_JSON line, got: ["EVENT_JSON:{\"standard\":\"openrail\",\"version\":\"1.0.0\",\"event\":\"booked\",\"data\":[{\"token_id\":\"c-1\",\"payment\":\"0\",\"surplus\":\"0\",\"fee\":\"0\",\"credit\":\"0\",\"legs\":[]}]}"]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 19 filtered out; finished in 61.63s
 ```
 
 ## C5 — Claim lifecycle

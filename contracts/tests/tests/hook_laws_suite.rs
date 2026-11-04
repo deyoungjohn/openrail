@@ -581,16 +581,20 @@ proptest! {
 }
 
 #[tokio::test]
-#[ignore = "C2"]
 async fn contract_module_cannot_permit_core_refusal() -> anyhow::Result<()> {
     let env = Env::new().await?;
-    // When C2 lands: transfer to claim_account (Rule 5) must fail even if a module permits.
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let claim_account = format!("c-1.{}", env.root.id());
+    // Transfer to claim_account (Rule 5) must fail even if a module permits.
     let outcome = env
         .alice
         .call(env.root.id(), "nft_transfer")
         .args_json(serde_json::json!({
-            "receiver_id": "c-1.openrail.near",
-            "token_id": "1",
+            "receiver_id": claim_account,
+            "token_id": "c-1",
             "memo": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         }))
         .deposit(near_sdk::NearToken::from_yoctonear(1))
@@ -666,23 +670,21 @@ fn module_storage_isolated() {
 }
 
 #[tokio::test]
-#[ignore = "C1"]
 async fn contract_module_storage_isolated() -> anyhow::Result<()> {
     let env = Env::new().await?;
-    // When C1 lands: verify that state created under core issuance only creates
-    // keys under c:, o:, t:, and does not touch m:* namespaces.
+    // Verify that state created under core issuance only creates
+    // keys under core prefixes and does not touch m:* namespaces.
     let outcome = env
-        .alice
-        .call(env.root.id(), "issue")
-        .args_json(serde_json::json!({
-            "amount_due": "1000000",
-            "due_date": 1800000000u64,
-            "terms_hash": "0000000000000000000000000000000000000000000000000000000000000000",
-            "settlement_assets": ["nep141:usdc.near"]
-        }))
-        .deposit(near_sdk::NearToken::from_near(1))
-        .transact()
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
         .await?;
     assert!(outcome.is_success());
+    let records = env.root.view_state().await?;
+    for (k, _) in records {
+        assert!(
+            !k.starts_with(b"m:"),
+            "Core state key {:?} must not use module namespace prefix b\"m:\"",
+            k
+        );
+    }
     Ok(())
 }
