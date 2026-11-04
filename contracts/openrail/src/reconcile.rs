@@ -543,13 +543,13 @@ impl Contract {
             .get_mut(&token_id)
             .unwrap_or_else(|| env::panic_str("claim not found"));
 
-        if claim.lock != (Lock::Reconciling { since }) {
+        let stale = claim.lock != (Lock::Reconciling { since });
+        if stale {
             ReconcileFailedEvent {
-                token_id,
+                token_id: token_id.clone(),
                 reason: "stale_callback".to_string(),
             }
             .emit();
-            return;
         }
 
         let results_count = env::promise_results_count();
@@ -615,6 +615,12 @@ impl Contract {
                 }
                 .emit();
             }
+        }
+
+        if stale {
+            // A stale callback still reconciles its promise results: failed legs must be
+            // requeued and last_seen_balance restored, but the lock is left untouched.
+            return;
         }
 
         if !is_retry {

@@ -191,6 +191,12 @@ impl Contract {
         require!(claim.status == Status::Paid, "claim is not Paid");
         require!(claim.surplus.0 == 0, "claim has unreleased surplus");
         require!(claim.lock == Lock::None, "claim is locked");
+        require!(
+            self.undistributed
+                .get(&token_id)
+                .is_none_or(|legs| legs.is_empty()),
+            "claim has undistributed legs"
+        );
 
         claim.status = Status::Closed;
         self.claims.insert(token_id.clone(), claim);
