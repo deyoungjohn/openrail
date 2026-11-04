@@ -127,7 +127,34 @@ Keep one combined file of `NAME=value` lines on your machine (outside the reposi
 sudo /opt/openrail/current/deploy/split-env.sh /path/to/openrail.env
 ```
 
-It writes `/etc/openrail/{api,issuer,watcher,indexer,web}.env`, each holding only the names in its own `deploy/env/<service>.env.example`, so a compromise of the internet-facing API cannot read the issuer or watcher private keys. It reports names that are missing and names that no service uses. Rerun it after every edit of the combined file, then restart the services. The manual route is below.
+### Writing the combined file
+
+On your own machine (not the server), outside the repository:
+
+```bash
+umask 077
+cp deploy/env/openrail.env.example ~/openrail.env
+```
+
+The public values are already filled in. Fill the lines marked `SECRET`. The three private keys come from the keyring items you created with `tools/genkey.mjs` (no value is printed):
+
+```bash
+set_secret() { sed -i "s|^$1=.*|$1=$(secret-tool lookup service openrail name "$2")|" ~/openrail.env; }
+set_secret ISSUER_PRIVATE_KEY issuer-fc-key
+set_secret RELAY_PRIVATE_KEY relayer-fc-key
+set_secret WATCHER_PRIVATE_KEY watcher-fc-key
+sed -i "s|^ISSUER_SERVICE_KEY=.*|ISSUER_SERVICE_KEY=$(openssl rand -hex 32)|" ~/openrail.env
+```
+
+Then put `ONECLICK_JWT` and `NEARBLOCKS_API_KEY` in with an editor (`nano ~/openrail.env`). Check that no `SECRET` line is still empty:
+
+```bash
+grep -n -E '^(ISSUER_SERVICE_KEY|ONECLICK_JWT|ISSUER_PRIVATE_KEY|RELAY_PRIVATE_KEY|WATCHER_PRIVATE_KEY)=$' ~/openrail.env && echo "STILL EMPTY ABOVE" || echo ok
+```
+
+Copy it to the server (`scp ~/openrail.env ubuntu@<server-ip>:~/`), run the split below, then delete the copy on the server (`shred -u ~/openrail.env`). The api and the issuer both read `ISSUER_SERVICE_KEY`; the split script gives the same value to both.
+
+`split-env.sh` writes `/etc/openrail/{api,issuer,watcher,indexer,web}.env`, each holding only the names in its own `deploy/env/<service>.env.example`, so a compromise of the internet-facing API cannot read the issuer or watcher private keys. It reports names that are missing and names that no service uses. Rerun it after every edit of the combined file, then restart the services. The manual route is below.
 
 Each unit reads only its own file. All files are mode `0600 root:root`; systemd reads them as root before dropping to the service user, so a service can never read another service's keys.
 
@@ -143,7 +170,7 @@ sudo editor /etc/openrail/indexer.env
 sudo editor /etc/openrail/web.env
 ```
 
-- `api.env`: no NEAR key and no 1Click secret beyond its API credentials; it needs `NEAR_ROOT_ACCOUNT`, `NEAR_RPC_URL`, `ISSUER_URL=http://127.0.0.1:8787`, `ISSUER_SERVICE_KEY`, `DATABASE_URL=/var/lib/openrail/api.sqlite`, `WEB_ORIGIN=https://openrail.incepture.dev`, `COOKIE_DOMAIN=openrail.incepture.dev`, `PAY_BASE_URL=https://openrail.incepture.dev`.
+- `api.env`: (`INDEXER_URL=http://127.0.0.1:8788` is required, and `API_PORT=3001` must be set: the api's built-in default, 8787, is the issuer's port) no NEAR key and no 1Click secret beyond its API credentials; it needs `NEAR_ROOT_ACCOUNT`, `NEAR_RPC_URL`, `ISSUER_URL=http://127.0.0.1:8787`, `ISSUER_SERVICE_KEY`, `DATABASE_URL=/var/lib/openrail/api.sqlite`, `WEB_ORIGIN=https://openrail.incepture.dev`, `COOKIE_DOMAIN=openrail.incepture.dev`, `PAY_BASE_URL=https://openrail.incepture.dev`.
 - `issuer.env`: `ISSUER_ACCOUNT_ID`, `ISSUER_PRIVATE_KEY`, `RELAY_PRIVATE_KEY`, `ISSUER_SERVICE_KEY`, `ISSUER_PORT=8787`.
 - `watcher.env`: `WATCHER_ACCOUNT_ID`, `WATCHER_PRIVATE_KEY`, `WATCHER_HEALTH_PORT=8080`, intervals, `ALERT_WEBHOOK_URL`.
 - `indexer.env`: `INDEXER_DB_PATH=/var/lib/openrail/indexer.sqlite`, `NEARBLOCKS_*`.
@@ -166,7 +193,7 @@ sudo systemctl reload caddy
 
 The `MemoryMax` values are ceilings (web 650M, API 450M, indexer 450M, watcher and issuer 300M; 2.15 GB in total). They are not expected to be reached together on a 2 GB host; watch `systemctl status` and `free -m` and lower the web/API ceilings if swapping starts.
 
-`openrail-indexer.service` is installed but not enabled until the indexer entrypoint lands. Then:
+The api needs the indexer (`INDEXER_URL`), so enable it with the others:
 
 ```bash
 sudo systemctl enable --now openrail-indexer.service
