@@ -557,3 +557,289 @@ async fn test_c5_retry_distribution_rejected_during_reconcile() -> Result<()> {
 
     Ok(())
 }
+
+/// C5 fix 1 (D-S8, conservation): A forward that fails while the claim lock was cleared by
+/// `clear_stale_lock` (mocking the stale `on_distributed` callback) must end with the leg in
+/// `undistributed` and `last_seen_balance` unchanged, and a following `reconcile` must book nothing.
+#[tokio::test]
+#[ignore = "C5fix"]
+async fn test_c5_stale_callback_failed_forward_preserves_undistributed_and_last_seen() -> Result<()>
+{
+    let env = Env::new().await?;
+    let asset = openrail_tests::DEFAULT_SETTLEMENT_ASSET.to_string();
+
+    // 1. Issue a 1_000_000 USDC claim and fund 1_500_000 USDC (1_000_000 payment + 500_000 surplus)
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
+    let _ = env.fund_claim(&token_id, 1_500_000, None).await?;
+    let rec = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec.is_success());
+
+    // Record pre-forward last_seen_balance (500_000 USDC remaining in the claim vault)
+    let mut claim_key = Vec::new();
+    let mut last_seen_before = 0u128;
+    for (k, v) in env.root.view_state().await? {
+        if let Ok(claim) =
+            <openrail::types::Claim as near_sdk::borsh::BorshDeserialize>::try_from_slice(&v)
+        {
+            if claim.token_id == token_id {
+                claim_key = k;
+                last_seen_before = claim
+                    .last_seen_balance
+                    .get(&asset)
+                    .copied()
+                    .unwrap_or(near_sdk::json_types::U128(0))
+                    .0;
+                break;
+            }
+        }
+    }
+    assert!(!claim_key.is_empty(), "Claim state record must exist");
+    assert_eq!(last_seen_before, 500_000);
+
+    // 2. Simulate in-flight forward dispatch (surplus zeroed, last_seen decremented by in-flight leg,
+    //    lock set to Reconciling { since: 1 })
+    for (k, v) in env.root.view_state().await? {
+        if k == claim_key {
+            let mut claim =
+                <openrail::types::Claim as near_sdk::borsh::BorshDeserialize>::try_from_slice(&v)?;
+            claim.surplus = near_sdk::json_types::U128(0);
+            claim
+                .last_seen_balance
+                .insert(asset.clone(), near_sdk::json_types::U128(0));
+            claim.lock = openrail::types::Lock::Reconciling { since: 1 };
+            let updated = near_sdk::borsh::to_vec(&claim)?;
+            env.worker.patch_state(env.root.id(), &k, &updated).await?;
+            break;
+        }
+    }
+
+    // 3. Advance > 100 blocks and clear the stale lock via clear_stale_lock
+    env.worker.fast_forward(105).await?;
+    let clear_res = env
+        .alice
+        .call(env.root.id(), "clear_stale_lock")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(clear_res.is_success());
+    let view_cleared: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(view_cleared.lock, openrail::types::Lock::None);
+
+    // 4. Mock the stale on_distributed callback arriving after clear_stale_lock with a failed forward
+    //    (direct call has 0 promise results, so succeeded == false for the leg)
+    let failed_leg = openrail::types::Leg::Pay {
+        receiver: env.alice.id().clone(),
+        amount: near_sdk::json_types::U128(500_000),
+        asset: Some(asset.clone()),
+    };
+    let stale_cb = env
+        .root
+        .call("on_distributed")
+        .args_json(json!({
+            "token_id": token_id,
+            "legs": [failed_leg],
+            "prev_lock": openrail::types::Lock::None,
+            "since": 1u64,
+            "is_retry": false,
+            "open_transfer_window": false,
+            "is_surplus": true,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(stale_cb.is_success());
+
+    // 5. Verify the failed leg is in undistributed and last_seen_balance is unchanged (500_000)
+    let view_after_cb: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(
+        view_after_cb.undistributed.len(),
+        1,
+        "Failed forward under cleared stale lock must record the leg in undistributed"
+    );
+    assert_eq!(view_after_cb.undistributed[0], failed_leg);
+
+    let mut last_seen_after = 0u128;
+    for (k, v) in env.root.view_state().await? {
+        if k == claim_key {
+            let claim =
+                <openrail::types::Claim as near_sdk::borsh::BorshDeserialize>::try_from_slice(&v)?;
+            last_seen_after = claim
+                .last_seen_balance
+                .get(&asset)
+                .copied()
+                .unwrap_or(near_sdk::json_types::U128(0))
+                .0;
+            break;
+        }
+    }
+    assert_eq!(
+        last_seen_after, last_seen_before,
+        "last_seen_balance must be unchanged after failed forward callback"
+    );
+
+    // 6. A following reconcile must book nothing (delta == 0, no booked event, counters unchanged)
+    let rec_follow = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_follow.is_success());
+    assert!(
+        !rec_follow.logs().iter().any(|l| l.contains("EVENT_JSON")),
+        "Following reconcile must book nothing and emit no EVENT_JSON, got: {:?}",
+        rec_follow.logs()
+    );
+
+    let view_after_rec: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(view_after_rec.booked_total.0, 1_500_000);
+    assert_eq!(view_after_rec.surplus.0, 0);
+    assert_eq!(view_after_rec.undistributed.len(), 1);
+
+    Ok(())
+}
+
+/// C5 fix 2 (D-S8): `close` on a `Paid` claim with a non-empty `undistributed` must be refused
+/// with a static message, and succeed after `retry_distribution` clears it.
+#[tokio::test]
+#[ignore = "C5fix"]
+async fn test_c5_close_refuses_non_empty_undistributed_until_retried() -> Result<()> {
+    let env = Env::new().await?;
+
+    // 1. Issue claim for 1_000_000 USDC
+    let issue_res = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
+    // 2. Patch claim vault so forward legs fail during reconcile, leaving claim Paid with undistributed legs
+    let claim_account: near_workspaces::AccountId =
+        format!("{token_id}.{}", env.root.id()).parse()?;
+    env.worker
+        .patch(&claim_account)
+        .code(&openrail_tests::wasms::mock_usdc_wasm()?)
+        .transact()
+        .await?;
+
+    let _ = env.fund_claim(&token_id, 1_000_000, None).await?;
+    let rec = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec.is_success());
+
+    let view_paid: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(view_paid.status, Status::Paid);
+    assert_eq!(view_paid.surplus.0, 0);
+    assert!(
+        !view_paid.undistributed.is_empty(),
+        "Paid claim must have non-empty undistributed legs after failed forward"
+    );
+
+    // 3. Calling close while undistributed is non-empty must be refused with a static message
+    let close_refused = env
+        .alice
+        .call(env.root.id(), "close")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(
+        close_refused.is_failure(),
+        "close on a Paid claim with non-empty undistributed must be refused"
+    );
+    let failure = format!("{:?}", close_refused.failures());
+    assert!(
+        failure.contains("undistributed"),
+        "Expected static refusal message mentioning undistributed, got: {failure}"
+    );
+
+    // 4. Restore vault code and run retry_distribution to clear undistributed
+    env.worker
+        .patch(&claim_account)
+        .code(&openrail_tests::wasms::vault_wasm()?)
+        .transact()
+        .await?;
+
+    let retry_res = env
+        .alice
+        .call(env.root.id(), "retry_distribution")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(retry_res.is_success());
+
+    let view_cleared: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert!(
+        view_cleared.undistributed.is_empty(),
+        "undistributed must be empty after retry_distribution"
+    );
+
+    // 5. Calling close now succeeds and transitions status to Closed
+    let close_ok = env
+        .alice
+        .call(env.root.id(), "close")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(
+        close_ok.is_success(),
+        "close must succeed after retry_distribution clears undistributed"
+    );
+    let close_events = env.assert_event(&close_ok, "close");
+    assert!(!close_events.is_empty(), "close event must be emitted");
+
+    let final_view: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(final_view.status, Status::Closed);
+
+    Ok(())
+}
