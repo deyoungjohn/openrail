@@ -13,6 +13,31 @@ if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
     echo "DOCKER_UNAVAILABLE: current user cannot reach the Docker daemon" >&2
     exit 1
   fi
+  image="$(sed -n 's/^image = "\(.*\)"/\1/p' contracts/openrail/Cargo.toml | head -1)"
+  digest="$(sed -n 's/^image_digest = "\(.*\)"/\1/p' contracts/openrail/Cargo.toml | head -1)"
+  if [[ -z "$image" || -z "$digest" ]]; then
+    echo "REPRODUCIBLE_IMAGE_UNPINNED: image or image_digest missing from contracts/openrail/Cargo.toml" >&2
+    exit 1
+  fi
+  actual="$(docker manifest inspect --verbose "$image" 2>/dev/null | node -e '
+    let body = "";
+    process.stdin.on("data", (chunk) => (body += chunk));
+    process.stdin.on("end", () => {
+      try {
+        process.stdout.write(JSON.parse(body).Descriptor.digest);
+      } catch {
+        process.exit(1);
+      }
+    });
+  ')"
+  if [[ -z "$actual" ]]; then
+    echo "REPRODUCIBLE_IMAGE_UNVERIFIED: docker manifest inspect could not find $image" >&2
+    exit 1
+  fi
+  if [[ "$actual" != "$digest" ]]; then
+    echo "REPRODUCIBLE_IMAGE_MISMATCH: $image is $actual, pinned $digest" >&2
+    exit 1
+  fi
   if [[ -f .git ]]; then
     echo "LINKED_WORKTREE: run cargo near build reproducible-wasm from the primary checkout, not a linked worktree" >&2
     exit 1
