@@ -38,7 +38,10 @@ START_TIME=$(date +%s)
 # 0. Ensure fresh contract wasm artifact is compiled
 echo ""
 echo "=== [0/4] Building contract WASM ==="
+S0=$(date +%s)
 cargo near build non-reproducible-wasm --manifest-path contracts/openrail/Cargo.toml
+
+echo "[stage-result] 0 elapsed=$(( $(date +%s) - S0 ))s"
 
 # 1. Proptest 1,000 cases
 echo ""
@@ -48,6 +51,7 @@ cargo test -p openrail-model --test proptest_invariants -- --nocapture
 PROP_END=$(date +%s)
 PROP_ELAPSED=$((PROP_END - PROP_START))
 echo "Proptests completed in ${PROP_ELAPSED}s"
+echo "[stage-result] 1 elapsed=${PROP_ELAPSED}s"
 
 # 2. Scale suite at 5,000 claims (timed)
 echo ""
@@ -57,15 +61,19 @@ cargo test -p openrail-tests --test scale_suite -- --nocapture
 SCALE_END=$(date +%s)
 SCALE_ELAPSED=$((SCALE_END - SCALE_START))
 echo "Scale suite completed in ${SCALE_ELAPSED}s"
+echo "[stage-result] 2 elapsed=${SCALE_ELAPSED}s"
 
 # 3. Mutation spot checks
 echo ""
 echo "=== [3/4] Running mutation spot checks ==="
+S3=$(date +%s)
 echo "--> Model mutation checks (5 deliberate breaks):"
 cargo test -p openrail-model --test mutation_checks -- --nocapture
 
 echo "--> Contract sandbox mutation checks (5 deliberate breaks):"
 cargo test -p openrail-tests --test mutation_tests -- --nocapture
+
+echo "[stage-result] 3 elapsed=$(( $(date +%s) - S3 ))s"
 
 # 4. Deploy rehearsal: deploy/new, keys, issuer, mock payment, watcher, indexer
 echo ""
@@ -73,7 +81,9 @@ echo "=== [4/4] Running deploy rehearsal ==="
 if [[ -z "${NEAR_SANDBOX_BIN_PATH:-}" && -x "$HOME/.near/sandbox" ]]; then
   export NEAR_SANDBOX_BIN_PATH="$HOME/.near/sandbox"
 fi
+S4=$(date +%s)
 scripts/deploy/rehearse.sh
+echo "[stage-result] 4 elapsed=$(( $(date +%s) - S4 ))s"
 
 END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))

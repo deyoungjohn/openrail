@@ -23,16 +23,26 @@ the report records the transaction hash and the exact base units.
 
 ## Gas and storage
 
-| Measurement        | Denominator        | Value     | Source               |
-| ------------------ | ------------------ | --------- | -------------------- |
-| `issue` gas        | per invoice        | _pending_ | `reports/` T2 report |
-| `reconcile` gas    | per booked payment | _pending_ | `reports/` T2 report |
-| `nft_transfer` gas | per transfer       | _pending_ | `reports/` T2 report |
-| Storage per claim  | per invoice        | _pending_ | `reports/` T2 report |
-| Root NEAR floor    | per claim count    | _pending_ | `reports/` T2 report |
+| Measurement                                       | Denominator              | Value                                            | Source                                                                      |
+| ------------------------------------------------- | ------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `issue` gas                                       | per invoice              | 15.30 Tgas at claim 1; 15.46 Tgas at claim 5,000 | [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md) |
+| `reconcile` gas, no new funds                     | per call                 | 6.86 Tgas at claim 1; 6.86 Tgas at claim 5,000   | [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md) |
+| `reconcile` gas, payment booked                   | per booked payment       | 17.97 Tgas at claim 1; 18.25 Tgas at claim 5,000 | [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md) |
+| `nft_transfer` gas                                | per transfer             | 3.54 Tgas at claim 1; 3.62 Tgas at claim 5,000   | [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md) |
+| Storage per claim                                 | per invoice              | 1,595 bytes at claim 5,000 (1,684 at claim 1)    | [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md) |
+| `claims_by_issuer` gas, page of 50 matches        | per call at 5,000 claims | 15.41 Tgas                                       | [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md) |
+| `claims_by_issuer` gas, full scan with no matches | per call at 5,000 claims | 540.66 Tgas                                      | [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md) |
+| Root NEAR floor                                   | per claim count          | _pending_                                        | `reports/` T2 report                                                        |
 
-Method: the T2 script reads gas from the RPC outcome and storage from the
-account state; the report links every transaction.
+How these were measured: the gate's scale suite runs at 5,000 claims. The
+sample points (claims 1, 500, 2,500 and 5,000) are real transactions in the
+NEAR sandbox. **The claims between sample points were seeded directly into
+contract state, not issued by transactions**, using the same key layout as
+`issue`. The gas figures are `total_gas_burnt` of the sample-point
+transactions; storage is the change in the root account's `storage_usage`
+around the sample-point `issue`. All of it is sandbox data, not mainnet. The
+raw output, commit and run time are in the evidence file. The `claims_by_issuer`
+cost is explained in [`LIMITATIONS.md`](LIMITATIONS.md).
 
 ## Pay-link and cash-out cost
 

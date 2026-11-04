@@ -23,3 +23,13 @@ Status: **built** facts unless marked **exploring**.
 - The SQLite invoice/payment cache is an interim boundary; receipts, statements
   and events already read from the indexer. **built**
 - A watcher outage delays bookings; it does not lose funds. **built**
+- `claims_by_issuer` scans claim numbers, so its cost grows with the total
+  number of claims, not with the number returned. At 5,000 claims, a page of 50
+  matching claims cost 15.41 Tgas, but a full scan for an issuer with no claims
+  cost 540.66 Tgas, which is more than a single call can carry. Listing a
+  sparse issuer is therefore not safe at that size. The contract is frozen for
+  the G1 deploy; a per-issuer index is planned for a later phase
+  ([`design-issuer-index.md`](design-issuer-index.md)). The watcher is not
+  affected at today's claim counts. Figures: [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md). The claims between the
+  sample points in that run were seeded directly into contract state; the
+  sample points are real transactions. **built**
