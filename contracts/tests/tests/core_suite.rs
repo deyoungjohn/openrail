@@ -706,6 +706,11 @@ async fn reconcile_idempotent() -> Result<()> {
         .transact()
         .await?;
     assert!(rec_res.is_success());
+    assert!(
+        !rec_res.logs().iter().any(|l| l.contains("EVENT_JSON")),
+        "Zero-delta reconcile must emit no EVENT_JSON line, got: {:?}",
+        rec_res.logs()
+    );
 
     let post_view: ClaimView = env
         .root
