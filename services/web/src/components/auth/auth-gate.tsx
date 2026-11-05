@@ -26,16 +26,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <p className="text-[15px]">{copy.auth.body}</p>
         {state.failed ? (
           <p role="alert" className="text-danger-text text-[14px]">
+            {state.detail ? `${copy.auth.walletSaid}: ${state.detail}. ` : ""}
             {state.failed === "unsupported"
               ? copy.auth.unsupported
               : state.failed === "timeout"
                 ? copy.auth.timeout
                 : copy.auth.failed}
-          </p>
-        ) : null}
-        {state.detail ? (
-          <p className="caption">
-            {copy.auth.walletSaid}: {state.detail}
           </p>
         ) : null}
         {busy && hint ? <p className="caption">{hint}</p> : null}

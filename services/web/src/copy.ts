@@ -295,8 +295,14 @@ export const copy = {
     timeout: "The wallet didn't answer. Close its window and try again.",
     walletSaid: "The wallet said",
     cancel: "Cancel",
-    hotHint:
-      "The HOT browser extension does not offer NEAR sign-in to websites. Scan the QR code with the HOT app on your phone, or open it from there.",
+    scanTwice:
+      "You scan twice: once to connect, and once more to sign the message. Keep this page open.",
+    hotNoExtension:
+      "The HOT browser extension does not offer NEAR sign-in to websites, so use the HOT app on your phone.",
+    popupBlocked:
+      "Intear opens a second window to sign. Chrome blocks it by default: if nothing opens, allow pop-ups for this site in the address bar, then press Sign in again.",
+    walletConnectNear:
+      "WalletConnect only works with wallets that support NEAR. EVM-only wallets such as MetaMask answer that the network is not supported.",
     errorTitle: "We couldn't check your sign-in",
     errorBody:
       "We can't reach the server right now. Your session is not lost. Try again in a moment.",

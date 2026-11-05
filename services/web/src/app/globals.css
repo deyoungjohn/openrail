@@ -18,8 +18,21 @@
   --accent-soft: #ecedff;
   --accent-text: #3f46fe;
   --on-accent: #ffffff;
-  --glass-bg: rgb(255 255 255 / 0.55);
-  --glass-border: rgb(15 23 42 / 0.12);
+  /* Pop-up glass (liquid-glass-formula.md): one pair of tokens for every overlay. */
+  --pop-bg: rgb(255 255 255 / 0.35);
+  --pop-blur: blur(6px);
+  --pop-bg-fallback: rgb(255 255 255 / 0.96);
+  --scrim: rgb(15 23 42 / 0.38);
+  --scrim-blur: blur(8px);
+  --edge: rgb(15 23 42 / 0.14);
+  --edge-2: rgb(15 23 42 / 0.24);
+  --pop-top-light: rgb(255 255 255 / 0.7);
+  --pop-drop: rgb(15 23 42 / 0.22);
+  /* hover, selected and pressed highlights: the accent as glass */
+  --hl: rgb(63 70 254 / 0.14);
+  --hl-edge: rgb(63 70 254 / 0.4);
+  --hl-soft: rgb(63 70 254 / 0.08);
+  --row: rgb(255 255 255 / 0.55);
   --mint: #9ffada;
   --on-mint: #0b0d17;
   --success: #0e9f6e;
@@ -60,8 +73,19 @@
   --danger-text: #f87171;
   --on-danger: #0b0d17;
   --info: #60a5fa;
-  --glass-bg: rgb(255 255 255 / 0.08);
-  --glass-border: rgb(255 255 255 / 0.16);
+  --pop-bg: rgb(255 255 255 / 0.008);
+  --pop-blur: blur(4px);
+  --pop-bg-fallback: rgb(0 0 0 / 0.88);
+  --scrim: rgb(0 0 0 / 0.72);
+  --scrim-blur: blur(8px);
+  --edge: rgb(255 255 255 / 0.14);
+  --edge-2: rgb(255 255 255 / 0.24);
+  --pop-top-light: rgb(255 255 255 / 0.1);
+  --pop-drop: rgb(0 0 0 / 0.7);
+  --hl: rgb(63 70 254 / 0.32);
+  --hl-edge: rgb(100 108 255 / 0.55);
+  --hl-soft: rgb(63 70 254 / 0.16);
+  --row: rgb(255 255 255 / 0.07);
 }
 
 @theme inline {
@@ -76,6 +100,10 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
   --color-accent-text: var(--accent-text);
+  --color-row: var(--row);
+  --color-edge: var(--edge);
+  --color-hl: var(--hl);
+  --color-hl-edge: var(--hl-edge);
   --color-on-accent: var(--on-accent);
   --color-mint: var(--mint);
   --color-on-mint: var(--on-mint);
@@ -146,20 +174,26 @@ h3 {
 }
 
 /*
- * Anything that opens on top of the page (dialogs, sheets, drawers, toasts) is liquid glass: a see-through
- * fill, with the page behind it blurred. The only place blur is allowed; there is still no glow, halo or
- * box-shadow anywhere (DESIGN.md).
+ * Pop-up glass (liquid-glass-formula.md): anything that opens on top of the page (dialogs, sheets, drawers,
+ * toasts) has an almost clear fill and a light blur. The page behind it is first dimmed and blurred by the
+ * scrim, which is what makes it look liquid. Never override a pop-up's background in a component: change
+ * --pop-bg and --pop-blur. Write plain backdrop-filter only: lightningcss adds the prefix, and a hand-written
+ * prefixed line next to it keeps only the prefixed one, which Chrome ignores.
+ * Glass is the one place a blur and a soft edge shadow are allowed; there is still no glow, halo or bloom.
  */
 .glass {
-  background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(24px) saturate(1.5);
-  backdrop-filter: blur(24px) saturate(1.5);
-  border: 1px solid var(--glass-border);
+  position: relative;
   border-radius: var(--radius-card);
+  border: 1px solid var(--edge);
+  background: var(--pop-bg);
+  backdrop-filter: var(--pop-blur);
+  box-shadow:
+    inset 0 1px 0 var(--pop-top-light),
+    0 24px 60px -28px var(--pop-drop);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass {
-    background: var(--surface);
+    background: var(--pop-bg-fallback);
   }
 }
 
@@ -226,7 +260,8 @@ dialog.overlay {
   color: inherit;
 }
 dialog.overlay::backdrop {
-  background: rgb(0 0 0 / 0.28);
+  background: var(--scrim);
+  backdrop-filter: var(--scrim-blur);
 }
 
 @media (prefers-reduced-motion: reduce) {

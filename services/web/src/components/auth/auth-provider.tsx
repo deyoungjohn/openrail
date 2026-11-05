@@ -13,6 +13,7 @@ import {
 import { copy } from "@/copy";
 import { auth, MOCK_MODE, MOCK_ACCOUNT } from "@/lib/auth";
 import { useNear } from "@/wallet/near";
+import { walletHint } from "@/wallet/hints";
 import { walletDetail } from "@/wallet/wallet-detail";
 
 export type AuthState =
@@ -96,10 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const id = await near.pickWallet("signIn");
         if (!id) return;
         startTimer(WALLET_TIMEOUT_BY_ID[id] ?? WALLET_TIMEOUT_MS);
-        // The HOT extension does not offer NEAR sign-in to web pages, so HOT opens its app (QR code).
-        if (id === "hot-wallet" && !(window as { hotExtension?: unknown }).hotExtension) {
-          setHint(copy.auth.hotHint);
-        }
+        setHint(
+          walletHint(id, Boolean((window as { hotExtension?: unknown }).hotExtension), copy.auth),
+        );
         accountId = await near.connect(id, ctl.signal);
         startTimer(WALLET_TIMEOUT_BY_ID[id] ?? WALLET_TIMEOUT_MS);
       }

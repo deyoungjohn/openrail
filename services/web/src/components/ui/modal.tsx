@@ -99,7 +99,7 @@ export function Modal({
             "transition-[opacity,transform] duration-[var(--dur-slow)]",
             variant === "drawer"
               ? "w-full max-w-md"
-              : "max-h-[90dvh] w-full max-w-lg max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0",
+              : "max-h-[90dvh] w-full max-w-lg max-sm:!rounded-b-none max-sm:!border-x-0 max-sm:!border-b-0",
             shown
               ? "translate-x-0 translate-y-0 opacity-100 ease-[var(--ease)]"
               : cn(

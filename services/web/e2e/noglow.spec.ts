@@ -15,7 +15,10 @@ for (const scheme of ["light", "dark"] as const) {
         for (const el of document.querySelectorAll("*")) {
           const cs = getComputedStyle(el);
           const hit = [
-            cs.boxShadow !== "none" && `box-shadow: ${cs.boxShadow}`,
+            // Pop-up glass has a soft edge shadow (liquid-glass-formula.md); nothing else may.
+            cs.boxShadow !== "none" &&
+              !el.classList.contains("glass") &&
+              `box-shadow: ${cs.boxShadow}`,
             cs.textShadow !== "none" && `text-shadow: ${cs.textShadow}`,
             cs.filter !== "none" && `filter: ${cs.filter}`,
             // Blur is allowed on overlays only: dialogs, sheets, drawers and toasts carry the .glass class.
