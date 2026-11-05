@@ -588,7 +588,7 @@ async function step3(ctx: Ctx, tokenId: string, invoiceId: string): Promise<Step
     ctx,
     3,
     "pay $1 USDC on Base and $1 in ETH on Arbitrum",
-    `open ${ctx.web}/pay/${encodeURIComponent(tokenId)}\nPay 1.00 USDC on Base, then 1.00 in ETH on Arbitrum.`,
+    `open ${ctx.web}/pay/${encodeURIComponent(tokenId)}\nOn the page choose "Split this payment" and set "Amount for this part" to 1.00 each time (the page otherwise quotes the full $3.00).\nPart 1: 1.00 USDC on Base. Part 2: 1.00 in ETH on Arbitrum.`,
   );
   if (!ctx.dryRun) {
     await poll(ctx, 3, "two EVM bookings", async () => {
@@ -646,7 +646,7 @@ async function step5(ctx: Ctx, tokenId: string, invoiceId: string): Promise<Step
     ctx,
     5,
     "pay $1 SOL after the sale",
-    `open ${ctx.web}/pay/${encodeURIComponent(tokenId)}\nPay 1.00 in SOL. The buyer must receive it.`,
+    `open ${ctx.web}/pay/${encodeURIComponent(tokenId)}\nChoose "Split this payment", set "Amount for this part" to 1.00 and pay it in SOL. The buyer must receive it.`,
   );
   if (!ctx.dryRun) {
     await poll(ctx, 5, "SOL booking", async () => {
