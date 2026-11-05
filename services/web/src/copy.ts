@@ -242,6 +242,9 @@ export const copy = {
     sendOnly: (asset: string, chain: string) =>
       `Send only ${asset} on ${chain}. Anything else may be lost.`,
     timeLeft: "Time left",
+    earlierTitle: "Earlier prices for this invoice",
+    earlierBody:
+      "If you already sent money to one of these addresses, it is safe and is counted when it arrives. Do not send to it again.",
     expiredTitle: "This price expired",
     expiredBody:
       "Prices are only held for a short time, and an expired one is never reused. Nothing was charged. Get a new price to continue.",

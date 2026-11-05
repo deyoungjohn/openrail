@@ -2,7 +2,7 @@
 
 import { ApiError, type PaySession, type PublicClaim, type Route } from "@openrail/api-client";
 import { CheckCircle2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { copy } from "@/copy";
 import { client } from "@/lib/client";
 import {
@@ -281,6 +281,31 @@ interface Leg {
 
 type Mode = "paste" | "wallet";
 
+// A reload must not lose a price the payer may already have sent money to. The open parts and every
+// address ever shown for this invoice are kept in this browser.
+interface Saved {
+  legs: { session: Session; routeId: string; cents: string; stage: PayStage }[];
+  earlier: { address: string; route: string }[];
+}
+const storeKey = (tokenId: string) => `openrail.pay.${tokenId}`;
+function readSaved(tokenId: string): Saved {
+  try {
+    const raw = window.localStorage.getItem(storeKey(tokenId));
+    const v = raw ? (JSON.parse(raw) as Saved) : null;
+    if (v && Array.isArray(v.legs) && Array.isArray(v.earlier)) return v;
+  } catch {
+    /* storage unavailable: start clean */
+  }
+  return { legs: [], earlier: [] };
+}
+function writeSaved(tokenId: string, saved: Saved) {
+  try {
+    window.localStorage.setItem(storeKey(tokenId), JSON.stringify(saved));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function PayScreen({ tokenId }: { tokenId: string }) {
   const p = copy.pay;
   const evm = useEvm();
@@ -296,6 +321,8 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   const [split, setSplit] = useState(false);
   const [amountText, setAmountText] = useState("");
   const [amountShown, setAmountShown] = useState(false);
+  const [earlier, setEarlier] = useState<Saved["earlier"]>([]);
+  const restored = useRef(false);
 
   useEffect(() => {
     let off = false;
@@ -319,6 +346,44 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     () => (claim?.routes ?? []).filter((r) => chainOfRoute(r) !== null),
     [claim],
   );
+
+  // Bring back the prices from before a reload, once the routes are known.
+  useEffect(() => {
+    if (restored.current || routes.length === 0) return;
+    restored.current = true;
+    const saved = readSaved(tokenId);
+    setEarlier(saved.earlier);
+    const back: Leg[] = [];
+    for (const l of saved.legs) {
+      const r = routes.find((x) => x.id === l.routeId);
+      if (r) back.push({ session: l.session, route: r, cents: BigInt(l.cents), stage: l.stage });
+    }
+    if (back.length > 0) {
+      setLegs(back);
+      setRouteId(back[back.length - 1]?.route.id ?? null);
+      setSplit(back.length > 1);
+    }
+  }, [routes, tokenId]);
+
+  useEffect(() => {
+    if (!restored.current) return;
+    const old = readSaved(tokenId).earlier;
+    const seen = new Set(old.map((e) => e.address));
+    const added = legs
+      .filter((l) => !seen.has(l.session.deposit_address))
+      .map((l) => ({ address: l.session.deposit_address, route: l.route.payer_asset }));
+    const all = [...old, ...added];
+    writeSaved(tokenId, {
+      legs: legs.map((l) => ({
+        session: l.session,
+        routeId: l.route.id,
+        cents: l.cents.toString(),
+        stage: l.stage,
+      })),
+      earlier: all,
+    });
+    setEarlier(all);
+  }, [legs, tokenId]);
   const route = routes.find((r) => r.id === routeId) ?? null;
   const outstanding = claim?.outstanding ?? "0";
   // What is left to pay once the parts so far are counted.
@@ -518,6 +583,26 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     </div>
   );
 
+  const shown = new Set(legs.map((l) => l.session.deposit_address));
+  const past = earlier.filter((e) => !shown.has(e.address));
+  const pastNote =
+    past.length > 0 ? (
+      <section
+        aria-label={p.earlierTitle}
+        className="surface-card space-y-2 p-4 text-[14px] sm:p-6"
+      >
+        <h2 className="text-[16px] font-semibold">{p.earlierTitle}</h2>
+        <p className="caption">{p.earlierBody}</p>
+        <ul className="space-y-1">
+          {past.map((e) => (
+            <li key={e.address} className="tabular break-all">
+              {e.route} · {e.address}
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
+
   const parts =
     split && legs.length > 0 ? (
       <section aria-label={p.mixPartsTitle} className="surface-card space-y-3 p-4 sm:p-6">
@@ -609,6 +694,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           </div>
         ) : null}
         {parts}
+        {pastNote}
         {prices}
         {open && starting ? <Card title={p.getting} state="loading" /> : null}
         {open && sessionError === "failed" ? (
