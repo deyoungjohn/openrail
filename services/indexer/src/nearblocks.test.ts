@@ -175,7 +175,7 @@ describe("NearBlocks account-scoped source", () => {
     );
     const quietPolls = Math.ceil(3_600_000 / DEFAULT_POLL_INTERVAL_MS);
     for (let poll = 0; poll < quietPolls; poll += 1) await source.fetch(null);
-    expect(quietPolls).toBe(240);
+    expect(quietPolls).toBe(12);
     expect(quietPolls).toBeLessThanOrEqual(300);
     expect(listCalls).toBe(quietPolls);
     expect(rpcCalls).toBe(0);

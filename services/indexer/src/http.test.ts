@@ -58,6 +58,41 @@ describe("indexer HTTP", () => {
     });
   });
 
+  it("pokes the poller", async () => {
+    const { app, indexer } = await setup();
+    const before = indexer.health().boost_until;
+    const response = await app.handle("POST", "/poke");
+    expect(response.status).toBe(200);
+    expect((response.body as { ok: boolean }).ok).toBe(true);
+    expect(indexer.health().boost_until).toBeGreaterThan(before);
+  });
+
+  it("registers a transaction hash through the injected reader", async () => {
+    const { store, indexer } = await setup();
+    const app = createIndexerApp({
+      store,
+      indexer,
+      rootAccount: ROOT,
+      registerTx: async (hash, signer) => ({
+        accepted: hash === "tx-1" && signer === "signer.near",
+        events: 2,
+      }),
+    });
+    const accepted = await app.handle("POST", "/register-tx", {
+      hash: "tx-1",
+      signer: "signer.near",
+    });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body).toMatchObject({ accepted: true, events: 2 });
+    const rejected = await app.handle("POST", "/register-tx", {
+      hash: "tx-2",
+      signer: "signer.near",
+    });
+    expect(rejected.status).toBe(400);
+    const invalid = await app.handle("POST", "/register-tx", { hash: "tx-1" });
+    expect(invalid.status).toBe(400);
+  });
+
   it("serves paginated history for a claim", async () => {
     const { app } = await setup();
     const response = await app.handle("GET", "/history?token_id=c-1&limit=3");

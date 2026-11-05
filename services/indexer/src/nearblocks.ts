@@ -8,6 +8,7 @@
  * The cursor is our own `h:<height>`: fetch the newest page(s), keep transactions above it,
  * and stop once a page reaches already-indexed heights. A quiet poll is one NearBlocks call.
  */
+import type { BudgetGovernor } from "./budget.js";
 import type { EventSource, SourceBlock, SourcePage, SourceReceipt } from "./types.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -75,6 +76,7 @@ export class NearBlocksEventSource implements EventSource {
     fetchImpl: FetchLike = (input, init) => fetch(input, init),
     limit = 100,
     maxPages = 5,
+    private readonly budget?: BudgetGovernor,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKey = apiKey;
@@ -93,18 +95,25 @@ export class NearBlocksEventSource implements EventSource {
   }
 
   private async listPage(cursor: string | null): Promise<NbResponse> {
+    if (this.budget !== undefined) await this.budget.beforeCall();
     const query = new URLSearchParams({ limit: String(this.limit) });
     if (cursor !== null) query.set("cursor", cursor);
     const url = `${this.baseUrl}/v1/account/${encodeURIComponent(this.rootAccount)}/txns?${query.toString()}`;
     this.increment("nearblocks.txns");
-    const response = await this.fetchImpl(url, {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        ...(this.apiKey === "" ? {} : { authorization: `Bearer ${this.apiKey}` }),
-      },
-      signal: AbortSignal.timeout(20_000),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          ...(this.apiKey === "" ? {} : { authorization: `Bearer ${this.apiKey}` }),
+        },
+        signal: AbortSignal.timeout(20_000),
+      });
+    } finally {
+      this.budget?.recordCall();
+    }
+    if (response.status === 429) this.budget?.on429();
     if (!response.ok) throw new Error(`NEARBLOCKS_HTTP_${response.status}`);
     return (await response.json()) as NbResponse;
   }

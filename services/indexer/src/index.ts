@@ -6,7 +6,8 @@
  *   NEAR_ROOT_ACCOUNT, NEAR_RPC_URL, NEAR_RPC_URL_FALLBACK
  *   INDEXER_DB_PATH (required), INDEXER_SOURCE (nearblocks|rpc; default nearblocks),
  *   NEARBLOCKS_API_URL / NEARBLOCKS_API_KEY (account-scoped source),
- *   INDEXER_POLL_INTERVAL_MS (15000), INDEXER_MAX_PAGES (5), INDEXER_RETENTION_DAYS (30),
+ *   NEARBLOCKS_DAILY_BUDGET (380), 7 s minimum spacing,
+ *   INDEXER_POLL_INTERVAL_MS (300000), INDEXER_MAX_PAGES (2), INDEXER_RETENTION_DAYS (30),
  *   INDEXER_PORT (8788), INDEXER_START_HEIGHT (0, RPC scanner only)
  *   INDEXER_WEBHOOK_URL / INDEXER_WEBHOOK_SECRET (optional; indexed events only)
  *   ONECLICK_API_URL / ONECLICK_JWT (optional; receipt origin/NEAR hashes)
@@ -19,7 +20,9 @@ import {
   requireEnv,
 } from "@openrail/shared";
 import { createServer, type ServerResponse } from "node:http";
+import { BudgetGovernor } from "./budget.js";
 import { ContractClaimReader } from "./claim.js";
+import { RpcTxStatusReader } from "./tx-status.js";
 import { createIndexerApp } from "./http.js";
 import { Indexer } from "./indexer.js";
 import { EvmOriginVerifier, OneClickReceiptEnricher, StatusAmountVerifier } from "./receipt.js";
@@ -49,6 +52,12 @@ async function main(): Promise<void> {
   const rpcUrls = nearRpcUrls();
 
   const store = new IndexerStore(dbPath, rootAccount);
+  const budget = new BudgetGovernor({
+    store,
+    dailyBudget: Math.floor(numberEnv("NEARBLOCKS_DAILY_BUDGET", 380)),
+    minSpacingMs: 7_000,
+    log: (message) => logger.warn(message),
+  });
   const sourceKind = (getEnv("INDEXER_SOURCE") ?? "nearblocks").toLowerCase();
   const rpcSource = new RpcEventSource(
     rootAccount,
@@ -64,6 +73,10 @@ async function main(): Promise<void> {
             getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
             getEnv("NEARBLOCKS_API_KEY") ?? "",
             rpcUrls,
+            undefined,
+            100,
+            5,
+            budget,
           ),
           rpcSource,
         );
@@ -92,19 +105,38 @@ async function main(): Promise<void> {
   const indexer = new Indexer({
     source,
     store,
+    rootAccount,
+    txStatus: new RpcTxStatusReader(rpcUrls),
     ...(sink === undefined ? {} : { sink }),
     ...(enricher === undefined ? {} : { enricher }),
-    maxPagesPerSync: Math.floor(numberEnv("INDEXER_MAX_PAGES", 5)),
-    pollIntervalMs: Math.floor(numberEnv("INDEXER_POLL_INTERVAL_MS", 15_000)),
+    maxPagesPerSync: Math.floor(numberEnv("INDEXER_MAX_PAGES", 2)),
+    pollIntervalMs: Math.floor(numberEnv("INDEXER_POLL_INTERVAL_MS", 300_000)),
     retentionDays: Math.floor(numberEnv("INDEXER_RETENTION_DAYS", 30)),
     logger,
+    budget,
   });
-  const app = createIndexerApp({ store, indexer, claimReader, rootAccount });
+  const app = createIndexerApp({
+    store,
+    indexer,
+    claimReader,
+    rootAccount,
+    registerTx: (hash, signer) => indexer.registerTx(hash, signer),
+  });
 
   const server = createServer((request, response) => {
     void (async () => {
       try {
-        const result = await app.handle(request.method ?? "GET", request.url ?? "/");
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk as Uint8Array));
+        let body: unknown;
+        if (chunks.length > 0) {
+          try {
+            body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+          } catch {
+            body = undefined;
+          }
+        }
+        const result = await app.handle(request.method ?? "GET", request.url ?? "/", body);
         respond(response, result.status, result.body);
       } catch (error) {
         logger.error("request failed", error instanceof Error ? error.message : String(error));
