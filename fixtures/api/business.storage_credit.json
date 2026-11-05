@@ -3,5 +3,11 @@
   "account_id": "acme.openrail.near",
   "contract_id": "openrail.near",
   "amount": "1000000000000000000000000",
-  "method": "deposit_storage_credit"
+  "method": "deposit_storage_credit",
+  "sponsor": {
+    "pool": "5000000000000000000000000",
+    "cap": 5,
+    "used": 1,
+    "remaining": 4
+  }
 }

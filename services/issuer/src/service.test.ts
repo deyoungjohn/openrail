@@ -80,6 +80,9 @@ function fixture(
     accounts?: boolean[];
     claim?: unknown;
     indexer?: { poke(): Promise<void>; registerTx(hash: string): Promise<void> };
+    sponsor?: {
+      sponsorStatusOf(business: string): Promise<{ pool: bigint; cap: number; used: number }>;
+    };
   } = {},
 ): Fixture {
   const config: IssuerServiceConfig = {
@@ -102,6 +105,7 @@ function fixture(
     config,
     logger,
     ...(options.indexer === undefined ? {} : { indexer: options.indexer }),
+    ...(options.sponsor === undefined ? {} : { sponsor: options.sponsor }),
   });
   return { service, issuer, relay, credit, accounts, config };
 }
@@ -138,6 +142,26 @@ describe("issuer prepareIssue", () => {
       amount: REQUIRED_ISSUE_DEPOSIT_YOCTO.toString(),
       storageCredit: (2n * 10n ** 22n).toString(),
     });
+  });
+
+  it("reports sponsored when the business credit is low and the pool/cap allow it", async () => {
+    const { service, credit } = fixture({
+      sponsor: { sponsorStatusOf: async () => ({ pool: 10n ** 23n, cap: 5, used: 1 }) },
+    });
+    credit.storageCreditOf = async () => 0n;
+    await expect(service.prepareIssue("acme.near")).resolves.toMatchObject({
+      sponsored: true,
+      sponsorCap: 5,
+      sponsorUsed: 1,
+      sponsoredRemaining: 4,
+    });
+  });
+
+  it("does not report sponsored when the business has enough own credit", async () => {
+    const { service } = fixture({
+      sponsor: { sponsorStatusOf: async () => ({ pool: 10n ** 23n, cap: 5, used: 1 }) },
+    });
+    await expect(service.prepareIssue("acme.near")).resolves.toMatchObject({ sponsored: false });
   });
 
   it("surfaces an unavailable storage_credit_of view", async () => {

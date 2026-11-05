@@ -10,6 +10,8 @@ import type {
   KeyInfo,
   KeyInspector,
   NearClientLike,
+  SponsorStatus,
+  SponsorStatusReader,
   StorageCreditReader,
   TokenCounter,
 } from "./types.js";
@@ -80,6 +82,30 @@ export class ContractStorageCreditReader implements StorageCreditReader {
       throw new Error("ISSUER_STORAGE_CREDIT_INVALID");
     }
     return BigInt(value);
+  }
+}
+
+export class ContractSponsorStatusReader implements SponsorStatusReader {
+  constructor(
+    private readonly near: NearClientLike,
+    private readonly rootAccount: string,
+  ) {}
+
+  async sponsorStatusOf(business: string): Promise<SponsorStatus> {
+    const value = await this.near.view<{ pool?: unknown; cap?: unknown; used?: unknown }>({
+      contractId: this.rootAccount,
+      methodName: "sponsor_status",
+      args: { account_id: business },
+      feature: "issuer.sponsor_status",
+    });
+    const pool =
+      typeof value.pool === "string" && /^\d+$/.test(value.pool) ? BigInt(value.pool) : null;
+    const cap = typeof value.cap === "number" && Number.isSafeInteger(value.cap) ? value.cap : null;
+    const used =
+      typeof value.used === "number" && Number.isSafeInteger(value.used) ? value.used : null;
+    if (pool === null || cap === null || used === null)
+      throw new Error("ISSUER_SPONSOR_STATUS_INVALID");
+    return { pool, cap, used };
   }
 }
 

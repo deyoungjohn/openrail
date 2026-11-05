@@ -43,6 +43,7 @@ function harness() {
       balance: "5000000000000000000000000",
       amount: "1000000000000000000000000",
     })),
+    sponsorStatus: vi.fn(async () => ({ pool: "5000000000000000000000000", cap: 5, used: 1 })),
   };
   const quoteProvider = {
     quote: vi.fn(async (request: { amount: string; deadline: string }) => ({
@@ -155,6 +156,46 @@ describe("invoice route", () => {
     );
     expect(response.status).toBe(400);
     expect((response.body as { error: { code: string } }).error.code).toBe("invalid_webhook_url");
+  });
+
+  it("returns own credit, sponsor pool and remaining sponsored invoices", async () => {
+    const { app, secret } = harness();
+    const response = await app.handle(
+      request("GET", "/v1/business/storage_credit", undefined, secret),
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      balance: "5000000000000000000000000",
+      sponsor: { pool: "5000000000000000000000000", cap: 5, used: 1, remaining: 4 },
+    });
+  });
+
+  it("treats a sponsored invoice as enough credit and reports the remaining count", async () => {
+    const { app, secret, issuer } = harness();
+    issuer.prepareIssue.mockResolvedValueOnce({
+      tokenId: "c-1",
+      claimAccount: "c-1.openrail.near",
+      storageCredit: "0",
+      amount: "20000000000000000000000",
+      sponsored: true,
+      sponsoredRemaining: 4,
+    } as never);
+    const sponsored = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(sponsored.status).toBe(201);
+
+    issuer.prepareIssue.mockResolvedValueOnce({
+      tokenId: "c-2",
+      claimAccount: "c-2.openrail.near",
+      storageCredit: "0",
+      amount: "20000000000000000000000",
+      sponsored: false,
+      sponsoredRemaining: 0,
+    } as never);
+    const refused = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(refused.status).toBe(402);
+    const error = (refused.body as { error: { code: string; message: string } }).error;
+    expect(error.code).toBe("insufficient_storage_credit");
+    expect(error.message).toContain("0 sponsored invoices remain");
   });
 
   it("requires a valid origin-chain refund address for a pay session", async () => {

@@ -134,6 +134,19 @@ export function createContractPort(rootAccount: string): ContractPort {
       if (claim === null) throw new ApiError(404, "claim_not_found");
       return claim as Record<string, unknown> & { kind: number };
     },
+    async sponsorStatus(accountId) {
+      const status = await near.view<{ pool?: unknown; cap?: unknown; used?: unknown }>({
+        contractId: rootAccount,
+        methodName: "sponsor_status",
+        args: { account_id: accountId },
+        feature: "api.sponsor_status",
+      });
+      return {
+        pool: String(status.pool ?? "0"),
+        cap: Number(status.cap ?? 0),
+        used: Number(status.used ?? 0),
+      };
+    },
     async storageCredit() {
       return {
         balance: getEnv("STORAGE_CREDIT_BALANCE") ?? "0",

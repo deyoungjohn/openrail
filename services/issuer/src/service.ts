@@ -18,6 +18,7 @@ import type {
   LogQuoteRequest,
   NearClientLike,
   PrepareIssueResult,
+  SponsorStatusReader,
   StorageCreditReader,
   TokenCounter,
 } from "./types.js";
@@ -50,6 +51,7 @@ export interface IssuerServiceDeps {
   issuerNear: NearClientLike;
   relayNear: NearClientLike;
   credit: StorageCreditReader;
+  sponsor?: SponsorStatusReader;
   /** Predicts the next claim id. Without it `prepareIssue` reports no id. */
   tokens?: TokenCounter;
   accounts: AccountChecker;
@@ -122,6 +124,7 @@ export class IssuerService {
   private readonly issuerNear: NearClientLike;
   private readonly relayNear: NearClientLike;
   private readonly credit: StorageCreditReader;
+  private readonly sponsor: SponsorStatusReader | undefined;
   private readonly tokens: TokenCounter | undefined;
   /** The highest claim number this service has seen minted. */
   private highWater = 0;
@@ -135,6 +138,7 @@ export class IssuerService {
     this.issuerNear = deps.issuerNear;
     this.relayNear = deps.relayNear;
     this.credit = deps.credit;
+    this.sponsor = deps.sponsor;
     this.tokens = deps.tokens;
     this.accounts = deps.accounts;
     this.logger = deps.logger;
@@ -156,6 +160,13 @@ export class IssuerService {
   async prepareIssue(business: string): Promise<PrepareIssueResult> {
     return this.mutex.run(async () => {
       const credit = await this.credit.storageCreditOf(business);
+      const sponsor =
+        this.sponsor === undefined ? undefined : await this.sponsor.sponsorStatusOf(business);
+      const required = this.config.requiredDepositYocto;
+      const sponsored =
+        sponsor === undefined
+          ? undefined
+          : credit < required && sponsor.pool >= required && sponsor.used < sponsor.cap;
       let predicted: { tokenId: string; claimAccount: string } | undefined;
       if (this.tokens !== undefined) {
         const next = Math.max(await this.tokens.lastTokenNumber(), this.highWater) + 1;
@@ -169,6 +180,15 @@ export class IssuerService {
         account: this.config.rootAccount,
         amount: this.config.requiredDepositYocto.toString(),
         storageCredit: credit.toString(),
+        ...(sponsored === undefined
+          ? {}
+          : {
+              sponsored,
+              sponsorPool: sponsor?.pool.toString(),
+              sponsorCap: sponsor?.cap,
+              sponsorUsed: sponsor?.used,
+              sponsoredRemaining: Math.max(0, (sponsor?.cap ?? 0) - (sponsor?.used ?? 0)),
+            }),
         ...(predicted ?? {}),
       };
     });
