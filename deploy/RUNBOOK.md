@@ -290,6 +290,7 @@ Whenever new code is pushed to `main`, CI builds the pack (workflow `server-pack
 `openrail-fetch` downloads the newest pack straight from GitHub to the server, checks its sha256, and hands it to `openrail-apply`. Use `sudo openrail-fetch --apply <short-sha>` for a specific commit, or `--dry-run` to see what it would do. It updates itself from each pack it verifies.
 
 **First time only:**
+
 1. [BROWSER] In the repository's Settings → Secrets and variables → Actions → **Variables**, add `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` and `NEXT_PUBLIC_API_PUBLISHABLE_KEY`, copied from your env file. Both are public values that are baked into the website. Optionally add `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_NEAR_NETWORK`, `NEXT_PUBLIC_ROOT_CONTRACT` and `NEXT_PUBLIC_API_MODE`; the defaults match the env file template.
 2. [EC2] Install the command:
 
