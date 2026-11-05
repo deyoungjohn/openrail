@@ -50,16 +50,26 @@ export function apiModulesFrom(enabled: readonly { id: string; module: unknown }
   return found;
 }
 
-/** Runs every module's `events` hook; the original event always comes first. */
+/**
+ * Runs every module's `events` hook; the original event always comes first. A module whose hook throws is
+ * skipped and logged: one broken module must never stop core events from being delivered.
+ */
 export function expandEvents(
   event: IndexedEvent,
   modules: readonly ApiModule[],
   context: ApiModuleContext,
+  log: (line: string) => void = (line) => console.error(line),
 ): IndexedEvent[] {
   const out = [event];
   for (const module of modules) {
     if (module.events === undefined) continue;
-    out.push(...module.events(event, context));
+    try {
+      out.push(...module.events(event, context));
+    } catch (error) {
+      log(
+        `module ${module.id} events hook failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   return out;
 }

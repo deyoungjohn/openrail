@@ -12,6 +12,7 @@ import {
   createSqliteModuleStore,
   expandEvents,
   type ApiModule,
+  type ApiModuleContext,
 } from "./modules.js";
 import { createSqliteStores } from "./stores.js";
 import { WebhookWorker } from "./webhook-worker.js";
@@ -149,5 +150,25 @@ describe("module events in the webhook worker", () => {
     });
     await worker.runOnce();
     expect(sent.map((body) => (JSON.parse(body) as { id: string }).id)).toEqual(["7:example"]);
+  });
+});
+
+describe("a broken module cannot stop core events", () => {
+  it("skips a module whose events hook throws and still returns the original event and the others", () => {
+    const lines: string[] = [];
+    const event = { id: "evt_1", type: "booked", created: 1 } as unknown as IndexedEvent;
+    const bad: ApiModule = {
+      id: "bad",
+      events: () => {
+        throw new Error("boom");
+      },
+    };
+    const good: ApiModule = {
+      id: "good",
+      events: (e) => [{ ...e, id: "evt_1_derived" } as IndexedEvent],
+    };
+    const out = expandEvents(event, [bad, good], {} as ApiModuleContext, (l) => lines.push(l));
+    expect(out.map((e) => e.id)).toEqual(["evt_1", "evt_1_derived"]);
+    expect(lines.join("\n")).toContain("module bad events hook failed: boom");
   });
 });
