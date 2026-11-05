@@ -127,7 +127,8 @@ sudo tar -xJf node-v22.23.0-linux-x64.tar.xz -C /opt
 sudo mv /opt/node-v22.23.0-linux-x64 /opt/node-22.23.0
 for b in node npm npx corepack; do sudo ln -sfn /opt/node-22.23.0/bin/$b /usr/local/bin/$b; done
 sudo /usr/local/bin/corepack enable --install-directory /usr/local/bin
-sudo /usr/local/bin/corepack prepare pnpm@12.8.1 --activate
+sudo install -d -m 0755 /opt/corepack
+sudo env COREPACK_HOME=/opt/corepack /usr/local/bin/corepack prepare pnpm@12.8.1 --activate
 node --version
 pnpm --version
 ```
@@ -192,10 +193,12 @@ sudo chmod -R g+rX "/opt/openrail/releases/$version"
 sudo chown -R openrail-web:openrail "/opt/openrail/releases/$version/services/web/.next"
 sudo install -d -m 0770 -o openrail-watcher -g openrail "/opt/openrail/releases/$version/reports"
 sudo ln -sfn "/opt/openrail/releases/$version" /opt/openrail/current
+(cd /opt/openrail/current && sudo env COREPACK_HOME=/opt/corepack /usr/local/bin/pnpm --version)
+sudo chmod -R a+rX /opt/corepack
 ls /opt/openrail/current
 ```
 
-Check: the last command lists `deploy packages services config node_modules` and more.
+Check: the `pnpm --version` line prints `12.8.1` (this fills the pnpm cache that the services use; they have no home folder of their own), and the last command lists `deploy packages services config node_modules` and more.
 
 ### Step 12. [EC2] Split the env file into one file per service
 
@@ -304,11 +307,12 @@ If a setting changed: edit `~/.openrail/openrail.env`, run `./deploy/upload.sh -
 
 ## If something goes wrong
 
-| Symptom                                 | Do this                                                                                                                                                     |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `uname -m` is `aarch64`                 | Stop. The pack is for x86 servers.                                                                                                                          |
-| `FAIL openrail-api.service`             | `sudo journalctl -u openrail-api -n 60 --no-pager`; a line starting `MISSING_ENV:` names the missing setting; add it to the combined file and redo Step 12. |
-| HTTPS does not work                     | DNS records must be "DNS only" (grey cloud) in Cloudflare; ports 80 and 443 must be open in the AWS security group and `ufw`.                               |
-| Pay page says it cannot start a payment | The publishable key was not registered (Step 15) or the web pack was built without it (Step 3).                                                             |
-| Receipts do not appear                  | The indexer polls every 5 minutes to stay inside the NearBlocks free plan. Wait, or check `sudo journalctl -u openrail-indexer -n 40 --no-pager`.           |
-| You changed a `NEXT_PUBLIC_*` value     | It only takes effect after a new build (Step 3) and upload.                                                                                                 |
+| Symptom                                                 | Do this                                                                                                                                                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `uname -m` is `aarch64`                                 | Stop. The pack is for x86 servers.                                                                                                                                 |
+| `ENOENT ... /nonexistent/.cache/node/corepack` in a log | The services need the pnpm cache in `/opt/corepack`. Run the `pnpm --version` and `chmod` lines of Step 11 again, then `sudo systemctl daemon-reload` and restart. |
+| `FAIL openrail-api.service`                             | `sudo journalctl -u openrail-api -n 60 --no-pager`; a line starting `MISSING_ENV:` names the missing setting; add it to the combined file and redo Step 12.        |
+| HTTPS does not work                                     | DNS records must be "DNS only" (grey cloud) in Cloudflare; ports 80 and 443 must be open in the AWS security group and `ufw`.                                      |
+| Pay page says it cannot start a payment                 | The publishable key was not registered (Step 15) or the web pack was built without it (Step 3).                                                                    |
+| Receipts do not appear                                  | The indexer polls every 5 minutes to stay inside the NearBlocks free plan. Wait, or check `sudo journalctl -u openrail-indexer -n 40 --no-pager`.                  |
+| You changed a `NEXT_PUBLIC_*` value                     | It only takes effect after a new build (Step 3) and upload.                                                                                                        |

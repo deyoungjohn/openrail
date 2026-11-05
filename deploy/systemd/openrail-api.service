@@ -11,6 +11,7 @@ WorkingDirectory=/opt/openrail/current
 EnvironmentFile=/etc/openrail/api.env
 Environment=NODE_OPTIONS=--max-old-space-size=200
 Environment=NODE_ENV=production
+Environment=COREPACK_HOME=/opt/corepack
 Environment=API_PORT=3001
 ExecStart=/usr/local/bin/pnpm --filter @openrail/api start
 Restart=always

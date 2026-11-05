@@ -11,6 +11,7 @@ WorkingDirectory=/opt/openrail/current
 EnvironmentFile=/etc/openrail/web.env
 Environment=NODE_OPTIONS=--max-old-space-size=200
 Environment=NODE_ENV=production
+Environment=COREPACK_HOME=/opt/corepack
 Environment=PORT=3000
 Environment=HOSTNAME=127.0.0.1
 ExecStart=/usr/local/bin/pnpm --filter @openrail/web start
