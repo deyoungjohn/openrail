@@ -213,6 +213,10 @@ export function createQuoteProvider(): QuoteProvider {
         recipient: request.recipient,
         recipientType: "INTENTS",
         depositType: "ORIGIN_CHAIN",
+        // 1Click rejects a quote without these two (HTTP 400, seen on the first live quote): `dry` false asks
+        // for a real deposit address, and the refund goes back to an address on the chain the payer used.
+        refundType: "ORIGIN_CHAIN",
+        dry: false,
         deadline: request.deadline,
       });
       return {
@@ -245,6 +249,8 @@ export function createCashoutPort(): CashoutPort {
         recipient: request.address,
         recipientType: "DESTINATION_CHAIN",
         depositType: "INTENTS",
+        refundType: "INTENTS",
+        dry: false,
         deadline,
       });
       return {
