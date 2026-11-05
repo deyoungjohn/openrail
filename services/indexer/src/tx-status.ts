@@ -1,4 +1,5 @@
 /** RPC `EXPERIMENTAL_tx_status` reader used by register-tx and degraded discovery. */
+import { toSeconds } from "./time.js";
 import type { SourceReceipt } from "./types.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -82,8 +83,9 @@ export class RpcTxStatusReader implements TxStatusReader {
           signerId: result.transaction?.signer_id ?? signer,
           blockHeight: first?.block_height ?? result.transaction_outcome?.block_height ?? 0,
           blockHash: first?.block_hash ?? result.transaction_outcome?.block_hash ?? hash,
-          blockTimestamp:
-            result.transaction_outcome?.outcome?.block_timestamp ?? Math.floor(Date.now() / 1000),
+          blockTimestamp: toSeconds(
+            result.transaction_outcome?.outcome?.block_timestamp ?? Date.now(),
+          ),
           receipts,
         };
       } catch (error) {

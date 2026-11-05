@@ -693,9 +693,10 @@ export class IndexerStore {
         "SELECT token_id, MIN(block_timestamp) AS issued_at FROM events WHERE event = 'issue' AND token_id IS NOT NULL GROUP BY token_id",
       )
       .all() as { token_id: string; issued_at: number }[];
-    const dueRows = this.db.prepare("SELECT token_id, due_date FROM claims").all() as {
+    const dueRows = this.db.prepare("SELECT token_id, due_date, amount_due FROM claims").all() as {
       token_id: string;
       due_date: number;
+      amount_due: string;
     }[];
     const receipts = this.db
       .prepare("SELECT token_id, payment, asset, timestamp, origin_json FROM receipts")
@@ -708,14 +709,15 @@ export class IndexerStore {
     }[];
     const issued = new Map(issueRows.map((row) => [row.token_id, Number(row.issued_at)]));
     const due = new Map(dueRows.map((row) => [row.token_id, Number(row.due_date)]));
-    const firstPaid = new Map<string, number>();
+    const amountDue = new Map(dueRows.map((row) => [row.token_id, BigInt(row.amount_due)]));
+    const receiptsByToken = new Map<string, { payment: bigint; timestamp: number }[]>();
     const chain = new Map<string, { count: number; amount: bigint }>();
     const asset = new Map<string, { count: number; amount: bigint }>();
 
     for (const row of receipts) {
-      const current = firstPaid.get(row.token_id);
-      if (current === undefined || row.timestamp < current)
-        firstPaid.set(row.token_id, row.timestamp);
+      const list = receiptsByToken.get(row.token_id) ?? [];
+      list.push({ payment: BigInt(row.payment), timestamp: Number(row.timestamp) });
+      receiptsByToken.set(row.token_id, list);
       let chainName = "unknown";
       if (row.origin_json !== null) {
         try {
@@ -738,18 +740,30 @@ export class IndexerStore {
     let totalDays = 0;
     let timed = 0;
     let onTime = 0;
-    for (const [tokenId, paidAt] of firstPaid) {
+    let paid = 0;
+    for (const [tokenId, rows] of receiptsByToken) {
+      const target = amountDue.get(tokenId) ?? 0n;
+      if (target <= 0n) continue;
+      const ordered = [...rows].sort((a, b) => a.timestamp - b.timestamp);
+      let cumulative = 0n;
+      let paidAt: number | null = null;
+      for (const row of ordered) {
+        cumulative += row.payment;
+        if (cumulative >= target) {
+          paidAt = row.timestamp;
+          break;
+        }
+      }
+      if (paidAt === null) continue;
+      paid += 1;
       const issuedAt = issued.get(tokenId);
       if (issuedAt !== undefined) {
         totalDays += Math.max(0, paidAt - issuedAt) / 86_400;
         timed += 1;
       }
       const dueAt = due.get(tokenId) ?? 0;
-      if (dueAt > 0) {
-        if (paidAt <= dueAt) onTime += 1;
-      }
+      if (dueAt > 0 && paidAt <= dueAt) onTime += 1;
     }
-    const paid = firstPaid.size;
     return {
       average_days_to_paid: timed === 0 ? null : totalDays / timed,
       paid_on_time_rate: paid === 0 ? null : onTime / paid,

@@ -84,8 +84,12 @@ NearBlocks `txns` row, no logs) and `account-receipts.openrail.json`; the block 
 
 `GET /analytics` returns the H11 numbers computed from indexed events:
 
-- average days from `issue` to the first `booked` payment;
+- average days from `issue` to the booking that reaches the full `amount_due`
+  (a part payment does not count as paid);
 - payments grouped by origin chain and settlement asset, with base-unit amounts;
 - paid-on-time rate (first payment at or before the claim's due date).
+
+All timestamps are normalized to Unix seconds in `services/indexer/src/time.ts`
+(NearBlocks returns nanoseconds) before they are stored or compared.
 
 The API passes this through at `GET /v1/analytics` (scope `invoices:read`).

@@ -1,4 +1,5 @@
 /** NEP-297 log parsing and validation (blueprint 2.9). */
+import { toSeconds } from "./time.js";
 import type { ParsedEvent, SourceBlock, SourceReceipt } from "./types.js";
 
 export const EVENT_PREFIX = "EVENT_JSON:";
@@ -72,7 +73,7 @@ export function parseReceipt(block: SourceBlock, receipt: SourceReceipt): Parsed
           eventKey: `${receipt.txHash}:${receipt.receiptId}:${logIndex}:${dataIndex}:${tokenIndex}`,
           blockHeight: block.height,
           blockHash: block.hash,
-          blockTimestamp: block.timestamp,
+          blockTimestamp: toSeconds(block.timestamp),
           txHash: receipt.txHash,
           receiptId: receipt.receiptId,
           logIndex,
