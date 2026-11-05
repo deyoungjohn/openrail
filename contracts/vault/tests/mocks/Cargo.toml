@@ -12,6 +12,9 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 near-sdk = { version = "=5.30.0", features = ["unstable"] }
+# This fixture has no lockfile of its own. near-sys 0.4.1 (published 5 Nov 14:24 UTC) removed the
+# universal_state functions that near-sdk 5.30.0 calls, so pin the version the workspace lock uses.
+near-sys = "=0.4.0"
 
 [profile.release]
 codegen-units = 1
