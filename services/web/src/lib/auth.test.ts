@@ -95,3 +95,33 @@ describe("liveAuth.signIn", () => {
     expect(f.mock.calls[1]![1].credentials).toBe("include");
   });
 });
+
+describe("liveAuth.signIn (the API issues the challenge for the connected account)", () => {
+  it("sends account_id with the challenge request, then verifies the signed message", async () => {
+    const calls: { url: string; body: unknown }[] = [];
+    const f: AuthFetch = async (url, init) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) });
+      if (url.endsWith("/v1/auth/challenge")) {
+        return new Response(
+          JSON.stringify({ message: "m", nonce: "bm9uY2U=", recipient: "api.openrail.near" }),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          account_id: "alice.near",
+          expires_at: "2026-11-12T00:00:00Z",
+          token: "t",
+        }),
+        { status: 200 },
+      );
+    };
+    const session = await liveAuth(BASE, f).signIn(
+      async () => ({ accountId: "alice.near", publicKey: "ed25519:K", signature: "ed25519:S" }),
+      "alice.near",
+    );
+    expect(session.account_id).toBe("alice.near");
+    expect(calls[0]?.body).toEqual({ account_id: "alice.near" });
+    expect(calls[1]?.url.endsWith("/v1/auth/verify")).toBe(true);
+  });
+});

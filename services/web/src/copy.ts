@@ -263,6 +263,8 @@ export const copy = {
     timeout: "The wallet didn't answer. Close its window and try again.",
     walletSaid: "The wallet said",
     cancel: "Cancel",
+    hotHint:
+      "The HOT browser extension does not offer NEAR sign-in to websites. Scan the QR code with the HOT app on your phone, or open it from there.",
     errorTitle: "We couldn't check your sign-in",
     errorBody:
       "We can't reach the server right now. Your session is not lost. Try again in a moment.",
@@ -414,8 +416,6 @@ export const copy = {
     cannotSign: "This wallet cannot sign you in. Use another wallet.",
     unavailable: "Not available on this device",
     unavailableNote: "Install it or open this page in its app",
-    hotNoExtension:
-      "The HOT browser extension does not offer NEAR sign-in to this page. Use the HOT app instead: scan the QR code or open it on your phone.",
   },
   dash: {
     title: "Dashboard",

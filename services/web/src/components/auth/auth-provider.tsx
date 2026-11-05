@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { copy } from "@/copy";
 import { auth, MOCK_MODE, MOCK_ACCOUNT } from "@/lib/auth";
 import { useNear } from "@/wallet/near";
 import { walletDetail } from "@/wallet/wallet-detail";
@@ -23,6 +24,8 @@ export type AuthState =
 interface AuthCtx {
   state: AuthState;
   signIn: () => Promise<void>;
+  /** A short hint about the wallet being used, shown while we wait for it. */
+  hint: string | null;
   /** Stops waiting for the wallet (closed pop-up, app that never answers). */
   cancelSignIn: () => void;
   signOut: () => Promise<void>;
@@ -33,6 +36,8 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 /** A wallet that has not answered after this long is treated as closed. */
 export const WALLET_TIMEOUT_MS = 120_000;
+/** WalletConnect either shows its QR code at once or not at all, so it gets a shorter wait. */
+const WALLET_TIMEOUT_BY_ID: Record<string, number> = { "wallet-connect": 30_000 };
 
 export function useAuth() {
   const ctx = useContext(Ctx);
@@ -65,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [tick]);
 
   const pending = useRef<AbortController | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
 
   const cancelSignIn = useCallback(() => pending.current?.abort(), []);
 
@@ -72,18 +78,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pending.current?.abort();
     const ctl = new AbortController();
     pending.current = ctl;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      ctl.abort();
-    }, WALLET_TIMEOUT_MS);
     let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const startTimer = (ms: number) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        timedOut = true;
+        ctl.abort();
+      }, ms);
+    };
     try {
+      let accountId: string | undefined;
       if (!MOCK_MODE) {
         const id = await near.pickWallet("signIn");
         if (!id) return;
-        await near.connect(id, ctl.signal);
+        startTimer(WALLET_TIMEOUT_BY_ID[id] ?? WALLET_TIMEOUT_MS);
+        // The HOT extension does not offer NEAR sign-in to web pages, so HOT opens its app (QR code).
+        if (id === "hot-wallet" && !(window as { hotExtension?: unknown }).hotExtension) {
+          setHint(copy.auth.hotHint);
+        }
+        accountId = await near.connect(id, ctl.signal);
+        startTimer(WALLET_TIMEOUT_BY_ID[id] ?? WALLET_TIMEOUT_MS);
       }
-      const s = await auth.signIn((c) => near.signMessage(c, ctl.signal));
+      const s = await auth.signIn((c) => near.signMessage(c, ctl.signal), accountId);
       setState({ status: "signedIn", accountId: s.account_id });
     } catch (e) {
       const cancelled = e instanceof Error && e.message === "WALLET_CANCELLED";
@@ -104,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } finally {
       clearTimeout(timer);
+      setHint(null);
       if (pending.current === ctl) pending.current = null;
     }
   }, [near]);
@@ -120,8 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(() => setTick((t) => t + 1), []);
   const value = useMemo(
-    () => ({ state, signIn, cancelSignIn, signOut, retry }),
-    [state, signIn, cancelSignIn, signOut, retry],
+    () => ({ state, signIn, hint, cancelSignIn, signOut, retry }),
+    [state, signIn, hint, cancelSignIn, signOut, retry],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

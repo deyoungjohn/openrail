@@ -44,7 +44,7 @@ interface NearState {
   /** Opens the picker and returns the chosen wallet id, or null if it was closed. */
   pickWallet: (purpose: PickerPurpose) => Promise<string | null>;
   /** Connects one wallet (its own pop-up or app). Rejects with `WALLET_CANCELLED` when `signal` aborts. */
-  connect: (walletId: string, signal?: AbortSignal) => Promise<void>;
+  connect: (walletId: string, signal?: AbortSignal) => Promise<string | undefined>;
   signOut: () => Promise<void>;
   /** One FunctionCall transaction, signed by the connected NEAR wallet. */
   call: (c: NearCall) => Promise<void>;
@@ -158,7 +158,8 @@ export function NearProvider({ children }: { children: ReactNode }) {
     // Connect without a contract: sign-in is a signed message, so the wallet must not add an access
     // key. Adding one is a transaction, and wallets such as OKX refuse it below 0.1 NEAR. Every
     // transaction we ask for later (sell, acknowledge, deposit) is approved in the wallet itself.
-    await abortable(w.signIn({} as never), signal);
+    const accounts = await abortable(w.signIn({} as never), signal);
+    return accounts[0]?.accountId ?? s.store.getState().accounts[0]?.accountId;
   }, []);
 
   const signIn = useCallback(() => {

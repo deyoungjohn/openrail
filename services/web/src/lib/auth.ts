@@ -24,7 +24,11 @@ export interface ChallengeToSign {
 export interface AuthApi {
   /** The current session, or null when signed out. Throws when the check itself failed. */
   session(): Promise<SessionInfo | null>;
-  signIn(sign: (c: ChallengeToSign) => Promise<SignedChallenge>): Promise<SessionInfo>;
+  /** `accountId` is the NEAR account the wallet just connected: the API issues the challenge for it. */
+  signIn(
+    sign: (c: ChallengeToSign) => Promise<SignedChallenge>,
+    accountId?: string,
+  ): Promise<SessionInfo>;
   signOut(): Promise<void>;
 }
 
@@ -55,8 +59,8 @@ export function liveAuth(baseUrl: string, f: AuthFetch = (url, init) => fetch(ur
       return { account_id: s.account_id, expires_at: s.expires_at };
     },
 
-    async signIn(sign) {
-      const cr = await post("/v1/auth/challenge", {});
+    async signIn(sign, accountId) {
+      const cr = await post("/v1/auth/challenge", { account_id: accountId });
       if (!cr.ok) throw new Error(`CHALLENGE_${cr.status}`);
       const c = (await cr.json()) as AuthChallenge;
       const signed = await sign({ message: c.message, nonce: c.nonce, recipient: c.recipient });

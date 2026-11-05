@@ -9,7 +9,7 @@ import { useAuth } from "./auth-provider";
 
 /** Dashboard content only renders for a signed-in business. */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { state, signIn, cancelSignIn, retry } = useAuth();
+  const { state, signIn, hint, cancelSignIn, retry } = useAuth();
   const [busy, setBusy] = useState(false);
 
   if (state.status === "loading") return <Card state="loading" />;
@@ -38,6 +38,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
             {copy.auth.walletSaid}: {state.detail}
           </p>
         ) : null}
+        {busy && hint ? <p className="caption">{hint}</p> : null}
         <div className="flex items-center gap-3">
           <Button
             loading={busy}
