@@ -7,14 +7,13 @@ Wants=network-online.target
 Type=simple
 User=openrail-web
 Group=openrail
-WorkingDirectory=/opt/openrail/current
+WorkingDirectory=/opt/openrail/current/services/web
 EnvironmentFile=/etc/openrail/web.env
 Environment=NODE_OPTIONS=--max-old-space-size=200
 Environment=NODE_ENV=production
-Environment=COREPACK_HOME=/opt/corepack
 Environment=PORT=3000
 Environment=HOSTNAME=127.0.0.1
-ExecStart=/usr/local/bin/pnpm --filter @openrail/web start
+ExecStart=/opt/openrail/current/services/web/node_modules/.bin/next start -p 3000 -H 127.0.0.1
 Restart=always
 RestartSec=5
 TimeoutStopSec=20

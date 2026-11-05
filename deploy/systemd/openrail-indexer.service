@@ -7,13 +7,12 @@ Wants=network-online.target
 Type=simple
 User=openrail-indexer
 Group=openrail
-WorkingDirectory=/opt/openrail/current
+WorkingDirectory=/opt/openrail/current/services/indexer
 EnvironmentFile=/etc/openrail/indexer.env
 Environment=NODE_OPTIONS=--max-old-space-size=200
 Environment=NODE_ENV=production
-Environment=COREPACK_HOME=/opt/corepack
 Environment=INDEXER_DB_PATH=/var/lib/openrail/indexer.sqlite
-ExecStart=/usr/local/bin/pnpm --filter @openrail/indexer exec tsx src/index.ts
+ExecStart=/opt/openrail/current/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=5
 TimeoutStopSec=20

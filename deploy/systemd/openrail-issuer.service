@@ -7,13 +7,12 @@ Wants=network-online.target
 Type=simple
 User=openrail-issuer
 Group=openrail
-WorkingDirectory=/opt/openrail/current
+WorkingDirectory=/opt/openrail/current/services/issuer
 EnvironmentFile=/etc/openrail/issuer.env
 Environment=NODE_OPTIONS=--max-old-space-size=200
 Environment=NODE_ENV=production
-Environment=COREPACK_HOME=/opt/corepack
 Environment=ISSUER_PORT=8787
-ExecStart=/usr/local/bin/pnpm --filter @openrail/issuer start
+ExecStart=/opt/openrail/current/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=5
 TimeoutStopSec=20

@@ -7,13 +7,12 @@ Wants=network-online.target
 Type=simple
 User=openrail-watcher
 Group=openrail
-WorkingDirectory=/opt/openrail/current
+WorkingDirectory=/opt/openrail/current/services/watcher
 EnvironmentFile=/etc/openrail/watcher.env
 Environment=NODE_OPTIONS=--max-old-space-size=200
 Environment=NODE_ENV=production
-Environment=COREPACK_HOME=/opt/corepack
 Environment=WATCHER_HEALTH_PORT=8080
-ExecStart=/usr/local/bin/pnpm --filter @openrail/watcher start
+ExecStart=/opt/openrail/current/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=5
 TimeoutStopSec=20
