@@ -7,6 +7,7 @@ import type { WebhookEndpointRecord } from "./webhooks.js";
 import type { StoredResponse } from "./idempotency.js";
 import type { RecurringStore } from "./recurring.js";
 import { createMemoryRecurringStore, createSqliteRecurringStore } from "./recurring-store.js";
+import { createMemoryModuleStore, createSqliteModuleStore, type ModuleStore } from "./modules.js";
 
 export interface OutboxRow {
   endpointId: string;
@@ -108,6 +109,7 @@ export interface Stores {
   challenges: ChallengeStore;
   idempotency: IdempotencyRepository;
   recurring: RecurringStore;
+  docs: ModuleStore;
   close?: () => void;
 }
 
@@ -283,6 +285,7 @@ export function createMemoryStores(): Stores {
       },
     },
     recurring: createMemoryRecurringStore(),
+    docs: createMemoryModuleStore(),
   };
 }
 
@@ -596,6 +599,7 @@ export function createSqliteStores(path: string): Stores {
     challenges,
     idempotency,
     recurring: createSqliteRecurringStore(db),
+    docs: createSqliteModuleStore(db),
     close: () => db.close(),
   };
 }

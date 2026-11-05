@@ -26,6 +26,7 @@ import { createHttpIndexer } from "./indexer-client.js";
 import { createSqliteStores } from "./stores.js";
 import { WebhookWorker } from "./webhook-worker.js";
 import { RecurringScheduler } from "./recurring.js";
+import { expandEvents } from "./modules.js";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -250,6 +251,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     },
     store: stores.api,
     recurring: stores.recurring,
+    docs: stores.docs,
     auth: new AuthStore(Date.now, 7 * 24 * 60 * 60 * 1000, stores),
     idempotency: new IdempotencyStore(stores.idempotency),
     contract: createContractPort(rootAccount),
@@ -270,6 +272,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     events: indexer,
     store: stores.api,
     logger: (message, data) => logger.info(message, data ?? {}),
+    expand: (event) => expandEvents(event, app.modules, app.moduleContext),
   });
   const timer = setInterval(() => {
     void worker.runOnce().catch((error: unknown) => {

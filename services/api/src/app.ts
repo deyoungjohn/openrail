@@ -22,6 +22,14 @@ import { IdempotencyConflict, IdempotencyStore } from "./idempotency.js";
 import { renderInvoicePdfBase64 } from "./pdf.js";
 import { handleRecurring, type RecurringStore } from "./recurring.js";
 import { createMemoryRecurringStore } from "./recurring-store.js";
+import { enabledModules } from "./enabled.js";
+import {
+  apiModulesFrom,
+  createMemoryModuleStore,
+  type ApiModule,
+  type ApiModuleContext,
+  type ModuleStore,
+} from "./modules.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
 import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
@@ -180,6 +188,10 @@ export interface ApiDeps {
   config: ApiConfig;
   store?: ApiStore;
   recurring?: RecurringStore;
+  /** Module document store (namespaced). */
+  docs?: ModuleStore;
+  /** Enabled API modules; defaults to the generated `enabled.ts`. */
+  modules?: ApiModule[];
   auth?: AuthStore;
   idempotency?: IdempotencyStore;
   contract: ContractPort;
@@ -254,6 +266,8 @@ function allowedOrigins(): string[] {
 export class ApiApp {
   readonly store: ApiStore;
   readonly recurring: RecurringStore;
+  readonly docs: ModuleStore;
+  readonly modules: readonly ApiModule[];
   private readonly auth: AuthStore;
   private readonly idempotency: IdempotencyStore;
   private readonly clock: () => Date;
@@ -264,6 +278,8 @@ export class ApiApp {
   constructor(private readonly deps: ApiDeps) {
     this.store = deps.store ?? createMemoryStores().api;
     this.recurring = deps.recurring ?? createMemoryRecurringStore();
+    this.docs = deps.docs ?? createMemoryModuleStore();
+    this.modules = deps.modules ?? apiModulesFrom(enabledModules);
     this.auth = deps.auth ?? new AuthStore();
     this.idempotency = deps.idempotency ?? new IdempotencyStore();
     this.clock = deps.clock ?? (() => new Date());
@@ -1115,7 +1131,26 @@ export class ApiApp {
       return { status: 200, body: payment };
     }
 
+    for (const module of this.modules) {
+      const response = await module.route?.(request, this.moduleContext);
+      if (response !== undefined) return response;
+    }
+
     throw new ApiError(404, "not_found");
+  }
+
+  /** What a module may use: core helpers, never core internals. */
+  get moduleContext(): ApiModuleContext {
+    return {
+      config: this.deps.config,
+      store: this.store,
+      docs: this.docs,
+      issuer: this.deps.issuer,
+      clock: this.clock,
+      requireAuth: (request, allowPublishable) => this.requireAuth(request, allowPublishable),
+      requireScope: (context, scope) => this.requireScope(context, scope),
+      withIdempotency: (request, run) => this.withIdempotency(request, run),
+    };
   }
 
   private async createInvoice(request: ApiRequest): Promise<ApiResponse> {

@@ -15,6 +15,8 @@ export interface WebhookWorkerDeps {
   limit?: number;
   retryWindowMs?: number;
   logger?: (message: string, data?: Record<string, unknown>) => void;
+  /** Extra events derived from each indexed event (module hooks); the original comes first. */
+  expand?: (event: IndexedEvent) => IndexedEvent[];
 }
 
 export class WebhookWorker {
@@ -47,25 +49,34 @@ export class WebhookWorker {
     });
     const endpoints = this.deps.store.listWebhookEndpoints();
     for (const raw of page.data) {
-      const event = this.withRecurringId({ ...raw, indexed: true } as unknown as IndexedEvent);
-      for (const endpoint of endpoints) {
-        if (!endpoint.events.includes(event.type)) continue;
-        const createdMs = endpoint.created_at === undefined ? 0 : Date.parse(endpoint.created_at);
-        if (event.created * 1000 < createdMs) continue;
-        this.deps.store.outboxEnqueue(
-          endpoint.id,
-          event.id,
-          JSON.stringify(event),
-          now,
-          now + this.retryWindowMs,
-        );
-      }
+      const base = this.withRecurringId({ ...raw, indexed: true } as unknown as IndexedEvent);
+      const expanded = this.deps.expand === undefined ? [base] : this.deps.expand(base);
+      for (const event of expanded) this.enqueue(event, endpoints, now);
     }
     if (page.next_cursor !== undefined && page.next_cursor !== null) {
       this.cursor = page.next_cursor;
       this.deps.store.setWorkerState("webhook_cursor", this.cursor);
     }
     await this.deliverDue(this.clock().getTime());
+  }
+
+  private enqueue(
+    event: IndexedEvent,
+    endpoints: ReturnType<ApiStore["listWebhookEndpoints"]>,
+    now: number,
+  ): void {
+    for (const endpoint of endpoints) {
+      if (!endpoint.events.includes(event.type)) continue;
+      const createdMs = endpoint.created_at === undefined ? 0 : Date.parse(endpoint.created_at);
+      if (event.created * 1000 < createdMs) continue;
+      this.deps.store.outboxEnqueue(
+        endpoint.id,
+        event.id,
+        JSON.stringify(event),
+        now,
+        now + this.retryWindowMs,
+      );
+    }
   }
 
   /** Adds `recurring_id` to events of invoices issued by a recurring template (off-chain field). */
