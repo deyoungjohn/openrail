@@ -889,14 +889,13 @@ export class ApiApp {
             "amount, destination_chain and address required",
           );
         }
-        return {
-          status: 201,
-          body: await this.deps.cashout.quote({
-            amount: body.amount,
-            destinationChain: body.destination_chain,
-            address: body.address,
-          }),
-        };
+        const quote = await this.deps.cashout.quote({
+          amount: body.amount,
+          destinationChain: body.destination_chain,
+          address: body.address,
+        });
+        await this.deps.pokeIndexer?.().catch(() => undefined);
+        return { status: 201, body: quote };
       });
     }
 
