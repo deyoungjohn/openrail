@@ -10,10 +10,6 @@
       "enabled": true
     },
     {
-      "id": "advance",
-      "enabled": true
-    },
-    {
       "id": "proof",
       "enabled": true
     },
@@ -26,7 +22,11 @@
       "enabled": true
     },
     {
-      "id": "subscriptions",
+      "id": "settle",
+      "enabled": true
+    },
+    {
+      "id": "woocommerce",
       "enabled": true
     }
   ]
