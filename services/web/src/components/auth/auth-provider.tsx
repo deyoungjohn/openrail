@@ -34,6 +34,9 @@ interface AuthCtx {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
+/** Wallets whose sign-out opens a pop-up: we skip it, the dashboard session is ours to end. */
+const QUIET_SIGN_OUT: readonly string[] = ["meteor-wallet"];
+
 /** A wallet that has not answered after this long is treated as closed. */
 export const WALLET_TIMEOUT_MS = 120_000;
 /** WalletConnect either shows its QR code at once or not at all, so it gets a shorter wait. */
@@ -132,7 +135,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({ status: "signedOut" });
     } finally {
       // Wallet sign-out is best effort: the API session is what guards the dashboard.
-      if (!MOCK_MODE) await near.signOut().catch(() => {});
+      // Signing out of the wallet is best effort, and some wallets (Meteor) open a window for it. The API
+      // session is what guards the dashboard, so those wallets keep their own connection quietly.
+      if (!MOCK_MODE && !(near.walletId && QUIET_SIGN_OUT.includes(near.walletId))) {
+        await near.signOut().catch(() => {});
+      }
     }
   }, [near]);
 
