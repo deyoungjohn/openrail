@@ -189,7 +189,7 @@ export function OnboardingScreen() {
                       s.done
                         ? "border-success bg-surface text-success-text"
                         : open
-                          ? "border-accent text-accent"
+                          ? "border-accent text-accent-text"
                           : "border-border text-muted",
                     )}
                   >

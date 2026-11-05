@@ -87,7 +87,7 @@ export function Tabs({
                 fill ? "min-h-11 justify-center px-2 py-2 text-center" : "h-11 whitespace-nowrap",
                 "transition-colors duration-[var(--dur)] ease-[var(--ease)]",
                 selected
-                  ? "border-accent text-accent"
+                  ? "border-accent text-accent-text"
                   : "border-transparent text-muted hover:text-text",
               )}
             >

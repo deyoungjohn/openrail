@@ -91,7 +91,7 @@ const columns: Column<Row>[] = [
   {
     key: "id",
     header: "Number",
-    render: (r) => <code className="font-mono text-[13px] text-accent">{r.id}</code>,
+    render: (r) => <code className="font-mono text-[13px] text-accent-text">{r.id}</code>,
   },
   { key: "client", header: "Client", render: (r) => r.client },
   { key: "status", header: "Status", render: (r) => <StatusChip status={r.status} /> },

@@ -53,7 +53,7 @@ function Payments({ invoiceId }: { invoiceId: string }) {
                 <p>
                   <Link
                     href={`/r/${encodeURIComponent(p.booking_tx_hash)}`}
-                    className="text-accent text-[14px] hover:underline"
+                    className="text-accent-text text-[14px] hover:underline"
                   >
                     {t.viewReceipt}
                   </Link>

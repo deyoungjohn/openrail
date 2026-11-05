@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers";
 
-// DESIGN.md dark-mode rule (1): no glow, halo, bloom, blur or box-shadow in either theme.
+// DESIGN.md dark-mode rule (1): no glow, halo, bloom or box-shadow in either theme; blur only on .glass overlays.
 for (const scheme of ["light", "dark"] as const) {
   test.describe(scheme, () => {
     test.use({ colorScheme: scheme, viewport: { width: 1280, height: 900 } });
@@ -18,7 +18,10 @@ for (const scheme of ["light", "dark"] as const) {
             cs.boxShadow !== "none" && `box-shadow: ${cs.boxShadow}`,
             cs.textShadow !== "none" && `text-shadow: ${cs.textShadow}`,
             cs.filter !== "none" && `filter: ${cs.filter}`,
-            cs.backdropFilter !== "none" && `backdrop-filter: ${cs.backdropFilter}`,
+            // Blur is allowed on overlays only: dialogs, sheets, drawers and toasts carry the .glass class.
+            cs.backdropFilter !== "none" &&
+              !el.classList.contains("glass") &&
+              `backdrop-filter: ${cs.backdropFilter}`,
           ].filter(Boolean);
           if (hit.length)
             bad.push(

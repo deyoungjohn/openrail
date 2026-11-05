@@ -106,7 +106,7 @@ export function ReceiptScreen({ hash }: { hash: string }) {
         </ol>
         <p className="caption mt-4">{t.verifyNote}</p>
         <p className="mt-3 text-[14px]">
-          <a href={verify_url} className="text-accent hover:underline">
+          <a href={verify_url} className="text-accent-text hover:underline">
             {t.verifyLink}
           </a>
         </p>

@@ -159,7 +159,7 @@ export function DashboardScreen() {
               >
                 <InvoiceTable caption={d.latest} rows={rows.slice(0, 5)} nowSec={nowSec} />
                 <p className="mt-3 text-right text-[14px]">
-                  <Link href="/app/invoices" className="text-accent hover:underline">
+                  <Link href="/app/invoices" className="text-accent-text hover:underline">
                     {d.viewAll}
                   </Link>
                 </p>
@@ -226,7 +226,7 @@ export function DashboardScreen() {
                     <li key={c.name} className="flex items-center gap-3 py-2.5">
                       <span
                         aria-hidden
-                        className="grid size-9 place-items-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent"
+                        className="grid size-9 place-items-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent-text"
                       >
                         {c.name.slice(0, 2).toUpperCase()}
                       </span>

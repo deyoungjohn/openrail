@@ -57,7 +57,7 @@ export function ChainBadge({
         cls,
         "transition-colors duration-[var(--dur-fast)]",
         selected
-          ? "border-accent bg-accent-soft text-accent"
+          ? "border-accent bg-accent-soft text-accent-text"
           : "border-border bg-surface hover:bg-surface-2",
       )}
     >

@@ -32,7 +32,7 @@ export function InvoiceTable({
       render: (r) => (
         <Link
           href={`/app/invoices/${encodeURIComponent(r.id)}`}
-          className="font-mono text-[13px] text-accent hover:underline"
+          className="font-mono text-[13px] text-accent-text hover:underline"
         >
           {r.invoice_number}
         </Link>

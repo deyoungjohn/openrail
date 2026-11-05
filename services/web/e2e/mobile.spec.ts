@@ -169,7 +169,7 @@ for (const [phone, device] of Object.entries(PHONES)) {
       await page.goto("/_dev/components");
       await page.getByRole("button", { name: "Open wallet picker" }).click();
       const dialog = page.getByRole("dialog");
-      const panel = dialog.locator(".surface-card").first();
+      const panel = dialog.locator(".glass").first();
       await expect(panel).toBeVisible();
       await page.waitForTimeout(500);
       const vp = page.viewportSize()!;

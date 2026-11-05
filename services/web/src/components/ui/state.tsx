@@ -21,7 +21,7 @@ export function EmptyState({
 }) {
   return (
     <div data-testid={testId} className="flex flex-col items-center gap-3 px-4 py-12 text-center">
-      <span className="grid size-12 place-items-center rounded-full bg-accent-soft text-accent">
+      <span className="grid size-12 place-items-center rounded-full bg-accent-soft text-accent-text">
         <Inbox size={20} strokeWidth={1.5} aria-hidden />
       </span>
       <h3 className="text-[18px] leading-[26px] font-semibold">{title}</h3>

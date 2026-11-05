@@ -46,7 +46,7 @@ export function Timeline({
             className={cn(
               "z-10 grid size-7 shrink-0 place-items-center rounded-full border",
               s.status === "done" && "border-success bg-surface text-success",
-              s.status === "current" && "border-accent bg-accent-soft text-accent",
+              s.status === "current" && "border-accent bg-accent-soft text-accent-text",
               s.status === "todo" && "border-border bg-surface text-muted",
               s.status === "failed" && "border-danger bg-surface text-danger",
             )}

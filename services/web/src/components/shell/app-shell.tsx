@@ -68,7 +68,7 @@ function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: (
                   "flex h-11 items-center gap-3 rounded-[10px] px-3 text-[14px] leading-5 font-medium",
                   "transition-colors duration-[var(--dur-fast)] ease-[var(--ease)]",
                   active
-                    ? "relative bg-accent-soft text-accent before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-accent"
+                    ? "relative bg-accent-soft text-accent-text before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-accent"
                     : "text-text hover:bg-surface-2",
                   collapsed && "justify-center px-0",
                 )}

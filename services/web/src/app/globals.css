@@ -16,7 +16,10 @@
   --accent: #3f46fe;
   --accent-hover: #2e35e0;
   --accent-soft: #ecedff;
+  --accent-text: #3f46fe;
   --on-accent: #ffffff;
+  --glass-bg: rgb(255 255 255 / 0.55);
+  --glass-border: rgb(15 23 42 / 0.12);
   --mint: #9ffada;
   --on-mint: #0b0d17;
   --success: #0e9f6e;
@@ -36,17 +39,20 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
+  /* Only the backgrounds change. The blue is the light-theme blue (DESIGN.md, changed 5 Nov). */
   --bg: #000000;
-  --surface: #14182c;
-  --surface-2: #1d2138;
-  --sidebar: #10132a;
-  --border: #323864;
-  --text: #e8eaf6;
-  --text-muted: #94a3b8;
-  --accent: #7c82ff;
-  --accent-hover: #959aff;
-  --accent-soft: #1d2150;
-  --on-accent: #0b0d17;
+  --surface: #121216;
+  --surface-2: #1c1c22;
+  --sidebar: #0d0d11;
+  --border: #2b2b33;
+  --text: #f2f3f7;
+  --text-muted: #9aa3b2;
+  --accent: #3f46fe;
+  --accent-hover: #2e35e0;
+  --accent-soft: #14163f;
+  /* The same blue is 3:1 on black, enough for fills and 3 px UI, not for small text: links use this tint. */
+  --accent-text: #8b90ff;
+  --on-accent: #ffffff;
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
@@ -54,6 +60,8 @@
   --danger-text: #f87171;
   --on-danger: #0b0d17;
   --info: #60a5fa;
+  --glass-bg: rgb(255 255 255 / 0.08);
+  --glass-border: rgb(255 255 255 / 0.16);
 }
 
 @theme inline {
@@ -67,6 +75,7 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
   --color-on-accent: var(--on-accent);
   --color-mint: var(--mint);
   --color-on-mint: var(--on-mint);
@@ -136,6 +145,45 @@ h3 {
     border-color var(--dur) var(--ease);
 }
 
+/*
+ * Anything that opens on top of the page (dialogs, sheets, drawers, toasts) is liquid glass: a see-through
+ * fill, with the page behind it blurred. The only place blur is allowed; there is still no glow, halo or
+ * box-shadow anywhere (DESIGN.md).
+ */
+.glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--surface);
+  }
+}
+
+/* Theme change: the new theme opens over the old one as a rectangle rising from the bottom (400 ms). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+[data-vt="rect"]::view-transition-new(root) {
+  animation: vt-rect 400ms ease-out both;
+}
+[data-vt] * {
+  transition: none !important;
+}
+@keyframes vt-rect {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
 @keyframes skeleton {
   0% {
     opacity: 1;
@@ -178,7 +226,7 @@ dialog.overlay {
   color: inherit;
 }
 dialog.overlay::backdrop {
-  background: rgb(11 13 23 / 0.5);
+  background: rgb(0 0 0 / 0.28);
 }
 
 @media (prefers-reduced-motion: reduce) {

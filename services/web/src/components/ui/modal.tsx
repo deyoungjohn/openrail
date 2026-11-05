@@ -94,7 +94,7 @@ export function Modal({
       >
         <div
           className={cn(
-            "surface-card flex flex-col overflow-hidden",
+            "glass flex flex-col overflow-hidden",
             variant === "drawer" && "max-h-full",
             "transition-[opacity,transform] duration-[var(--dur-slow)]",
             variant === "drawer"
