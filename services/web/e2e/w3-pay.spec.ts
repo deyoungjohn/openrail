@@ -263,6 +263,8 @@ test("a connected wallet fills in the refund address", async ({ page }) => {
   }, REFUND);
   await mockApi(page);
   await page.goto("/pay/c-1");
+  // The wallet tab fills the address in; the first tab (pay from any wallet) never does.
+  await page.getByRole("tab", { name: "Use a connected wallet" }).click();
   await page.getByRole("button", { name: "USDC on Base" }).click();
   await expect(page.getByLabel("Refund address")).toHaveValue(REFUND);
 });

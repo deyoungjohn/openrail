@@ -6,6 +6,8 @@ import {
   formatToken,
   payStage,
   payTimeline,
+  legAmountProblem,
+  remainingCents,
   refundAddressProblem,
   spreadLabel,
   type RouteLike,
@@ -140,5 +142,61 @@ describe("refundAddressProblem (the API now requires refund_to, validated per ch
   });
   it("never accepts a value when the chain has no rule", () => {
     expect(refundAddressProblem(null, evm)).not.toBeNull();
+  });
+});
+
+describe("remainingCents: what is still to pay after the parts so far (H9)", () => {
+  const leg = (
+    cents: bigint,
+    stage: "waiting" | "processing" | "paid" | "expired" | "refunded" | "failed",
+  ) => ({
+    cents,
+    stage,
+  });
+  it("starts from the outstanding amount, rounded up to the cent", () => {
+    expect(remainingCents("12500000", [])).toBe(1250n);
+    expect(remainingCents("12500001", [])).toBe(1251n);
+  });
+  it("takes off every part that is waiting, arriving or paid", () => {
+    expect(
+      remainingCents("12500000", [
+        leg(500n, "waiting"),
+        leg(250n, "processing"),
+        leg(100n, "paid"),
+      ]),
+    ).toBe(400n);
+  });
+  it("gives a part back when its price expired, it was refunded or it failed", () => {
+    expect(
+      remainingCents("12500000", [
+        leg(500n, "expired"),
+        leg(300n, "refunded"),
+        leg(200n, "failed"),
+        leg(250n, "paid"),
+      ]),
+    ).toBe(1000n);
+  });
+  it("never goes below zero", () => {
+    expect(remainingCents("1000000", [leg(500n, "paid")])).toBe(0n);
+  });
+});
+
+describe("legAmountProblem: the amount of one part", () => {
+  it("accepts an amount up to what is left, with up to two decimals", () => {
+    expect(legAmountProblem("5", 1250n)).toBeNull();
+    expect(legAmountProblem("5.5", 1250n)).toBeNull();
+    expect(legAmountProblem("12.50", 1250n)).toBeNull();
+    expect(legAmountProblem("0.01", 1250n)).toBeNull();
+  });
+  it("refuses nothing, zero, words, and three decimals", () => {
+    for (const v of ["", "0", "0.00", "abc", "1.234", "-1", "1e2"])
+      expect(legAmountProblem(v, 1250n)).not.toBeNull();
+  });
+  it("refuses more than what is left and says how much is left", () => {
+    const msg = legAmountProblem("12.51", 1250n);
+    expect(msg).toContain("$12.50");
+  });
+  it("refuses any amount when nothing is left", () => {
+    expect(legAmountProblem("1", 0n)).not.toBeNull();
   });
 });

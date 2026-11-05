@@ -157,7 +157,13 @@ test.describe("tab order follows the visual order", () => {
     await mockApi(page, base());
     await page.goto("/pay/c-1");
     await expect(page.getByRole("button", { name: /USDC on Base/ })).toBeVisible();
-    expectOrder(await mainTabOrder(page), ["USDC on Base", "USDC on BNB Chain"]);
+    // The selected tab is the one stop of the tab list; the other tab is reached with the arrow keys.
+    expectOrder(await mainTabOrder(page), [
+      "Pay from any wallet or exchange",
+      "USDC on Base",
+      "USDC on BNB Chain",
+      "Split this payment",
+    ]);
 
     await page.getByRole("button", { name: /USDC on Base/ }).click();
     await page.getByLabel("Refund address").fill(SIGNER);

@@ -1,5 +1,7 @@
 import type { ChainId } from "../components/ui/chain-badge";
 import { copy } from "../copy";
+import { formatUsd } from "./format";
+import { unitsToCentsUp } from "./invoice-model";
 
 // Pure view logic for the pay page (blueprint 2.8). No React, no network.
 
@@ -118,4 +120,44 @@ export function refundAddressProblem(chain: ChainId | null, value: string): stri
   if (chain === "near")
     return NEAR_ACCOUNT.test(v) || /^[0-9a-f]{64}$/.test(v) ? null : copy.pay.refundBad.near;
   return copy.pay.refundBad.unknown;
+}
+
+// ---- pay mix (H9): one invoice paid in several parts -------------------------------------------
+
+/** A part's price no longer holds money back once it expired, was refunded or failed. */
+const holdsMoney = (stage: PayStage): boolean =>
+  stage !== "expired" && stage !== "refunded" && stage !== "failed";
+
+/** Cents still to pay: the outstanding amount (USDC base units, rounded up to a cent) minus every part that holds money. */
+export function remainingCents(
+  outstandingUnits: string,
+  legs: readonly { cents: bigint; stage: PayStage }[],
+): bigint {
+  const left = legs.reduce(
+    (n, l) => (holdsMoney(l.stage) ? n - l.cents : n),
+    unitsToCentsUp(BigInt(outstandingUnits)),
+  );
+  return left < 0n ? 0n : left;
+}
+
+/** The amount of a part in cents: whole dollars or up to two decimals, greater than zero. */
+export function legCents(text: string): bigint | null {
+  const v = text.trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(v)) return null;
+  const [w = "0", f = ""] = v.split(".");
+  const cents = BigInt(w) * 100n + BigInt(f.padEnd(2, "0"));
+  return cents === 0n ? null : cents;
+}
+
+/** An API amount (`5.00`) from cents. */
+export const centsToApi = (cents: bigint): string =>
+  `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
+
+/** A plain-words problem with the amount of a part, or null. */
+export function legAmountProblem(text: string, remaining: bigint): string | null {
+  if (remaining <= 0n) return copy.pay.mixNothingLeft;
+  const cents = legCents(text);
+  if (cents === null) return copy.pay.mixBadAmount;
+  if (cents > remaining) return copy.pay.mixTooMuch(formatUsd(remaining));
+  return null;
 }
