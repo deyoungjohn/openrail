@@ -179,31 +179,33 @@ function ApiKeysPanel() {
   ];
 
   return (
-    <Card
-      title={t.keysTitle}
-      action={
-        <Button
-          size="sm"
-          icon={<Plus size={16} strokeWidth={1.5} aria-hidden />}
-          onClick={() => {
-            setName("");
-            setScopes(DEFAULT_SCOPES);
-            setShown(false);
-            setFailed(false);
-            setCreateOpen(true);
-          }}
-        >
-          {t.createKey}
-        </Button>
-      }
-      state={keys.state === "ready" ? (active.length === 0 ? "empty" : "ready") : keys.state}
-      emptyTitle={t.keysEmptyTitle}
-      emptyBody={t.keysEmptyBody}
-      errorBody={t.sectionError}
-      onRetry={reload}
-    >
-      <p className="caption mb-3">{t.keyCount(active.length)}</p>
-      <Table caption={t.keysTitle} columns={columns} rows={rows} rowKey={(k) => k.id} />
+    <>
+      <Card
+        title={t.keysTitle}
+        action={
+          <Button
+            size="sm"
+            icon={<Plus size={16} strokeWidth={1.5} aria-hidden />}
+            onClick={() => {
+              setName("");
+              setScopes(DEFAULT_SCOPES);
+              setShown(false);
+              setFailed(false);
+              setCreateOpen(true);
+            }}
+          >
+            {t.createKey}
+          </Button>
+        }
+        state={keys.state === "ready" ? (active.length === 0 ? "empty" : "ready") : keys.state}
+        emptyTitle={t.keysEmptyTitle}
+        emptyBody={t.keysEmptyBody}
+        errorBody={t.sectionError}
+        onRetry={reload}
+      >
+        <p className="caption mb-3">{t.keyCount(active.length)}</p>
+        <Table caption={t.keysTitle} columns={columns} rows={rows} rowKey={(k) => k.id} />
+      </Card>
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t.createKey}>
         <form
@@ -319,7 +321,7 @@ function ApiKeysPanel() {
           }
         }}
       />
-    </Card>
+    </>
   );
 }
 
@@ -391,81 +393,83 @@ function HooksPanel() {
   const urlBad = !/^https:\/\/[^\s/]+/.test(url.trim());
 
   return (
-    <Card
-      title={t.hooksTitle}
-      action={
-        <Button
-          size="sm"
-          icon={<Plus size={16} strokeWidth={1.5} aria-hidden />}
-          onClick={() => {
-            setUrl("");
-            setEvents([]);
-            setShown(false);
-            setFailed(false);
-            setAddOpen(true);
-          }}
-        >
-          {t.addEndpoint}
-        </Button>
-      }
-      state={hooks.state === "ready" ? (rows.length === 0 ? "empty" : "ready") : hooks.state}
-      emptyTitle={t.hooksEmptyTitle}
-      emptyBody={t.hooksEmptyBody}
-      errorBody={t.sectionError}
-      onRetry={reload}
-    >
-      <ul className="divide-y divide-border">
-        {rows.map((h) => (
-          <li key={h.id} className="space-y-3 py-4">
-            <div className="space-y-1">
-              <p className="font-mono text-[13px] break-all">{h.url}</p>
-              <p className="caption">{h.events.join(", ")}</p>
-              <p className="caption">{t.created(when(h.created_at))}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={testing === h.id}
-                onClick={async () => {
-                  setTesting(h.id);
-                  try {
-                    const r = await dashClient.webhookEndpoints.test(h.id);
-                    setTestResult({
-                      id: h.id,
-                      text: r.delivered ? t.testOk(r.status_code) : t.testFail(r.status_code),
-                    });
-                  } catch {
-                    setTestResult({ id: h.id, text: t.testError });
-                  } finally {
-                    setTesting(null);
-                  }
-                }}
-              >
-                {testing === h.id ? t.testing : t.testEvent}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => setLog(h)}>
-                {t.deliveryLog}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setDelFailed(false);
-                  setDel(h);
-                }}
-              >
-                {t.deleteEndpoint}
-              </Button>
-            </div>
-            {testResult?.id === h.id ? (
-              <p role="status" className="text-[14px]">
-                {testResult.text}
-              </p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+    <>
+      <Card
+        title={t.hooksTitle}
+        action={
+          <Button
+            size="sm"
+            icon={<Plus size={16} strokeWidth={1.5} aria-hidden />}
+            onClick={() => {
+              setUrl("");
+              setEvents([]);
+              setShown(false);
+              setFailed(false);
+              setAddOpen(true);
+            }}
+          >
+            {t.addEndpoint}
+          </Button>
+        }
+        state={hooks.state === "ready" ? (rows.length === 0 ? "empty" : "ready") : hooks.state}
+        emptyTitle={t.hooksEmptyTitle}
+        emptyBody={t.hooksEmptyBody}
+        errorBody={t.sectionError}
+        onRetry={reload}
+      >
+        <ul className="divide-y divide-border">
+          {rows.map((h) => (
+            <li key={h.id} className="space-y-3 py-4">
+              <div className="space-y-1">
+                <p className="font-mono text-[13px] break-all">{h.url}</p>
+                <p className="caption">{h.events.join(", ")}</p>
+                <p className="caption">{t.created(when(h.created_at))}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={testing === h.id}
+                  onClick={async () => {
+                    setTesting(h.id);
+                    try {
+                      const r = await dashClient.webhookEndpoints.test(h.id);
+                      setTestResult({
+                        id: h.id,
+                        text: r.delivered ? t.testOk(r.status_code) : t.testFail(r.status_code),
+                      });
+                    } catch {
+                      setTestResult({ id: h.id, text: t.testError });
+                    } finally {
+                      setTesting(null);
+                    }
+                  }}
+                >
+                  {testing === h.id ? t.testing : t.testEvent}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setLog(h)}>
+                  {t.deliveryLog}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setDelFailed(false);
+                    setDel(h);
+                  }}
+                >
+                  {t.deleteEndpoint}
+                </Button>
+              </div>
+              {testResult?.id === h.id ? (
+                <p role="status" className="text-[14px]">
+                  {testResult.text}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </Card>
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title={t.addEndpoint}>
         <form
@@ -561,7 +565,7 @@ function HooksPanel() {
           }
         }}
       />
-    </Card>
+    </>
   );
 }
 
