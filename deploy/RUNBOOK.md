@@ -300,7 +300,7 @@ sudo ln -sfn /opt/openrail/releases/<OLD_COMMIT> /opt/openrail/current
 sudo systemctl restart openrail-indexer openrail-issuer openrail-watcher openrail-api openrail-web
 ```
 
-If a setting changed: edit `~/.openrail/openrail.env`, run `./deploy/upload.sh --env`, then on the server Step 12 and the restart line. Settings that start with `NEXT_PUBLIC_` need a new build as well.
+If only a setting or a key changed (nothing in the code), you do not rebuild: edit `~/.openrail/openrail.env`, run `./deploy/upload.sh --env-only`, then on the server Step 12 and the restart line. Settings that start with `NEXT_PUBLIC_` need a new build as well.
 
 ## If something goes wrong
 
