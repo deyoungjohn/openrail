@@ -3,8 +3,8 @@ import { claimFromView, paymentLogFromQuotes, type ClaimViewJson } from "./live-
 
 const VIEW: ClaimViewJson = {
   token_id: "c-1",
-  issuer_id: "merchant.near",
-  owner_id: "merchant.near",
+  issuer_id: "acme.near",
+  owner_id: "acme.near",
   claim_account: "c-1.openrail.near",
   debtor: { Evm: "0x12dcbbc7f96b87220e90b46d9528db156b1da841" },
   terms_hash: "0x" + "ab".repeat(32),
@@ -39,7 +39,7 @@ describe("claimFromView: the contract's own answer becomes the screens' claim", 
     const c = claimFromView(VIEW);
     expect(c.debtor).toMatchObject({ kind: "evm" });
     expect(c.invoiceNumber).toBe("c-1");
-    expect(c.issuerName).toBe("merchant.near");
+    expect(c.issuerName).toBe("acme.near");
   });
   it("maps an EVM acknowledgement, a NEAR debtor and a held lock", () => {
     const c = claimFromView({
