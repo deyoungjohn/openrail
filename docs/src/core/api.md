@@ -164,6 +164,44 @@ Invoice objects carry `outstanding` and `paid_total` (base-unit strings);
 receipts carry `booking_tx_hash`; the cash-out quote carries `source_asset`,
 `deposit_address`, `amount` (the quoted `amountIn`), and `min_amount_in`.
 
+## Recurring invoices
+
+| Method        | Path                          | Purpose                                                  |
+| ------------- | ----------------------------- | -------------------------------------------------------- |
+| `POST`/`GET`  | `/v1/recurring_invoices`      | Create a template, or list them.                         |
+| `GET`/`PATCH` | `/v1/recurring_invoices/{id}` | Template plus its runs; pause, resume, cancel or change. |
+
+A template repeats `weekly`, `monthly` or `quarterly` from `start_date`, until
+`end_date` (inclusive) or `count` dates, or until cancelled. On each date at
+06:00 UTC the API issues an ordinary invoice through `issue_for`, numbered
+`<prefix>-001`, `<prefix>-002`, …, due `due_days` later, and emails the pay link
+when `send_email` is on. Nothing is pulled from the client; they pay each
+invoice like any other.
+
+- Monthly and quarterly dates keep the start day and clamp to the month end:
+  start 31 Jan → 28 Feb → 31 Mar → 30 Apr.
+- Each date is issued at most once (one run row per template and date).
+- A failed issue is retried on the next two passes, then marked `failed` and
+  the template's `attention` field says so.
+- A run whose outcome is unknown after a restart is marked `unknown`, never
+  re-issued; check the invoice list before issuing it by hand.
+- Dates missed by more than 3 days (for example while paused) are recorded as
+  `skipped`.
+- Invoices from a template carry `recurring_id`, and so do their webhook events.
+
+Try it:
+
+```sh
+curl -s -X POST "$API/v1/recurring_invoices" \
+  -H "Authorization: Bearer $OPENRAIL_SECRET_KEY" -H 'content-type: application/json' \
+  -d '{"repeat":"monthly","start_date":"2026-12-01","count":12,
+       "invoice":{"invoice_number_prefix":"RET","issuer_legal_name":"Acme Ltd",
+       "debtor_legal_name":"Client Co","debtor_key":"client.near","amount_usd":"1500.00"}}'
+```
+
+→ `201` with `status: "active"` and `next_run_date: "2026-12-01"`. On that date,
+after 06:00 UTC, `GET /v1/invoices` lists `RET-001` with `recurring_id` set.
+
 ## Hosted-page routes
 
 | Method | Path                        | Purpose                                                                                                                                              |

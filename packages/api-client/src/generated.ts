@@ -151,6 +151,7 @@ export interface Invoice {
   terms: Terms;
   outstanding: U128;
   paid_total: U128;
+  recurring_id?: string;
 }
 
 export interface InvoiceList {
@@ -596,6 +597,77 @@ export type ApiKeyScope =
 export interface Health {
   ok: true;
   mock: boolean;
+}
+
+export interface RecurringTemplateInvoice {
+  invoice_number_prefix: string;
+  issuer_legal_name: string;
+  debtor_legal_name: string;
+  debtor_key: string;
+  amount_usd: string;
+  line_items?: Record<string, unknown>[];
+}
+
+export interface CreateRecurringInvoiceRequest {
+  repeat: "weekly" | "monthly" | "quarterly";
+  start_date: string;
+  end_date?: string;
+  count?: number;
+  due_days?: number;
+  send_email?: boolean;
+  email_to?: string;
+  invoice: RecurringTemplateInvoice;
+}
+
+export interface UpdateRecurringInvoiceRequest {
+  status?: "active" | "paused" | "cancelled";
+  end_date?: string | null;
+  count?: number | null;
+  due_days?: number;
+  send_email?: boolean;
+  email_to?: string | null;
+  invoice?: {
+    amount_usd?: string;
+    line_items?: Record<string, unknown>[];
+  };
+}
+
+export interface RecurringInvoice {
+  id: string;
+  account_id: string;
+  status: "active" | "paused" | "completed" | "cancelled";
+  repeat: "weekly" | "monthly" | "quarterly";
+  start_date: string;
+  end_date: string | null;
+  count: number | null;
+  due_days: number;
+  send_email: boolean;
+  email_to: string | null;
+  invoice: RecurringTemplateInvoice;
+  next_index: number;
+  next_run_date: string | null;
+  issued_count: number;
+  attention: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecurringRun {
+  template_id: string;
+  run_date: string;
+  status: "pending" | "issued" | "retrying" | "failed" | "skipped" | "unknown";
+  attempts: number;
+  invoice_id: string | null;
+  error: string | null;
+  updated_at: string;
+}
+
+export type RecurringInvoiceDetail = RecurringInvoice & {
+  runs: RecurringRun[];
+};
+
+export interface RecurringInvoiceList {
+  data: RecurringInvoice[];
 }
 
 export interface operations {
@@ -1056,6 +1128,57 @@ export interface operations {
   getHealth: {
     responses: {
       "200": Health;
+    };
+  };
+  createRecurringInvoice: {
+    parameters: {
+      header: {
+        "Idempotency-Key"?: string;
+      };
+    };
+    requestBody: CreateRecurringInvoiceRequest;
+    responses: {
+      "201": RecurringInvoice;
+      "400": Error;
+      "401": Error;
+      "403": Error;
+      "409": Error;
+    };
+  };
+  listRecurringInvoices: {
+    responses: {
+      "200": RecurringInvoiceList;
+      "401": Error;
+      "403": Error;
+    };
+  };
+  getRecurringInvoice: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": RecurringInvoiceDetail;
+      "401": Error;
+      "403": Error;
+      "404": Error;
+    };
+  };
+  updateRecurringInvoice: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    requestBody: UpdateRecurringInvoiceRequest;
+    responses: {
+      "200": RecurringInvoice;
+      "400": Error;
+      "401": Error;
+      "403": Error;
+      "404": Error;
+      "409": Error;
     };
   };
 }
