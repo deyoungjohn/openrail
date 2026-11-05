@@ -21,7 +21,7 @@ import type { PickerPurpose } from "./groups";
 import { nearWalletModules } from "./near-wallets";
 import { abortable } from "./abortable";
 import { signInParams } from "./sign-in-params";
-import { classifyProbe } from "./probe";
+import { classifyProbe, staticSignsMessage, withTimeout } from "./probe";
 
 /** One wallet in the picker. `signsMessage`: true or false from the selector, null while unknown. */
 export interface NearWalletInfo {
@@ -76,6 +76,9 @@ export function useNear() {
 const network = process.env.NEXT_PUBLIC_NEAR_NETWORK === "testnet" ? "testnet" : "mainnet";
 const ROOT_CONTRACT = process.env.NEXT_PUBLIC_ROOT_CONTRACT ?? "openrail.near";
 
+/** How long the live capability check may take for one wallet before its source decides. */
+const PROBE_TIMEOUT_MS = 4000;
+
 export function NearProvider({ children }: { children: ReactNode }) {
   const selector = useRef<WalletSelector | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -125,17 +128,30 @@ export function NearProvider({ children }: { children: ReactNode }) {
     const s = selector.current;
     if (!s || probed.current) return;
     probed.current = true;
-    for (const m of s.store.getState().modules) {
-      let verdict: boolean | null = null;
-      try {
-        const w = await s.wallet(m.id);
-        // Empty parameters: an unsupported wallet is refused first, a supporting one fails validation.
-        await w.signMessage({ message: "", recipient: "", nonce: Buffer.alloc(0) });
-      } catch (e) {
-        verdict = classifyProbe(e);
-      }
-      setWallets((prev) => prev.map((p) => (p.id === m.id ? { ...p, signsMessage: verdict } : p)));
-    }
+    // All wallets at once, each with its own limit: a module that hangs gets the answer its source gives.
+    await Promise.all(
+      s.store.getState().modules.map(async (m) => {
+        let verdict: boolean | null = null;
+        try {
+          await withTimeout(
+            (async () => {
+              const w = await s.wallet(m.id);
+              // Empty parameters: an unsupported wallet is refused first, a supporting one fails validation.
+              await w.signMessage({ message: "", recipient: "", nonce: Buffer.alloc(0) });
+            })(),
+            PROBE_TIMEOUT_MS,
+          );
+        } catch (e) {
+          verdict =
+            e instanceof Error && e.message === "PROBE_TIMEOUT"
+              ? staticSignsMessage(m.id)
+              : (classifyProbe(e) ?? staticSignsMessage(m.id));
+        }
+        setWallets((prev) =>
+          prev.map((p) => (p.id === m.id ? { ...p, signsMessage: verdict } : p)),
+        );
+      }),
+    );
   }, []);
 
   const pickWallet = useCallback(
@@ -158,7 +174,7 @@ export function NearProvider({ children }: { children: ReactNode }) {
     if (!s) throw new Error("WALLET_NOT_READY");
     const w = await abortable(s.wallet(id), signal);
     // Connect without a contract: sign-in is a signed message, so the wallet must not add an access
-    // key. Adding one is a transaction, and wallets such as OKX refuse it below 0.1 NEAR. Every
+    // key. Adding one is a transaction, and some wallets refuse it below 0.1 NEAR. Every
     // transaction we ask for later (sell, acknowledge, deposit) is approved in the wallet itself.
     const accounts = await abortable(w.signIn(signInParams(id, ROOT_CONTRACT) as never), signal);
     return accounts[0]?.accountId ?? s.store.getState().accounts[0]?.accountId;

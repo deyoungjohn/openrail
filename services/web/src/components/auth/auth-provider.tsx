@@ -13,6 +13,7 @@ import {
 import { copy } from "@/copy";
 import { auth, MOCK_MODE, MOCK_ACCOUNT } from "@/lib/auth";
 import { useNear } from "@/wallet/near";
+import { walletHint } from "@/wallet/hints";
 import { walletDetail } from "@/wallet/wallet-detail";
 
 export type AuthState =
@@ -33,6 +34,9 @@ interface AuthCtx {
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
+
+/** Wallets whose sign-out opens a pop-up: we skip it, the dashboard session is ours to end. */
+const QUIET_SIGN_OUT: readonly string[] = ["meteor-wallet"];
 
 /** A wallet that has not answered after this long is treated as closed. */
 export const WALLET_TIMEOUT_MS = 120_000;
@@ -93,10 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const id = await near.pickWallet("signIn");
         if (!id) return;
         startTimer(WALLET_TIMEOUT_BY_ID[id] ?? WALLET_TIMEOUT_MS);
-        // The HOT extension does not offer NEAR sign-in to web pages, so HOT opens its app (QR code).
-        if (id === "hot-wallet" && !(window as { hotExtension?: unknown }).hotExtension) {
-          setHint(copy.auth.hotHint);
-        }
+        setHint(
+          walletHint(id, Boolean((window as { hotExtension?: unknown }).hotExtension), copy.auth),
+        );
         accountId = await near.connect(id, ctl.signal);
         startTimer(WALLET_TIMEOUT_BY_ID[id] ?? WALLET_TIMEOUT_MS);
       }
@@ -132,7 +135,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({ status: "signedOut" });
     } finally {
       // Wallet sign-out is best effort: the API session is what guards the dashboard.
-      if (!MOCK_MODE) await near.signOut().catch(() => {});
+      // Signing out of the wallet is best effort, and some wallets (Meteor) open a window for it. The API
+      // session is what guards the dashboard, so those wallets keep their own connection quietly.
+      if (!MOCK_MODE && !(near.walletId && QUIET_SIGN_OUT.includes(near.walletId))) {
+        await near.signOut().catch(() => {});
+      }
     }
   }, [near]);
 

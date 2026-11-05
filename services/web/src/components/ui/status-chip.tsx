@@ -28,7 +28,7 @@ type Tone = "grey" | "info" | "accent" | "warning" | "success" | "danger";
 const tones: Record<Tone, string> = {
   grey: "text-muted bg-surface-2",
   info: "text-info bg-surface-2",
-  accent: "text-accent bg-accent-soft",
+  accent: "text-accent-text bg-accent-soft",
   warning: "text-warning bg-surface-2",
   success: "text-success-text bg-surface-2",
   danger: "text-danger-text bg-surface-2",

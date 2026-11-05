@@ -214,26 +214,55 @@ async function readJson(url: string, fetchImpl: typeof fetch): Promise<Record<st
   return body !== null && typeof body === "object" ? (body as Record<string, unknown>) : {};
 }
 
-function rpcUrl(): string {
-  return requireEnv("NEAR_RPC_URL").split(",")[0]!.trim();
+function rpcUrls(): string[] {
+  const urls = requireEnv("NEAR_RPC_URL")
+    .split(",")
+    .concat((getEnv("NEAR_RPC_URL_FALLBACK") ?? "").split(","))
+    .map((url) => url.trim())
+    .filter((url) => url !== "");
+  return [...new Set(urls)];
 }
 
+/** The first node that answers. A node that times out, answers with something that is not JSON, or errors is skipped. */
 async function rpc(
   method: string,
   params: unknown,
   fetchImpl: typeof fetch,
 ): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(rpcUrl(), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: "openrail-g1", method, params }),
-  });
-  const text = await response.text();
-  const body = JSON.parse(text) as { result?: unknown; error?: unknown };
-  if (!response.ok || body.error !== undefined || body.result === undefined) {
-    throw new Error(`RPC ${method} failed: ${redactString(JSON.stringify(body.error ?? body))}`);
+  let last = new Error("RPC: no url");
+  for (const url of rpcUrls()) {
+    try {
+      const response = await fetchImpl(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "openrail-g1", method, params }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const text = await response.text();
+      let body: { result?: unknown; error?: unknown };
+      try {
+        body = JSON.parse(text) as { result?: unknown; error?: unknown };
+      } catch {
+        throw new Error(
+          `${new URL(url).host} answered HTTP ${response.status} with ${text.slice(0, 60).replace(/\s+/g, " ")}`,
+        );
+      }
+      if (!response.ok || body.error !== undefined || body.result === undefined) {
+        throw new Error(
+          `RPC ${method} failed: ${redactString(JSON.stringify(body.error ?? body))}`,
+        );
+      }
+      return body.result as Record<string, unknown>;
+    } catch (error) {
+      last = error instanceof Error ? error : new Error(String(error));
+      if (
+        /^RPC \w+ failed/.test(last.message) &&
+        /UNKNOWN_ACCOUNT|UNKNOWN_ACCESS_KEY/.test(last.message)
+      )
+        throw last;
+    }
   }
-  return body.result as Record<string, unknown>;
+  throw last;
 }
 
 function codeHashFromAccount(account: Record<string, unknown>): string | null {
@@ -299,8 +328,10 @@ async function preflight(ctx: Ctx): Promise<void> {
       ctx.fetchImpl,
     );
     ctx.codeHash = codeHashFromAccount(account);
-  } catch {
-    console.log("# root account unavailable (continuing)");
+  } catch (error) {
+    console.log(
+      `# root account unavailable (continuing): ${redactString(error instanceof Error ? error.message : String(error)).slice(0, 160)}`,
+    );
   }
   const expected = getEnv("EXPECTED_CODE_HASH");
   if (expected !== undefined) {
@@ -468,7 +499,7 @@ async function sendNear(
     signed = { signedTxBase64: Buffer.from("{}").toString("base64"), txHash: "FakeTxHash1" };
   }
   ctx.started = true;
-  const response = await ctx.fetchImpl(rpcUrl(), {
+  const response = await ctx.fetchImpl(rpcUrls()[0] as string, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

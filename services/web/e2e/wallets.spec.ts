@@ -16,7 +16,7 @@ test.describe("wallet picker (static cases in the gallery)", () => {
       "Not available on this device",
     ]);
     await expect(dialog.getByRole("button", { name: /Meteor Wallet/ })).toBeEnabled();
-    await expect(dialog.getByRole("button", { name: /OKX Wallet/ })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: /Nightly/ })).toBeDisabled();
     await expect(dialog.getByRole("button", { name: /Coin98 Wallet/ })).toBeDisabled();
     await expect(dialog.getByRole("alert")).toHaveCount(0);
     await dialog.getByRole("button", { name: /HOT Wallet/ }).click();
@@ -88,7 +88,15 @@ test.describe("what the selector says about each wallet", () => {
     expect(ids.join(" ")).not.toMatch(/my-near-wallet|mynear/i);
     // Bitget's module does not start without its extension, so it is absent from the runtime list;
     // its capability is pinned statically in src/wallet/capabilities.test.ts.
-    for (const id of ["meteor-wallet", "hot-wallet", "here-wallet", "okx-wallet", "coin98-wallet"])
+    for (const id of [
+      "meteor-wallet",
+      "hot-wallet",
+      "here-wallet",
+      "nightly",
+      "intear-wallet",
+      "near-mobile-wallet",
+      "coin98-wallet",
+    ])
       expect(ids).toContain(id);
     for (const r of table) expect(["yes", "no", "unknown"]).toContain(r.signMessage);
   });

@@ -39,6 +39,7 @@ async function rpc<T>(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: AbortSignal.timeout(8000), // a slow node must hand over to the fallback, not hang the sign-in
   });
   const body = (await response.json()) as {
     result?: T;
@@ -57,31 +58,53 @@ async function rpc<T>(
  * An implicit account that has never been funded does not exist on chain yet; its own key is accepted
  * then (see implicitKeyMatches). A failing chain read is a 503, never a silent "no".
  */
-export function createAccessKeyPort(rpcUrl: string, fetchImpl?: FetchLike): AccessKeyPort {
+/** The chain answered "no": the key or account is not there, or what we sent is not a valid account or key. */
+function isDefinite(name: string | undefined): boolean {
+  return (
+    name === "UNKNOWN_ACCESS_KEY" ||
+    name === "UNKNOWN_ACCOUNT" ||
+    name === "INVALID_ACCOUNT" ||
+    name === "PARSE_ERROR" ||
+    name === "REQUEST_VALIDATION_ERROR"
+  );
+}
+
+export function createAccessKeyPort(
+  rpcUrl: string | readonly string[],
+  fetchImpl?: FetchLike,
+  log: (line: string) => void = (line) => console.error(line),
+): AccessKeyPort {
+  const urls = typeof rpcUrl === "string" ? [rpcUrl] : [...rpcUrl];
+  /** The chain's answer from the first RPC that gives one; an RPC that fails is skipped (and logged). */
+  const ask = async <T>(params: unknown): Promise<T> => {
+    let last: unknown;
+    for (const url of urls) {
+      try {
+        return await rpc<T>(url, "query", params, fetchImpl);
+      } catch (error) {
+        // A definite answer from the chain (the key or the account is not there) is not a failure.
+        const name = (error as { causeName?: string }).causeName;
+        if (isDefinite(name)) throw error;
+        log(`access key check: ${new URL(url).host} failed: ${(error as Error).message}`);
+        last = error;
+      }
+    }
+    throw last ?? new Error("NEAR_RPC_ERROR: no rpc url");
+  };
   return {
     async has(accountId, publicKey) {
       try {
-        const result = await rpc<{ nonce?: number; error?: string }>(
-          rpcUrl,
-          "query",
-          {
-            request_type: "view_access_key",
-            finality: "final",
-            account_id: accountId,
-            public_key: publicKey,
-          },
-          fetchImpl,
-        );
+        const result = await ask<{ nonce?: number }>({
+          request_type: "view_access_key",
+          finality: "final",
+          account_id: accountId,
+          public_key: publicKey,
+        });
         if (result.nonce !== undefined) return true;
         // "access key ... does not exist": is the account itself missing?
         if (!implicitKeyMatches(accountId, publicKey)) return false;
         try {
-          await rpc(
-            rpcUrl,
-            "query",
-            { request_type: "view_account", finality: "final", account_id: accountId },
-            fetchImpl,
-          );
+          await ask({ request_type: "view_account", finality: "final", account_id: accountId });
           return false; // the account exists and this key is not on it
         } catch (error) {
           if ((error as { causeName?: string }).causeName === "UNKNOWN_ACCOUNT") return true;
@@ -89,7 +112,8 @@ export function createAccessKeyPort(rpcUrl: string, fetchImpl?: FetchLike): Acce
         }
       } catch (error) {
         const name = (error as { causeName?: string }).causeName;
-        if (name === "UNKNOWN_ACCESS_KEY" || name === "UNKNOWN_ACCOUNT") return false;
+        if (isDefinite(name)) return false;
+        log(`access key check unavailable: ${(error as Error).message}`);
         throw new ApiError(503, "chain_unavailable", "could not check the account key on chain");
       }
     },
@@ -230,7 +254,9 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     idempotency: new IdempotencyStore(stores.idempotency),
     contract: createContractPort(rootAccount),
     issuer: createHttpIssuer(issuerUrl),
-    accessKey: createAccessKeyPort(rpcUrl as string),
+    accessKey: createAccessKeyPort(
+      [rpcUrl as string, getEnv("NEAR_RPC_URL_FALLBACK")].filter((u): u is string => !!u),
+    ),
     cashout: createCashoutPort(),
     indexer,
     pokeIndexer: async () => {

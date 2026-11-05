@@ -16,7 +16,23 @@
   --accent: #3f46fe;
   --accent-hover: #2e35e0;
   --accent-soft: #ecedff;
+  --accent-text: #3f46fe;
   --on-accent: #ffffff;
+  /* Pop-up glass (liquid-glass-formula.md): one pair of tokens for every overlay. */
+  --pop-bg: rgb(255 255 255 / 0.35);
+  --pop-blur: blur(6px);
+  --pop-bg-fallback: rgb(255 255 255 / 0.96);
+  --scrim: rgb(15 23 42 / 0.38);
+  --scrim-blur: blur(8px);
+  --edge: rgb(15 23 42 / 0.14);
+  --edge-2: rgb(15 23 42 / 0.24);
+  --pop-top-light: rgb(255 255 255 / 0.7);
+  --pop-drop: rgb(15 23 42 / 0.22);
+  /* hover, selected and pressed highlights: the accent as glass */
+  --hl: rgb(63 70 254 / 0.14);
+  --hl-edge: rgb(63 70 254 / 0.4);
+  --hl-soft: rgb(63 70 254 / 0.08);
+  --row: rgb(255 255 255 / 0.55);
   --mint: #9ffada;
   --on-mint: #0b0d17;
   --success: #0e9f6e;
@@ -36,17 +52,20 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
+  /* Only the backgrounds change. The blue is the light-theme blue (DESIGN.md, changed 5 Nov). */
   --bg: #000000;
-  --surface: #14182c;
-  --surface-2: #1d2138;
-  --sidebar: #10132a;
-  --border: #323864;
-  --text: #e8eaf6;
-  --text-muted: #94a3b8;
-  --accent: #7c82ff;
-  --accent-hover: #959aff;
-  --accent-soft: #1d2150;
-  --on-accent: #0b0d17;
+  --surface: #121216;
+  --surface-2: #1c1c22;
+  --sidebar: #0d0d11;
+  --border: #2b2b33;
+  --text: #f2f3f7;
+  --text-muted: #9aa3b2;
+  --accent: #3f46fe;
+  --accent-hover: #2e35e0;
+  --accent-soft: #14163f;
+  /* The same blue is 3:1 on black, enough for fills and 3 px UI, not for small text: links use this tint. */
+  --accent-text: #8b90ff;
+  --on-accent: #ffffff;
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
@@ -54,6 +73,19 @@
   --danger-text: #f87171;
   --on-danger: #0b0d17;
   --info: #60a5fa;
+  --pop-bg: rgb(255 255 255 / 0.008);
+  --pop-blur: blur(4px);
+  --pop-bg-fallback: rgb(0 0 0 / 0.88);
+  --scrim: rgb(0 0 0 / 0.72);
+  --scrim-blur: blur(8px);
+  --edge: rgb(255 255 255 / 0.14);
+  --edge-2: rgb(255 255 255 / 0.24);
+  --pop-top-light: rgb(255 255 255 / 0.1);
+  --pop-drop: rgb(0 0 0 / 0.7);
+  --hl: rgb(63 70 254 / 0.32);
+  --hl-edge: rgb(100 108 255 / 0.55);
+  --hl-soft: rgb(63 70 254 / 0.16);
+  --row: rgb(255 255 255 / 0.07);
 }
 
 @theme inline {
@@ -67,6 +99,11 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-row: var(--row);
+  --color-edge: var(--edge);
+  --color-hl: var(--hl);
+  --color-hl-edge: var(--hl-edge);
   --color-on-accent: var(--on-accent);
   --color-mint: var(--mint);
   --color-on-mint: var(--on-mint);
@@ -136,6 +173,51 @@ h3 {
     border-color var(--dur) var(--ease);
 }
 
+/*
+ * Pop-up glass (liquid-glass-formula.md): anything that opens on top of the page (dialogs, sheets, drawers,
+ * toasts) has an almost clear fill and a light blur. The page behind it is first dimmed and blurred by the
+ * scrim, which is what makes it look liquid. Never override a pop-up's background in a component: change
+ * --pop-bg and --pop-blur. Write plain backdrop-filter only: lightningcss adds the prefix, and a hand-written
+ * prefixed line next to it keeps only the prefixed one, which Chrome ignores.
+ * Glass is the one place a blur and a soft edge shadow are allowed; there is still no glow, halo or bloom.
+ */
+.glass {
+  position: relative;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--edge);
+  background: var(--pop-bg);
+  backdrop-filter: var(--pop-blur);
+  box-shadow:
+    inset 0 1px 0 var(--pop-top-light),
+    0 24px 60px -28px var(--pop-drop);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--pop-bg-fallback);
+  }
+}
+
+/* Theme change: the new theme opens over the old one as a rectangle rising from the bottom (400 ms). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+[data-vt="rect"]::view-transition-new(root) {
+  animation: vt-rect 400ms ease-out both;
+}
+[data-vt] * {
+  transition: none !important;
+}
+@keyframes vt-rect {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
 @keyframes skeleton {
   0% {
     opacity: 1;
@@ -178,7 +260,8 @@ dialog.overlay {
   color: inherit;
 }
 dialog.overlay::backdrop {
-  background: rgb(11 13 23 / 0.5);
+  background: var(--scrim);
+  backdrop-filter: var(--scrim-blur);
 }
 
 @media (prefers-reduced-motion: reduce) {

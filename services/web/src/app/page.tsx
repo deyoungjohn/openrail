@@ -11,7 +11,7 @@ export default function Landing() {
         <ThemeToggle />
       </header>
       <main className="flex flex-1 flex-col items-start justify-center gap-6 py-16">
-        <span className="rounded-full bg-accent-soft px-3 py-1 text-[13px] font-medium text-accent">
+        <span className="rounded-full bg-accent-soft px-3 py-1 text-[13px] font-medium text-accent-text">
           {copy.landing.badge}
         </span>
         <h1 className="text-[clamp(32px,7vw,64px)] leading-[1.05] font-extrabold tracking-[-0.03em]">

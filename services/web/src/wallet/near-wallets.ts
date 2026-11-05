@@ -3,11 +3,15 @@ import { setupBitgetWallet } from "@near-wallet-selector/bitget-wallet";
 import { setupCoin98Wallet } from "@near-wallet-selector/coin98-wallet";
 import { setupHereWallet } from "@near-wallet-selector/here-wallet";
 import { setupHotWallet } from "@near-wallet-selector/hot-wallet";
+import { setupIntearWallet } from "@near-wallet-selector/intear-wallet";
 import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
-import { setupOKXWallet } from "@near-wallet-selector/okx-wallet";
+import { setupNearMobileWallet } from "@near-wallet-selector/near-mobile-wallet";
+import { setupNightly } from "@near-wallet-selector/nightly";
 import { setupWalletConnect } from "@near-wallet-selector/wallet-connect";
 
-// The wallets we offer: active ones that multichain users hold. Order is only the default; the
+// The wallets we offer: active NEAR wallets people use (Meteor, HOT, Here, Nightly, Intear, NEAR
+// Mobile, Coin98) plus WalletConnect for Trust and others. OKX is out for now: it refuses to connect
+// below 0.1 NEAR and its burner accounts are not on chain. Order is only the default; the
 // picker puts wallets that can sign you in first, using the selector's own capability check
 // (see probe.ts).
 //
@@ -20,7 +24,9 @@ export function nearWalletModules(origin: string): WalletModuleFactory[] {
     setupMeteorWallet(),
     setupHotWallet(),
     setupHereWallet(),
-    setupOKXWallet(),
+    setupNightly(),
+    setupIntearWallet(),
+    setupNearMobileWallet(),
     setupBitgetWallet(),
     setupCoin98Wallet(),
     ...(projectId

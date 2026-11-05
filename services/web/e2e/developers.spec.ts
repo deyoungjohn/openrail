@@ -15,6 +15,38 @@ const base = (): Handlers => ({
 });
 
 test.describe("API keys", () => {
+  test("the first key can be created: Create key opens its dialog while the list is empty", async ({
+    page,
+  }) => {
+    await mockApi(page, {
+      ...base(),
+      "GET /v1/api_keys": { body: { data: [], has_more: false } },
+      "GET /v1/webhook_endpoints": { body: { data: [], has_more: false } },
+    });
+    await page.goto("/app/developers");
+    const keys = page.getByRole("region", { name: "API keys" });
+    await expect(keys).toContainText("No API keys yet");
+    await keys.getByRole("button", { name: "Create key" }).click();
+    await expect(page.getByRole("dialog").getByLabel("Key name")).toBeVisible();
+  });
+
+  test("the first webhook endpoint can be added: Add endpoint opens its dialog while the list is empty", async ({
+    page,
+  }) => {
+    await mockApi(page, {
+      ...base(),
+      "GET /v1/api_keys": { body: { data: [], has_more: false } },
+      "GET /v1/webhook_endpoints": { body: { data: [], has_more: false } },
+    });
+    await page.goto("/app/developers");
+    await page.getByRole("tab", { name: "Webhooks" }).click();
+    await page
+      .getByRole("button", { name: /Add endpoint/ })
+      .first()
+      .click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+  });
+
   test("lists keys by prefix with scopes, last use and status, never a secret", async ({
     page,
   }) => {

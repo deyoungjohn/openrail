@@ -60,3 +60,17 @@ describe("wallets that are left out of dashboard sign-in", () => {
     ]);
   });
 });
+
+describe("Here Wallet is left out of dashboard sign-in until its app accepts the request", () => {
+  const list = [
+    w("meteor-wallet", { signsMessage: true }),
+    w("here-wallet", { signsMessage: true }),
+  ];
+  it("is not offered for sign-in", () => {
+    const g = groupWallets(list, "signIn");
+    expect(g.usable.map((x) => x.id)).toEqual(["meteor-wallet"]);
+  });
+  it("stays available for connecting to approve a transaction", () => {
+    expect(groupWallets(list, "connect").usable.map((x) => x.id)).toContain("here-wallet");
+  });
+});
