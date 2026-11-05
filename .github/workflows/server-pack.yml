@@ -57,6 +57,10 @@ jobs:
             if [ -z "${!v}" ]; then echo "::error::repository variable $v is not set"; missing=1; fi
           done
           [ "$missing" = 0 ] || exit 1
+          # A value pasted with a trailing newline or space would be baked into the site as is.
+          for v in NEXT_PUBLIC_API_MODE NEXT_PUBLIC_API_URL NEXT_PUBLIC_NEAR_NETWORK NEXT_PUBLIC_ROOT_CONTRACT NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID NEXT_PUBLIC_API_PUBLISHABLE_KEY; do
+            export "$v=$(printf %s "${!v}" | tr -d '[:space:]')"
+          done
           ./deploy/build.sh
 
       - name: Checksum

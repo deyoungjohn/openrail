@@ -36,6 +36,18 @@ export type AuthFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 const JSON_HEADERS = { accept: "application/json", "content-type": "application/json" };
 
+/** `VERIFY_401 (wrong_signer)`: the status and the API's own error code, so a failure can be traced. */
+async function failure(step: string, response: Response): Promise<string> {
+  let code = "";
+  try {
+    const body = (await response.json()) as { error?: { code?: unknown } };
+    if (typeof body.error?.code === "string") code = ` (${body.error.code})`;
+  } catch {
+    // no JSON body: the status alone
+  }
+  return `${step}_${response.status}${code}`;
+}
+
 export function liveAuth(baseUrl: string, f: AuthFetch = (url, init) => fetch(url, init)): AuthApi {
   const base = baseUrl.replace(/\/+$/, "");
   const post = (path: string, body: unknown) =>
@@ -61,7 +73,7 @@ export function liveAuth(baseUrl: string, f: AuthFetch = (url, init) => fetch(ur
 
     async signIn(sign, accountId) {
       const cr = await post("/v1/auth/challenge", { account_id: accountId });
-      if (!cr.ok) throw new Error(`CHALLENGE_${cr.status}`);
+      if (!cr.ok) throw new Error(await failure("CHALLENGE", cr));
       const c = (await cr.json()) as AuthChallenge;
       const signed = await sign({ message: c.message, nonce: c.nonce, recipient: c.recipient });
       const vr = await post("/v1/auth/verify", {
@@ -70,7 +82,7 @@ export function liveAuth(baseUrl: string, f: AuthFetch = (url, init) => fetch(ur
         signature: signed.signature,
         nonce: c.nonce,
       });
-      if (!vr.ok) throw new Error(`VERIFY_${vr.status}`);
+      if (!vr.ok) throw new Error(await failure("VERIFY", vr));
       const s = (await vr.json()) as AuthSession;
       // The body repeats the token for CLI use; the cookie is what the browser relies on.
       return { account_id: s.account_id, expires_at: s.expires_at };

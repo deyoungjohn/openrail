@@ -18,7 +18,7 @@ import {
 } from "./app.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { AuthStore } from "./auth.js";
+import { AuthStore, implicitKeyMatches } from "./auth.js";
 import { IdempotencyStore } from "./idempotency.js";
 import { loadSpec } from "./mock.js";
 import type { QuoteProvider } from "./quote.js";
@@ -27,32 +27,70 @@ import { createSqliteStores } from "./stores.js";
 import { WebhookWorker } from "./webhook-worker.js";
 import { RecurringScheduler } from "./recurring.js";
 
-async function rpc<T>(url: string, method: string, params: unknown): Promise<T> {
-  const response = await fetch(url, {
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+async function rpc<T>(
+  url: string,
+  method: string,
+  params: unknown,
+  fetchImpl: FetchLike = (input, init) => fetch(input, init),
+): Promise<T> {
+  const response = await fetchImpl(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
-  const body = (await response.json()) as { result?: T; error?: { message?: string } };
+  const body = (await response.json()) as {
+    result?: T;
+    error?: { message?: string; cause?: { name?: string } };
+  };
   if (!response.ok || body.error !== undefined) {
-    throw new Error(`NEAR_RPC_ERROR: ${body.error?.message ?? response.status}`);
+    throw Object.assign(new Error(`NEAR_RPC_ERROR: ${body.error?.message ?? response.status}`), {
+      causeName: body.error?.cause?.name,
+    });
   }
   return body.result as T;
 }
 
-export function createAccessKeyPort(rpcUrl: string): AccessKeyPort {
+/**
+ * Does `publicKey` belong to `accountId`? A key the chain lists: yes. A key it does not list: no.
+ * An implicit account that has never been funded does not exist on chain yet; its own key is accepted
+ * then (see implicitKeyMatches). A failing chain read is a 503, never a silent "no".
+ */
+export function createAccessKeyPort(rpcUrl: string, fetchImpl?: FetchLike): AccessKeyPort {
   return {
     async has(accountId, publicKey) {
       try {
-        const result = await rpc<{ nonce?: number }>(rpcUrl, "query", {
-          request_type: "view_access_key",
-          finality: "final",
-          account_id: accountId,
-          public_key: publicKey,
-        });
-        return result.nonce !== undefined;
-      } catch {
-        return false;
+        const result = await rpc<{ nonce?: number; error?: string }>(
+          rpcUrl,
+          "query",
+          {
+            request_type: "view_access_key",
+            finality: "final",
+            account_id: accountId,
+            public_key: publicKey,
+          },
+          fetchImpl,
+        );
+        if (result.nonce !== undefined) return true;
+        // "access key ... does not exist": is the account itself missing?
+        if (!implicitKeyMatches(accountId, publicKey)) return false;
+        try {
+          await rpc(
+            rpcUrl,
+            "query",
+            { request_type: "view_account", finality: "final", account_id: accountId },
+            fetchImpl,
+          );
+          return false; // the account exists and this key is not on it
+        } catch (error) {
+          if ((error as { causeName?: string }).causeName === "UNKNOWN_ACCOUNT") return true;
+          throw error;
+        }
+      } catch (error) {
+        const name = (error as { causeName?: string }).causeName;
+        if (name === "UNKNOWN_ACCESS_KEY" || name === "UNKNOWN_ACCOUNT") return false;
+        throw new ApiError(503, "chain_unavailable", "could not check the account key on chain");
       }
     },
   };

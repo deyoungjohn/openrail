@@ -125,3 +125,20 @@ describe("liveAuth.signIn (the API issues the challenge for the connected accoun
     expect(calls[1]?.url.endsWith("/v1/auth/verify")).toBe(true);
   });
 });
+
+describe("liveAuth.signIn failures", () => {
+  it("names the API's error code in the message", async () => {
+    const f: AuthFetch = async (url) =>
+      url.endsWith("/v1/auth/challenge")
+        ? new Response(JSON.stringify({ message: "m", nonce: "bm9uY2U=", recipient: "r" }), {
+            status: 200,
+          })
+        : new Response(JSON.stringify({ error: { code: "wrong_signer" } }), { status: 401 });
+    await expect(
+      liveAuth(BASE, f).signIn(
+        async () => ({ accountId: "a.near", publicKey: "ed25519:K", signature: "ed25519:S" }),
+        "a.near",
+      ),
+    ).rejects.toThrow("VERIFY_401 (wrong_signer)");
+  });
+});

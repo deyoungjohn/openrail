@@ -20,6 +20,7 @@ import { WalletPicker } from "../components/wallet-picker";
 import type { PickerPurpose } from "./groups";
 import { nearWalletModules } from "./near-wallets";
 import { abortable } from "./abortable";
+import { signInParams } from "./sign-in-params";
 import { classifyProbe } from "./probe";
 
 /** One wallet in the picker. `signsMessage`: true or false from the selector, null while unknown. */
@@ -73,6 +74,7 @@ export function useNear() {
 }
 
 const network = process.env.NEXT_PUBLIC_NEAR_NETWORK === "testnet" ? "testnet" : "mainnet";
+const ROOT_CONTRACT = process.env.NEXT_PUBLIC_ROOT_CONTRACT ?? "openrail.near";
 
 export function NearProvider({ children }: { children: ReactNode }) {
   const selector = useRef<WalletSelector | null>(null);
@@ -158,7 +160,7 @@ export function NearProvider({ children }: { children: ReactNode }) {
     // Connect without a contract: sign-in is a signed message, so the wallet must not add an access
     // key. Adding one is a transaction, and wallets such as OKX refuse it below 0.1 NEAR. Every
     // transaction we ask for later (sell, acknowledge, deposit) is approved in the wallet itself.
-    const accounts = await abortable(w.signIn({} as never), signal);
+    const accounts = await abortable(w.signIn(signInParams(id, ROOT_CONTRACT) as never), signal);
     return accounts[0]?.accountId ?? s.store.getState().accounts[0]?.accountId;
   }, []);
 
