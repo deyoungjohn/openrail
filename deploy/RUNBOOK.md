@@ -251,8 +251,8 @@ grep '^NEXT_PUBLIC_API_PUBLISHABLE_KEY=' ~/.openrail/openrail.env
 Copy the part after `=` (it starts with `or_pk_live_`; it is public by design). Then [EC2], replacing `<THE KEY>`:
 
 ```bash
-cd /opt/openrail/current
-echo '<THE KEY>' | sudo -u openrail-api env DATABASE_URL=/var/lib/openrail/api.sqlite NEAR_ROOT_ACCOUNT=openrail.near /usr/local/bin/pnpm --filter @openrail/api register-pk
+cd /opt/openrail/current/services/api
+echo '<THE KEY>' | sudo -u openrail-api env DATABASE_URL=/var/lib/openrail/api.sqlite NEAR_ROOT_ACCOUNT=openrail.near /opt/openrail/current/node_modules/.bin/tsx src/register-publishable-key.ts
 ```
 
 Check: it prints `registered publishable key` (or `this key was already registered`).
