@@ -415,7 +415,7 @@ export const copy = {
     unavailable: "Not available on this device",
     unavailableNote: "Install it or open this page in its app",
     hotNoExtension:
-      "Extension not found on this page. After installing it, reload the page. Or use the HOT app with the QR code.",
+      "The HOT browser extension does not offer NEAR sign-in to this page. Use the HOT app instead: scan the QR code or open it on your phone.",
   },
   dash: {
     title: "Dashboard",

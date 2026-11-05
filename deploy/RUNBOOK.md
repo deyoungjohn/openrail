@@ -280,27 +280,32 @@ Send me the output of Step 14 and Step 16. I check the API from outside and then
 
 ---
 
-## Updating later (until the one-command updater exists)
+## Updating later: one command on the server
 
-Whenever the code changes:
+Whenever new code is pushed:
 
-1. [LAPTOP] `cd ~/openrail && git pull && ./deploy/build.sh && ./deploy/upload.sh`
-2. [EC2] Run Step 11 again (it picks the newest pack by itself), then:
+1. [LAPTOP] `cd ~/openrail && git pull && ./deploy/build.sh && ./deploy/upload.sh` (add `--env` if you changed a setting or key).
+2. [EC2] `sudo openrail-apply`
+
+`openrail-apply` takes the newest uploaded pack and does everything: unpacks it as a new release, applies an uploaded env file (then shreds it), switches `current`, updates the service files and web server config if they changed, restarts the five services in order, and waits for the health check. **If the new release is not healthy it goes back to the previous one by itself** and tells you which service failed, with its last log lines. It keeps the last four releases.
+
+Other uses:
+
+| Command                                    | What it does                                                    |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| `sudo openrail-apply --restart-only`       | no new code: reinstall service files, restart everything, check |
+| `sudo openrail-apply --rollback`           | go back to the previous release                                 |
+| `sudo openrail-apply --dry-run`            | print what would happen, change nothing                         |
+| `sudo openrail-apply /path/to/pack.tar.gz` | install that exact pack                                         |
+
+**First time only**, install the command from the pack you already uploaded:
 
 ```bash
-sudo systemctl restart openrail-indexer openrail-issuer openrail-watcher openrail-api openrail-web
-sleep 20 && sudo /opt/openrail/current/deploy/healthcheck.sh
+tar -xzf ~/openrail-server-*.tar.gz -O deploy/apply.sh | sudo tee /usr/local/bin/openrail-apply >/dev/null
+sudo chmod +x /usr/local/bin/openrail-apply
 ```
 
-To go back to the previous version, point the link at the old folder and restart:
-
-```bash
-ls /opt/openrail/releases
-sudo ln -sfn /opt/openrail/releases/<OLD_COMMIT> /opt/openrail/current
-sudo systemctl restart openrail-indexer openrail-issuer openrail-watcher openrail-api openrail-web
-```
-
-If only a setting or a key changed (nothing in the code), you do not rebuild: edit `~/.openrail/openrail.env`, run `./deploy/upload.sh --env-only`, then on the server Step 12 and the restart line. Settings that start with `NEXT_PUBLIC_` need a new build as well.
+After that it updates itself on every run. If a setting changed only (no code), `./deploy/upload.sh --env-only` then `sudo openrail-apply --restart-only` applies it. Settings that start with `NEXT_PUBLIC_` need a new build as well.
 
 ## If something goes wrong
 
