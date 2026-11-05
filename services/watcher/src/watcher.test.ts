@@ -51,6 +51,13 @@ class FakeNear implements NearClientLike {
         return this.state.config as T;
       case "claims_by_issuer":
         return this.state.claims.filter((claim) => claim.issuer_id === String(args.account)) as T;
+      case "nft_tokens": {
+        const from = Number(args.from_index ?? 0);
+        const limit = Number(args.limit ?? 100);
+        return this.state.claims
+          .slice(from, from + limit)
+          .map((claim) => ({ token_id: claim.token_id })) as T;
+      }
       case "payment_log":
         return (this.state.quotes[String(args.token_id)] ?? []) as T;
       case "claim":
@@ -160,6 +167,19 @@ function setup(
 function openQuote(): Record<string, Quote[]> {
   return { "c-1": [makeQuote(NOW / 1000)] };
 }
+
+describe("watcher discovery", () => {
+  it("finds a claim issued for a business that is not in config.issuers", async () => {
+    const fixture = setup({
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1", { issuer_id: "business.near" })],
+      quotes: {},
+      balances: { "c-1.openrail.near": ["100", "0", "0", "0"] },
+    });
+    const summary = await fixture.watcher.tick();
+    expect(summary.reconciled).toEqual(["c-1"]);
+  });
+});
 
 describe("watcher decisions", () => {
   it("a rise triggers exactly one reconcile with 250 Tgas", async () => {

@@ -55,12 +55,20 @@ function useNow(intervalMs = 1000): number | null {
   return now;
 }
 
-const timeOf = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-GB", {
+const timeOf = (iso: string) => {
+  const at = new Date(iso);
+  const time = at.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "UTC",
-  }) + " UTC";
+  });
+  // Beyond a day the time of day alone is ambiguous: add the date.
+  const far = at.getTime() - Date.now() > 20 * 3600 * 1000;
+  const day = far
+    ? at.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) + ", "
+    : "";
+  return `${day}${time} UTC`;
+};
 
 function usdcToUsd(units: string): string {
   return `$${formatToken(units, 6)}`;

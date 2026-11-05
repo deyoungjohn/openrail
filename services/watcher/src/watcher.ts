@@ -102,6 +102,7 @@ export class Watcher {
   private readonly indexer: IndexerControl | undefined;
 
   private readonly lastChecked = new Map<string, number>();
+  private readonly finished = new Set<string>();
   private lowAlerted = false;
   private belowThreshold = false;
   private lastBlockHeight: number | null = null;
@@ -172,6 +173,41 @@ export class Watcher {
         if (page.length < PAGE_SIZE) break;
         from = nextIssuerFrom(page, from);
       }
+    }
+
+    // Claims are issued for businesses (issuer_id = the business), so the issuer list alone misses them:
+    // walk every minted token too. Finished claims are remembered and not read again.
+    try {
+      let fromIndex = 0;
+      for (;;) {
+        const tokens = await this.near.view<Array<{ token_id?: unknown }>>({
+          contractId: this.config.rootAccount,
+          methodName: "nft_tokens",
+          args: { from_index: String(fromIndex), limit: PAGE_SIZE },
+          feature: "watcher:tokens",
+        });
+        if (!Array.isArray(tokens) || tokens.length === 0) break;
+        for (const token of tokens) {
+          const id = token?.token_id;
+          if (typeof id !== "string" || claims.has(id) || this.finished.has(id)) continue;
+          const claim = await this.near.view<ClaimView | null>({
+            contractId: this.config.rootAccount,
+            methodName: "claim",
+            args: { token_id: id },
+            feature: "watcher:claim",
+          });
+          if (claim === null || typeof claim?.token_id !== "string") continue;
+          if (TERMINAL_STATUSES.has(claim.status) && !(claim.undistributed?.length ?? 0)) {
+            this.finished.add(id);
+            continue;
+          }
+          claims.set(claim.token_id, claim);
+        }
+        if (tokens.length < PAGE_SIZE) break;
+        fromIndex += tokens.length;
+      }
+    } catch (error) {
+      this.noteError(error);
     }
 
     for (const tokenId of this.config.extraClaims) {
