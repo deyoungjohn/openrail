@@ -161,3 +161,11 @@ export function legAmountProblem(text: string, remaining: bigint): string | null
   if (cents > remaining) return copy.pay.mixTooMuch(formatUsd(remaining));
   return null;
 }
+
+/** Transaction lists are plain hashes, but a provider object like { hash } must never reach the screen. */
+export function hashStrings(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((h) => (typeof h === "string" ? h : (h as { hash?: unknown } | null)?.hash))
+    .filter((h): h is string => typeof h === "string" && h !== "");
+}

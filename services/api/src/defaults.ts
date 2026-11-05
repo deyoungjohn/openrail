@@ -231,16 +231,22 @@ export function createQuoteProvider(): QuoteProvider {
     async status(depositAddress) {
       const result = await client.status(depositAddress);
       const d = result.swapDetails;
+      // 1Click lists transactions as { hash, explorerUrl } objects; the API promises plain hashes.
+      const hashes = (list: unknown): string[] | undefined =>
+        Array.isArray(list)
+          ? list
+              .map((h) => (typeof h === "string" ? h : (h as { hash?: unknown } | null)?.hash))
+              .filter((h): h is string => typeof h === "string" && h !== "")
+          : undefined;
+      const origin = hashes(d.originChainTxHashes);
+      const destination = hashes(d.destinationChainTxHashes);
+      const near = hashes(d.nearTxHashes);
       return {
         status: result.status ?? "PENDING_DEPOSIT",
         ...(d.depositedAmount === undefined ? {} : { depositedAmount: d.depositedAmount }),
-        ...(d.originChainTxHashes === undefined
-          ? {}
-          : { originChainTxHashes: d.originChainTxHashes }),
-        ...(d.destinationChainTxHashes === undefined
-          ? {}
-          : { destinationChainTxHashes: d.destinationChainTxHashes }),
-        ...(d.nearTxHashes === undefined ? {} : { nearTxHashes: d.nearTxHashes }),
+        ...(origin === undefined ? {} : { originChainTxHashes: origin }),
+        ...(destination === undefined ? {} : { destinationChainTxHashes: destination }),
+        ...(near === undefined ? {} : { nearTxHashes: near }),
       };
     },
   };

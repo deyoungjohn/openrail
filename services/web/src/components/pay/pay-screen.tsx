@@ -12,6 +12,7 @@ import {
   formatDueDate,
   formatToken,
   legAmountProblem,
+  hashStrings,
   legCents,
   payStage,
   payTimeline,
@@ -164,8 +165,8 @@ function SessionView({
         setStatus(r.status);
         setShort(r.swap_details.status === "INCOMPLETE_DEPOSIT");
         setHashes({
-          origin: r.swap_details.origin_chain_tx_hashes ?? [],
-          near: r.swap_details.near_tx_hashes ?? [],
+          origin: hashStrings(r.swap_details.origin_chain_tx_hashes),
+          near: hashStrings(r.swap_details.near_tx_hashes),
         });
         setPollFailed(false);
       } catch {

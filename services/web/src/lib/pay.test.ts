@@ -4,6 +4,7 @@ import {
   chainOfRoute,
   formatDueDate,
   formatToken,
+  hashStrings,
   payStage,
   payTimeline,
   legAmountProblem,
@@ -198,5 +199,15 @@ describe("legAmountProblem: the amount of one part", () => {
   });
   it("refuses any amount when nothing is left", () => {
     expect(legAmountProblem("1", 0n)).not.toBeNull();
+  });
+});
+
+describe("hashStrings", () => {
+  it("keeps plain hashes and unwraps provider objects, so nothing but text reaches the screen", () => {
+    expect(hashStrings(["0xa", { hash: "0xb", explorerUrl: "" }, { nope: 1 }, null, ""])).toEqual([
+      "0xa",
+      "0xb",
+    ]);
+    expect(hashStrings(undefined)).toEqual([]);
   });
 });
