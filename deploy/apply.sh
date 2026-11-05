@@ -8,7 +8,7 @@
 #   add --dry-run to print what would happen without changing anything
 #
 # First time only (the script installs itself afterwards and updates itself on every run):
-#   tar -xzf ~/openrail-server-*.tar.gz -O deploy/apply.sh | sudo tee /usr/local/bin/openrail-apply >/dev/null
+#   pack=$(ls -t ~/openrail-server-*.tar.gz | head -1); tar -xzf "$pack" -O deploy/apply.sh | sudo tee /usr/local/bin/openrail-apply >/dev/null
 #   sudo chmod +x /usr/local/bin/openrail-apply
 #
 # If ~/openrail.env exists (uploaded with deploy/upload.sh --env or --env-only), the per-service env files are

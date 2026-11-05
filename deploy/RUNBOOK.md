@@ -301,7 +301,7 @@ Other uses:
 **First time only**, install the command from the pack you already uploaded:
 
 ```bash
-tar -xzf ~/openrail-server-*.tar.gz -O deploy/apply.sh | sudo tee /usr/local/bin/openrail-apply >/dev/null
+pack=$(ls -t ~/openrail-server-*.tar.gz | head -1); tar -xzf "$pack" -O deploy/apply.sh | sudo tee /usr/local/bin/openrail-apply >/dev/null
 sudo chmod +x /usr/local/bin/openrail-apply
 ```
 
