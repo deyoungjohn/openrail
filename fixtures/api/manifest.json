@@ -352,6 +352,14 @@
       "status": 200,
       "schema": "RecurringInvoice",
       "mock": true
+    },
+    {
+      "file": "analytics.json",
+      "method": "GET",
+      "path": "/v1/analytics",
+      "status": 200,
+      "schema": "Analytics",
+      "mock": true
     }
   ]
 }

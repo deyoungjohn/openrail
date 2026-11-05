@@ -79,3 +79,17 @@ pnpm --filter @openrail/indexer test   # 44 tests, no network
 The recorded fixtures are `services/indexer/src/fixtures/txn.deploy-global.json` (a real
 NearBlocks `txns` row, no logs) and `account-receipts.openrail.json`; the block fixture is
 `blocks.json`. `source.test.ts` covers the off-by-default RPC scanner with a fake RPC.
+
+## Analytics
+
+`GET /analytics` returns the H11 numbers computed from indexed events:
+
+- average days from `issue` to the booking that reaches the full `amount_due`
+  (a part payment does not count as paid);
+- payments grouped by origin chain and settlement asset, with base-unit amounts;
+- paid-on-time rate (first payment at or before the claim's due date).
+
+All timestamps are normalized to Unix seconds in `services/indexer/src/time.ts`
+(NearBlocks returns nanoseconds) before they are stored or compared.
+
+The API passes this through at `GET /v1/analytics` (scope `invoices:read`).

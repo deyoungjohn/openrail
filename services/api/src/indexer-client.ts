@@ -46,6 +46,11 @@ export function createHttpIndexer(baseUrl: string, fetchImpl: FetchLike = fetch)
       if (!response.ok) throw new Error(`INDEXER_HTTP_${response.status}`);
       return (await response.json()) as Record<string, unknown>;
     },
+    async analytics() {
+      const response = await get("/analytics");
+      if (!response.ok) throw new Error(`INDEXER_HTTP_${response.status}`);
+      return (await response.json()) as Record<string, unknown>;
+    },
     async listEvents(query) {
       const params = new URLSearchParams({ limit: String(query.limit ?? 50) });
       if (query.after !== undefined && query.after !== "") params.set("after", query.after);

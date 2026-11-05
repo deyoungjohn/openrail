@@ -1,5 +1,5 @@
 import { createLogger } from "@openrail/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LowBalanceAlert } from "./alerts.js";
 import type { WatcherConfig } from "./config.js";
 import type { ChainStatus, ClaimView, ConfigView, NearClientLike, Quote } from "./types.js";
@@ -112,7 +112,10 @@ function makeQuote(deadlineRequested: number): Quote {
   };
 }
 
-function setup(state: FakeState): {
+function setup(
+  state: FakeState,
+  indexer?: { poke(): Promise<void>; registerTx(hash: string): Promise<void> },
+): {
   watcher: Watcher;
   near: FakeNear;
   chain: FakeChain;
@@ -138,6 +141,7 @@ function setup(state: FakeState): {
     },
     now: () => now,
     sleep: async () => {},
+    ...(indexer === undefined ? {} : { indexer }),
   });
   return {
     watcher,
@@ -173,6 +177,24 @@ describe("watcher decisions", () => {
     expect(fixture.near.calls[0]?.methodName).toBe("reconcile");
     expect(fixture.near.calls[0]?.gas).toBe(250_000_000_000_000n);
     expect(fixture.near.calls[0]?.args).toEqual({ token_id: "c-1" });
+  });
+
+  it("pokes the indexer after a reconcile", async () => {
+    const indexer = {
+      poke: vi.fn(async () => undefined),
+      registerTx: vi.fn(async () => undefined),
+    };
+    const fixture = setup(
+      {
+        config: CONFIG_VIEW,
+        claims: [makeClaim("c-1")],
+        quotes: openQuote(),
+        balances: { "c-1.openrail.near": ["100", "0", "0", "0"] },
+      },
+      indexer,
+    );
+    await fixture.watcher.tick();
+    expect(indexer.poke).toHaveBeenCalledTimes(1);
   });
 
   it("no rise sends nothing", async () => {

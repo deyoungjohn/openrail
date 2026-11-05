@@ -3,7 +3,7 @@
     {
       "height": 100,
       "hash": "BlockHash100",
-      "timestamp": 1793613600,
+      "timestamp": 1793613600000000000,
       "receipts": [
         {
           "receiptId": "R-issue",
@@ -21,7 +21,7 @@
     {
       "height": 101,
       "hash": "BlockHash101",
-      "timestamp": 1793613660,
+      "timestamp": 1793613660000000000,
       "receipts": [
         {
           "receiptId": "R-booked",
@@ -38,7 +38,7 @@
     {
       "height": 102,
       "hash": "BlockHash102",
-      "timestamp": 1793613720,
+      "timestamp": 1793613720000000000,
       "receipts": [
         {
           "receiptId": "R-ack",
@@ -64,7 +64,7 @@
     {
       "height": 103,
       "hash": "BlockHash103",
-      "timestamp": 1793613780,
+      "timestamp": 1793613780000000000,
       "receipts": [
         {
           "receiptId": "R-surplus",

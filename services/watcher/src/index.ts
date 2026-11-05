@@ -10,7 +10,14 @@
  *   WATCHER_HEALTH_PORT (8080), WATCHER_EXTRA_CLAIMS (comma-separated token ids),
  *   ALERT_WEBHOOK_URL (optional), NEAR_ENV (mainnet|testnet)
  */
-import { createLogger, getEnv, nearClientFromEnv, requireEnv, writeReport } from "@openrail/shared";
+import {
+  createIndexerControl,
+  createLogger,
+  getEnv,
+  nearClientFromEnv,
+  requireEnv,
+  writeReport,
+} from "@openrail/shared";
 import { webhookAlertSink } from "./alerts.js";
 import { RpcChainStatus, nearRpcUrls } from "./chain.js";
 import { watcherConfigFromEnv } from "./config.js";
@@ -39,6 +46,10 @@ async function main(): Promise<void> {
     config,
     logger,
     alert,
+    indexer:
+      getEnv("INDEXER_URL") === undefined
+        ? undefined
+        : createIndexerControl(getEnv("INDEXER_URL") as string, config.watcherAccount),
     reportLowBalance: (snapshot) => {
       writeReport({
         test_id: "watcher-low-balance",

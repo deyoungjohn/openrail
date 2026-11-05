@@ -195,6 +195,9 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     accessKey: createAccessKeyPort(rpcUrl as string),
     cashout: createCashoutPort(),
     indexer,
+    pokeIndexer: async () => {
+      await fetch(`${indexerUrl.replace(/\/+$/, "")}/poke`, { method: "POST" });
+    },
     quoteProvider: createQuoteProvider(),
     spec: loadSpec(),
   });

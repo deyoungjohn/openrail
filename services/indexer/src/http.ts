@@ -116,6 +116,10 @@ export function createIndexerApp(deps: IndexerAppDeps) {
         return { status: 200, body: { ok: true, ...deps.indexer.health() } };
       }
 
+      if (path === "/analytics") {
+        return { status: 200, body: deps.store.analytics() };
+      }
+
       if (path === "/history" || path === "/events") {
         const tokenId = parsed.searchParams.get("token_id") ?? undefined;
         const after = Number(parsed.searchParams.get("after") ?? "0");

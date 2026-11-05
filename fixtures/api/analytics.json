@@ -1,0 +1,23 @@
+{
+  "average_days_to_paid": 0.0006944444444444445,
+  "paid_on_time_rate": 1,
+  "payments_by_chain": [
+    {
+      "chain": "base",
+      "count": 1,
+      "amount": "12500000"
+    }
+  ],
+  "payments_by_asset": [
+    {
+      "asset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "count": 1,
+      "amount": "12500000"
+    }
+  ],
+  "sample": {
+    "claims": 1,
+    "paid": 1,
+    "on_time": 1
+  }
+}

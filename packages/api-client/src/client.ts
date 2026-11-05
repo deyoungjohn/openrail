@@ -281,6 +281,8 @@ export class OpenrailClient {
 
   health = (): Promise<SuccessBody<"getHealth">> => this.call("GET", "/v1/health");
 
+  analytics = (): Promise<SuccessBody<"getAnalytics">> => this.call("GET", "/v1/analytics");
+
   /** The OpenAPI document itself (not part of the typed operation map). */
   async openapi(): Promise<Record<string, unknown>> {
     return (await this.call<"getOpenApi">("GET", "/v1/openapi.json")) as Record<string, unknown>;

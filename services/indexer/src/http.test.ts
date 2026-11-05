@@ -93,6 +93,13 @@ describe("indexer HTTP", () => {
     expect(invalid.status).toBe(400);
   });
 
+  it("serves analytics from indexed events", async () => {
+    const { app } = await setup();
+    const response = await app.handle("GET", "/analytics");
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ sample: { claims: 1, paid: 1, on_time: 1 } });
+  });
+
   it("serves paginated history for a claim", async () => {
     const { app } = await setup();
     const response = await app.handle("GET", "/history?token_id=c-1&limit=3");

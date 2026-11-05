@@ -8,7 +8,13 @@
  *   RELAY_PRIVATE_KEY                       (function-call key: acknowledge_evm only)
  *   ISSUER_PORT (8787), ISSUER_ACCOUNT_WAIT_MS (15000), ISSUER_ACCOUNT_POLL_MS (250)
  */
-import { createLogger, getEnv, nearClientFromEnv, requireEnv } from "@openrail/shared";
+import {
+  createIndexerControl,
+  createLogger,
+  getEnv,
+  nearClientFromEnv,
+  requireEnv,
+} from "@openrail/shared";
 import { KeyPair } from "near-api-js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
@@ -107,6 +113,10 @@ async function main(): Promise<void> {
     credit: new ContractStorageCreditReader(issuerNear, rootAccount),
     accounts: new RpcAccountChecker(rpcUrls),
     logger,
+    indexer:
+      getEnv("INDEXER_URL") === undefined
+        ? undefined
+        : createIndexerControl(getEnv("INDEXER_URL") as string, issuerAccount),
     config: {
       rootAccount,
       requiredDepositYocto: REQUIRED_ISSUE_DEPOSIT_YOCTO,
