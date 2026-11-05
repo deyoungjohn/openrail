@@ -67,6 +67,72 @@ fn date_formats_utc() {
     assert_eq!(format_date(1_800_000_000), "2027-01-15");
 }
 
+#[test]
+fn svg_live_reflects_status_and_percent() {
+    use openrail::svg::invoice_svg_live;
+    use openrail::types::Status;
+
+    // 1. Issued (0% paid)
+    let svg_issued = invoice_svg_live(
+        "INV-1",
+        1_000_000,
+        0,
+        &Status::Issued,
+        1_800_000_000,
+        1_700_000_000,
+    );
+    assert!(svg_issued.contains("Status: Issued"));
+    assert!(svg_issued.contains("Paid: $0.00 (0%)"));
+    assert!(svg_issued.contains("Due 2027-01-15"));
+    assert!(!svg_issued.contains("Overdue"));
+
+    // 2. PartiallyPaid (50% paid)
+    let svg_partial = invoice_svg_live(
+        "INV-1",
+        1_000_000,
+        500_000,
+        &Status::PartiallyPaid,
+        1_800_000_000,
+        1_700_000_000,
+    );
+    assert!(svg_partial.contains("Status: PartiallyPaid"));
+    assert!(svg_partial.contains("Paid: $0.50 (50%)"));
+
+    // 3. Paid (100% paid)
+    let svg_paid = invoice_svg_live(
+        "INV-1",
+        1_000_000,
+        1_000_000,
+        &Status::Paid,
+        1_800_000_000,
+        1_700_000_000,
+    );
+    assert!(svg_paid.contains("Status: Paid"));
+    assert!(svg_paid.contains("Paid: $1.00 (100%)"));
+    assert!(!svg_paid.contains("Overdue"));
+
+    // 4. Overdue check: when open and now > due_date
+    let svg_overdue = invoice_svg_live(
+        "INV-1",
+        1_000_000,
+        0,
+        &Status::Issued,
+        1_800_000_000,
+        1_850_000_000,
+    );
+    assert!(svg_overdue.contains("Overdue (due 2027-01-15)"));
+}
+
+#[test]
+fn decode_svg_data_uri_roundtrip() {
+    use openrail::svg::decode_svg_data_uri;
+
+    let svg = invoice_svg("INV-99", 5_000_000, 1_800_000_000);
+    let uri = svg_data_uri("INV-99", 5_000_000, 1_800_000_000);
+    let decoded = decode_svg_data_uri(&uri).expect("decode uri");
+    assert_eq!(decoded, svg);
+}
+
 fn decode_base64(value: &str) -> Vec<u8> {
     fn index(byte: u8) -> Option<u8> {
         match byte {

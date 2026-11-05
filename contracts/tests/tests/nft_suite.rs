@@ -1361,3 +1361,287 @@ async fn nft_owner_index_enumeration_and_pagination_across_transfers() -> Result
 
     Ok(())
 }
+
+// ──────────────────────────────────────────────
+// H8 Live Invoice NFT Tests (Blueprint 4.5 H8)
+// ──────────────────────────────────────────────
+
+/// 11. `nft_media_reflects_status` (Blueprint 4.5 H8):
+/// Verifies that `nft_token` dynamically renders media from the claim's current state,
+/// reflecting status, amount paid, percent, and due or overdue state.
+/// Also asserts that `issue` stopped storing the SVG at mint.
+#[tokio::test]
+async fn nft_media_reflects_status() -> Result<()> {
+    let env = Env::new().await?;
+
+    let terms_hash = Hex32::new([42u8; 32]);
+    let amount_due = 1_000_000u128; // $1.00
+    let future_due = 1_900_000_000u64; // year 2030
+
+    // Issue claim c-1 with future due date
+    let res = env
+        .issue_claim_with_details(
+            &env.alice,
+            0,
+            Some(Debtor::Near(env.bob.id().clone())),
+            terms_hash,
+            amount_due,
+            future_due,
+            None,
+        )
+        .await?;
+    assert!(res.is_success());
+
+    // 1. Verify `issue` stopped storing the SVG at mint in contract state
+    let state_map = env.worker.view_state(env.root.id()).await?;
+    let token_id = "c-1";
+    let token_key_borsh = near_sdk::borsh::to_vec(&token_id)?;
+    let mut meta_key = Vec::with_capacity(2 + token_key_borsh.len());
+    meta_key.extend_from_slice(b"t:");
+    meta_key.extend_from_slice(&token_key_borsh);
+    let stored_meta_bytes = state_map
+        .get(meta_key.as_slice())
+        .expect("token metadata must exist in storage");
+    let stored_meta: openrail::types::TokenMetadata =
+        near_sdk::borsh::from_slice(stored_meta_bytes)?;
+    assert!(
+        stored_meta.media.is_none(),
+        "issue must stop storing SVG at mint (media must be None in storage)"
+    );
+
+    // 2. View `nft_token` dynamically renders media with Status: Issued, $0.00 (0%), Due
+    let token: JsonToken = env
+        .root
+        .view("nft_token")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    let meta = token.metadata.expect("metadata must be present");
+    let media = meta.media.expect("live media must be rendered on view");
+    assert!(media.starts_with("data:image/svg+xml;base64,"));
+    assert!(meta.reference.is_none(), "NEP-177 reference must be None");
+    assert!(
+        meta.reference_hash.is_none(),
+        "NEP-177 reference_hash must be None"
+    );
+
+    let svg = openrail::svg::decode_svg_data_uri(&media).expect("valid base64 SVG");
+    assert!(svg.contains("Invoice 1"), "SVG must contain invoice number");
+    assert!(
+        svg.contains("Status: Issued"),
+        "SVG must reflect Status: Issued"
+    );
+    assert!(
+        svg.contains("Paid: $0.00 (0%)"),
+        "SVG must show $0.00 paid and 0%"
+    );
+    assert!(
+        svg.contains("Due 2030-"),
+        "SVG must contain Due date when not overdue"
+    );
+    assert!(
+        !svg.contains("Overdue"),
+        "Future due date must not be Overdue"
+    );
+
+    // 3. Issue claim c-2 with past due date -> rendered SVG reflects Overdue
+    let past_due = 1_000_000_000u64; // year 2001
+    let res2 = env
+        .issue_claim_with_details(
+            &env.alice,
+            0,
+            Some(Debtor::Near(env.bob.id().clone())),
+            terms_hash,
+            2_000_000,
+            past_due,
+            None,
+        )
+        .await?;
+    assert!(res2.is_success());
+
+    let token2: JsonToken = env
+        .root
+        .view("nft_token")
+        .args_json(json!({ "token_id": "c-2" }))
+        .await?
+        .json()?;
+    let meta2 = token2.metadata.expect("metadata must be present");
+    let media2 = meta2.media.expect("live media must be rendered");
+    let svg2 = openrail::svg::decode_svg_data_uri(&media2).expect("valid base64 SVG");
+    assert!(
+        svg2.contains("Overdue"),
+        "Past due date must be marked Overdue"
+    );
+
+    Ok(())
+}
+
+/// 12. `nft_media_changes_after_booking` (Blueprint 4.5 H8):
+/// Verifies that `nft_token`, `nft_tokens`, and `nft_tokens_for_owner` media dynamically
+/// changes after partial and full booking, reflecting new status, paid amount, and percent.
+#[tokio::test]
+async fn nft_media_changes_after_booking() -> Result<()> {
+    let env = Env::new().await?;
+
+    let terms_hash = Hex32::new([42u8; 32]);
+    let amount_due = 10_000_000u128; // $10.00
+    let due_date = 1_900_000_000u64;
+
+    let res = env
+        .issue_claim_with_details(
+            &env.alice,
+            0,
+            Some(Debtor::Near(env.bob.id().clone())),
+            terms_hash,
+            amount_due,
+            due_date,
+            None,
+        )
+        .await?;
+    assert!(res.is_success());
+
+    // 1. Initial media before booking
+    let token_initial: JsonToken = env
+        .root
+        .view("nft_token")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    let media_initial = token_initial.metadata.unwrap().media.unwrap();
+    let svg_initial = openrail::svg::decode_svg_data_uri(&media_initial).unwrap();
+    assert!(svg_initial.contains("Status: Issued"));
+    assert!(svg_initial.contains("Paid: $0.00 (0%)"));
+
+    // 2. Partial booking: 4_000_000 ($4.00, 40%)
+    let _ = env.fund_claim("c-1", 4_000_000, None).await?;
+    let rec1 = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec1.is_success());
+
+    let token_partial: JsonToken = env
+        .root
+        .view("nft_token")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    let media_partial = token_partial.metadata.unwrap().media.unwrap();
+    assert_ne!(
+        media_initial, media_partial,
+        "media must change after partial booking"
+    );
+    let svg_partial = openrail::svg::decode_svg_data_uri(&media_partial).unwrap();
+    assert!(svg_partial.contains("Status: PartiallyPaid"));
+    assert!(svg_partial.contains("Paid: $4.00 (40%)"));
+
+    // 3. Full booking: 6_000_000 ($6.00 more -> $10.00, 100%)
+    let _ = env.fund_claim("c-1", 6_000_000, None).await?;
+    let rec2 = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec2.is_success());
+
+    let token_paid: JsonToken = env
+        .root
+        .view("nft_token")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    let media_paid = token_paid.metadata.unwrap().media.unwrap();
+    assert_ne!(
+        media_partial, media_paid,
+        "media must change after full booking"
+    );
+    let svg_paid = openrail::svg::decode_svg_data_uri(&media_paid).unwrap();
+    assert!(svg_paid.contains("Status: Paid"));
+    assert!(svg_paid.contains("Paid: $10.00 (100%)"));
+
+    // 4. Verify batch views nft_tokens and nft_tokens_for_owner also return live media
+    let tokens: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens")
+        .args_json(json!({ "from_index": "0", "limit": 1 }))
+        .await?
+        .json()?;
+    assert_eq!(
+        tokens[0].metadata.as_ref().unwrap().media,
+        Some(media_paid.clone())
+    );
+
+    let owner_tokens: Vec<JsonToken> = env
+        .root
+        .view("nft_tokens_for_owner")
+        .args_json(json!({ "account_id": env.alice.id(), "from_index": "0", "limit": 1 }))
+        .await?
+        .json()?;
+    assert_eq!(
+        owner_tokens[0].metadata.as_ref().unwrap().media,
+        Some(media_paid)
+    );
+
+    Ok(())
+}
+
+/// 13. `nft_media_xml_escaped` (Blueprint 4.5 H8):
+/// Verifies that all user-supplied text rendered into the live SVG is XML-escaped.
+#[tokio::test]
+async fn nft_media_xml_escaped() -> Result<()> {
+    let env = Env::new().await?;
+
+    let terms_hash = Hex32::new([42u8; 32]);
+    let amount_due = 1_000_000u128;
+    let due_date = 1_900_000_000u64;
+
+    let res = env
+        .issue_claim_with_details(
+            &env.alice,
+            0,
+            Some(Debtor::Near(env.bob.id().clone())),
+            terms_hash,
+            amount_due,
+            due_date,
+            None,
+        )
+        .await?;
+    assert!(res.is_success());
+
+    let token: JsonToken = env
+        .root
+        .view("nft_token")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    let media = token.metadata.unwrap().media.unwrap();
+    let svg = openrail::svg::decode_svg_data_uri(&media).unwrap();
+
+    // Verify valid XML structure and tags
+    assert!(svg.starts_with("<svg "));
+    assert!(svg.ends_with("</svg>"));
+    assert!(!svg.contains("<script>"));
+
+    // Also verify unit level escaping on invoice_svg_live
+    let malicious = "INV-<script>alert(\"x\")&'";
+    let escaped_svg = openrail::svg::invoice_svg_live(
+        malicious,
+        1_000_000,
+        500_000,
+        &openrail::types::Status::PartiallyPaid,
+        due_date,
+        0,
+    );
+    assert!(!escaped_svg.contains("<script>"));
+    assert!(escaped_svg.contains("&lt;script&gt;"));
+    assert!(escaped_svg.contains("&quot;"));
+    assert!(escaped_svg.contains("&amp;"));
+    assert!(escaped_svg.contains("&apos;"));
+
+    Ok(())
+}

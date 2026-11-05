@@ -80,7 +80,9 @@ export function buildEvidence(
     );
   }
 
-  const figures = lines.filter((l) => /^(scale_[a-z_]+ at N=|claims_by_issuer at N=)/.test(l));
+  const figures = lines.filter((l) =>
+    /^(scale_[a-z_]+ at N=|claims_by_issuer at N=|nft_token.* at N=)/.test(l),
+  );
 
   const config = (key: string): string => {
     const m = new RegExp(`^\\s+${key}\\s*:\\s*(\\S+)`, "m").exec(text);

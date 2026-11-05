@@ -1,6 +1,6 @@
 # Contract mutation checks
 
-These are deliberate rule breaks applied to the contract code and runner scripts, each run against the named acceptance test, then restored. C2/C3 are recorded at commit [`cd54fa9`](https://github.com/deyoungjohn/openrail/commit/cd54fa9), based on [`44361a3`](https://github.com/deyoungjohn/openrail/commit/44361a3) (PR [#54](https://github.com/deyoungjohn/openrail/pull/54)); C4 and C5 are recorded on branch `ph1-c5-lifecycle` (PR [#71](https://github.com/deyoungjohn/openrail/pull/71)); G1 runner mutations are recorded on branch `ph1-t2-g1-safety` (PR [#97](https://github.com/deyoungjohn/openrail/pull/97)).
+These are deliberate rule breaks applied to the contract code and runner scripts, each run against the named acceptance test, then restored. C2/C3 are recorded at commit [`cd54fa9`](https://github.com/deyoungjohn/openrail/commit/cd54fa9), based on [`44361a3`](https://github.com/deyoungjohn/openrail/commit/44361a3) (PR [#54](https://github.com/deyoungjohn/openrail/pull/54)); C4 and C5 are recorded on branch `ph1-c5-lifecycle` (PR [#71](https://github.com/deyoungjohn/openrail/pull/71)); G1 runner mutations are recorded on branch `ph1-t2-g1-safety` (PR [#97](https://github.com/deyoungjohn/openrail/pull/97)); H8 mutations are recorded on branch `ph2-h8-live-nft`.
 
 ## Reproduce
 
@@ -952,4 +952,132 @@ AssertionError: expected +0 not to be +0 // Object.is equality
        |                          ^
     389|       expect(r.stdout + r.stderr).toMatch(/--yes-all|NEAR_ENV/);
     390|       expect(world.writes).toEqual([]);
+```
+
+## H8 — Live invoice NFT
+
+| ID    | Break                                         | Test                              | Result          |
+| ----- | --------------------------------------------- | --------------------------------- | --------------- |
+| H8-M1 | issue stores SVG at mint (media in storage)   | `nft_media_reflects_status`       | FAILED (caught) |
+| H8-M2 | dynamic live rendering disabled in token_view | `nft_media_changes_after_booking` | FAILED (caught) |
+| H8-M3 | XML escaping disabled in live SVG rendering   | `nft_media_xml_escaped`           | FAILED (caught) |
+
+### H8-M1: issue stores SVG at mint
+
+Command: `cargo test -p openrail-tests --test nft_suite nft_media_reflects_status`
+
+```diff
+--- a/contracts/openrail/src/issue.rs
++++ b/contracts/openrail/src/issue.rs
+@@ -57,7 +57,7 @@ fn build_token_metadata(
+         None => TokenMetadata {
+             title: Some(default_title),
+             description: Some(default_desc),
+-            media: None,
++            media: Some("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=".to_string()),
+             media_hash: None,
+             copies: Some(1),
+             issued_at: Some(env::block_timestamp_ms()),
+```
+
+Failure (tail):
+
+```text
+test nft_media_reflects_status ... FAILED
+
+failures:
+
+---- nft_media_reflects_status stdout ----
+
+thread 'nft_media_reflects_status' panicked at contracts/tests/tests/nft_suite.rs:1407:5:
+issue must stop storing SVG at mint (media must be None in storage)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    nft_media_reflects_status
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 16.51s
+```
+
+### H8-M2: dynamic live rendering disabled in token_view
+
+Command: `cargo test -p openrail-tests --test nft_suite nft_media_changes_after_booking`
+
+```diff
+--- a/contracts/openrail/src/nft.rs
++++ b/contracts/openrail/src/nft.rs
+@@ -346,7 +346,7 @@ impl Contract {
+             .unwrap_or_default();
+         let approvals = self.approvals_of(token_id);
+         let now_seconds = env::block_timestamp_ms() / 1000;
+-        metadata.media = Some(crate::svg::render_claim_media(&claim, now_seconds));
++        metadata.media = None;
+         metadata.reference = None;
+         metadata.reference_hash = None;
+         Some(JsonToken {
+```
+
+Failure (tail):
+
+```text
+test nft_media_changes_after_booking ... FAILED
+
+failures:
+
+---- nft_media_changes_after_booking stdout ----
+
+thread 'nft_media_changes_after_booking' panicked at contracts/tests/tests/nft_suite.rs:1504:63:
+called `Option::unwrap()` on a `None` value
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    nft_media_changes_after_booking
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 15.98s
+```
+
+### H8-M3: XML escaping disabled in live SVG rendering
+
+Command: `cargo test -p openrail-tests --test nft_suite nft_media_xml_escaped`
+
+```diff
+--- a/contracts/openrail/src/svg.rs
++++ b/contracts/openrail/src/svg.rs
+@@ -44,12 +44,2 @@ pub fn xml_escape(value: &str) -> String {
+-    let mut out = String::with_capacity(value.len());
+-    for character in value.chars() {
+-        match character {
+-            '&' => out.push_str("&amp;"),
+-            '<' => out.push_str("&lt;"),
+-            '>' => out.push_str("&gt;"),
+-            '"' => out.push_str("&quot;"),
+-            '\'' => out.push_str("&apos;"),
+-            _ => out.push(character),
+-        }
+-    }
+-    out
++    value.to_string()
+ }
+```
+
+Failure (tail):
+
+```text
+test nft_media_xml_escaped ... FAILED
+
+failures:
+
+---- nft_media_xml_escaped stdout ----
+
+thread 'nft_media_xml_escaped' panicked at contracts/tests/tests/nft_suite.rs:1634:5:
+assertion failed: !escaped_svg.contains("<script>")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    nft_media_xml_escaped
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 17.30s
 ```
