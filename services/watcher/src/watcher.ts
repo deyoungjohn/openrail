@@ -102,7 +102,8 @@ export class Watcher {
   private readonly indexer: IndexerControl | undefined;
 
   private readonly lastChecked = new Map<string, number>();
-  private readonly finished = new Set<string>();
+  /** Finished claims and when they were last looked at: late payments to them are booked as surplus for the business. */
+  private readonly finished = new Map<string, number>();
   private lowAlerted = false;
   private belowThreshold = false;
   private lastBlockHeight: number | null = null;
@@ -189,7 +190,9 @@ export class Watcher {
         if (!Array.isArray(tokens) || tokens.length === 0) break;
         for (const token of tokens) {
           const id = token?.token_id;
-          if (typeof id !== "string" || claims.has(id) || this.finished.has(id)) continue;
+          if (typeof id !== "string" || claims.has(id)) continue;
+          const seenAt = this.finished.get(id);
+          if (seenAt !== undefined && this.now() - seenAt < this.config.slowIntervalMs) continue;
           const claim = await this.near.view<ClaimView | null>({
             contractId: this.config.rootAccount,
             methodName: "claim",
@@ -197,10 +200,7 @@ export class Watcher {
             feature: "watcher:claim",
           });
           if (claim === null || typeof claim?.token_id !== "string") continue;
-          if (TERMINAL_STATUSES.has(claim.status) && !(claim.undistributed?.length ?? 0)) {
-            this.finished.add(id);
-            continue;
-          }
+          if (TERMINAL_STATUSES.has(claim.status)) this.finished.set(id, this.now());
           claims.set(claim.token_id, claim);
         }
         if (tokens.length < PAGE_SIZE) break;
@@ -406,11 +406,16 @@ export class Watcher {
 
       const quoteExpiryMs = lastQuote === null ? null : lastQuote * 1000 + this.config.quoteTtlMs;
       const openQuote = quoteExpiryMs !== null && nowMs <= quoteExpiryMs;
-      const slowClaim = quoteExpiryMs !== null && nowMs > quoteExpiryMs;
+      // A finished claim is still watched, on the slow cadence: money that arrives after payment is
+      // booked as surplus for the business and the debtor is never charged again.
+      const finished = !isNonTerminal(claim.status);
+      const slowClaim =
+        (quoteExpiryMs !== null && nowMs > quoteExpiryMs) || (finished && !openQuote);
       const blockHeight = this.lastBlockHeight;
       const lockExpired = this.lockExpired(claim.lock, blockHeight);
       const hasWork =
         openQuote ||
+        finished ||
         isNonTerminal(claim.status) ||
         (Array.isArray(claim.undistributed) && claim.undistributed.length > 0) ||
         lockExpired;

@@ -181,6 +181,38 @@ describe("watcher discovery", () => {
   });
 });
 
+describe("late payments", () => {
+  it("books money that arrives on a paid claim (it becomes surplus for the business)", async () => {
+    const fixture = setup({
+      config: CONFIG_VIEW,
+      claims: [
+        makeClaim("c-1", {
+          status: "Paid",
+          last_seen_balance: Object.fromEntries(ASSETS.map((a) => [a, "0"])),
+        }),
+      ],
+      quotes: {},
+      balances: { "c-1.openrail.near": ["0", "3000000", "0", "0"] },
+    });
+    const summary = await fixture.watcher.tick();
+    expect(summary.reconciled).toEqual(["c-1"]);
+  });
+
+  it("looks at a paid claim only on the slow cadence", async () => {
+    const fixture = setup({
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1", { status: "Paid" })],
+      quotes: {},
+      balances: {},
+    });
+    await fixture.watcher.tick();
+    const batches = fixture.near.batches.length;
+    fixture.advance(60_000);
+    await fixture.watcher.tick();
+    expect(fixture.near.batches.length).toBe(batches);
+  });
+});
+
 describe("watcher decisions", () => {
   it("a rise triggers exactly one reconcile with 250 Tgas", async () => {
     const fixture = setup({
@@ -322,7 +354,7 @@ describe("watcher decisions", () => {
     expect(fixture.near.batches).toHaveLength(2);
   });
 
-  it("skips terminal claims without an open quote or work", async () => {
+  it("sends nothing for a finished claim whose balance did not rise", async () => {
     const fixture = setup({
       config: CONFIG_VIEW,
       claims: [makeClaim("c-1", { status: "Closed" })],
@@ -331,7 +363,8 @@ describe("watcher decisions", () => {
     });
 
     await fixture.watcher.tick();
-    expect(fixture.near.batches).toHaveLength(0);
+    // Finished claims are still read (slow cadence) so a late payment is booked as surplus.
+    expect(fixture.near.calls).toHaveLength(0);
   });
 });
 
