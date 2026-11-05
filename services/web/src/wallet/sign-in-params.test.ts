@@ -10,4 +10,9 @@ describe("signInParams", () => {
   it("gives Here Wallet the contract it needs to store the account before signing", () => {
     expect(signInParams("here-wallet", "openrail.near")).toEqual({ contractId: "openrail.near" });
   });
+  it("gives NEAR Mobile a receiver: it refuses a connect without one", () => {
+    expect(signInParams("near-mobile-wallet", "openrail.near")).toEqual({
+      contractId: "openrail.near",
+    });
+  });
 });

@@ -86,3 +86,15 @@ describe("access key port with a fallback RPC", () => {
     expect(lines.join("\n")).toContain("primary.test failed");
   });
 });
+
+describe("access key port: definite answers and slow nodes", () => {
+  it("treats a key the node cannot parse as 'not this account's key', not as an outage", async () => {
+    const f = async (): Promise<Response> =>
+      new Response(
+        JSON.stringify({ error: { message: "bad key", cause: { name: "PARSE_ERROR" } } }),
+        { status: 200 },
+      );
+    const port = createAccessKeyPort("http://rpc", f);
+    expect(await port.has("alice.near", "ed25519:not-a-key")).toBe(false);
+  });
+});

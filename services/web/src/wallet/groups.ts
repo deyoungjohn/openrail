@@ -13,8 +13,12 @@ export interface WalletGroups {
   unavailable: NearWalletInfo[];
 }
 
-/** Wallets whose module has no signMessage (pinned in capabilities.test.ts): never offered for sign-in. */
-const NO_SIGN_IN: readonly string[] = ["bitget-wallet"];
+/**
+ * Never offered for sign-in. Bitget: its module has no signMessage (pinned in capabilities.test.ts). Here:
+ * its app rejects our sign request ("Invalid schema", SIGN_ERROR) after a successful connect, tried on
+ * three builds; it comes back when its app accepts the request.
+ */
+const NO_SIGN_IN: readonly string[] = ["bitget-wallet", "here-wallet"];
 
 /** Sort wallets for the picker. Sign-in lists the wallets that can sign a message first. */
 export function groupWallets(

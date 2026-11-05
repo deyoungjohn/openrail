@@ -39,6 +39,7 @@ async function rpc<T>(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: AbortSignal.timeout(8000), // a slow node must hand over to the fallback, not hang the sign-in
   });
   const body = (await response.json()) as {
     result?: T;
@@ -57,6 +58,17 @@ async function rpc<T>(
  * An implicit account that has never been funded does not exist on chain yet; its own key is accepted
  * then (see implicitKeyMatches). A failing chain read is a 503, never a silent "no".
  */
+/** The chain answered "no": the key or account is not there, or what we sent is not a valid account or key. */
+function isDefinite(name: string | undefined): boolean {
+  return (
+    name === "UNKNOWN_ACCESS_KEY" ||
+    name === "UNKNOWN_ACCOUNT" ||
+    name === "INVALID_ACCOUNT" ||
+    name === "PARSE_ERROR" ||
+    name === "REQUEST_VALIDATION_ERROR"
+  );
+}
+
 export function createAccessKeyPort(
   rpcUrl: string | readonly string[],
   fetchImpl?: FetchLike,
@@ -72,7 +84,7 @@ export function createAccessKeyPort(
       } catch (error) {
         // A definite answer from the chain (the key or the account is not there) is not a failure.
         const name = (error as { causeName?: string }).causeName;
-        if (name === "UNKNOWN_ACCESS_KEY" || name === "UNKNOWN_ACCOUNT") throw error;
+        if (isDefinite(name)) throw error;
         log(`access key check: ${new URL(url).host} failed: ${(error as Error).message}`);
         last = error;
       }
@@ -100,7 +112,7 @@ export function createAccessKeyPort(
         }
       } catch (error) {
         const name = (error as { causeName?: string }).causeName;
-        if (name === "UNKNOWN_ACCESS_KEY" || name === "UNKNOWN_ACCOUNT") return false;
+        if (isDefinite(name)) return false;
         log(`access key check unavailable: ${(error as Error).message}`);
         throw new ApiError(503, "chain_unavailable", "could not check the account key on chain");
       }
