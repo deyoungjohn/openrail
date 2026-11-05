@@ -47,8 +47,8 @@ const pickerWallets: NearWalletInfo[] = [
     signsMessage: false,
   },
   {
-    id: "okx-wallet",
-    name: "OKX Wallet",
+    id: "nightly",
+    name: "Nightly",
     iconUrl: null,
     type: "injected",
     available: true,

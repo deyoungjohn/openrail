@@ -68,3 +68,21 @@ describe("access key port", () => {
     await expect(port.has("alice.near", KEY)).rejects.toMatchObject({ status: 503 });
   });
 });
+
+describe("access key port with a fallback RPC", () => {
+  it("asks the next RPC when the first fails, and logs the failure", async () => {
+    const lines: string[] = [];
+    let calls = 0;
+    const f = async (url: string): Promise<Response> => {
+      calls += 1;
+      if (url.includes("primary")) throw new Error("fetch failed");
+      return new Response(JSON.stringify({ result: { nonce: 1 } }), { status: 200 });
+    };
+    const port = createAccessKeyPort(["http://primary.test", "http://backup.test"], f, (l) =>
+      lines.push(l),
+    );
+    expect(await port.has("alice.near", KEY)).toBe(true);
+    expect(calls).toBe(2);
+    expect(lines.join("\n")).toContain("primary.test failed");
+  });
+});

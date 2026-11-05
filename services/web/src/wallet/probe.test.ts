@@ -22,3 +22,20 @@ describe("classifyProbe", () => {
     expect(classifyProbe(undefined)).toBeNull();
   });
 });
+
+import { staticSignsMessage, withTimeout } from "./probe";
+
+describe("static wallet capabilities and the probe timeout", () => {
+  it("knows the wallets we offer, and Bitget cannot sign you in", () => {
+    for (const id of ["meteor-wallet", "hot-wallet", "here-wallet", "nightly", "intear-wallet"])
+      expect(staticSignsMessage(id)).toBe(true);
+    expect(staticSignsMessage("bitget-wallet")).toBe(false);
+    expect(staticSignsMessage("unknown-wallet")).toBeNull();
+  });
+  it("gives up on a module that never answers", async () => {
+    await expect(withTimeout(new Promise<void>(() => {}), 20)).rejects.toThrow("PROBE_TIMEOUT");
+  });
+  it("passes a fast answer through", async () => {
+    await expect(withTimeout(Promise.resolve(3), 1000)).resolves.toBe(3);
+  });
+});

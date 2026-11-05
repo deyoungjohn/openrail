@@ -14,7 +14,9 @@ const EXPECTED: Record<string, boolean> = {
   "@near-wallet-selector/meteor-wallet": true,
   "@near-wallet-selector/hot-wallet": true,
   "@near-wallet-selector/here-wallet": true,
-  "@near-wallet-selector/okx-wallet": true,
+  "@near-wallet-selector/nightly": true,
+  "@near-wallet-selector/intear-wallet": true,
+  "@near-wallet-selector/near-mobile-wallet": true,
   "@near-wallet-selector/coin98-wallet": true,
   "@near-wallet-selector/wallet-connect": true,
   // Bitget's module has no signMessage: the selector refuses it, so it cannot sign you in.

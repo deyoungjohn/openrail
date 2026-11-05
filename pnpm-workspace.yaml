@@ -6,3 +6,7 @@ allowBuilds:
   secp256k1: false
   bufferutil: false
   utf-8-validate: false
+  "@parcel/watcher": false
+  "@swc/core": false
+  lmdb: false
+  msgpackr-extract: false

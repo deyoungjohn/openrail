@@ -3,7 +3,7 @@ import { signInParams } from "./sign-in-params";
 
 describe("signInParams", () => {
   it("connects most wallets without a contract, so no access key is added", () => {
-    for (const id of ["meteor-wallet", "okx-wallet", "hot-wallet", "wallet-connect"]) {
+    for (const id of ["meteor-wallet", "nightly", "hot-wallet", "wallet-connect"]) {
       expect(signInParams(id, "openrail.near")).toEqual({});
     }
   });
