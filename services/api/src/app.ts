@@ -20,6 +20,8 @@ import { sha256Hex0x } from "./crypto.js";
 import { createMemoryStores, type ApiStore } from "./stores.js";
 import { IdempotencyConflict, IdempotencyStore } from "./idempotency.js";
 import { renderInvoicePdfBase64 } from "./pdf.js";
+import { handleRecurring, type RecurringStore } from "./recurring.js";
+import { createMemoryRecurringStore } from "./recurring-store.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
 import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
@@ -118,6 +120,8 @@ export interface InvoiceRecord {
   created_at: string;
   created_block: number;
   terms: Terms;
+  /** Set when the invoice was issued by a recurring template. */
+  recurring_id?: string;
 }
 
 export function createStore(): ApiStore {
@@ -174,6 +178,7 @@ export class ApiError extends Error {
 export interface ApiDeps {
   config: ApiConfig;
   store?: ApiStore;
+  recurring?: RecurringStore;
   auth?: AuthStore;
   idempotency?: IdempotencyStore;
   contract: ContractPort;
@@ -246,6 +251,7 @@ function allowedOrigins(): string[] {
 
 export class ApiApp {
   readonly store: ApiStore;
+  readonly recurring: RecurringStore;
   private readonly auth: AuthStore;
   private readonly idempotency: IdempotencyStore;
   private readonly clock: () => Date;
@@ -255,6 +261,7 @@ export class ApiApp {
 
   constructor(private readonly deps: ApiDeps) {
     this.store = deps.store ?? createMemoryStores().api;
+    this.recurring = deps.recurring ?? createMemoryRecurringStore();
     this.auth = deps.auth ?? new AuthStore();
     this.idempotency = deps.idempotency ?? new IdempotencyStore();
     this.clock = deps.clock ?? (() => new Date());
@@ -691,6 +698,22 @@ export class ApiApp {
       }
     }
 
+    const recurringMatch = /^\/v1\/recurring_invoices(?:\/([^/]+))?$/.exec(path);
+    if (recurringMatch !== null) {
+      const context = this.requireAuth(request);
+      this.requireScope(context, method === "GET" ? "invoices:read" : "invoices:write");
+      const run = async (): Promise<ApiResponse> =>
+        handleRecurring({
+          method,
+          id: recurringMatch[1],
+          body: request.body,
+          accountId: context.accountId,
+          store: this.recurring,
+          clock: this.clock,
+        });
+      return method === "POST" ? this.withIdempotency(request, run) : run();
+    }
+
     if (path === "/v1/pay/sessions" && method === "POST") {
       return this.withIdempotency(request, async () => {
         const context = this.requireAuth(request, true);
@@ -1089,7 +1112,20 @@ export class ApiApp {
 
   private async createInvoice(request: ApiRequest): Promise<ApiResponse> {
     const context = this.requireAuth(request);
-    const body = (request.body ?? {}) as {
+    const invoice = await this.issueInvoice(context.accountId, request.body);
+    return { status: 201, body: invoice };
+  }
+
+  /**
+   * Builds the terms, issues the claim through `issue_for` and stores the invoice. Used by
+   * `POST /v1/invoices` and by the recurring-invoice scheduler.
+   */
+  async issueInvoice(
+    accountId: string,
+    input: unknown,
+    options: { recurringId?: string } = {},
+  ): Promise<InvoiceRecord> {
+    const body = (input ?? {}) as {
       invoice_number?: string;
       issuer_legal_name?: string;
       debtor_legal_name?: string;
@@ -1113,8 +1149,8 @@ export class ApiApp {
       if (body[field] === undefined)
         throw new ApiError(400, "invalid_request", `${field} required`);
     }
-    const business = this.business(context.accountId);
-    const prepared = await this.deps.issuer.prepareIssue(context.accountId);
+    const business = this.business(accountId);
+    const prepared = await this.deps.issuer.prepareIssue(accountId);
     const terms = buildTerms({
       invoice_number: body.invoice_number as string,
       issuer_legal_name: body.issuer_legal_name as string,
@@ -1162,8 +1198,9 @@ export class ApiApp {
       created_at: nowIso(this.clock),
       created_block: 0,
       terms,
+      ...(options.recurringId === undefined ? {} : { recurring_id: options.recurringId }),
     };
     this.store.saveInvoice(invoice);
-    return { status: 201, body: invoice };
+    return invoice;
   }
 }

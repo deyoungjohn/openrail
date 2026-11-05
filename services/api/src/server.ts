@@ -11,7 +11,7 @@ function cors(request: IncomingMessage, response: ServerResponse): void {
   const allowed = process.env.WEB_ORIGIN ?? "http://localhost:3000";
   const origin = request.headers.origin;
   response.setHeader("vary", "Origin");
-  response.setHeader("access-control-allow-methods", "GET,POST,PUT,DELETE,OPTIONS");
+  response.setHeader("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   response.setHeader("access-control-allow-headers", "authorization,content-type,idempotency-key");
   if (origin !== undefined && origin === allowed) {
     response.setHeader("access-control-allow-origin", origin);

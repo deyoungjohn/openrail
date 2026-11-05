@@ -47,7 +47,7 @@ export class WebhookWorker {
     });
     const endpoints = this.deps.store.listWebhookEndpoints();
     for (const raw of page.data) {
-      const event = { ...raw, indexed: true } as unknown as IndexedEvent;
+      const event = this.withRecurringId({ ...raw, indexed: true } as unknown as IndexedEvent);
       for (const endpoint of endpoints) {
         if (!endpoint.events.includes(event.type)) continue;
         const createdMs = endpoint.created_at === undefined ? 0 : Date.parse(endpoint.created_at);
@@ -66,6 +66,15 @@ export class WebhookWorker {
       this.deps.store.setWorkerState("webhook_cursor", this.cursor);
     }
     await this.deliverDue(this.clock().getTime());
+  }
+
+  /** Adds `recurring_id` to events of invoices issued by a recurring template (off-chain field). */
+  private withRecurringId(event: IndexedEvent): IndexedEvent {
+    const tokenId = event.data?.token_id;
+    if (typeof tokenId !== "string") return event;
+    const recurringId = this.deps.store.getInvoice(tokenId)?.recurring_id;
+    if (recurringId === undefined) return event;
+    return { ...event, data: { ...event.data, recurring_id: recurringId } };
   }
 
   private async deliverDue(now: number): Promise<void> {

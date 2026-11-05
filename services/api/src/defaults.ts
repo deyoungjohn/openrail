@@ -25,6 +25,7 @@ import type { QuoteProvider } from "./quote.js";
 import { createHttpIndexer } from "./indexer-client.js";
 import { createSqliteStores } from "./stores.js";
 import { WebhookWorker } from "./webhook-worker.js";
+import { RecurringScheduler } from "./recurring.js";
 
 async function rpc<T>(url: string, method: string, params: unknown): Promise<T> {
   const response = await fetch(url, {
@@ -186,6 +187,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
       payBaseUrl: getEnv("PAY_BASE_URL") ?? "https://pay.openrail.near",
     },
     store: stores.api,
+    recurring: stores.recurring,
     auth: new AuthStore(Date.now, 7 * 24 * 60 * 60 * 1000, stores),
     idempotency: new IdempotencyStore(stores.idempotency),
     contract: createContractPort(rootAccount),
@@ -208,5 +210,20 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     });
   }, 15_000);
   timer.unref();
+  const recurringLogger = createLogger("api-recurring");
+  const scheduler = new RecurringScheduler({
+    store: stores.recurring,
+    issue: (accountId, body, recurringId) => app.issueInvoice(accountId, body, { recurringId }),
+    logger: (message, data) => recurringLogger.info(message, data ?? {}),
+  });
+  const recurringTimer = setInterval(() => {
+    void scheduler.runOnce().catch((error: unknown) => {
+      recurringLogger.error(
+        "recurring pass failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+  }, 60_000);
+  recurringTimer.unref();
   return app;
 }
