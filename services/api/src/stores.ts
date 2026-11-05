@@ -57,6 +57,7 @@ export interface ApiStore {
   ): void;
   outboxExpire(endpointId: string, eventId: string): void;
   getPaySession(id: string): PaySession | undefined;
+  listPaySessions(tokenId: string): PaySession[];
   savePaySession(session: PaySession): void;
   getOpenQuotes(tokenId: string): Record<string, unknown>[];
   saveOpenQuotes(tokenId: string, quotes: Record<string, unknown>[]): void;
@@ -225,6 +226,7 @@ export function createMemoryStores(): Stores {
         if (row !== undefined) row.delivered = true;
       },
       getPaySession: (id) => paySessions.get(id),
+      listPaySessions: (tokenId) => [...paySessions.values()].filter((x) => x.token_id === tokenId),
       savePaySession: (session) => paySessions.set(session.id, session),
       getOpenQuotes: (tokenId) => openQuotes.get(tokenId) ?? [],
       saveOpenQuotes: (tokenId, quotes) => openQuotes.set(tokenId, quotes),
@@ -441,6 +443,14 @@ export function createSqliteStores(path: string): Stores {
     getPaySession(id) {
       const row = db.prepare("SELECT body FROM pay_sessions WHERE id = ?").get(id);
       return row === undefined ? undefined : parseJson<PaySession>(row.body);
+    },
+    listPaySessions(tokenId) {
+      return db
+        .prepare(
+          "SELECT body FROM pay_sessions WHERE json_extract(body, '$.token_id') = ? ORDER BY rowid",
+        )
+        .all(tokenId)
+        .map((row) => parseJson<PaySession>(row.body));
     },
     savePaySession(session) {
       db.prepare(

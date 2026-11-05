@@ -195,6 +195,8 @@ export class OpenrailClient {
       this.call("POST", "/v1/pay/sessions", { body, idempotencyKey: options.idempotencyKey }),
     getSession: (id: string): Promise<SuccessBody<"getPaySession">> =>
       this.call("GET", `/v1/pay/sessions/${encodeURIComponent(id)}`),
+    listSessions: (tokenId: string): Promise<SuccessBody<"listPaySessions">> =>
+      this.call("GET", `/v1/pay/claims/${encodeURIComponent(tokenId)}/sessions`),
     getClaim: (tokenId: string): Promise<SuccessBody<"getPublicClaim">> =>
       this.call("GET", `/v1/pay/claims/${encodeURIComponent(tokenId)}`),
   };

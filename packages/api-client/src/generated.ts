@@ -690,6 +690,10 @@ export interface Analytics {
   };
 }
 
+export interface PaySessionList {
+  data: PaySession[];
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -1206,6 +1210,19 @@ export interface operations {
       "200": Analytics;
       "401": Error;
       "403": Error;
+    };
+  };
+  listPaySessions: {
+    parameters: {
+      path: {
+        token_id: string;
+      };
+    };
+    responses: {
+      "200": PaySessionList;
+      "400": Error;
+      "401": Error;
+      "404": Error;
     };
   };
 }

@@ -281,31 +281,6 @@ interface Leg {
 
 type Mode = "paste" | "wallet";
 
-// A reload must not lose a price the payer may already have sent money to. The open parts and every
-// address ever shown for this invoice are kept in this browser.
-interface Saved {
-  legs: { session: Session; routeId: string; cents: string; stage: PayStage }[];
-  earlier: { address: string; route: string }[];
-}
-const storeKey = (tokenId: string) => `openrail.pay.${tokenId}`;
-function readSaved(tokenId: string): Saved {
-  try {
-    const raw = window.localStorage.getItem(storeKey(tokenId));
-    const v = raw ? (JSON.parse(raw) as Saved) : null;
-    if (v && Array.isArray(v.legs) && Array.isArray(v.earlier)) return v;
-  } catch {
-    /* storage unavailable: start clean */
-  }
-  return { legs: [], earlier: [] };
-}
-function writeSaved(tokenId: string, saved: Saved) {
-  try {
-    window.localStorage.setItem(storeKey(tokenId), JSON.stringify(saved));
-  } catch {
-    /* ignore */
-  }
-}
-
 export function PayScreen({ tokenId }: { tokenId: string }) {
   const p = copy.pay;
   const evm = useEvm();
@@ -321,7 +296,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   const [split, setSplit] = useState(false);
   const [amountText, setAmountText] = useState("");
   const [amountShown, setAmountShown] = useState(false);
-  const [earlier, setEarlier] = useState<Saved["earlier"]>([]);
+  const [earlier, setEarlier] = useState<{ address: string; route: string }[]>([]);
   const restored = useRef(false);
 
   useEffect(() => {
@@ -347,43 +322,52 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     [claim],
   );
 
-  // Bring back the prices from before a reload, once the routes are known.
+  // A reload must not lose a price the payer may already have sent money to: the server keeps every
+  // price it gave for this invoice. Open ones come back as they were; the rest are listed as earlier.
   useEffect(() => {
     if (restored.current || routes.length === 0) return;
     restored.current = true;
-    const saved = readSaved(tokenId);
-    setEarlier(saved.earlier);
-    const back: Leg[] = [];
-    for (const l of saved.legs) {
-      const r = routes.find((x) => x.id === l.routeId);
-      if (r) back.push({ session: l.session, route: r, cents: BigInt(l.cents), stage: l.stage });
-    }
-    if (back.length > 0) {
-      setLegs(back);
-      setRouteId(back[back.length - 1]?.route.id ?? null);
-      setSplit(back.length > 1);
-    }
+    client.pay
+      .listSessions(tokenId)
+      .then(({ data }) => {
+        const now = Date.now();
+        const back: Leg[] = [];
+        for (const sess of data) {
+          const r = routes.find((x) => x.id === sess.route_id);
+          const cents = legCents(sess.amount_usd);
+          const open = Date.parse(sess.deadline) > now || sess.status === "success";
+          if (r && cents !== null && open) {
+            back.push({ session: sess, route: r, cents, stage: "waiting" });
+          }
+        }
+        // The newest open price comes back on screen.
+        const keep = back.slice(-1);
+        setEarlier(
+          data.map((x) => ({
+            address: x.deposit_address,
+            route: routes.find((r) => r.id === x.route_id)?.payer_asset ?? x.route_id,
+          })),
+        );
+        if (keep.length > 0) {
+          setLegs(keep);
+          setRouteId(keep[keep.length - 1]?.route.id ?? null);
+          setSplit(keep.length > 1);
+        }
+      })
+      .catch(() => undefined);
   }, [routes, tokenId]);
 
+  // A price made on this page joins the list of addresses once it is replaced.
   useEffect(() => {
-    if (!restored.current) return;
-    const old = readSaved(tokenId).earlier;
-    const seen = new Set(old.map((e) => e.address));
-    const added = legs
-      .filter((l) => !seen.has(l.session.deposit_address))
-      .map((l) => ({ address: l.session.deposit_address, route: l.route.payer_asset }));
-    const all = [...old, ...added];
-    writeSaved(tokenId, {
-      legs: legs.map((l) => ({
-        session: l.session,
-        routeId: l.route.id,
-        cents: l.cents.toString(),
-        stage: l.stage,
-      })),
-      earlier: all,
+    setEarlier((old) => {
+      const seen = new Set(old.map((e) => e.address));
+      const added = legs
+        .filter((l) => !seen.has(l.session.deposit_address))
+        .map((l) => ({ address: l.session.deposit_address, route: l.route.payer_asset }));
+      return added.length > 0 ? [...old, ...added] : old;
     });
-    setEarlier(all);
-  }, [legs, tokenId]);
+  }, [legs]);
+
   const route = routes.find((r) => r.id === routeId) ?? null;
   const outstanding = claim?.outstanding ?? "0";
   // What is left to pay once the parts so far are counted.

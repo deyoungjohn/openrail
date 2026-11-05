@@ -256,6 +256,18 @@ describe("invoice route", () => {
     expect((denied.body as { error: { code: string } }).error.code).toBe("insufficient_scope");
   });
 
+  it("lists every price given for an invoice so a reload can show the same address", async () => {
+    const { app, secret } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    const body = { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) };
+    const first = await app.handle(request("POST", "/v1/pay/sessions", body, secret));
+    const second = await app.handle(request("POST", "/v1/pay/sessions", body, secret));
+    const listed = await app.handle(request("GET", "/v1/pay/claims/c-1/sessions"));
+    expect(listed.status).toBe(200);
+    const ids = (listed.body as { data: { id: string }[] }).data.map((s) => s.id);
+    expect(ids).toEqual([(first.body as { id: string }).id, (second.body as { id: string }).id]);
+  });
+
   it("pokes the indexer after a cash-out quote", async () => {
     const { app, secret, pokeIndexer } = harness();
     const response = await app.handle(

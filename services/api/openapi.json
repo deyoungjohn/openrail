@@ -2405,7 +2405,7 @@
           "invoice_number_prefix": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{1,32}$",
-            "description": "Invoices are numbered <prefix>-001, <prefix>-002, \u2026"
+            "description": "Invoices are numbered <prefix>-001, <prefix>-002, …"
           },
           "issuer_legal_name": {
             "type": "string"
@@ -2822,6 +2822,18 @@
               "on_time": {
                 "type": "integer"
               }
+            }
+          }
+        }
+      },
+      "PaySessionList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaySession"
             }
           }
         }
@@ -5350,7 +5362,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "Recurring template id (rec_\u2026).",
+            "description": "Recurring template id (rec_…).",
             "schema": {
               "type": "string"
             }
@@ -5417,7 +5429,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "Recurring template id (rec_\u2026).",
+            "description": "Recurring template id (rec_…).",
             "schema": {
               "type": "string"
             }
@@ -5533,6 +5545,67 @@
           },
           "403": {
             "description": "Missing required scope (insufficient_scope: missing scope: invoices:read).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pay/claims/{token_id}/sessions": {
+      "get": {
+        "operationId": "listPaySessions",
+        "summary": "List the prices already given for an invoice",
+        "tags": ["Pay"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "description": "Invoice token id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every pay session for the invoice, oldest first, so the hosted page can show the same price again after a reload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaySessionList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
             "content": {
               "application/json": {
                 "schema": {

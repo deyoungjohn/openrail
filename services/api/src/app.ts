@@ -795,15 +795,29 @@ export class ApiApp {
         return { status: 201, body: session };
       });
     }
+    const paySessionsOfMatch = /^\/v1\/pay\/claims\/([^/]+)\/sessions$/.exec(path);
+    if (paySessionsOfMatch !== null && method === "GET") {
+      const invoice = this.invoiceBy(paySessionsOfMatch[1] ?? "");
+      return { status: 200, body: { data: this.store.listPaySessions(invoice.token_id) } };
+    }
     const paySessionMatch = /^\/v1\/pay\/sessions\/([^/]+)$/.exec(path);
     if (paySessionMatch !== null && method === "GET") {
       const session = this.store.getPaySession(paySessionMatch[1] ?? "");
       if (session === undefined) throw new ApiError(404, "pay_session_not_found");
+      // The payer's page polls this: once the claim is paid on chain the price is done, whichever
+      // address the money went to. (Before, it said "pending" forever.)
+      let status: string = session.status;
+      try {
+        const claim = await this.deps.contract.claim(session.token_id);
+        if (claim.status === "Paid") status = "success";
+      } catch {
+        /* the chain is slow: keep the stored status */
+      }
       return {
         status: 200,
         body: {
           id: session.id,
-          status: session.status,
+          status,
           swap_details: { status: "PENDING_DEPOSIT" },
           updated_at: nowIso(this.clock),
         },
