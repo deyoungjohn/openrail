@@ -30,7 +30,10 @@ export const mockApi: OpenrailApi = {
   },
 };
 
-export const api: OpenrailApi = mockApi;
+import { liveApi } from "./live-api";
+
+/** Fixtures while the site runs as a demo; the chain and the API when `NEXT_PUBLIC_API_MODE=live`. */
+export const api: OpenrailApi = process.env.NEXT_PUBLIC_API_MODE === "live" ? liveApi : mockApi;
 
 /** True while screens run on fixtures, so nothing signs against a real contract. */
 export const MOCK_MODE = process.env.NEXT_PUBLIC_API_MODE !== "live";
