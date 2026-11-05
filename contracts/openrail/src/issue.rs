@@ -41,8 +41,6 @@ fn build_token_metadata(
         crate::svg::format_amount(amount_due),
         crate::svg::format_date(due_date)
     );
-    let default_media = crate::svg::svg_data_uri(&n.to_string(), amount_due, due_date);
-
     match metadata {
         Some(mut m) => {
             if m.title.is_none() {
@@ -50,9 +48,6 @@ fn build_token_metadata(
             }
             if m.description.is_none() {
                 m.description = Some(default_desc);
-            }
-            if m.media.is_none() {
-                m.media = Some(default_media);
             }
             if m.extra.is_none() {
                 m.extra = Some(terms_hash.to_string());
@@ -62,7 +57,7 @@ fn build_token_metadata(
         None => TokenMetadata {
             title: Some(default_title),
             description: Some(default_desc),
-            media: Some(default_media),
+            media: None,
             media_hash: None,
             copies: Some(1),
             issued_at: Some(env::block_timestamp_ms()),

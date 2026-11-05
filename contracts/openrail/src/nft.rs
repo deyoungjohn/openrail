@@ -339,12 +339,16 @@ impl Contract {
 
     fn token_view(&self, token_id: &str) -> Option<JsonToken> {
         let claim = self.claims.get(token_id)?.clone();
-        let metadata = self
+        let mut metadata = self
             .token_metadata
             .get(token_id)
             .cloned()
             .unwrap_or_default();
         let approvals = self.approvals_of(token_id);
+        let now_seconds = env::block_timestamp_ms() / 1000;
+        metadata.media = Some(crate::svg::render_claim_media(&claim, now_seconds));
+        metadata.reference = None;
+        metadata.reference_hash = None;
         Some(JsonToken {
             token_id: token_id.to_string(),
             owner_id: claim.owner_id,

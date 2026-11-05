@@ -112,11 +112,7 @@ async fn seed_claims_range(env: &Env, owner: &Account, start: usize, end: usize)
                     openrail::svg::format_amount(amount_due),
                     openrail::svg::format_date(due_date)
                 )),
-                media: Some(openrail::svg::svg_data_uri(
-                    &i.to_string(),
-                    amount_due,
-                    due_date,
-                )),
+                media: None,
                 media_hash: None,
                 copies: Some(1),
                 issued_at: Some(1_700_000_000_000),
@@ -342,12 +338,12 @@ async fn scale_storage_per_claim_constant() -> Result<()> {
         prev = i;
     }
 
-    // Blueprint 2.11: storage per claim is constant (K16).
-    // Steady-state storage delta on root is constant (around ~1,370 bytes per claim across claims 2..N)
+    // Blueprint 2.11 & 4.5 H8: storage per claim is constant (K16).
+    // Steady-state storage delta on root is constant (around ~960 bytes per claim across claims 2..N without stored SVG)
     for &(idx, delta) in storage_deltas_at_samples.iter() {
         if idx > 1 {
             assert!(
-                (1000..=1600).contains(&delta),
+                (700..=1200).contains(&delta),
                 "Claim {} storage delta must be around steady-state size (got {} bytes)",
                 idx,
                 delta
@@ -691,6 +687,71 @@ async fn scale_nft_tokens_for_owner_pagination() -> Result<()> {
         cbi_scan.is_success(),
         cbi_scan.total_gas_burnt.as_gas(),
         cbi_scan.total_gas_burnt.as_gas() as f64 / 1e12,
+    );
+
+    // Measure gas of NFT views at N claims (Blueprint 4.5 H8)
+    let nft_token_call = env
+        .alice
+        .call(env.root.id(), "nft_token")
+        .args_json(json!({ "token_id": "c-1" }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(nft_token_call.is_success());
+    let nft_token_gas = nft_token_call.total_gas_burnt.as_gas();
+    let token_sample: Option<JsonToken> = nft_token_call.json()?;
+    assert!(token_sample
+        .as_ref()
+        .unwrap()
+        .metadata
+        .as_ref()
+        .unwrap()
+        .media
+        .is_some());
+    println!(
+        "nft_token at N={}: gas={} ({:.2} Tgas)",
+        n,
+        nft_token_gas,
+        nft_token_gas as f64 / 1e12,
+    );
+
+    let nft_tokens_call = env
+        .alice
+        .call(env.root.id(), "nft_tokens")
+        .args_json(json!({
+            "from_index": "0",
+            "limit": 50,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(nft_tokens_call.is_success());
+    let nft_tokens_gas = nft_tokens_call.total_gas_burnt.as_gas();
+    println!(
+        "nft_tokens(limit 50) at N={}: gas={} ({:.2} Tgas)",
+        n,
+        nft_tokens_gas,
+        nft_tokens_gas as f64 / 1e12,
+    );
+
+    let nft_tokens_for_owner_call = env
+        .alice
+        .call(env.root.id(), "nft_tokens_for_owner")
+        .args_json(json!({
+            "account_id": env.alice.id(),
+            "from_index": (n.saturating_sub(50)).to_string(),
+            "limit": 50,
+        }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(nft_tokens_for_owner_call.is_success());
+    let nft_tokens_for_owner_gas = nft_tokens_for_owner_call.total_gas_burnt.as_gas();
+    println!(
+        "nft_tokens_for_owner(limit 50) at N={}: gas={} ({:.2} Tgas)",
+        n,
+        nft_tokens_for_owner_gas,
+        nft_tokens_for_owner_gas as f64 / 1e12,
     );
 
     Ok(())
