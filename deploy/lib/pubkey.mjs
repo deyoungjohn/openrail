@@ -1,5 +1,6 @@
+/* global Buffer, process, console */
 // Prints the PUBLIC key for a NEAR ed25519 secret key read from stdin. The secret is never printed.
-//   secret-tool lookup service openrail name issuer-fc-key | node tools/pubkey.mjs
+//   secret-tool lookup service openrail name issuer-fc-key | node deploy/lib/pubkey.mjs
 const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const enc = (buf) => {
   let n = BigInt("0x" + buf.toString("hex"));
