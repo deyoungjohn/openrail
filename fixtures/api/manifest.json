@@ -320,6 +320,38 @@
       "status": 200,
       "schema": "Health",
       "mock": true
+    },
+    {
+      "file": "recurring_invoices.create.json",
+      "method": "POST",
+      "path": "/v1/recurring_invoices",
+      "status": 201,
+      "schema": "RecurringInvoice",
+      "mock": true
+    },
+    {
+      "file": "recurring_invoices.list.json",
+      "method": "GET",
+      "path": "/v1/recurring_invoices",
+      "status": 200,
+      "schema": "RecurringInvoiceList",
+      "mock": true
+    },
+    {
+      "file": "recurring_invoices.get.json",
+      "method": "GET",
+      "path": "/v1/recurring_invoices/{id}",
+      "status": 200,
+      "schema": "RecurringInvoiceDetail",
+      "mock": true
+    },
+    {
+      "file": "recurring_invoices.update.json",
+      "method": "PATCH",
+      "path": "/v1/recurring_invoices/{id}",
+      "status": 200,
+      "schema": "RecurringInvoice",
+      "mock": true
     }
   ]
 }

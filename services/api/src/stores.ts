@@ -5,6 +5,8 @@ import type { Challenge, ApiKeyRecord } from "./auth.js";
 import type { PaySession } from "./quote.js";
 import type { WebhookEndpointRecord } from "./webhooks.js";
 import type { StoredResponse } from "./idempotency.js";
+import type { RecurringStore } from "./recurring.js";
+import { createMemoryRecurringStore, createSqliteRecurringStore } from "./recurring-store.js";
 
 export interface OutboxRow {
   endpointId: string;
@@ -105,6 +107,7 @@ export interface Stores {
   sessions: SessionStore;
   challenges: ChallengeStore;
   idempotency: IdempotencyRepository;
+  recurring: RecurringStore;
   close?: () => void;
 }
 
@@ -279,6 +282,7 @@ export function createMemoryStores(): Stores {
           if (entry.createdAt <= before) idempotency.delete(key);
       },
     },
+    recurring: createMemoryRecurringStore(),
   };
 }
 
@@ -585,5 +589,13 @@ export function createSqliteStores(path: string): Stores {
     },
   };
 
-  return { api, keys, sessions, challenges, idempotency, close: () => db.close() };
+  return {
+    api,
+    keys,
+    sessions,
+    challenges,
+    idempotency,
+    recurring: createSqliteRecurringStore(db),
+    close: () => db.close(),
+  };
 }

@@ -48,6 +48,9 @@
     },
     {
       "name": "Statements"
+    },
+    {
+      "name": "Recurring invoices"
     }
   ],
   "security": [
@@ -865,6 +868,10 @@
           },
           "paid_total": {
             "$ref": "#/components/schemas/U128"
+          },
+          "recurring_id": {
+            "type": "string",
+            "description": "Set when the invoice was issued by a recurring template."
           }
         }
       },
@@ -2379,6 +2386,357 @@
           },
           "mock": {
             "type": "boolean"
+          }
+        }
+      },
+      "RecurringTemplateInvoice": {
+        "type": "object",
+        "required": [
+          "invoice_number_prefix",
+          "issuer_legal_name",
+          "debtor_legal_name",
+          "debtor_key",
+          "amount_usd"
+        ],
+        "properties": {
+          "invoice_number_prefix": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,32}$",
+            "description": "Invoices are numbered <prefix>-001, <prefix>-002, …"
+          },
+          "issuer_legal_name": {
+            "type": "string"
+          },
+          "debtor_legal_name": {
+            "type": "string"
+          },
+          "debtor_key": {
+            "type": "string",
+            "description": "NEAR account or 0x EVM address of the client."
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,2})?$",
+            "examples": ["1500.00"]
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "CreateRecurringInvoiceRequest": {
+        "type": "object",
+        "required": ["repeat", "start_date", "invoice"],
+        "properties": {
+          "repeat": {
+            "type": "string",
+            "enum": ["weekly", "monthly", "quarterly"]
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "description": "First date (UTC), today or later."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Last date, inclusive. Give end_date or count, not both; neither means until cancelled."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 520,
+            "description": "Number of scheduled dates."
+          },
+          "due_days": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 365,
+            "default": 14,
+            "description": "Each invoice is due this many days after its date."
+          },
+          "send_email": {
+            "type": "boolean",
+            "default": false
+          },
+          "email_to": {
+            "type": "string",
+            "format": "email",
+            "description": "Required when send_email is true."
+          },
+          "invoice": {
+            "$ref": "#/components/schemas/RecurringTemplateInvoice"
+          }
+        }
+      },
+      "UpdateRecurringInvoiceRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["active", "paused", "cancelled"]
+          },
+          "end_date": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "count": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 520
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "due_days": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 365
+          },
+          "send_email": {
+            "type": "boolean"
+          },
+          "email_to": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "invoice": {
+            "type": "object",
+            "properties": {
+              "amount_usd": {
+                "type": "string"
+              },
+              "line_items": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "RecurringInvoice": {
+        "type": "object",
+        "required": [
+          "id",
+          "account_id",
+          "status",
+          "repeat",
+          "start_date",
+          "end_date",
+          "count",
+          "due_days",
+          "send_email",
+          "email_to",
+          "invoice",
+          "next_index",
+          "next_run_date",
+          "issued_count",
+          "attention",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "paused", "completed", "cancelled"]
+          },
+          "repeat": {
+            "type": "string",
+            "enum": ["weekly", "monthly", "quarterly"]
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "count": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "due_days": {
+            "type": "integer"
+          },
+          "send_email": {
+            "type": "boolean"
+          },
+          "email_to": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "invoice": {
+            "$ref": "#/components/schemas/RecurringTemplateInvoice"
+          },
+          "next_index": {
+            "type": "integer",
+            "description": "Index of the next scheduled date (0 = start_date)."
+          },
+          "next_run_date": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Next date to issue; null when completed or cancelled."
+          },
+          "issued_count": {
+            "type": "integer"
+          },
+          "attention": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when a run failed or its outcome is unknown; check before re-issuing by hand."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RecurringRun": {
+        "type": "object",
+        "required": [
+          "template_id",
+          "run_date",
+          "status",
+          "attempts",
+          "invoice_id",
+          "error",
+          "updated_at"
+        ],
+        "properties": {
+          "template_id": {
+            "type": "string"
+          },
+          "run_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "issued", "retrying", "failed", "skipped", "unknown"]
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "invoice_id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RecurringInvoiceDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RecurringInvoice"
+          },
+          {
+            "type": "object",
+            "required": ["runs"],
+            "properties": {
+              "runs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RecurringRun"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RecurringInvoiceList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecurringInvoice"
+            }
           }
         }
       }
@@ -4753,6 +5111,299 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recurring_invoices": {
+      "post": {
+        "operationId": "createRecurringInvoice",
+        "summary": "Create a recurring invoice template",
+        "description": "Issues an ordinary invoice through issue_for at 06:00 UTC on each scheduled date. Monthly and quarterly dates clamp to the month end (31 Jan, 28 Feb, 31 Mar). A date is issued at most once. Dates missed by more than 3 days (for example while paused) are recorded as skipped, not issued.",
+        "tags": ["Recurring invoices"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRecurringInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Template created; nothing is issued until the first date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringInvoice"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key reused with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listRecurringInvoices",
+        "summary": "List recurring invoice templates",
+        "tags": ["Recurring invoices"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Templates of the authenticated business.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringInvoiceList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recurring_invoices/{id}": {
+      "get": {
+        "operationId": "getRecurringInvoice",
+        "summary": "Get a template and its runs",
+        "tags": ["Recurring invoices"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Recurring template id (rec_…).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Template plus one run per scheduled date reached so far.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringInvoiceDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateRecurringInvoice",
+        "summary": "Pause, resume, cancel or change a template",
+        "description": "Only status, end_date, count, due_days, send_email, email_to, invoice.amount_usd and invoice.line_items can change (immutable_field otherwise). Changes apply to runs not yet issued. A cancelled or completed template cannot change (recurring_closed).",
+        "tags": ["Recurring invoices"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Recurring template id (rec_…).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRecurringInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated template.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringInvoice"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, failed validation or immutable_field.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Template is cancelled or completed (recurring_closed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
