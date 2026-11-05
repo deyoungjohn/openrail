@@ -951,6 +951,11 @@ impl Model {
                 .claims
                 .get_mut(&token_id)
                 .ok_or_else(|| ModelError::ClaimNotFound(token_id.clone()))?;
+            if !claim.lock.allows_transfer() {
+                return Err(ModelError::ClaimLocked(
+                    "cannot retry while reconciling".into(),
+                ));
+            }
             std::mem::take(&mut claim.undistributed)
         };
 

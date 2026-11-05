@@ -409,6 +409,97 @@ fn test_ds8_failed_distribution_and_retry() {
 }
 
 #[test]
+fn test_regression_retry_distribution_locked_while_reconciling() {
+    let mut model = Model::new();
+    let token_id = "c-1".to_string();
+    let asset = "nep141:usdc.near".to_string();
+
+    model
+        .step(
+            Action::Issue {
+                token_id: token_id.clone(),
+                kind: 0,
+                issuer_id: "issuer.near".to_string(),
+                debtor: Some(Debtor::Evm(Hex20::default())),
+                terms_hash: Hex32::default(),
+                amount_due: 1_438_476,
+                due_date: 0,
+            },
+            100,
+        )
+        .unwrap();
+
+    // 1. Deposit balance
+    model
+        .step(
+            Action::DepositIntentsBalance {
+                token_id: token_id.clone(),
+                asset: asset.clone(),
+                amount: 400,
+            },
+            110,
+        )
+        .unwrap();
+
+    // 2. Reconcile with failed leg, putting leg into undistributed
+    model
+        .step(
+            Action::Reconcile {
+                token_id: token_id.clone(),
+                leg_failures: vec![true],
+            },
+            120,
+        )
+        .unwrap();
+
+    assert_eq!(model.get_claim(&token_id).unwrap().undistributed.len(), 1);
+
+    // Capture claim state before ReconcileStart
+    let pre_claim = model.get_claim(&token_id).unwrap().clone();
+
+    // 3. Initiate reconcile (sets Lock::Reconciling)
+    model
+        .step(
+            Action::ReconcileStart {
+                token_id: token_id.clone(),
+            },
+            130,
+        )
+        .unwrap();
+
+    // 4. Retry distribution must be refused while Reconciling lock is active
+    let err = model
+        .step(
+            Action::RetryDistribution {
+                token_id: token_id.clone(),
+                leg_failures: vec![false],
+            },
+            140,
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        ModelError::ClaimLocked("cannot retry while reconciling".into())
+    );
+
+    // 5. Zero-delta reconcile callback completes and idempotent check holds
+    model
+        .step(
+            Action::ReconcileCallback {
+                token_id: token_id.clone(),
+                leg_failures: vec![],
+                callback_ok: true,
+            },
+            150,
+        )
+        .unwrap();
+
+    let post_claim = model.get_claim(&token_id).unwrap().clone();
+    check_reconcile_idempotent(&pre_claim, &post_claim).unwrap();
+}
+
+#[test]
 fn test_anomaly_drain_balance_and_reset_last_seen() {
     let mut model = Model::new();
     let token_id = "c-anomaly".to_string();
