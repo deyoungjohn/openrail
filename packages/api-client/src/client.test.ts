@@ -200,6 +200,14 @@ describe("typed client", () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.openrail.near/v1/health");
   });
 
+  it("reads analytics", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(fixture("analytics.json")));
+    const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });
+    const analytics = await client.analytics();
+    expect(analytics.sample.paid).toBe(1);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.openrail.near/v1/analytics");
+  });
+
   it("serves the OpenAPI document", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ openapi: "3.1.0" }));
     const client = new OpenrailClient({ baseUrl: "https://api.openrail.near", fetchImpl });

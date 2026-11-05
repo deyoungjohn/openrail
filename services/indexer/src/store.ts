@@ -681,6 +681,92 @@ export class IndexerStore {
     return toDelete.length;
   }
 
+  analytics(): {
+    average_days_to_paid: number | null;
+    paid_on_time_rate: number | null;
+    payments_by_chain: { chain: string; count: number; amount: string }[];
+    payments_by_asset: { asset: string; count: number; amount: string }[];
+    sample: { claims: number; paid: number; on_time: number };
+  } {
+    const issueRows = this.db
+      .prepare(
+        "SELECT token_id, MIN(block_timestamp) AS issued_at FROM events WHERE event = 'issue' AND token_id IS NOT NULL GROUP BY token_id",
+      )
+      .all() as { token_id: string; issued_at: number }[];
+    const dueRows = this.db.prepare("SELECT token_id, due_date FROM claims").all() as {
+      token_id: string;
+      due_date: number;
+    }[];
+    const receipts = this.db
+      .prepare("SELECT token_id, payment, asset, timestamp, origin_json FROM receipts")
+      .all() as {
+      token_id: string;
+      payment: string;
+      asset: string;
+      timestamp: number;
+      origin_json: string | null;
+    }[];
+    const issued = new Map(issueRows.map((row) => [row.token_id, Number(row.issued_at)]));
+    const due = new Map(dueRows.map((row) => [row.token_id, Number(row.due_date)]));
+    const firstPaid = new Map<string, number>();
+    const chain = new Map<string, { count: number; amount: bigint }>();
+    const asset = new Map<string, { count: number; amount: bigint }>();
+
+    for (const row of receipts) {
+      const current = firstPaid.get(row.token_id);
+      if (current === undefined || row.timestamp < current)
+        firstPaid.set(row.token_id, row.timestamp);
+      let chainName = "unknown";
+      if (row.origin_json !== null) {
+        try {
+          const origin = JSON.parse(row.origin_json) as { chain?: unknown };
+          if (typeof origin.chain === "string" && origin.chain !== "") chainName = origin.chain;
+        } catch {
+          // keep unknown
+        }
+      }
+      const chainEntry = chain.get(chainName) ?? { count: 0, amount: 0n };
+      chainEntry.count += 1;
+      chainEntry.amount += BigInt(row.payment);
+      chain.set(chainName, chainEntry);
+      const assetEntry = asset.get(row.asset) ?? { count: 0, amount: 0n };
+      assetEntry.count += 1;
+      assetEntry.amount += BigInt(row.payment);
+      asset.set(row.asset, assetEntry);
+    }
+
+    let totalDays = 0;
+    let timed = 0;
+    let onTime = 0;
+    for (const [tokenId, paidAt] of firstPaid) {
+      const issuedAt = issued.get(tokenId);
+      if (issuedAt !== undefined) {
+        totalDays += Math.max(0, paidAt - issuedAt) / 86_400;
+        timed += 1;
+      }
+      const dueAt = due.get(tokenId) ?? 0;
+      if (dueAt > 0) {
+        if (paidAt <= dueAt) onTime += 1;
+      }
+    }
+    const paid = firstPaid.size;
+    return {
+      average_days_to_paid: timed === 0 ? null : totalDays / timed,
+      paid_on_time_rate: paid === 0 ? null : onTime / paid,
+      payments_by_chain: [...chain.entries()].map(([name, value]) => ({
+        chain: name,
+        count: value.count,
+        amount: value.amount.toString(),
+      })),
+      payments_by_asset: [...asset.entries()].map(([name, value]) => ({
+        asset: name,
+        count: value.count,
+        amount: value.amount.toString(),
+      })),
+      sample: { claims: issued.size, paid, on_time: onTime },
+    };
+  }
+
   budgetState(): { day: string; used: number } | null {
     const row = this.db
       .prepare("SELECT day, used FROM budget_state ORDER BY day DESC LIMIT 1")

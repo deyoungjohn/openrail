@@ -51,6 +51,9 @@
     },
     {
       "name": "Recurring invoices"
+    },
+    {
+      "name": "Analytics"
     }
   ],
   "security": [
@@ -2402,7 +2405,7 @@
           "invoice_number_prefix": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{1,32}$",
-            "description": "Invoices are numbered <prefix>-001, <prefix>-002, …"
+            "description": "Invoices are numbered <prefix>-001, <prefix>-002, \u2026"
           },
           "issuer_legal_name": {
             "type": "string"
@@ -2736,6 +2739,89 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RecurringInvoice"
+            }
+          }
+        }
+      },
+      "Analytics": {
+        "type": "object",
+        "required": [
+          "average_days_to_paid",
+          "paid_on_time_rate",
+          "payments_by_chain",
+          "payments_by_asset",
+          "sample"
+        ],
+        "properties": {
+          "average_days_to_paid": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paid_on_time_rate": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payments_by_chain": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["chain", "count", "amount"],
+              "properties": {
+                "chain": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "amount": {
+                  "$ref": "#/components/schemas/U128"
+                }
+              }
+            }
+          },
+          "payments_by_asset": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["asset", "count", "amount"],
+              "properties": {
+                "asset": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "amount": {
+                  "$ref": "#/components/schemas/U128"
+                }
+              }
+            }
+          },
+          "sample": {
+            "type": "object",
+            "required": ["claims", "paid", "on_time"],
+            "properties": {
+              "claims": {
+                "type": "integer"
+              },
+              "paid": {
+                "type": "integer"
+              },
+              "on_time": {
+                "type": "integer"
+              }
             }
           }
         }
@@ -5264,7 +5350,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "Recurring template id (rec_…).",
+            "description": "Recurring template id (rec_\u2026).",
             "schema": {
               "type": "string"
             }
@@ -5331,7 +5417,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "Recurring template id (rec_…).",
+            "description": "Recurring template id (rec_\u2026).",
             "schema": {
               "type": "string"
             }
@@ -5400,6 +5486,53 @@
           },
           "409": {
             "description": "Template is cancelled or completed (recurring_closed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/analytics": {
+      "get": {
+        "operationId": "getAnalytics",
+        "summary": "Analytics computed from indexed events",
+        "tags": ["Analytics"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Average days to paid, payments by chain/asset, paid-on-time rate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Analytics"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope (insufficient_scope: missing scope: invoices:read).",
             "content": {
               "application/json": {
                 "schema": {

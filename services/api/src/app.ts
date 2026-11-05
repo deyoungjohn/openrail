@@ -79,6 +79,7 @@ export interface IndexerPort {
     type?: string;
     limit?: number;
   }): Promise<{ data: Record<string, unknown>[]; next_cursor?: string | null }>;
+  analytics(): Promise<Record<string, unknown>>;
 }
 
 export interface CashoutPort {
@@ -193,6 +194,7 @@ export interface ApiDeps {
   spec?: Record<string, unknown>;
   webhookFetch?: (input: string, init?: RequestInit) => Promise<Response>;
   webhookUrlValidator?: (url: string) => Promise<unknown>;
+  pokeIndexer?: () => Promise<void>;
 }
 
 function nowIso(clock: () => Date): string {
@@ -758,6 +760,7 @@ export class ApiApp {
           expired: false,
         });
         this.store.saveOpenQuotes(session.token_id, quotes);
+        await this.deps.pokeIndexer?.().catch(() => undefined);
         return { status: 201, body: session };
       });
     }
@@ -1053,6 +1056,12 @@ export class ApiApp {
       if (method === "GET" && action === "deliveries") {
         return { status: 200, body: { data: this.store.listDeliveries(endpointId) } };
       }
+    }
+
+    if (path === "/v1/analytics" && method === "GET") {
+      this.requireScope(this.requireAuth(request), "invoices:read");
+      if (this.deps.indexer === undefined) throw new ApiError(503, "analytics_unavailable");
+      return { status: 200, body: await this.deps.indexer.analytics() };
     }
 
     if (path === "/v1/events" && method === "GET") {

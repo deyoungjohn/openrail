@@ -22,6 +22,7 @@ function appWithIndexer() {
     listReceipts: vi.fn(async () => receipts),
     getReceipt: vi.fn(async () => receipt),
     getStatement: vi.fn(async () => statement),
+    analytics: vi.fn(async () => ({ average_days_to_paid: 2, paid_on_time_rate: 1 })),
     listEvents: vi.fn(async () => ({
       data: [{ id: "7", type: "booked", created: 1762077695, data: { token_id: "c-1" } }],
       next_cursor: "7",
@@ -91,6 +92,14 @@ describe("receipt and statement routes use the indexer port", () => {
     expect(body.receipt.id).toBe(receipt.id);
     expect(body.verify_url).toContain(String(receipt.booking_tx_hash));
     expect(indexer.getReceipt).toHaveBeenCalledWith(receipt.booking_tx_hash);
+  });
+
+  it("passes analytics through from the indexer", async () => {
+    const { app, indexer, secret } = appWithIndexer();
+    const response = await app.handle(request("GET", "/v1/analytics", secret));
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ average_days_to_paid: 2, paid_on_time_rate: 1 });
+    expect(indexer.analytics).toHaveBeenCalled();
   });
 
   it("lists events from the indexer cursor", async () => {

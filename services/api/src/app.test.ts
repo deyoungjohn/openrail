@@ -54,9 +54,11 @@ function harness() {
       spreadBps: 0,
     })),
   };
+  const pokeIndexer = vi.fn(async () => undefined);
   const deps: ApiDeps = {
     config,
     auth,
+    pokeIndexer,
     issuer,
     contract,
     accessKey: { has: async () => true },
@@ -70,7 +72,7 @@ function harness() {
       if (!url.startsWith("https://")) throw new UnsafeWebhookUrl("webhook URL must use https");
     },
   };
-  return { app: new ApiApp(deps), auth, secret, issuer, contract, quoteProvider };
+  return { app: new ApiApp(deps), auth, secret, issuer, contract, quoteProvider, pokeIndexer };
 }
 
 function request(
@@ -297,7 +299,7 @@ describe("invoice route", () => {
 
 describe("pay session route", () => {
   it("returns deadline_requested and the provider deadline after log_quote", async () => {
-    const { app, secret, issuer, quoteProvider } = harness();
+    const { app, secret, issuer, quoteProvider, pokeIndexer } = harness();
     await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
     const response = await app.handle(
       request(
@@ -318,6 +320,7 @@ describe("pay session route", () => {
     expect(body.deposit_address).toBe("0xdeposit");
     expect(quoteProvider.quote).toHaveBeenCalled();
     expect(issuer.logQuote).toHaveBeenCalled();
+    expect(pokeIndexer).toHaveBeenCalledTimes(1);
   });
 });
 

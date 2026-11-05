@@ -1,6 +1,6 @@
 import type { FunctionCallRequest, ViewRequest } from "@openrail/shared";
 import { createLogger } from "@openrail/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   IssuerService,
   REQUIRED_ISSUE_DEPOSIT_YOCTO,
@@ -79,6 +79,7 @@ function fixture(
     issuerResult?: (method: string) => unknown;
     accounts?: boolean[];
     claim?: unknown;
+    indexer?: { poke(): Promise<void>; registerTx(hash: string): Promise<void> };
   } = {},
 ): Fixture {
   const config: IssuerServiceConfig = {
@@ -100,6 +101,7 @@ function fixture(
     accounts,
     config,
     logger,
+    ...(options.indexer === undefined ? {} : { indexer: options.indexer }),
   });
   return { service, issuer, relay, credit, accounts, config };
 }
@@ -179,6 +181,17 @@ describe("issuer issueFor", () => {
     });
     await service.issueFor(ISSUE);
     expect(accounts.calls).toEqual(["c-5.openrail.near", "c-5.openrail.near", "c-5.openrail.near"]);
+  });
+
+  it("registers the issue transaction and pokes the indexer", async () => {
+    const indexer = {
+      poke: vi.fn(async () => undefined),
+      registerTx: vi.fn(async () => undefined),
+    };
+    const { service } = fixture({ issuerResult: () => ok("c-5"), indexer });
+    await service.issueFor(ISSUE);
+    expect(indexer.registerTx).toHaveBeenCalledWith("tx-1");
+    expect(indexer.poke).toHaveBeenCalledTimes(1);
   });
 
   it("fails when the claim account never appears", async () => {

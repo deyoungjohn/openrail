@@ -12,7 +12,7 @@
  * After a claim's last quote +72 h it moves to the 10-minute cadence. Every contract call goes
  * through the public core methods named in `abi/openrail.core.json`.
  */
-import { redactString, type Logger } from "@openrail/shared";
+import { redactString, type IndexerControl, type Logger } from "@openrail/shared";
 import type { AlertSink, LowBalanceAlert } from "./alerts.js";
 import type { WatcherConfig } from "./config.js";
 import type { HealthSnapshot } from "./health.js";
@@ -52,6 +52,7 @@ export interface WatcherOptions {
   reportLowBalance?: (snapshot: HealthSnapshot) => void;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  indexer?: IndexerControl;
 }
 
 function isNonTerminal(status: string): boolean {
@@ -98,6 +99,7 @@ export class Watcher {
   private readonly reportLowBalance: ((snapshot: HealthSnapshot) => void) | undefined;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly indexer: IndexerControl | undefined;
 
   private readonly lastChecked = new Map<string, number>();
   private lowAlerted = false;
@@ -120,6 +122,7 @@ export class Watcher {
     this.reportLowBalance = options.reportLowBalance;
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.indexer = options.indexer;
   }
 
   snapshot(): HealthSnapshot {
@@ -234,7 +237,7 @@ export class Watcher {
   }
 
   private async send(method: WatcherMethod, tokenId: string): Promise<void> {
-    await this.near.sendFunctionCall({
+    const result = await this.near.sendFunctionCall({
       receiverId: this.config.rootAccount,
       methodName: method,
       args: { token_id: tokenId },
@@ -242,6 +245,17 @@ export class Watcher {
       deposit: 0n,
       feature: "watcher",
     });
+    const outcome = result as {
+      transaction?: { hash?: unknown };
+      transaction_outcome?: { id?: unknown };
+    } | null;
+    const hash = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id;
+    try {
+      if (typeof hash === "string" && hash !== "") await this.indexer?.registerTx(hash);
+      await this.indexer?.poke();
+    } catch (error) {
+      this.logger.warn("indexer control failed", errorMessage(error));
+    }
     this.logger.info("sent", method, tokenId);
   }
 

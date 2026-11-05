@@ -9,7 +9,7 @@
  * Two keys on `ISSUER_ACCOUNT_ID`: `ISSUER_PRIVATE_KEY` signs `issue_for`/`log_quote`;
  * `RELAY_PRIVATE_KEY` signs `acknowledge_evm` only.
  */
-import type { Logger } from "@openrail/shared";
+import type { IndexerControl, Logger } from "@openrail/shared";
 import { IssuerError } from "./errors.js";
 import type {
   AccountChecker,
@@ -52,6 +52,7 @@ export interface IssuerServiceDeps {
   accounts: AccountChecker;
   config?: Partial<IssuerServiceConfig>;
   logger: Logger;
+  indexer?: IndexerControl;
 }
 
 /** A tiny promise-chain mutex; keeps nonce use and account waits serial. */
@@ -121,6 +122,7 @@ export class IssuerService {
   private readonly accounts: AccountChecker;
   private readonly config: IssuerServiceConfig;
   private readonly logger: Logger;
+  private readonly indexer: IndexerControl | undefined;
   private readonly mutex = new Mutex();
 
   constructor(deps: IssuerServiceDeps) {
@@ -129,6 +131,7 @@ export class IssuerService {
     this.credit = deps.credit;
     this.accounts = deps.accounts;
     this.logger = deps.logger;
+    this.indexer = deps.indexer;
     this.config = {
       rootAccount: deps.config?.rootAccount ?? "",
       requiredDepositYocto: deps.config?.requiredDepositYocto ?? REQUIRED_ISSUE_DEPOSIT_YOCTO,
@@ -184,8 +187,15 @@ export class IssuerService {
       }
       const claimAccount = `${tokenId}.${this.config.rootAccount}`;
       await this.waitForAccount(claimAccount);
+      const txHash = txHashOf(result);
+      try {
+        await this.indexer?.registerTx(txHash);
+        await this.indexer?.poke();
+      } catch (error) {
+        this.logger.warn("indexer control failed", errorMessage(error));
+      }
       this.logger.info("issued", tokenId, request.business);
-      return { txHash: txHashOf(result), tokenId, claimAccount };
+      return { txHash, tokenId, claimAccount };
     });
   }
 

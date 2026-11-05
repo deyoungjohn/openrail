@@ -670,6 +670,26 @@ export interface RecurringInvoiceList {
   data: RecurringInvoice[];
 }
 
+export interface Analytics {
+  average_days_to_paid: number | null;
+  paid_on_time_rate: number | null;
+  payments_by_chain: Array<{
+    chain: string;
+    count: number;
+    amount: U128;
+  }>;
+  payments_by_asset: Array<{
+    asset: string;
+    count: number;
+    amount: U128;
+  }>;
+  sample: {
+    claims: number;
+    paid: number;
+    on_time: number;
+  };
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -1179,6 +1199,13 @@ export interface operations {
       "403": Error;
       "404": Error;
       "409": Error;
+    };
+  };
+  getAnalytics: {
+    responses: {
+      "200": Analytics;
+      "401": Error;
+      "403": Error;
     };
   };
 }
