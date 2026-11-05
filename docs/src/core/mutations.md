@@ -1081,3 +1081,194 @@ failures:
 
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 17.30s
 ```
+
+## H8 — Independent live NFT suite (`h8_live_nft_suite`)
+
+Deliberate breaks in live NFT dynamic SVG rendering and legacy metadata migration evaluated against the independent test suite in `contracts/tests/tests/h8_live_nft_suite.rs`.
+
+| ID       | Break                                                   | Test                                                               | Result          |
+| -------- | ------------------------------------------------------- | ------------------------------------------------------------------ | --------------- |
+| H8-IND-1 | Overdue condition suppressed in live SVG rendering      | `test_h8_media_flips_to_overdue_when_block_time_passes_due_date`   | FAILED (caught) |
+| H8-IND-2 | Stored media returned if present (no live override)     | `test_h8_stored_media_from_mint_before_change_renders_live`        | FAILED (caught) |
+| H8-IND-3 | Cancelled and Closed statuses omitted in live SVG       | `test_h8_media_changes_with_all_statuses_and_shows_amount_percent` | FAILED (caught) |
+| H8-IND-4 | Percentage calculation disabled in live SVG rendering   | `test_h8_media_changes_with_all_statuses_and_shows_amount_percent` | FAILED (caught) |
+| H8-IND-5 | Live media omitted on global enumeration (`nft_tokens`) | `test_h8_media_present_across_nft_enumeration_endpoints`           | FAILED (caught) |
+
+### H8-IND-1: Overdue condition suppressed in live SVG rendering
+
+Command: `cargo test -p openrail-tests --test h8_live_nft_suite test_h8_media_flips_to_overdue_when_block_time_passes_due_date`
+
+```diff
+--- a/contracts/openrail/src/svg.rs
++++ b/contracts/openrail/src/svg.rs
+@@ -88,3 +88,3 @@ pub fn invoice_svg_live(
+     let is_open = matches!(status, Status::Issued | Status::PartiallyPaid);
+-    let is_overdue = is_open && now_seconds > due_date;
++    let is_overdue = false;
+     let due_date_str = format_date(due_date);
+```
+
+Failure (tail):
+
+```text
+test test_h8_media_flips_to_overdue_when_block_time_passes_due_date ... FAILED
+
+failures:
+
+---- test_h8_media_flips_to_overdue_when_block_time_passes_due_date stdout ----
+
+thread 'test_h8_media_flips_to_overdue_when_block_time_passes_due_date' panicked at contracts/tests/tests/h8_live_nft_suite.rs:263:5:
+Open claim with past due date must contain 'Overdue', got: <svg ...>...<text x="40" y="320" fill="#9fb3c8" font-family="sans-serif" font-size="24">Due 1970-01-02</text></svg>
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_h8_media_flips_to_overdue_when_block_time_passes_due_date
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 13.20s
+```
+
+### H8-IND-2: Stored media returned if present (no live override)
+
+Command: `cargo test -p openrail-tests --test h8_live_nft_suite test_h8_stored_media_from_mint_before_change_renders_live`
+
+```diff
+--- a/contracts/openrail/src/nft.rs
++++ b/contracts/openrail/src/nft.rs
+@@ -348,3 +348,5 @@ impl Contract {
+         let now_seconds = env::block_timestamp_ms() / 1000;
+-        metadata.media = Some(crate::svg::render_claim_media(&claim, now_seconds));
++        if metadata.media.is_none() {
++            metadata.media = Some(crate::svg::render_claim_media(&claim, now_seconds));
++        }
+         metadata.reference = None;
+```
+
+Failure (tail):
+
+```text
+test test_h8_stored_media_from_mint_before_change_renders_live ... FAILED
+
+failures:
+
+---- test_h8_stored_media_from_mint_before_change_renders_live stdout ----
+
+thread 'test_h8_stored_media_from_mint_before_change_renders_live' panicked at contracts/tests/tests/h8_live_nft_suite.rs:622:5:
+assertion `left != right` failed: nft_token must NOT return the stored stale media; it must render live
+  left: "data:image/svg+xml;base64,T0xEX1NUQVRJQ19TVkdfRlJPTV9NElOVF9QUkUtSDg="
+ right: "data:image/svg+xml;base64,T0xEX1NUQVRJQ19TVkdfRlJPTV9NElOVF9QUkUtSDg="
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_h8_stored_media_from_mint_before_change_renders_live
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 12.84s
+```
+
+### H8-IND-3: Cancelled and Closed statuses omitted in live SVG
+
+Command: `cargo test -p openrail-tests --test h8_live_nft_suite test_h8_media_changes_with_all_statuses_and_shows_amount_percent`
+
+```diff
+--- a/contracts/openrail/src/svg.rs
++++ b/contracts/openrail/src/svg.rs
+@@ -64,3 +64,3 @@ pub fn status_text(status: &Status) -> &'static str {
+-        Status::Cancelled => "Cancelled",
+-        Status::Closed => "Closed",
++        Status::Cancelled => "Unknown",
++        Status::Closed => "Unknown",
+     }
+```
+
+Failure (tail):
+
+```text
+test test_h8_media_changes_with_all_statuses_and_shows_amount_percent ... FAILED
+
+failures:
+
+---- test_h8_media_changes_with_all_statuses_and_shows_amount_percent stdout ----
+
+thread 'test_h8_media_changes_with_all_statuses_and_shows_amount_percent' panicked at contracts/tests/tests/h8_live_nft_suite.rs:182:5:
+SVG must show Status: Closed, got: <svg ...>...<text x="40" y="160" fill="#94a3b8" font-family="sans-serif" font-size="26">Status: Unknown</text>...
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_h8_media_changes_with_all_statuses_and_shows_amount_percent
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 15.07s
+```
+
+### H8-IND-4: Percentage calculation disabled in live SVG rendering
+
+Command: `cargo test -p openrail-tests --test h8_live_nft_suite test_h8_media_changes_with_all_statuses_and_shows_amount_percent`
+
+```diff
+--- a/contracts/openrail/src/svg.rs
++++ b/contracts/openrail/src/svg.rs
+@@ -121,3 +121,3 @@ pub fn invoice_svg_live(
+         paid = format_amount(amount_paid),
+-        percent = percent,
++        percent = 0,
+         due_color = due_color,
+```
+
+Failure (tail):
+
+```text
+test test_h8_media_changes_with_all_statuses_and_shows_amount_percent ... FAILED
+
+failures:
+
+---- test_h8_media_changes_with_all_statuses_and_shows_amount_percent stdout ----
+
+thread 'test_h8_media_changes_with_all_statuses_and_shows_amount_percent' panicked at contracts/tests/tests/h8_live_nft_suite.rs:111:5:
+SVG must show Paid: $2.50 (25%), got: <svg ...>...<text x="40" y="270" fill="#9fb3c8" font-family="sans-serif" font-size="24">Paid: $2.50 (0%)</text>...
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_h8_media_changes_with_all_statuses_and_shows_amount_percent
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 15.24s
+```
+
+### H8-IND-5: Live media omitted on global enumeration (`nft_tokens`)
+
+Command: `cargo test -p openrail-tests --test h8_live_nft_suite test_h8_media_present_across_nft_enumeration_endpoints`
+
+```diff
+--- a/contracts/openrail/src/nft.rs
++++ b/contracts/openrail/src/nft.rs
+@@ -377,5 +377,11 @@ impl Contract {
+         crate::claims::IndexedTokenSet::global()
+             .iter_range(from, limit)
+-            .filter_map(|token_id| self.token_view(&token_id))
++            .filter_map(|token_id| {
++                let mut t = self.token_view(&token_id)?;
++                if let Some(m) = t.metadata.as_mut() {
++                    m.media = None;
++                }
++                Some(t)
++            })
+             .collect()
+```
+
+Failure (tail):
+
+```text
+test test_h8_media_present_across_nft_enumeration_endpoints ... FAILED
+
+failures:
+
+---- test_h8_media_present_across_nft_enumeration_endpoints stdout ----
+Error: live media required
+
+
+failures:
+    test_h8_media_present_across_nft_enumeration_endpoints
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 15.84s
+```
