@@ -256,6 +256,20 @@ describe("invoice route", () => {
     expect((denied.body as { error: { code: string } }).error.code).toBe("insufficient_scope");
   });
 
+  it("pokes the indexer after a cash-out quote", async () => {
+    const { app, secret, pokeIndexer } = harness();
+    const response = await app.handle(
+      request(
+        "POST",
+        "/v1/cashout/quote",
+        { amount: "2000000", destination_chain: "base", address: "0x" + "e".repeat(40) },
+        secret,
+      ),
+    );
+    expect(response.status).toBe(201);
+    expect(pokeIndexer).toHaveBeenCalledTimes(1);
+  });
+
   it("lists payments for the business", async () => {
     const { app, secret } = harness();
     app.store.savePayment("pay_1", {
