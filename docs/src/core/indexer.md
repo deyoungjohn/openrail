@@ -87,7 +87,7 @@ NearBlocks `txns` row, no logs) and `account-receipts.openrail.json`; the block 
 - average days from `issue` to the booking that reaches the full `amount_due`
   (a part payment does not count as paid);
 - payments grouped by origin chain and settlement asset, with base-unit amounts;
-- paid-on-time rate (first payment at or before the claim's due date).
+- paid-on-time rate (the booking that completes the claim at or before its due date).
 
 All timestamps are normalized to Unix seconds in `services/indexer/src/time.ts`
 (NearBlocks returns nanoseconds) before they are stored or compared.
