@@ -162,6 +162,7 @@ test.describe("tab order follows the visual order", () => {
       "Pay from any wallet or exchange",
       "USDC on Base",
       "USDC on BNB Chain",
+      "Split this payment",
     ]);
 
     await page.getByRole("button", { name: /USDC on Base/ }).click();

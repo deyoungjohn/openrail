@@ -210,8 +210,8 @@ test.describe("H9: split this payment", () => {
     await chooseAndGetPrice(page, "USDC on BNB Chain");
     const prices = page.getByRole("region", { name: /^Your price/ });
     await expect(prices).toHaveCount(2);
-    await expect(prices.nth(0)).toContainText("5.00 USDC");
-    await expect(prices.nth(1)).toContainText("7.50 USDC");
+    await expect(prices.nth(0)).toContainText("$5.00");
+    await expect(prices.nth(1)).toContainText("$7.50");
     await expect(page.locator("code", { hasText: "0x1111" }).first()).toBeVisible();
     await expect(page.locator("code", { hasText: "0x2222" }).first()).toBeVisible();
   });

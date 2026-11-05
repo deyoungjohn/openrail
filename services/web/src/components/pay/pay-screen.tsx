@@ -604,7 +604,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
         {prices}
         {open && starting ? <Card title={p.getting} state="loading" /> : null}
         {open && sessionError === "failed" ? (
-          <div role="alert" className="surface-card">
+          <div className="surface-card">
             <ErrorState
               body={split && legs.length > 0 ? p.mixPartFailed : p.sessionError}
               onRetry={route ? submit : undefined}
