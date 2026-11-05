@@ -59,7 +59,7 @@ grep -n -E '^(ISSUER_SERVICE_KEY|ONECLICK_JWT|NEARBLOCKS_API_KEY|ISSUER_PRIVATE_
 
 To change a value later, edit the file: `nano ~/.openrail/openrail.env`. It is not in the repository. Never paste it anywhere.
 
-If `init-env.sh` stops with `MISSING_KEYRING_ITEM: <name>`, that key was never stored. Create it with `node tools/genkey.mjs` (in the lab repo) or tell me.
+If `init-env.sh` stops with `KEY_MISMATCH`, a keyring item holds a different key than the one registered on chain for that role; compare with `node deploy/lib/pubkey.mjs` (reads a secret on stdin, prints only the public key). If it stops with `MISSING_KEYRING_ITEM: <name>`, that key was never stored. Create it with `node tools/genkey.mjs` (in the lab repo) or tell me.
 
 ### Step 3. [LAPTOP] Build the server pack
 

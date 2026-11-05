@@ -35,6 +35,21 @@ keyring() { # keyring ITEM: print a keyring secret, or stop if it is missing
 fill ISSUER_PRIVATE_KEY "$(keyring issuer-fc-key)"
 fill RELAY_PRIVATE_KEY "$(keyring relayer-fc-key)"
 fill WATCHER_PRIVATE_KEY "$(keyring watcher-fc-key)"
+# The keys must be the ones registered on chain (the template lists their public keys): a swapped
+# keyring item would otherwise only show up when the issuer refuses to start.
+check_key() { # check_key ROLE ITEM PUBLIC_KEY_NAME
+  local expected derived
+  expected="$(grep -m1 "^$3=" deploy/env/openrail.env.example | cut -d= -f2-)"
+  derived="$(secret-tool lookup service openrail name "$2" | node deploy/lib/pubkey.mjs)"
+  if [[ "$derived" != "$expected" ]]; then
+    echo "KEY_MISMATCH: keyring item $2 has public key $derived, but the $1 key registered on chain is $expected" >&2
+    rm -f "$file"
+    exit 1
+  fi
+}
+check_key issuer issuer-fc-key ISSUER_PUBLIC_KEY
+check_key relay relayer-fc-key RELAYER_PUBLIC_KEY
+check_key watcher watcher-fc-key WATCHER_PUBLIC_KEY
 fill ISSUER_SERVICE_KEY "$(openssl rand -hex 32)"
 fill NEXT_PUBLIC_API_PUBLISHABLE_KEY "or_pk_live_$(node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))")"
 
