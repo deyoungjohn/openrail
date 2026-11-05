@@ -1,0 +1,95 @@
+name: server-pack
+
+# Builds the server pack in CI (the same deploy/build.sh the laptop runs) and publishes it as a
+# GitHub Release asset, so the server downloads it from GitHub instead of a laptop uploading it.
+#
+# The pack holds no secrets: only NEXT_PUBLIC_* values (public by definition) are baked in, read
+# from repository Variables (Settings → Secrets and variables → Actions → Variables).
+# Server side: `sudo openrail-fetch --apply` (deploy/fetch.sh).
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "evidence/**"
+      - "reports/**"
+  workflow_dispatch:
+
+concurrency:
+  group: server-pack
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the release that carries the pack
+
+env:
+  KEEP_PACKS: "5"
+
+jobs:
+  pack:
+    name: build and publish server pack
+    runs-on: ubuntu-24.04 # same OS family as the server (Ubuntu 24.04, x86_64)
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23"
+          cache: pnpm
+
+      - name: Build the pack (deploy/build.sh)
+        env:
+          NEXT_PUBLIC_API_MODE: ${{ vars.NEXT_PUBLIC_API_MODE || 'live' }}
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.openrail.incepture.dev' }}
+          NEXT_PUBLIC_NEAR_NETWORK: ${{ vars.NEXT_PUBLIC_NEAR_NETWORK || 'mainnet' }}
+          NEXT_PUBLIC_ROOT_CONTRACT: ${{ vars.NEXT_PUBLIC_ROOT_CONTRACT || 'openrail.near' }}
+          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ vars.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
+          NEXT_PUBLIC_API_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_API_PUBLISHABLE_KEY }}
+          OPENRAIL_ENV: /nonexistent # CI has no env file; build.sh then uses the variables above
+        run: |
+          missing=0
+          for v in NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID NEXT_PUBLIC_API_PUBLISHABLE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::repository variable $v is not set"; missing=1; fi
+          done
+          [ "$missing" = 0 ] || exit 1
+          ./deploy/build.sh
+
+      - name: Checksum
+        id: pack
+        run: |
+          pack="$(ls -t dist/openrail-server-*.tar.gz | head -1)"
+          name="$(basename "$pack")"
+          ( cd dist && sha256sum "$name" > "$name.sha256" )
+          echo "path=$pack" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          ls -lh dist/
+
+      - name: Publish release server-<sha>
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: server-${{ steps.pack.outputs.short }}
+        run: |
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" \
+            "${{ steps.pack.outputs.path }}" "${{ steps.pack.outputs.path }}.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "Server pack ${{ steps.pack.outputs.short }}" \
+            --notes "Built by CI from ${GITHUB_SHA} (linux x86_64, Node 22.23). Install on the server: sudo openrail-fetch --apply ${{ steps.pack.outputs.short }}" \
+            --prerelease
+
+      - name: Keep only the newest packs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq \
+            '[.[] | select(.tag_name | startswith("server-"))] | sort_by(.created_at) | reverse | .['"$KEEP_PACKS"':][] | .tag_name' \
+          | while read -r old; do
+              echo "deleting old pack release $old"
+              gh release delete "$old" --yes --cleanup-tag || true
+            done

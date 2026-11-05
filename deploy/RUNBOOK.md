@@ -282,10 +282,25 @@ Send me the output of Step 14 and Step 16. I check the API from outside and then
 
 ## Updating later: one command on the server
 
-Whenever new code is pushed:
+Whenever new code is pushed to `main`, CI builds the pack (workflow `server-pack`, about 5 minutes) and publishes it as a GitHub Release named `server-<sha>`. Nothing is built or uploaded from the laptop.
 
-1. [LAPTOP] `cd ~/openrail && git pull && ./deploy/build.sh && ./deploy/upload.sh` (add `--env` if you changed a setting or key).
-2. [EC2] `sudo openrail-apply`
+1. [BROWSER] Wait for the `server-pack` run on the latest `main` commit to go green (Actions tab).
+2. [EC2] `sudo openrail-fetch --apply`
+
+`openrail-fetch` downloads the newest pack straight from GitHub to the server, checks its sha256, and hands it to `openrail-apply`. Use `sudo openrail-fetch --apply <short-sha>` for a specific commit, or `--dry-run` to see what it would do. It updates itself from each pack it verifies.
+
+**First time only:**
+1. [BROWSER] In the repository's Settings → Secrets and variables → Actions → **Variables**, add `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` and `NEXT_PUBLIC_API_PUBLISHABLE_KEY`, copied from your env file. Both are public values that are baked into the website. Optionally add `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_NEAR_NETWORK`, `NEXT_PUBLIC_ROOT_CONTRACT` and `NEXT_PUBLIC_API_MODE`; the defaults match the env file template.
+2. [EC2] Install the command:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/deyoungjohn/openrail/main/deploy/fetch.sh | sudo tee /usr/local/bin/openrail-fetch >/dev/null
+   sudo chmod +x /usr/local/bin/openrail-fetch
+   ```
+
+Changed a key or setting only? `./deploy/upload.sh --env-only` (small file), then `sudo openrail-apply --restart-only`. Changed a `NEXT_PUBLIC_` value? Update the repository Variable and re-run the `server-pack` workflow (Actions → server-pack → Run workflow).
+
+The old laptop path still works when GitHub is unavailable: `./deploy/build.sh && ./deploy/upload.sh`, then `sudo openrail-apply`.
 
 `openrail-apply` takes the newest uploaded pack and does everything: unpacks it as a new release, applies an uploaded env file (then shreds it), switches `current`, updates the service files and web server config if they changed, restarts the five services in order, and waits for the health check. **If the new release is not healthy it goes back to the previous one by itself** and tells you which service failed, with its last log lines. It keeps the last four releases.
 
