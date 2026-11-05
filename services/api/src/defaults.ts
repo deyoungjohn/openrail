@@ -228,6 +228,21 @@ export function createQuoteProvider(): QuoteProvider {
         spreadBps: 0,
       };
     },
+    async status(depositAddress) {
+      const result = await client.status(depositAddress);
+      const d = result.swapDetails;
+      return {
+        status: result.status ?? "PENDING_DEPOSIT",
+        ...(d.depositedAmount === undefined ? {} : { depositedAmount: d.depositedAmount }),
+        ...(d.originChainTxHashes === undefined
+          ? {}
+          : { originChainTxHashes: d.originChainTxHashes }),
+        ...(d.destinationChainTxHashes === undefined
+          ? {}
+          : { destinationChainTxHashes: d.destinationChainTxHashes }),
+        ...(d.nearTxHashes === undefined ? {} : { nearTxHashes: d.nearTxHashes }),
+      };
+    },
   };
 }
 

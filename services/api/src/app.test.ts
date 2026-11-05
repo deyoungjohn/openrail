@@ -53,6 +53,7 @@ function harness() {
       amountOut: request.amount,
       spreadBps: 0,
     })),
+    status: vi.fn(async (_address: string) => ({ status: "PENDING_DEPOSIT" })),
   };
   const pokeIndexer = vi.fn(async () => undefined);
   const deps: ApiDeps = {
@@ -262,10 +263,32 @@ describe("invoice route", () => {
     const body = { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) };
     const first = await app.handle(request("POST", "/v1/pay/sessions", body, secret));
     const second = await app.handle(request("POST", "/v1/pay/sessions", body, secret));
-    const listed = await app.handle(request("GET", "/v1/pay/claims/c-1/sessions"));
+    const listed = await app.handle(request("GET", "/v1/pay/claims/c-1/sessions", undefined, ""));
     expect(listed.status).toBe(200);
     const ids = (listed.body as { data: { id: string }[] }).data.map((s) => s.id);
     expect(ids).toEqual([(first.body as { id: string }).id, (second.body as { id: string }).id]);
+  });
+
+  it("a price is paid only when the provider says so, even if the claim is paid", async () => {
+    const { app, secret, contract, quoteProvider } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    const body = { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) };
+    const made = await app.handle(request("POST", "/v1/pay/sessions", body, secret));
+    const id = (made.body as { id: string }).id;
+    contract.claim.mockResolvedValue({ ...(await contract.claim()), status: "Paid" });
+    const poll = async () =>
+      (await app.handle(request("GET", `/v1/pay/sessions/${id}`, undefined, ""))).body as {
+        status: string;
+        swap_details: { status: string };
+      };
+
+    expect((await poll()).status).toBe("pending_deposit");
+    quoteProvider.status.mockResolvedValueOnce({ status: "INCOMPLETE_DEPOSIT" });
+    const short = await poll();
+    expect(short.status).toBe("pending_deposit");
+    expect(short.swap_details.status).toBe("INCOMPLETE_DEPOSIT");
+    quoteProvider.status.mockResolvedValueOnce({ status: "SUCCESS" });
+    expect((await poll()).status).toBe("success");
   });
 
   it("pokes the indexer after a cash-out quote", async () => {

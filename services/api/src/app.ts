@@ -219,6 +219,25 @@ export interface ApiDeps {
   pokeIndexer?: () => Promise<void>;
 }
 
+/** The provider's status word as the API's payment status. A short deposit stays pending: it waits for the rest. */
+export function paymentStatusOf(
+  provider: string,
+): "pending_deposit" | "processing" | "success" | "refunded" | "failed" {
+  switch (provider) {
+    case "KNOWN_DEPOSIT_TX":
+    case "PROCESSING":
+      return "processing";
+    case "SUCCESS":
+      return "success";
+    case "REFUNDED":
+      return "refunded";
+    case "FAILED":
+      return "failed";
+    default:
+      return "pending_deposit";
+  }
+}
+
 function nowIso(clock: () => Date): string {
   return clock().toISOString();
 }
@@ -804,21 +823,33 @@ export class ApiApp {
     if (paySessionMatch !== null && method === "GET") {
       const session = this.store.getPaySession(paySessionMatch[1] ?? "");
       if (session === undefined) throw new ApiError(404, "pay_session_not_found");
-      // The payer's page polls this: once the claim is paid on chain the price is done, whichever
-      // address the money went to. (Before, it said "pending" forever.)
+      // The payer's page polls this. The truth is the provider's word about this deposit address;
+      // a price that never received money must never look paid, whatever the claim says.
       let status: string = session.status;
+      let swap: Record<string, unknown> = { status: "PENDING_DEPOSIT" };
       try {
-        const claim = await this.deps.contract.claim(session.token_id);
-        if (claim.status === "Paid") status = "success";
+        const live = await this.quotes.status(session.deposit_address);
+        if (live !== undefined) {
+          status = paymentStatusOf(live.status);
+          swap = {
+            status: live.status,
+            ...(live.depositedAmount === undefined
+              ? {}
+              : { deposited_amount: live.depositedAmount }),
+            origin_chain_tx_hashes: live.originChainTxHashes ?? [],
+            destination_chain_tx_hashes: live.destinationChainTxHashes ?? [],
+            near_tx_hashes: live.nearTxHashes ?? [],
+          };
+        }
       } catch {
-        /* the chain is slow: keep the stored status */
+        /* the provider is slow: keep the stored status */
       }
       return {
         status: 200,
         body: {
           id: session.id,
           status,
-          swap_details: { status: "PENDING_DEPOSIT" },
+          swap_details: swap,
           updated_at: nowIso(this.clock),
         },
       };

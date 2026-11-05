@@ -38,8 +38,19 @@ export interface QuoteProviderResult {
   spreadBps?: number;
 }
 
+export interface ProviderStatus {
+  /** The provider's own word, e.g. PENDING_DEPOSIT, INCOMPLETE_DEPOSIT, PROCESSING, SUCCESS, REFUNDED, FAILED. */
+  status: string;
+  depositedAmount?: string;
+  originChainTxHashes?: string[];
+  destinationChainTxHashes?: string[];
+  nearTxHashes?: string[];
+}
+
 export interface QuoteProvider {
   quote(request: QuoteProviderRequest): Promise<QuoteProviderResult>;
+  /** What the provider says about a deposit address. Optional: without it the page shows the stored status. */
+  status?(depositAddress: string): Promise<ProviderStatus>;
 }
 
 export interface QuoteLogger {
@@ -138,6 +149,11 @@ export function isQuoteExpired(deadline: string, now = new Date()): boolean {
 export class QuoteService {
   private readonly clock: () => Date;
   private readonly ids: (prefix: string) => string;
+
+  /** The provider's word about a deposit address, or nothing when the provider cannot say. */
+  async status(depositAddress: string): Promise<ProviderStatus | undefined> {
+    return this.deps.provider.status?.(depositAddress);
+  }
 
   constructor(private readonly deps: QuoteServiceDeps) {
     this.clock = deps.clock ?? (() => new Date());

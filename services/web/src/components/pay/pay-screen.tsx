@@ -144,6 +144,7 @@ function SessionView({
     near: [],
   });
   const [pollFailed, setPollFailed] = useState(false);
+  const [short, setShort] = useState(false);
   const chain = chainOfRoute(route);
 
   const stage = payStage(status, session.deadline, now ?? 0);
@@ -161,6 +162,7 @@ function SessionView({
         const r = await client.pay.getSession(session.id);
         if (off) return;
         setStatus(r.status);
+        setShort(r.swap_details.status === "INCOMPLETE_DEPOSIT");
         setHashes({
           origin: r.swap_details.origin_chain_tx_hashes ?? [],
           near: r.swap_details.near_tx_hashes ?? [],
@@ -249,6 +251,17 @@ function SessionView({
           />
           <p className="caption px-1">
             {p.sendOnly(route.payer_asset, chain ? CHAINS[chain] : route.origin_chain)}
+          </p>
+          <p className="caption px-1">
+            {short
+              ? p.shortSeen(
+                  formatToken(session.amount_in, route.origin_decimals),
+                  route.payer_asset,
+                )
+              : p.shortRule(
+                  formatToken(session.amount_in, route.origin_decimals),
+                  route.payer_asset,
+                )}
           </p>
           <div className="flex items-center justify-between px-1">
             <span className="caption">{p.timeLeft}</span>

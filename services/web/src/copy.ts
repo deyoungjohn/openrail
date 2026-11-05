@@ -242,6 +242,10 @@ export const copy = {
     sendOnly: (asset: string, chain: string) =>
       `Send only ${asset} on ${chain}. Anything else may be lost.`,
     timeLeft: "Time left",
+    shortRule: (amount: string, asset: string) =>
+      `This price is for ${amount} ${asset}. A smaller deposit waits here for the rest and is returned to your refund address if the rest does not arrive before the price expires. To pay less, go back and split the payment first.`,
+    shortSeen: (amount: string, asset: string) =>
+      `We saw a deposit smaller than ${amount} ${asset}. Send the rest to this same address and it is counted together. If you do nothing it is returned to your refund address when the price expires.`,
     earlierTitle: "Earlier prices for this invoice",
     earlierBody:
       "If you already sent money to one of these addresses, it is safe and is counted when it arrives. Do not send to it again.",
