@@ -18,6 +18,7 @@ import type {
   LogQuoteRequest,
   NearClientLike,
   PrepareIssueResult,
+  SponsorStatus,
   SponsorStatusReader,
   StorageCreditReader,
   TokenCounter,
@@ -160,12 +161,25 @@ export class IssuerService {
   async prepareIssue(business: string): Promise<PrepareIssueResult> {
     return this.mutex.run(async () => {
       const credit = await this.credit.storageCreditOf(business);
-      const sponsor =
-        this.sponsor === undefined ? undefined : await this.sponsor.sponsorStatusOf(business);
+      let sponsor: SponsorStatus | undefined;
+      let sponsorFailed = false;
+      if (this.sponsor !== undefined) {
+        try {
+          sponsor = await this.sponsor.sponsorStatusOf(business);
+        } catch (error) {
+          sponsorFailed = true;
+          this.logger.warn(
+            "sponsor_status unavailable; treating as no sponsorship",
+            errorMessage(error),
+          );
+        }
+      }
       const required = this.config.requiredDepositYocto;
       const sponsored =
         sponsor === undefined
-          ? undefined
+          ? sponsorFailed
+            ? false
+            : undefined
           : credit < required && sponsor.pool >= required && sponsor.used < sponsor.cap;
       let predicted: { tokenId: string; claimAccount: string } | undefined;
       if (this.tokens !== undefined) {

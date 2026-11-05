@@ -164,6 +164,21 @@ describe("issuer prepareIssue", () => {
     await expect(service.prepareIssue("acme.near")).resolves.toMatchObject({ sponsored: false });
   });
 
+  it("treats a missing sponsor_status view as no sponsorship", async () => {
+    const { service, credit } = fixture({
+      sponsor: {
+        sponsorStatusOf: async () => {
+          throw new Error("Method sponsor_status is not found");
+        },
+      },
+    });
+    credit.storageCreditOf = async () => 0n;
+    await expect(service.prepareIssue("acme.near")).resolves.toMatchObject({
+      storageCredit: "0",
+      sponsored: false,
+    });
+  });
+
   it("surfaces an unavailable storage_credit_of view", async () => {
     const { service, credit } = fixture();
     credit.storageCreditOf = async () => {

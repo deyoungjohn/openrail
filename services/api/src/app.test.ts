@@ -170,6 +170,19 @@ describe("invoice route", () => {
     });
   });
 
+  it("still answers the credit route when sponsor_status is missing", async () => {
+    const { app, secret, contract } = harness();
+    contract.sponsorStatus = vi.fn(async () => {
+      throw new Error("Method sponsor_status is not found");
+    });
+    const response = await app.handle(
+      request("GET", "/v1/business/storage_credit", undefined, secret),
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ balance: "5000000000000000000000000" });
+    expect((response.body as { sponsor?: unknown }).sponsor).toBeUndefined();
+  });
+
   it("treats a sponsored invoice as enough credit and reports the remaining count", async () => {
     const { app, secret, issuer } = harness();
     issuer.prepareIssue.mockResolvedValueOnce({

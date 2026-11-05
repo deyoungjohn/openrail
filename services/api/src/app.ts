@@ -641,7 +641,13 @@ export class ApiApp {
     if (path === "/v1/business/storage_credit" && method === "GET") {
       const context = this.requireAuth(request);
       const credit = await this.deps.contract.storageCredit(context.accountId);
-      const sponsor = await this.deps.contract.sponsorStatus?.(context.accountId);
+      let sponsor: Awaited<ReturnType<NonNullable<ContractPort["sponsorStatus"]>>> | undefined;
+      try {
+        sponsor = await this.deps.contract.sponsorStatus?.(context.accountId);
+      } catch {
+        console.warn("sponsor_status unavailable; returning own credit only");
+        sponsor = undefined;
+      }
       return {
         status: 200,
         body: {
