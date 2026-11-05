@@ -213,6 +213,14 @@ export const copy = {
     mixStillToPay: "Still to pay",
     mixCovered: "Every part is covered",
     mixAllPaid: "All parts paid",
+    legStage: {
+      waiting: "Waiting for payment",
+      expired: "Price expired",
+      processing: "Arriving",
+      paid: "Paid",
+      refunded: "Refunded",
+      failed: "Did not go through",
+    },
     mixPartFailed:
       "We couldn't get a price for that part. Nothing was charged. Your other parts are kept. Try again.",
     pickTitle: "Choose how you pay",
