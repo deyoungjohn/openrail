@@ -462,6 +462,11 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
         {picker(p.pickUsdc, usdc)}
         {picker(p.pickVolatile, volatile)}
       </div>
+      {!split && legs.length === 0 ? (
+        <Button type="button" variant="secondary" onClick={turnSplitOn}>
+          {p.mixSplit}
+        </Button>
+      ) : null}
       {route && !covered ? (
         <form
           noValidate
@@ -499,11 +504,6 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
             <Button type="submit" loading={starting}>
               {split ? p.mixGetPrice : p.getPrice}
             </Button>
-            {!split && legs.length === 0 ? (
-              <Button type="button" variant="secondary" onClick={turnSplitOn}>
-                {p.mixSplit}
-              </Button>
-            ) : null}
           </div>
         </form>
       ) : null}
@@ -552,7 +552,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6">
         <header className="space-y-1">
           <p className="caption">{p.invoice(c.invoice_number)}</p>
           <h1 className="text-[28px] leading-9 font-bold">{p.title(c.issuer_legal_name)}</h1>
@@ -577,6 +577,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           <Card title={p.pickTitle}>
             <p className="caption mb-4">{p.pickHelp}</p>
             <Tabs
+              fill
               label={p.tabsLabel}
               value={mode}
               onValueChange={(id) => setMode(id as Mode)}
@@ -589,7 +590,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           </Card>
         )}
       </div>
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6">
         {allPaid && legs.some((l) => l.stage === "paid") ? (
           <div
             role="status"

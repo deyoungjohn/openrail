@@ -15,11 +15,14 @@ export function Tabs({
   label,
   value,
   onValueChange,
+  fill,
 }: {
   items: readonly TabItem[];
   label: string;
   value?: string;
   onValueChange?: (id: string) => void;
+  /** Equal-width tabs whose long labels wrap, for a short screen (two tabs). */
+  fill?: boolean;
 }) {
   const base = useId();
   const [inner, setInner] = useState(items[0]?.id);
@@ -59,7 +62,10 @@ export function Tabs({
       <div
         role="tablist"
         aria-label={label}
-        className="flex gap-6 overflow-x-auto border-b border-border"
+        className={cn("border-b border-border", fill ? "grid" : "flex gap-6 overflow-x-auto")}
+        style={
+          fill ? { gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` } : undefined
+        }
       >
         {items.map((t, i) => {
           const selected = t.id === current;
@@ -77,7 +83,8 @@ export function Tabs({
               onClick={() => select(t.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
               className={cn(
-                "-mb-px inline-flex h-11 items-center gap-2 border-b-2 text-[14px] leading-5 font-medium whitespace-nowrap",
+                "-mb-px inline-flex items-center gap-2 border-b-2 text-[14px] leading-5 font-medium",
+                fill ? "min-h-11 justify-center px-2 py-2 text-center" : "h-11 whitespace-nowrap",
                 "transition-colors duration-[var(--dur)] ease-[var(--ease)]",
                 selected
                   ? "border-accent text-accent"
