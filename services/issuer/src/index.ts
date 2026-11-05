@@ -19,6 +19,7 @@ import { KeyPair } from "near-api-js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
   ContractStorageCreditReader,
+  ContractTokenCounter,
   RpcAccountChecker,
   RpcKeyInspector,
   nearRpcUrls,
@@ -111,6 +112,7 @@ async function main(): Promise<void> {
     issuerNear,
     relayNear,
     credit: new ContractStorageCreditReader(issuerNear, rootAccount),
+    tokens: new ContractTokenCounter(issuerNear, rootAccount),
     accounts: new RpcAccountChecker(rpcUrls),
     logger,
     indexer:

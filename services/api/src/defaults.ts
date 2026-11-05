@@ -143,6 +143,38 @@ export function createContractPort(rootAccount: string): ContractPort {
   };
 }
 
+/** The issuer's own error code reaches the caller as an ApiError instead of a bare 500. */
+export function issuerFailure(status: number, text: string): ApiError {
+  let code = "";
+  let message = "";
+  try {
+    const body = JSON.parse(text) as { error?: { code?: unknown; message?: unknown } };
+    if (typeof body.error?.code === "string") code = body.error.code;
+    if (typeof body.error?.message === "string") message = body.error.message;
+  } catch {
+    // not JSON: the status alone
+  }
+  if (status === 409 && code === "TOKEN_ID_MISMATCH") {
+    return new ApiError(409, "token_id_mismatch", message || "the claim id changed while issuing");
+  }
+  console.error(`issuer answered HTTP ${status} ${code} ${message}`.trim());
+  if (status === 401 || status === 403) {
+    return new ApiError(502, "issuer_unauthorized", "the issuer service refused the api's key");
+  }
+  if (status >= 400 && status < 500) {
+    return new ApiError(
+      status,
+      `issuer_${code.toLowerCase() || "rejected"}`,
+      message || code || "rejected",
+    );
+  }
+  return new ApiError(
+    502,
+    "issuer_unavailable",
+    `the issuer service failed${code ? ` (${code})` : ""}`,
+  );
+}
+
 export function createHttpIssuer(baseUrl: string): IssuerPort {
   const url = baseUrl.replace(/\/+$/, "");
   const key = getEnv("ISSUER_SERVICE_KEY");
@@ -156,7 +188,7 @@ export function createHttpIssuer(baseUrl: string): IssuerPort {
       body: JSON.stringify(body),
     });
     const text = await response.text();
-    if (!response.ok) throw new Error(`ISSUER_HTTP_${response.status}: ${text}`);
+    if (!response.ok) throw issuerFailure(response.status, text);
     return JSON.parse(text) as T;
   };
   return {

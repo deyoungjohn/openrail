@@ -5,6 +5,7 @@ import {
   RpcAccountChecker,
   RpcKeyInspector,
   type FetchLike,
+  ContractTokenCounter,
 } from "./chain.js";
 import type { NearClientLike } from "./types.js";
 
@@ -123,5 +124,33 @@ describe("issuer storage credit view", () => {
     await expect(reader.storageCreditOf("acme.near")).rejects.toThrow(
       "ISSUER_STORAGE_CREDIT_INVALID",
     );
+  });
+});
+
+describe("ContractTokenCounter", () => {
+  const near = (views: Record<string, unknown>) => ({
+    sendFunctionCall: async () => null,
+    view: async <T>(request: { methodName: string }): Promise<T> => views[request.methodName] as T,
+  });
+  it("is 0 on an empty contract", async () => {
+    const counter = new ContractTokenCounter(
+      near({ nft_total_supply: "0" }) as never,
+      "openrail.near",
+    );
+    expect(await counter.lastTokenNumber()).toBe(0);
+  });
+  it("reads the newest token's number", async () => {
+    const counter = new ContractTokenCounter(
+      near({ nft_total_supply: "3", nft_tokens: [{ token_id: "c-7" }] }) as never,
+      "openrail.near",
+    );
+    expect(await counter.lastTokenNumber()).toBe(7);
+  });
+  it("refuses an answer it cannot read", async () => {
+    const counter = new ContractTokenCounter(
+      near({ nft_total_supply: "x" }) as never,
+      "openrail.near",
+    );
+    await expect(counter.lastTokenNumber()).rejects.toThrow("ISSUER_SUPPLY_INVALID");
   });
 });

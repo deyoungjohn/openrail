@@ -170,6 +170,10 @@ export function createIssuerApp(deps: IssuerAppDeps): IssuerApp {
                 termsHash: hashField(payload, "termsHash"),
                 amountDue: moneyField(payload, "amountDue"),
                 dueDate: numberField(payload, "dueDate"),
+                ...(typeof payload.expectedTokenId === "string" &&
+                /^c-\d+$/.test(payload.expectedTokenId)
+                  ? { expectedTokenId: payload.expectedTokenId }
+                  : {}),
                 ...(metadata === undefined || metadata === null
                   ? {}
                   : { metadata: metadata as Record<string, unknown> }),

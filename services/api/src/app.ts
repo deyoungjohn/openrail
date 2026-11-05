@@ -47,7 +47,15 @@ export interface ContractPort {
 }
 
 export interface IssuerPort {
-  prepareIssue(accountId: string): Promise<{ tokenId: string; claimAccount: string }>;
+  prepareIssue(accountId: string): Promise<{
+    tokenId: string;
+    claimAccount: string;
+    /** `storage_credit_of(business)` and the deposit one invoice needs, in yoctoNEAR (when the issuer reports them). */
+    storageCredit?: string;
+    amount?: string;
+    /** The account the business deposits storage credit to. */
+    account?: string;
+  }>;
   issueFor(request: {
     business: string;
     kind: number;
@@ -56,7 +64,9 @@ export interface IssuerPort {
     amountDue: string;
     dueDate: number;
     metadata?: Record<string, unknown>;
-  }): Promise<{ txHash: string }>;
+    /** The id `prepareIssue` predicted; the issuer refuses a mint that took another (409 token_id_mismatch). */
+    expectedTokenId?: string;
+  }): Promise<{ txHash: string; tokenId?: string; claimAccount?: string }>;
   logQuote(request: {
     tokenId: string;
     quoteId: string;
@@ -432,6 +442,11 @@ export class ApiApp {
         },
       };
     }
+    // Anything else is a bug or an outage: it must reach the journal, which the response never shows.
+    console.error(
+      "unhandled error in the api",
+      error instanceof Error ? (error.stack ?? error.message) : error,
+    );
     return { status: 500, body: { error: { code: "internal_error", message: "internal error" } } };
   }
 
@@ -1163,6 +1178,8 @@ export class ApiApp {
    * Builds the terms, issues the claim through `issue_for` and stores the invoice. Used by
    * `POST /v1/invoices` and by the recurring-invoice scheduler.
    */
+  private issueTail: Promise<void> = Promise.resolve();
+
   async issueInvoice(
     accountId: string,
     input: unknown,
@@ -1193,32 +1210,69 @@ export class ApiApp {
         throw new ApiError(400, "invalid_request", `${field} required`);
     }
     const business = this.business(accountId);
-    const prepared = await this.deps.issuer.prepareIssue(accountId);
-    const terms = buildTerms({
-      invoice_number: body.invoice_number as string,
-      issuer_legal_name: body.issuer_legal_name as string,
-      issuer_account: business.account_id,
-      debtor_legal_name: body.debtor_legal_name as string,
-      debtor_key: body.debtor_key as string,
-      amount_usd: twoDecimals(Number(body.amount_usd)),
-      due_date: dateToUtc(body.due_date as string),
-      line_items_sha256: body.line_items_sha256 ?? stableLineItems(body.line_items ?? []),
-      claim_account: prepared.claimAccount,
-      pay_link: body.pay_link ?? `${this.deps.config.payBaseUrl}/c/${prepared.tokenId}`,
-      assignment_agreement_sha256: body.assignment_agreement_sha256,
-      clauses: [...CORE_CLAUSES, ...(body.clauses ?? [])],
+    // The terms hash binds the claim account, which is only known from the id the issuer predicts. Concurrent
+    // requests would predict the same id, so they go one at a time; a prediction that turns out wrong (an
+    // earlier mint failed after taking its id) is retried once with the corrected count.
+    const run = this.issueTail.then(async () => {
+      for (let attempt = 1; ; attempt += 1) {
+        const prepared = await this.deps.issuer.prepareIssue(accountId);
+        if (!prepared.tokenId || !prepared.claimAccount) {
+          throw new ApiError(
+            502,
+            "issuer_outdated",
+            "the issuer service did not report the next claim id",
+          );
+        }
+        if (prepared.storageCredit !== undefined && prepared.amount !== undefined) {
+          if (BigInt(prepared.storageCredit) < BigInt(prepared.amount)) {
+            throw new ApiError(
+              402,
+              "insufficient_storage_credit",
+              `Storage credit is ${prepared.storageCredit} yoctoNEAR and an invoice needs ${prepared.amount}. ` +
+                `Deposit storage credit from ${business.account_id} to ${prepared.account ?? "the root contract"} first.`,
+            );
+          }
+        }
+        const terms = buildTerms({
+          invoice_number: body.invoice_number as string,
+          issuer_legal_name: body.issuer_legal_name as string,
+          issuer_account: business.account_id,
+          debtor_legal_name: body.debtor_legal_name as string,
+          debtor_key: body.debtor_key as string,
+          amount_usd: twoDecimals(Number(body.amount_usd)),
+          due_date: dateToUtc(body.due_date as string),
+          line_items_sha256: body.line_items_sha256 ?? stableLineItems(body.line_items ?? []),
+          claim_account: prepared.claimAccount,
+          pay_link: body.pay_link ?? `${this.deps.config.payBaseUrl}/c/${prepared.tokenId}`,
+          assignment_agreement_sha256: body.assignment_agreement_sha256,
+          clauses: [...CORE_CLAUSES, ...(body.clauses ?? [])],
+        });
+        const hash = termsHash(terms);
+        const amountDue = usdToBaseUnits(Number(terms.amount_usd), 6).toString();
+        const debtor = parseDebtor(body.debtor_key);
+        try {
+          await this.deps.issuer.issueFor({
+            business: business.account_id,
+            kind: 0,
+            debtor,
+            termsHash: hash,
+            amountDue,
+            dueDate: Math.floor(Date.parse(terms.due_date) / 1000),
+            expectedTokenId: prepared.tokenId,
+          });
+        } catch (error) {
+          if (attempt < 2 && error instanceof ApiError && error.code === "token_id_mismatch")
+            continue;
+          throw error;
+        }
+        return { prepared, hash, debtor, terms, amountDue };
+      }
     });
-    const hash = termsHash(terms);
-    const amountDue = usdToBaseUnits(Number(terms.amount_usd), 6).toString();
-    const debtor = parseDebtor(body.debtor_key);
-    await this.deps.issuer.issueFor({
-      business: business.account_id,
-      kind: 0,
-      debtor,
-      termsHash: hash,
-      amountDue,
-      dueDate: Math.floor(Date.parse(terms.due_date) / 1000),
-    });
+    this.issueTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    const { prepared, hash, debtor, terms, amountDue } = await run;
     const invoice: InvoiceRecord = {
       id: id("inv"),
       token_id: prepared.tokenId,

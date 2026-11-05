@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiApp, type ApiDeps } from "./app.js";
+import { ApiApp, type ApiDeps, ApiError } from "./app.js";
 import { AuthStore } from "./auth.js";
 import { UnsafeWebhookUrl } from "./webhook-url.js";
 import { termsHash } from "./terms.js";
@@ -483,5 +483,69 @@ describe("auth route", () => {
     const body = challenge.body as { nonce: string; message: string; recipient: string };
     expect(body.recipient).toBe("api.openrail.near");
     expect(body.message).toContain("acme.openrail.near");
+  });
+});
+
+describe("invoice route: the issuer handshake", () => {
+  it("passes the id it predicted so the issuer can refuse a mint that took another", async () => {
+    const { app, secret, issuer } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(issuer.issueFor).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedTokenId: "c-1" }),
+    );
+  });
+
+  it("answers 402 insufficient_storage_credit, and issues nothing, when the business has no credit", async () => {
+    const { app, secret, issuer } = harness();
+    issuer.prepareIssue.mockResolvedValueOnce({
+      tokenId: "c-1",
+      claimAccount: "c-1.openrail.near",
+      storageCredit: "0",
+      amount: "20000000000000000000000",
+      account: "openrail.near",
+    } as never);
+    const response = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(response.status).toBe(402);
+    expect((response.body as { error: { code: string; message: string } }).error.code).toBe(
+      "insufficient_storage_credit",
+    );
+    expect((response.body as { error: { message: string } }).error.message).toContain(
+      "openrail.near",
+    );
+    expect(issuer.issueFor).not.toHaveBeenCalled();
+  });
+
+  it("retries once with the corrected id when the mint took another", async () => {
+    const { app, secret, issuer } = harness();
+    issuer.prepareIssue
+      .mockResolvedValueOnce({ tokenId: "c-5", claimAccount: "c-5.openrail.near" } as never)
+      .mockResolvedValueOnce({ tokenId: "c-7", claimAccount: "c-7.openrail.near" } as never);
+    issuer.issueFor
+      .mockRejectedValueOnce(new ApiError(409, "token_id_mismatch"))
+      .mockResolvedValueOnce({ txHash: "0xissue" });
+    const response = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(response.status).toBe(201);
+    expect((response.body as { token_id: string }).token_id).toBe("c-7");
+    expect(issuer.issueFor).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up with 409 after a second mismatch", async () => {
+    const { app, secret, issuer } = harness();
+    issuer.issueFor.mockRejectedValue(new ApiError(409, "token_id_mismatch"));
+    const response = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(response.status).toBe(409);
+    expect(issuer.issueFor).toHaveBeenCalledTimes(2);
+  });
+
+  it("says so when the issuer does not report the next claim id (an old issuer service)", async () => {
+    const { app, secret, issuer } = harness();
+    issuer.prepareIssue.mockResolvedValueOnce({
+      account: "openrail.near",
+      amount: "1",
+      storageCredit: "9",
+    } as never);
+    const response = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(response.status).toBe(502);
+    expect((response.body as { error: { code: string } }).error.code).toBe("issuer_outdated");
   });
 });

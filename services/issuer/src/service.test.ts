@@ -279,3 +279,53 @@ describe("issuer logQuote and acknowledgeEvm", () => {
     });
   });
 });
+
+describe("issuer predicts the next claim id (the terms hash binds the claim account)", () => {
+  const withCounter = (last: number, issuerResult: () => unknown = () => ok("c-5")) => {
+    const base = fixture({ issuerResult });
+    const service = new IssuerService({
+      issuerNear: base.issuer,
+      relayNear: new FakeNear(),
+      credit: base.credit,
+      tokens: { lastTokenNumber: async () => last },
+      accounts: base.accounts,
+      config: base.config,
+      logger,
+    });
+    return { service };
+  };
+
+  it("reports the id after the newest claim, with its claim account", async () => {
+    const { service } = withCounter(4);
+    const prepared = await service.prepareIssue("acme.near");
+    expect(prepared.tokenId).toBe("c-5");
+    expect(prepared.claimAccount).toBe("c-5.openrail.near");
+    expect(prepared.storageCredit).toBe((2n * 10n ** 22n).toString());
+  });
+
+  it("starts at c-1 on an empty contract", async () => {
+    const { service } = withCounter(0);
+    expect((await service.prepareIssue("acme.near")).tokenId).toBe("c-1");
+  });
+
+  it("accepts the mint when the id is the one predicted", async () => {
+    const { service } = withCounter(4);
+    const result = await service.issueFor({ ...ISSUE, expectedTokenId: "c-5" });
+    expect(result.tokenId).toBe("c-5");
+  });
+
+  it("refuses a mint that took another id, and the next prediction moves past it", async () => {
+    const { service } = withCounter(4, () => ok("c-9"));
+    await expect(service.issueFor({ ...ISSUE, expectedTokenId: "c-5" })).rejects.toMatchObject({
+      status: 409,
+      code: "TOKEN_ID_MISMATCH",
+    });
+    expect((await service.prepareIssue("acme.near")).tokenId).toBe("c-10");
+  });
+
+  it("without a counter, prepare reports no id (old behaviour)", async () => {
+    const { service } = fixture();
+    const prepared = await service.prepareIssue("acme.near");
+    expect(prepared.tokenId).toBeUndefined();
+  });
+});

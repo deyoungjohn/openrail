@@ -19,6 +19,7 @@ import type {
   NearClientLike,
   PrepareIssueResult,
   StorageCreditReader,
+  TokenCounter,
 } from "./types.js";
 
 export const REQUIRED_ISSUE_DEPOSIT_YOCTO = 20_000_000_000_000_000_000_000n; // 0.02 NEAR
@@ -49,6 +50,8 @@ export interface IssuerServiceDeps {
   issuerNear: NearClientLike;
   relayNear: NearClientLike;
   credit: StorageCreditReader;
+  /** Predicts the next claim id. Without it `prepareIssue` reports no id. */
+  tokens?: TokenCounter;
   accounts: AccountChecker;
   config?: Partial<IssuerServiceConfig>;
   logger: Logger;
@@ -119,6 +122,9 @@ export class IssuerService {
   private readonly issuerNear: NearClientLike;
   private readonly relayNear: NearClientLike;
   private readonly credit: StorageCreditReader;
+  private readonly tokens: TokenCounter | undefined;
+  /** The highest claim number this service has seen minted. */
+  private highWater = 0;
   private readonly accounts: AccountChecker;
   private readonly config: IssuerServiceConfig;
   private readonly logger: Logger;
@@ -129,6 +135,7 @@ export class IssuerService {
     this.issuerNear = deps.issuerNear;
     this.relayNear = deps.relayNear;
     this.credit = deps.credit;
+    this.tokens = deps.tokens;
     this.accounts = deps.accounts;
     this.logger = deps.logger;
     this.indexer = deps.indexer;
@@ -149,11 +156,20 @@ export class IssuerService {
   async prepareIssue(business: string): Promise<PrepareIssueResult> {
     return this.mutex.run(async () => {
       const credit = await this.credit.storageCreditOf(business);
+      let predicted: { tokenId: string; claimAccount: string } | undefined;
+      if (this.tokens !== undefined) {
+        const next = Math.max(await this.tokens.lastTokenNumber(), this.highWater) + 1;
+        predicted = {
+          tokenId: `c-${next}`,
+          claimAccount: `c-${next}.${this.config.rootAccount}`,
+        };
+      }
       this.logger.info("prepared issue", business);
       return {
         account: this.config.rootAccount,
         amount: this.config.requiredDepositYocto.toString(),
         storageCredit: credit.toString(),
+        ...(predicted ?? {}),
       };
     });
   }
@@ -184,6 +200,15 @@ export class IssuerService {
       const tokenId = returnStringOf(result);
       if (!/^c-\d+$/.test(tokenId)) {
         throw new IssuerError(502, "NEAR_RETURN_INVALID");
+      }
+      this.highWater = Math.max(this.highWater, Number(tokenId.slice(2)));
+      if (request.expectedTokenId !== undefined && request.expectedTokenId !== tokenId) {
+        // The claim exists but its terms name another account: the caller must start again with the new count.
+        throw new IssuerError(
+          409,
+          "TOKEN_ID_MISMATCH",
+          `expected ${request.expectedTokenId}, minted ${tokenId}`,
+        );
       }
       const claimAccount = `${tokenId}.${this.config.rootAccount}`;
       await this.waitForAccount(claimAccount);

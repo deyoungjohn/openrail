@@ -16,6 +16,8 @@ export interface IssueForRequest {
   amountDue: string;
   dueDate: number;
   metadata?: Record<string, unknown>;
+  /** The id `prepareIssue` predicted; a different minted id is refused as TOKEN_ID_MISMATCH. */
+  expectedTokenId?: string;
 }
 
 export interface LogQuoteRequest {
@@ -40,6 +42,18 @@ export interface PrepareIssueResult {
   amount: string;
   /** Current `storage_credit_of(business)` in yoctoNEAR. */
   storageCredit: string;
+  /**
+   * The id the next `issue_for` will mint, predicted from the contract's newest token and the highest id this
+   * service has seen. The terms hash binds the claim account, so the API needs it before the mint. It is
+   * checked after the mint (`expectedTokenId`).
+   */
+  tokenId?: string;
+  claimAccount?: string;
+}
+
+/** The number n of the newest claim `c-n` on the contract, or 0 when there is none. */
+export interface TokenCounter {
+  lastTokenNumber(): Promise<number>;
 }
 
 export interface PrepareIssueBody {
