@@ -6,26 +6,33 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { auth, MOCK_MODE, MOCK_ACCOUNT } from "@/lib/auth";
 import { useNear } from "@/wallet/near";
+import { walletDetail } from "@/wallet/wallet-detail";
 
 export type AuthState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "signedOut"; failed?: "unsupported" | "failed" }
+  | { status: "signedOut"; failed?: "unsupported" | "failed" | "timeout"; detail?: string }
   | { status: "signedIn"; accountId: string };
 
 interface AuthCtx {
   state: AuthState;
   signIn: () => Promise<void>;
+  /** Stops waiting for the wallet (closed pop-up, app that never answers). */
+  cancelSignIn: () => void;
   signOut: () => Promise<void>;
   retry: () => void;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
+
+/** A wallet that has not answered after this long is treated as closed. */
+export const WALLET_TIMEOUT_MS = 120_000;
 
 export function useAuth() {
   const ctx = useContext(Ctx);
@@ -57,21 +64,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [tick]);
 
+  const pending = useRef<AbortController | null>(null);
+
+  const cancelSignIn = useCallback(() => pending.current?.abort(), []);
+
   const signIn = useCallback(async () => {
+    pending.current?.abort();
+    const ctl = new AbortController();
+    pending.current = ctl;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      ctl.abort();
+    }, WALLET_TIMEOUT_MS);
+    let timedOut = false;
     try {
       if (!MOCK_MODE) {
         const id = await near.pickWallet("signIn");
         if (!id) return;
-        await near.connect(id);
+        await near.connect(id, ctl.signal);
       }
-      const s = await auth.signIn(near.signMessage);
+      const s = await auth.signIn((c) => near.signMessage(c, ctl.signal));
       setState({ status: "signedIn", accountId: s.account_id });
     } catch (e) {
+      const cancelled = e instanceof Error && e.message === "WALLET_CANCELLED";
+      if (cancelled && !timedOut) {
+        setState({ status: "signedOut" });
+        return;
+      }
+      // The wallet's own words go to the console, so a failure can be traced, and a short line to the screen.
+      console.error("sign-in failed", e);
       setState({
         status: "signedOut",
-        failed:
-          e instanceof Error && e.message === "SIGNMESSAGE_UNSUPPORTED" ? "unsupported" : "failed",
+        failed: timedOut
+          ? "timeout"
+          : e instanceof Error && e.message === "SIGNMESSAGE_UNSUPPORTED"
+            ? "unsupported"
+            : "failed",
+        ...(timedOut ? {} : { detail: walletDetail(e) }),
       });
+    } finally {
+      clearTimeout(timer);
+      if (pending.current === ctl) pending.current = null;
     }
   }, [near]);
 
@@ -86,7 +119,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [near]);
 
   const retry = useCallback(() => setTick((t) => t + 1), []);
-  const value = useMemo(() => ({ state, signIn, signOut, retry }), [state, signIn, signOut, retry]);
+  const value = useMemo(
+    () => ({ state, signIn, cancelSignIn, signOut, retry }),
+    [state, signIn, cancelSignIn, signOut, retry],
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

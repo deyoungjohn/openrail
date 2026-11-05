@@ -260,6 +260,9 @@ export const copy = {
     body: "Sign in with your NEAR account. You sign one message in your wallet. It costs nothing, and you stay signed in on this device for a week.",
     failed: "We couldn't sign you in. Nothing was changed. Check your wallet and try again.",
     unsupported: "This wallet cannot sign you in. Use another wallet.",
+    timeout: "The wallet didn't answer. Close its window and try again.",
+    walletSaid: "The wallet said",
+    cancel: "Cancel",
     errorTitle: "We couldn't check your sign-in",
     errorBody:
       "We can't reach the server right now. Your session is not lost. Try again in a moment.",
@@ -411,6 +414,8 @@ export const copy = {
     cannotSign: "This wallet cannot sign you in. Use another wallet.",
     unavailable: "Not available on this device",
     unavailableNote: "Install it or open this page in its app",
+    hotNoExtension:
+      "Extension not found on this page. After installing it, reload the page. Or use the HOT app with the QR code.",
   },
   dash: {
     title: "Dashboard",

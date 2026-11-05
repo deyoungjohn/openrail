@@ -19,6 +19,7 @@ import type { ChallengeToSign, SignedChallenge } from "../lib/auth";
 import { WalletPicker } from "../components/wallet-picker";
 import type { PickerPurpose } from "./groups";
 import { nearWalletModules } from "./near-wallets";
+import { abortable } from "./abortable";
 import { classifyProbe } from "./probe";
 
 /** One wallet in the picker. `signsMessage`: true or false from the selector, null while unknown. */
@@ -42,13 +43,13 @@ interface NearState {
   signIn: () => void;
   /** Opens the picker and returns the chosen wallet id, or null if it was closed. */
   pickWallet: (purpose: PickerPurpose) => Promise<string | null>;
-  /** Connects one wallet (its own pop-up or app). */
-  connect: (walletId: string) => Promise<void>;
+  /** Connects one wallet (its own pop-up or app). Rejects with `WALLET_CANCELLED` when `signal` aborts. */
+  connect: (walletId: string, signal?: AbortSignal) => Promise<void>;
   signOut: () => Promise<void>;
   /** One FunctionCall transaction, signed by the connected NEAR wallet. */
   call: (c: NearCall) => Promise<void>;
   /** NEP-413 signature of the sign-in challenge. Throws `SIGNMESSAGE_UNSUPPORTED` for wallets without it. */
-  signMessage: (c: ChallengeToSign) => Promise<SignedChallenge>;
+  signMessage: (c: ChallengeToSign, signal?: AbortSignal) => Promise<SignedChallenge>;
   /** Asks the selector which wallets support signMessage. Safe to call again. */
   probeWallets: () => Promise<void>;
 }
@@ -72,7 +73,6 @@ export function useNear() {
 }
 
 const network = process.env.NEXT_PUBLIC_NEAR_NETWORK === "testnet" ? "testnet" : "mainnet";
-const ROOT_CONTRACT = process.env.NEXT_PUBLIC_ROOT_CONTRACT ?? "openrail.near";
 
 export function NearProvider({ children }: { children: ReactNode }) {
   const selector = useRef<WalletSelector | null>(null);
@@ -151,13 +151,14 @@ export function NearProvider({ children }: { children: ReactNode }) {
     [probeWallets],
   );
 
-  const connect = useCallback(async (id: string) => {
+  const connect = useCallback(async (id: string, signal?: AbortSignal) => {
     const s = selector.current;
     if (!s) throw new Error("WALLET_NOT_READY");
-    const w = await s.wallet(id);
-    // The selector wants a contract for the access key a wallet adds; none of our calls need one
-    // beyond the root contract, and sign-in itself is a signed message, not a transaction.
-    await w.signIn({ contractId: ROOT_CONTRACT } as never);
+    const w = await abortable(s.wallet(id), signal);
+    // Connect without a contract: sign-in is a signed message, so the wallet must not add an access
+    // key. Adding one is a transaction, and wallets such as OKX refuse it below 0.1 NEAR. Every
+    // transaction we ask for later (sell, acknowledge, deposit) is approved in the wallet itself.
+    await abortable(w.signIn({} as never), signal);
   }, []);
 
   const signIn = useCallback(() => {
@@ -183,29 +184,35 @@ export function NearProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const signMessage = useCallback(async (c: ChallengeToSign): Promise<SignedChallenge> => {
-    const s = selector.current;
-    if (!s) throw new Error("WALLET_NOT_READY");
-    const wallet = await s.wallet();
-    const nonce = Uint8Array.from(atob(c.nonce), (ch) => ch.charCodeAt(0));
-    let signed;
-    try {
-      signed = await wallet.signMessage({
-        message: c.message,
-        recipient: c.recipient,
-        nonce: Buffer.from(nonce),
-      });
-    } catch (e) {
-      if (classifyProbe(e) === false) throw new Error("SIGNMESSAGE_UNSUPPORTED", { cause: e });
-      throw e;
-    }
-    if (!signed) throw new Error("WALLET_NO_SIGNATURE");
-    return {
-      accountId: signed.accountId,
-      publicKey: signed.publicKey,
-      signature: signed.signature,
-    };
-  }, []);
+  const signMessage = useCallback(
+    async (c: ChallengeToSign, signal?: AbortSignal): Promise<SignedChallenge> => {
+      const s = selector.current;
+      if (!s) throw new Error("WALLET_NOT_READY");
+      const wallet = await abortable(s.wallet(), signal);
+      const nonce = Uint8Array.from(atob(c.nonce), (ch) => ch.charCodeAt(0));
+      let signed;
+      try {
+        signed = await abortable(
+          wallet.signMessage({
+            message: c.message,
+            recipient: c.recipient,
+            nonce: Buffer.from(nonce),
+          }),
+          signal,
+        );
+      } catch (e) {
+        if (classifyProbe(e) === false) throw new Error("SIGNMESSAGE_UNSUPPORTED", { cause: e });
+        throw e;
+      }
+      if (!signed) throw new Error("WALLET_NO_SIGNATURE");
+      return {
+        accountId: signed.accountId,
+        publicKey: signed.publicKey,
+        signature: signed.signature,
+      };
+    },
+    [],
+  );
 
   const value = useMemo(
     () => ({

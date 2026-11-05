@@ -44,6 +44,12 @@ function Row({
   );
 }
 
+/** The HOT extension announces itself as `window.hotExtension`; without it HOT opens its app/QR flow. */
+function noteFor(id: string, t: { hotNoExtension: string }): string | undefined {
+  if (id !== "hot-wallet" || typeof window === "undefined") return undefined;
+  return (window as { hotExtension?: unknown }).hotExtension ? undefined : t.hotNoExtension;
+}
+
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
@@ -79,7 +85,7 @@ export function WalletPicker({
         {g.usable.length > 0 ? (
           <Group title={purpose === "signIn" ? t.canSignIn : t.available}>
             {g.usable.map((w) => (
-              <Row key={w.id} w={w} onPick={() => onPick(w.id)} />
+              <Row key={w.id} w={w} onPick={() => onPick(w.id)} note={noteFor(w.id, t)} />
             ))}
           </Group>
         ) : null}

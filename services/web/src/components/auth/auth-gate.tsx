@@ -9,7 +9,7 @@ import { useAuth } from "./auth-provider";
 
 /** Dashboard content only renders for a signed-in business. */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { state, signIn, retry } = useAuth();
+  const { state, signIn, cancelSignIn, retry } = useAuth();
   const [busy, setBusy] = useState(false);
 
   if (state.status === "loading") return <Card state="loading" />;
@@ -26,19 +26,38 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <p className="text-[15px]">{copy.auth.body}</p>
         {state.failed ? (
           <p role="alert" className="text-danger-text text-[14px]">
-            {state.failed === "unsupported" ? copy.auth.unsupported : copy.auth.failed}
+            {state.failed === "unsupported"
+              ? copy.auth.unsupported
+              : state.failed === "timeout"
+                ? copy.auth.timeout
+                : copy.auth.failed}
           </p>
         ) : null}
-        <Button
-          loading={busy}
-          onClick={async () => {
-            setBusy(true);
-            await signIn();
-            setBusy(false);
-          }}
-        >
-          {copy.wallet.signIn}
-        </Button>
+        {state.detail ? (
+          <p className="caption">
+            {copy.auth.walletSaid}: {state.detail}
+          </p>
+        ) : null}
+        <div className="flex items-center gap-3">
+          <Button
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await signIn();
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {copy.wallet.signIn}
+          </Button>
+          {busy ? (
+            <Button variant="secondary" onClick={cancelSignIn}>
+              {copy.auth.cancel}
+            </Button>
+          ) : null}
+        </div>
       </div>
     );
   return <>{children}</>;
