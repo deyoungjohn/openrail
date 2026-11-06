@@ -206,8 +206,15 @@ function redactedJson(value: unknown): string {
   return JSON.stringify(redact(value));
 }
 
-async function readJson(url: string, fetchImpl: typeof fetch): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(url);
+async function readJson(
+  url: string,
+  fetchImpl: typeof fetch,
+  bearer?: string,
+): Promise<Record<string, unknown>> {
+  const response = await fetchImpl(
+    url,
+    bearer === undefined ? undefined : { headers: { authorization: `Bearer ${bearer}` } },
+  );
   const text = await response.text();
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${redactString(text.slice(0, 200))}`);
   const body = JSON.parse(text) as unknown;
@@ -458,9 +465,13 @@ function booking(value: Record<string, unknown>, field: string): bigint {
 }
 
 async function receipts(ctx: Ctx, invoiceId: string): Promise<Array<Record<string, unknown>>> {
+  // Receipts belong to the business: this read needs the same key the invoice was created with.
+  const key = getEnv("OPENRAIL_API_KEY") ?? getEnv("ISSUER_SERVICE_KEY");
+  if (key === undefined) fail("MISSING_ENV: OPENRAIL_API_KEY");
   const body = await readJson(
     `${ctx.api}/v1/invoices/${encodeURIComponent(invoiceId)}/receipts`,
     ctx.fetchImpl,
+    key,
   );
   const data = body.data;
   return Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];

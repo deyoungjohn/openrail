@@ -22,6 +22,7 @@ CADDYFILE="${OPENRAIL_CADDYFILE:-/etc/caddy/Caddyfile}"
 SELF_COPY="${OPENRAIL_SELF_COPY:-/usr/local/bin/openrail-apply}"
 HEALTH_WAIT_SECONDS="${OPENRAIL_HEALTH_WAIT:-150}"
 KEEP_RELEASES=4
+KEEP_PACKS=2
 SERVICES=(indexer issuer watcher api web) # start order: the api needs the indexer and issuer
 TEST_MODE="${OPENRAIL_TEST:-0}"           # tests run in a temp folder: no systemd, no chown
 
@@ -146,6 +147,18 @@ prune_releases() {
   done
 }
 
+prune_packs() { # prune_packs <home>: each pack is ~250 MB; the release folders already hold what rollback needs
+  local home="$1" count=0 pack
+  # shellcheck disable=SC2012
+  for pack in $(ls -t "$home"/openrail-server-*.tar.gz 2>/dev/null); do
+    count=$((count + 1))
+    if ((count > KEEP_PACKS)); then
+      say "removing old pack $(basename "$pack")"
+      run rm -f "$pack"
+    fi
+  done
+}
+
 # ---------------------------------------------------------------------------------------------------------------
 home_of_caller() {
   if [[ -n "${OPENRAIL_HOME:-}" ]]; then printf '%s\n' "$OPENRAIL_HOME"; return; fi # tests
@@ -235,6 +248,7 @@ restart_all
 if wait_healthy "$new"; then
   say "healthy; running release $version (previous: $(basename "${old:-none}"))"
   prune_releases
+  prune_packs "$home"
   exit 0
 fi
 
