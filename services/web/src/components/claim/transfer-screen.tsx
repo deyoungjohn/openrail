@@ -90,7 +90,11 @@ function QuotesCard({ tokenId }: { tokenId: string }) {
             </span>
             <span className="text-[14px]">
               <span className="caption mr-2">{q.expires}</span>
-              <Countdown expiresAt={e.deadline * 1000} />
+              <Countdown
+                target={e.deadline * 1000}
+                units={["minutes", "seconds"]}
+                variant="compact"
+              />
             </span>
           </li>
         ))}

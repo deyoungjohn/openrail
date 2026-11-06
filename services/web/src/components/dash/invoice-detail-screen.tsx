@@ -94,7 +94,11 @@ function OpenQuotes({ invoiceId }: { invoiceId: string }) {
           >
             <span className="text-[14px] font-medium">{q.route_id}</span>
             <AddressChip value={q.deposit_address} head={8} tail={6} />
-            <Countdown expiresAt={q.deadline_requested * 1000} />
+            <Countdown
+              target={q.deadline_requested * 1000}
+              units={["minutes", "seconds"]}
+              variant="compact"
+            />
           </li>
         ))}
       </ul>

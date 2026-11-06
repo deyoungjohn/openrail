@@ -229,7 +229,11 @@ export function CashoutScreen() {
               <p className="flex items-center justify-between text-[14px]">
                 <span className="caption">{t.expiresIn}</span>
                 <span onClick={undefined}>
-                  <Countdown expiresAt={Date.parse(quote.deadline)} />
+                  <Countdown
+                    target={Date.parse(quote.deadline)}
+                    units={["minutes", "seconds"]}
+                    variant="compact"
+                  />
                 </span>
               </p>
               {!canSign ? (

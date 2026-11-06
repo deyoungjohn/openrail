@@ -418,7 +418,7 @@ describe("invoice route", () => {
 });
 
 describe("pay session route", () => {
-  it("returns deadline_requested and the provider deadline after log_quote", async () => {
+  it("returns the on-chain deadline, not the provider's, after log_quote", async () => {
     const { app, secret, issuer, quoteProvider, pokeIndexer } = harness();
     await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
     const response = await app.handle(
@@ -436,7 +436,8 @@ describe("pay session route", () => {
       deposit_address: string;
     };
     expect(body.deadline_requested).toBe(Date.parse("2026-11-02T10:00:00Z") / 1000 + 3600);
-    expect(body.deadline).toBe("2026-11-03T10:00:00Z");
+    // The promise to the payer is the logged deadline; the provider keeps its address open longer.
+    expect(body.deadline).toBe(new Date(body.deadline_requested * 1000).toISOString());
     expect(body.deposit_address).toBe("0xdeposit");
     expect(quoteProvider.quote).toHaveBeenCalled();
     expect(issuer.logQuote).toHaveBeenCalled();

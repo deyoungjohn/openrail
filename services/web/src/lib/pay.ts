@@ -40,6 +40,21 @@ export function formatToken(units: string, decimals: number): string {
   return `${whole}.${frac}`;
 }
 
+/** Decimals a payer can sensibly type into a wallet: ETH to 6, SOL to 5, every other asset in full. */
+export function payDecimals(asset: string, decimals: number): number {
+  const keep = asset === "ETH" ? 6 : asset === "SOL" ? 5 : decimals;
+  return Math.min(keep, decimals);
+}
+
+/**
+ * The amount to send, rounded UP to the decimals a wallet can enter. The swap returns anything above
+ * the quote, so rounding up never costs the payer; rounding down could fall short of the minimum.
+ */
+export function payUnits(units: string, decimals: number, asset: string): string {
+  const step = 10n ** BigInt(decimals - payDecimals(asset, decimals));
+  return (((BigInt(units) + step - 1n) / step) * step).toString();
+}
+
 /** Price-protection margin in basis points as a percent with two decimals. */
 export const spreadLabel = (bps: number): string => `${(bps / 100).toFixed(2)}%`;
 
@@ -168,16 +183,4 @@ export function hashStrings(list: unknown): string[] {
   return list
     .map((h) => (typeof h === "string" ? h : (h as { hash?: unknown } | null)?.hash))
     .filter((h): h is string => typeof h === "string" && h !== "");
-}
-
-const pad2 = (n: number) => n.toString().padStart(2, "0");
-
-/** Always hours, minutes and seconds: 72h 04m 09s, 3h 05m 09s, 4m 09s, 9s. */
-export function formatLeft(left: number): string {
-  const h = Math.floor(left / 3600);
-  const m = Math.floor((left % 3600) / 60);
-  const sec = left % 60;
-  if (h > 0) return `${h}h ${pad2(m)}m ${pad2(sec)}s`;
-  if (m > 0) return `${m}m ${pad2(sec)}s`;
-  return `${sec}s`;
 }

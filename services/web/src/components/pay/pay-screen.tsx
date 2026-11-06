@@ -11,6 +11,7 @@ import {
   chainOfRoute,
   formatDueDate,
   formatToken,
+  payUnits,
   legAmountProblem,
   hashStrings,
   legCents,
@@ -56,6 +57,22 @@ function useNow(intervalMs = 1000): number | null {
   return now;
 }
 
+/**
+ * The deadline that counts is the one logged on chain (`deadline_requested`, in seconds). The swap provider
+ * keeps its own address open for three days after it; that is not what the payer is promised.
+ */
+/** What the page shows and the wallet button sends: the quote rounded up to decimals a wallet can enter. */
+const amountOf = (session: Session, route: Route): string =>
+  formatToken(
+    payUnits(session.amount_in, route.origin_decimals, route.payer_asset),
+    route.origin_decimals,
+  );
+
+const deadlineOf = (session: Session): string =>
+  Number.isFinite(session.deadline_requested)
+    ? new Date(session.deadline_requested * 1000).toISOString()
+    : session.deadline;
+
 const timeOf = (iso: string) => {
   const at = new Date(iso);
   const time = at.toLocaleTimeString("en-GB", {
@@ -100,7 +117,7 @@ function QuoteNote({
         <div>
           <dt className="caption">{upto ? p.youSendUpTo : p.youSendExact}</dt>
           <dd className="tabular text-[28px] leading-[1.1] font-bold">
-            {formatToken(session.amount_in, route.origin_decimals)} {route.payer_asset}{" "}
+            {amountOf(session, route)} {route.payer_asset}{" "}
             <span className="text-[15px] font-normal text-muted">{p.on(chainName)}</span>
           </dd>
         </div>
@@ -116,7 +133,7 @@ function QuoteNote({
         ) : null}
       </dl>
       {upto ? <p className="caption">{p.marginNote}</p> : null}
-      <p className="text-[14px] leading-5">{p.locked(timeOf(session.deadline))}</p>
+      <p className="text-[14px] leading-5">{p.locked(timeOf(deadlineOf(session)))}</p>
     </section>
   );
 }
@@ -137,7 +154,7 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
       const hash = await evm.pay({
         chainId: route.evm_chain_id as number,
         to: session.deposit_address as `0x${string}`,
-        amount: BigInt(session.amount_in),
+        amount: BigInt(payUnits(session.amount_in, route.origin_decimals, route.payer_asset)),
         token: route.origin_contract === null ? null : (route.origin_contract as `0x${string}`),
       });
       setSent(hash);
@@ -149,7 +166,7 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
     }
   };
 
-  const amount = `${formatToken(session.amount_in, route.origin_decimals)} ${route.payer_asset}`;
+  const amount = `${amountOf(session, route)} ${route.payer_asset}`;
   return (
     <div className="surface-card space-y-3 p-4 sm:p-6">
       {evm.address ? (
@@ -202,7 +219,7 @@ function SessionView({
   const [short, setShort] = useState(false);
   const chain = chainOfRoute(route);
 
-  const stage = payStage(status, session.deadline, now ?? 0);
+  const stage = payStage(status, deadlineOf(session), now ?? 0);
   const live = now !== null && (stage === "waiting" || stage === "processing");
 
   useEffect(() => {
@@ -301,7 +318,7 @@ function SessionView({
         <>
           <QrPanel
             address={session.deposit_address}
-            amount={`${formatToken(session.amount_in, route.origin_decimals)} ${route.payer_asset}`}
+            amount={`${amountOf(session, route)} ${route.payer_asset}`}
             chain={chain ?? undefined}
           />
           <WalletPay session={session} route={route} />
@@ -310,18 +327,18 @@ function SessionView({
           </p>
           <p className="caption px-1">
             {short
-              ? p.shortSeen(
-                  formatToken(session.amount_in, route.origin_decimals),
-                  route.payer_asset,
-                )
-              : p.shortRule(
-                  formatToken(session.amount_in, route.origin_decimals),
-                  route.payer_asset,
-                )}
+              ? p.shortSeen(amountOf(session, route), route.payer_asset)
+              : p.shortRule(amountOf(session, route), route.payer_asset)}
           </p>
           <div className="flex items-center justify-between px-1">
             <span className="caption">{p.timeLeft}</span>
-            <Countdown expiresAt={Date.parse(session.deadline)} />
+            <Countdown
+              target={Date.parse(deadlineOf(session))}
+              units={["minutes", "seconds"]}
+              variant="compact"
+              label={p.timeLeft}
+              completeLabel={copy.countdown.expired}
+            />
           </div>
         </>
       )}

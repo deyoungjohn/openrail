@@ -1,0 +1,88 @@
+/* Countdown (uiarc) sized for the pay page: one line of tabular digits that matches the surrounding text. */
+.countdown {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 14px;
+  line-height: 1;
+}
+.countdown[data-complete] {
+  color: var(--warning-text, var(--text));
+}
+.shell {
+  display: inline-flex;
+  overflow: hidden;
+}
+.content {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.units {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+}
+.unit {
+  display: inline-flex;
+  align-items: baseline;
+}
+.group {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.15em;
+}
+.number {
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+}
+.name {
+  color: var(--text-muted, currentColor);
+  font-size: 0.85em;
+}
+.colon {
+  margin: 0 0.1em;
+}
+.wheel {
+  position: relative;
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+}
+.sizer {
+  visibility: hidden;
+}
+.glyph {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  text-align: center;
+}
+.done {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.pulse {
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 999px;
+  background: currentColor;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+}

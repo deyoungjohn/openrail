@@ -459,42 +459,30 @@ const H1: StepDef[] = [
   },
   {
     name: "late payment after a transfer: it becomes surplus for the owner, nothing is charged again",
-    usd: 3,
+    usd: 1,
     readOnly: false,
     async run(ctx, state) {
       const tokenId = getEnv("H1_LATE_TOKEN") ?? "c-3";
       const before = await claimOf(ctx, tokenId);
       must(before.status === "Paid", `${tokenId} is not a paid claim`);
       const routes = await routesOf(ctx, tokenId);
-      const list = (await readJson(
-        `${ctx.api}/v1/pay/claims/${encodeURIComponent(tokenId)}/sessions`,
-        ctx.fetchImpl,
-      )) as { data?: SessionView[] };
-      let chosen: SessionView | undefined;
-      for (const s of list.data ?? []) {
-        if (Date.parse(s.deadline) < Date.now() + 15 * 60_000) continue;
-        const st = await sessionStatus(ctx, s.id);
-        if (st.swap === "PENDING_DEPOSIT") {
-          chosen = s;
-          break;
-        }
-      }
-      must(
-        chosen !== undefined,
-        `${tokenId} has no unpaid quote that is still open; use another paid claim`,
-      );
-      const route = routes.find((r) => r.id === chosen.route_id);
+      // A stablecoin quote made now. (An old ETH or SOL quote is no use: the price has moved and the
+      // swap would be returned, as happened on 6 Nov.) The API quotes an explicit amount on a paid claim.
+      const route = routes.find((r) => r.swap_type === "FLEX_INPUT" && r.evm_chain_id !== null);
+      must(route !== undefined, "no USDC route offered");
+      const session = await newSession(ctx, 5, tokenId, route.id, "1.00", 1800);
       tellToPay(
         ctx,
-        chosen,
+        session,
         route,
-        `Send the quoted amount (a payment on an already paid claim, owner ${String(before.owner_id)}):`,
+        `Send 1.00 USDC to this address. It is a payment on an already paid claim (owner ${String(before.owner_id)}):`,
       );
       await until("the late payment is booked", 25 * 60_000, async () => {
         return big((await claimOf(ctx, tokenId)).booked_total) > big(before.booked_total);
       });
       const after = await claimOf(ctx, tokenId);
       const delta = big(after.booked_total) - big(before.booked_total);
+      must(delta === USDC, `booked ${delta}, expected 1000000`);
       must(after.status === "Paid", `status is ${String(after.status)}`);
       must(
         big(after.surplus) - big(before.surplus) === delta,

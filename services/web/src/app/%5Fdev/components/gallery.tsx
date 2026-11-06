@@ -263,9 +263,17 @@ export function Gallery() {
           </Card>
         </div>
         <div className="flex flex-wrap gap-6">
-          <Countdown expiresAt={Date.now() + 10 * 60_000} />
-          <Countdown expiresAt={Date.now() + 90_000} />
-          <Countdown expiresAt={NOW - 1} />
+          <Countdown
+            target={Date.now() + 10 * 60_000}
+            units={["minutes", "seconds"]}
+            variant="compact"
+          />
+          <Countdown
+            target={Date.now() + 90_000}
+            units={["minutes", "seconds"]}
+            variant="compact"
+          />
+          <Countdown target={NOW - 1} units={["minutes", "seconds"]} variant="compact" />
         </div>
       </Section>
 

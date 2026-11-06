@@ -3,8 +3,8 @@ import {
   amountPrefix,
   chainOfRoute,
   formatDueDate,
-  formatLeft,
   formatToken,
+  payUnits,
   hashStrings,
   payStage,
   payTimeline,
@@ -213,11 +213,20 @@ describe("hashStrings", () => {
   });
 });
 
-describe("formatLeft", () => {
-  it("is always hours, minutes and seconds", () => {
-    expect(formatLeft(72 * 3600 + 4 * 60 + 9)).toBe("72h 04m 09s");
-    expect(formatLeft(3 * 3600 + 5 * 60 + 9)).toBe("3h 05m 09s");
-    expect(formatLeft(4 * 60 + 9)).toBe("4m 09s");
-    expect(formatLeft(9)).toBe("9s");
+describe("payUnits", () => {
+  it("rounds an ETH quote up to six decimals, so a wallet can enter it and it never falls short", () => {
+    expect(payUnits("1348354311809600", 18, "ETH")).toBe("1349000000000000");
+    expect(formatToken(payUnits("1348354311809600", 18, "ETH"), 18)).toBe("0.001349");
+    expect(BigInt(payUnits("1348354311809600", 18, "ETH"))).toBeGreaterThanOrEqual(
+      1348354311809600n,
+    );
+  });
+  it("leaves an amount that is already round, and USDC, exactly as quoted", () => {
+    expect(payUnits("1349000000000000", 18, "ETH")).toBe("1349000000000000");
+    expect(payUnits("3000000", 6, "USDC")).toBe("3000000");
+    expect(payUnits("1234567", 6, "USDC")).toBe("1234567");
+  });
+  it("rounds SOL up to five decimals", () => {
+    expect(payUnits("11134668", 9, "SOL")).toBe("11140000");
   });
 });
