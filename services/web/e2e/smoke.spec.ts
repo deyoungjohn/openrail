@@ -32,9 +32,10 @@ test.describe("signed-in journey on the mock API", () => {
     await page.getByRole("button", { name: "Create invoice" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "Invoice created" })).toBeVisible();
-    await dialog.getByLabel("Client's email").fill("ap@northwind.example");
-    await dialog.getByRole("button", { name: "Send invoice" }).click();
-    await expect(dialog.getByText("Sent to ap@northwind.example")).toBeVisible();
+    // Email is not available yet: the sheet offers the pay link and the QR code, and no email form.
+    await expect(dialog.getByText("Pay link")).toBeVisible();
+    await expect(dialog.getByLabel("Client's email")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Send invoice" })).toHaveCount(0);
   });
 
   test("a client pays: pay page, price, address, then the receipt", async ({ page }) => {

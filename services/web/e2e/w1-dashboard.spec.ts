@@ -463,9 +463,10 @@ test.describe("issue form", () => {
       line_items: [{ description: "Design", quantity: 2, unit_amount_usd: "125.00" }],
     });
 
-    await dialog.getByLabel("Client's email").fill("ap@northwind.example");
-    await dialog.getByRole("button", { name: "Send invoice" }).click();
-    await expect(dialog.getByText("Sent to ap@northwind.example")).toBeVisible();
+    // Email is not available yet: the sheet offers the pay link and the QR code, and no email form.
+    await expect(dialog.getByText("Pay link")).toBeVisible();
+    await expect(dialog.getByLabel("Client's email")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Send invoice" })).toHaveCount(0);
   });
 
   test("a failed create says nothing was sent", async ({ page }) => {
