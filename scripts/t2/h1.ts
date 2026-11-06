@@ -12,7 +12,7 @@
  * environment, a resumable state file, and a report whose result follows from the checks below.
  * The runner never pays: where money must move, it prints the address and the amount and waits
  * for the person to send it, then checks the outcome on chain and in the API.
- * Existing claims are reused where that is meaningful (c-1 to c-3 are all paid); two scenarios need
+ * Existing claims are reused where that is meaningful (c-1 to c-3 are all paid); three scenarios need
  * an unpaid invoice and issue one each (0.02 NEAR each, from the sponsor pool or the credit).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -139,6 +139,7 @@ interface SessionView {
   amount_in: string;
   amount_usd: string;
   deadline: string;
+  deadline_requested: number;
   status: string;
 }
 
@@ -350,7 +351,7 @@ const H1: StepDef[] = [
     },
   },
   {
-    name: "expired quote: a price nobody pays lapses and changes nothing",
+    name: "expired quote: a price past its deadline changes nothing until it is paid",
     usd: 0,
     readOnly: false,
     async run(ctx, state) {
@@ -358,64 +359,80 @@ const H1: StepDef[] = [
       const routes = await routesOf(ctx, tokenId);
       const route = routes.find((r) => r.swap_type === "FLEX_INPUT" && r.evm_chain_id !== null);
       must(route !== undefined, "no USDC route offered");
+      // The deadline that counts is the one logged on chain (`deadline_requested`). The swap provider
+      // keeps its deposit address open for three days after it, so the session is kept for step 4.
       const session = await newSession(ctx, 2, tokenId, route.id, undefined, 300);
-      console.log(`  quote ${session.id} lapses at ${session.deadline}; waiting`);
-      await until(
-        "quote deadline",
-        8 * 60_000,
-        async () => Date.parse(session.deadline) + 20_000 < Date.now(),
+      const lapse = Number(session.deadline_requested) * 1000;
+      console.log(
+        `  quote ${session.id} lapses (on chain) at ${new Date(lapse).toISOString()}; waiting`,
       );
-      const status = await sessionStatus(ctx, session.id);
-      must(
-        status.status === "pending_deposit" || status.status === "failed",
-        `expired quote reads ${status.status}`,
-      );
+      await until("our quote deadline", 8 * 60_000, async () => lapse + 10_000 < Date.now());
       const claim = await claimOf(ctx, tokenId);
       must(big(claim.booked_total) === 0n, "an unpaid quote changed the claim");
-      state.evidence = { session: session.id, status: status.status, booked_total: "0" };
+      state.evidence = { session, route_id: route.id, booked_total: "0" };
     },
   },
   {
-    name: "short deposit: less than the price waits, then is returned",
-    usd: 1,
+    name: "short deposit: less than the price waits, and a top-up completes it",
+    usd: 3,
     readOnly: false,
     async run(ctx, state) {
-      const tokenId = recorded(ctx, "A");
+      const tokenId = await issueInvoice(ctx, 3, "B");
+      state.token_id = tokenId;
       const routes = await routesOf(ctx, tokenId);
       const route = routes.find((r) => r.swap_type === "FLEX_INPUT" && r.evm_chain_id !== null);
       must(route !== undefined, "no USDC route offered");
-      const session = await newSession(ctx, 3, tokenId, route.id, undefined, 900);
+      const session = await newSession(ctx, 3, tokenId, route.id, undefined, 3600);
       tellToPay(
         ctx,
         session,
         route,
-        "Send exactly 1.00 USDC (less than the price) to this address:",
+        "Send exactly 1.00 USDC (less than the 3.00 price) to this address:",
       );
-      await until("1Click sees the short deposit", 12 * 60_000, async () => {
+      await until("the provider sees the short deposit", 12 * 60_000, async () => {
         return (await sessionStatus(ctx, session.id)).swap === "INCOMPLETE_DEPOSIT";
       });
+      const waiting = await claimOf(ctx, tokenId);
+      must(big(waiting.booked_total) === 0n, "a short deposit was booked");
       console.log(
-        "  the short deposit is waiting; now waiting for the price to lapse and 1Click to return it",
+        "  the short deposit waits and nothing is booked. Now send the other 2.00 USDC to the SAME address.",
       );
-      await until("refund of the short deposit", 30 * 60_000, async () => {
-        return (await sessionStatus(ctx, session.id)).swap === "REFUNDED";
+      await until("the top-up completes the payment", 25 * 60_000, async () => {
+        return big((await claimOf(ctx, tokenId)).booked_total) >= 3n * USDC;
       });
       const claim = await claimOf(ctx, tokenId);
-      must(big(claim.booked_total) === 0n, "a short deposit was booked");
-      state.evidence = { session: session.id, outcome: "REFUNDED", booked_total: "0" };
+      must(
+        big(claim.booked_total) === 3n * USDC,
+        `booked ${String(claim.booked_total)}, expected exactly 3000000`,
+      );
+      must(claim.status === "Paid", `status is ${String(claim.status)}`);
+      state.evidence = {
+        session: session.id,
+        token_id: tokenId,
+        booked: "3000000",
+        note: "the provider returns an uncompleted deposit only after its own three-day deadline; that return was not exercised",
+      };
     },
   },
   {
-    name: "overpayment: the extra becomes surplus and the debtor is charged only the invoice",
+    name: "overpayment on an expired quote: it is booked, the extra becomes surplus",
     usd: 4,
     readOnly: false,
     async run(ctx, state) {
       const tokenId = recorded(ctx, "A");
+      const kept = (step(ctx.state, 2).evidence ?? {}) as {
+        session?: SessionView;
+        route_id?: string;
+      };
+      must(kept.session !== undefined, "run step 2 first: it keeps the quote that is paid here");
+      const session = kept.session;
       const routes = await routesOf(ctx, tokenId);
-      const route = routes.find((r) => r.swap_type === "FLEX_INPUT" && r.evm_chain_id !== null);
-      must(route !== undefined, "no USDC route offered");
-      const session = await newSession(ctx, 4, tokenId, route.id, undefined, 3600);
-      tellToPay(ctx, session, route, "Send 4.00 USDC (more than the 3.00 price) to this address:");
+      tellToPay(
+        ctx,
+        session,
+        routes.find((r) => r.id === kept.route_id),
+        "This quote is past its on-chain deadline. Send 4.00 USDC (more than the 3.00 price) to this address:",
+      );
       await until("the overpayment is booked", 25 * 60_000, async () => {
         return big((await claimOf(ctx, tokenId)).booked_total) > 0n;
       });
@@ -600,7 +617,7 @@ const H1: StepDef[] = [
     usd: 3,
     readOnly: false,
     async run(ctx, state) {
-      const tokenId = await issueInvoice(ctx, 8, "B");
+      const tokenId = await issueInvoice(ctx, 8, "C");
       state.token_id = tokenId;
       const routes = (await routesOf(ctx, tokenId)).filter(
         (r) => r.swap_type === "FLEX_INPUT" && r.evm_chain_id !== null,
@@ -763,9 +780,14 @@ export async function runH1(argv: string[] = process.argv.slice(2)): Promise<num
     business: requireOrExit("H1_BUSINESS_ACCOUNT"),
     tokens: {},
   };
-  for (let i = 0; i < defs.length; i += 1) {
-    const saved = step(ctx.state, i + 1).token_id;
-    if (saved !== undefined) ctx.tokens[i === 0 ? "A" : "B"] = saved;
+  // Invoices issued by earlier steps (a resumed run): step 1 issued A, step 3 B, step 8 C.
+  for (const [number, label] of [
+    [1, "A"],
+    [3, "B"],
+    [8, "C"],
+  ] as const) {
+    const saved = step(ctx.state, number).token_id;
+    if (saved !== undefined && set === "h1") ctx.tokens[label] = saved;
   }
   const writeFinal = (): H1Report => {
     mkdirSync(options.reportDir, { recursive: true });
