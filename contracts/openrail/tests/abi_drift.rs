@@ -129,13 +129,37 @@ fn test_built_abi_drift() {
     let built_json: Value =
         serde_json::from_str(&built_content).expect("Invalid JSON in built ABI");
 
-    let expected_methods: BTreeSet<String> = core_json
+    let mut expected_methods: BTreeSet<String> = core_json
         .get("methods")
         .and_then(Value::as_array)
         .expect("methods array missing")
         .iter()
         .map(|m| m.get("name").and_then(Value::as_str).unwrap().to_string())
         .collect();
+
+    let modules_dir = if Path::new("src/modules").exists() {
+        Path::new("src/modules")
+    } else {
+        Path::new("../../contracts/openrail/src/modules")
+    };
+    if let Ok(entries) = fs::read_dir(modules_dir) {
+        for entry in entries.flatten() {
+            let abi_file = entry.path().join("abi.json");
+            if abi_file.exists() {
+                if let Ok(content) = fs::read_to_string(&abi_file) {
+                    if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                        if let Some(methods) = json.get("methods").and_then(Value::as_array) {
+                            for m in methods {
+                                if let Some(name) = m.as_str() {
+                                    expected_methods.insert(name.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     let actual_methods: BTreeSet<String> = built_json
         .get("body")

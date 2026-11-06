@@ -93,6 +93,50 @@ describe("generate", () => {
     );
   });
 
+  it("emits a support component only when a module that needs it is enabled", () => {
+    write(
+      "openrail.modules.json",
+      JSON.stringify({
+        modules: [
+          { id: "alpha", enabled: true },
+          { id: "beta", enabled: false },
+        ],
+        support: [
+          { id: "carrier", enabled_if: ["alpha", "beta"] },
+          { id: "idle", enabled_if: ["beta"] },
+        ],
+      }),
+    );
+    write("contracts/openrail/Cargo.toml", `[package]\nname = "x"\n\n[features]\nalpha = []\n`);
+    mkdirSync(join(root, "contracts/openrail/src/modules/carrier"), { recursive: true });
+    mkdirSync(join(root, "contracts/openrail/src/modules/idle"), { recursive: true });
+    const { files, errors } = generate(root);
+    expect(errors).toEqual([]);
+    const rs = files["contracts/openrail/src/modules/mod.rs"];
+    // Only the enabled enablers appear in the cfg; no hook, not in ENABLED.
+    expect(rs).toContain(`#[cfg(any(feature = "alpha"))]\npub mod carrier;`);
+    expect(rs).not.toContain("carrier::HOOK");
+    expect(rs).not.toMatch(/"carrier",/);
+    expect(rs).not.toContain("idle");
+  });
+
+  it("rejects a support component whose enablers are not module ids", () => {
+    write(
+      "openrail.modules.json",
+      JSON.stringify({
+        modules: [{ id: "alpha", enabled: true }],
+        support: [
+          { id: "carrier", enabled_if: ["nosuch"] },
+          { id: "alpha", enabled_if: ["alpha"] },
+        ],
+      }),
+    );
+    write("contracts/openrail/Cargo.toml", `[package]\nname = "x"\n\n[features]\nalpha = []\n`);
+    const { errors } = generate(root);
+    expect(errors.join("\n")).toContain("support carrier: unknown module nosuch");
+    expect(errors.join("\n")).toContain("support id clashes with a module id: alpha");
+  });
+
   it("never emits a disabled module even when its folder exists", () => {
     fixture(
       [

@@ -360,9 +360,35 @@ impl Contract {
                         }
                     }
                 }
-                Leg::Hold { .. } => {
-                    // Hold legs stay in the claim account, not forwarded
-                    final_legs.push(leg);
+                Leg::Hold {
+                    module_id, amount, ..
+                } => {
+                    // Hold legs stay in the claim account and are not forwarded, but they take
+                    // asset capacity like a Pay leg, so the holding module knows which asset (and
+                    // how much of it) it holds, and later legs cannot spend the same value.
+                    let mut remaining_needed = amount.0;
+                    while remaining_needed > 0 {
+                        while current_cap_idx < sorted_capacities.len()
+                            && sorted_capacities[current_cap_idx].capacity == 0
+                        {
+                            current_cap_idx += 1;
+                        }
+                        if current_cap_idx >= sorted_capacities.len() {
+                            env::panic_str("insufficient asset capacity for distribution leg");
+                        }
+                        let cap = &mut sorted_capacities[current_cap_idx];
+                        let take = remaining_needed.min(cap.capacity);
+                        cap.capacity = cap.capacity.saturating_sub(take);
+                        remaining_needed = remaining_needed.saturating_sub(take);
+                        final_legs.push(Leg::Hold {
+                            module_id: module_id.clone(),
+                            amount: U128(take),
+                            asset: Some(cap.asset.clone()),
+                        });
+                        if cap.capacity == 0 {
+                            current_cap_idx += 1;
+                        }
+                    }
                 }
             }
         }
@@ -694,7 +720,12 @@ impl Contract {
             return;
         }
 
+        if let Err(refusal) = crate::hooks::dispatch_check_clear_stale_lock(claim) {
+            env::panic_str(&refusal.reason);
+        }
+
         let cleared_lock = std::mem::replace(&mut claim.lock, Lock::None);
+        crate::hooks::dispatch_on_lock_cleared(claim, &cleared_lock);
         LockClearedEvent {
             token_id,
             cleared_lock,

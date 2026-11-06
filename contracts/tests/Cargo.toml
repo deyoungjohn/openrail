@@ -16,6 +16,10 @@ anyhow = "1.0"
 near-sdk = { version = "=5.30.0", features = ["unstable", "unit-testing"] }
 openrail = { path = "../openrail" }
 
+[features]
+default = []
+settle = ["openrail/settle"]
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 openrail-model = { path = "../model" }

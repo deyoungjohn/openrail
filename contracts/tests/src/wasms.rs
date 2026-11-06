@@ -234,21 +234,24 @@ pub fn mock_nft_receiver_wasm() -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-/// Returns the `openrail.wasm` root contract bytecode built from `origin/main` (d4bd298).
-pub fn openrail_origin_main_wasm() -> Result<Vec<u8>> {
+/// Pinned commit of openrail contract as deployed on mainnet (4 Nov deploy plan).
+pub const BASELINE_DEPLOYED_SHA: &str = "899ad5540d02db8e77c7a98ef1daa24e8df04ae5";
+
+/// Returns the `openrail.wasm` root contract bytecode built from the pinned mainnet baseline (`899ad55`).
+pub fn openrail_baseline_mainnet_wasm() -> Result<Vec<u8>> {
     if let Some(cached) = OPENRAIL_ORIGIN_MAIN_WASM_CACHE.get() {
         return Ok(cached.clone());
     }
 
-    if let Ok(path) = std::env::var("OPENRAIL_MAIN_WASM") {
+    if let Ok(path) = std::env::var("OPENRAIL_BASELINE_WASM") {
         let bytes =
-            std::fs::read(&path).with_context(|| format!("read OPENRAIL_MAIN_WASM={path}"))?;
+            std::fs::read(&path).with_context(|| format!("read OPENRAIL_BASELINE_WASM={path}"))?;
         let _ = OPENRAIL_ORIGIN_MAIN_WASM_CACHE.set(bytes.clone());
         return Ok(bytes);
     }
 
     let root = workspace_root();
-    let cached_path = root.join("target/near/openrail_origin_main.wasm");
+    let cached_path = root.join("target/near/openrail_baseline_mainnet.wasm");
     if cached_path.exists() {
         let bytes = std::fs::read(&cached_path)
             .with_context(|| format!("read cached {}", cached_path.display()))?;
@@ -256,16 +259,16 @@ pub fn openrail_origin_main_wasm() -> Result<Vec<u8>> {
         return Ok(bytes);
     }
 
-    // Build from origin/main using git archive
-    let build_dir = root.join("target/origin_main_tree");
+    // Build from pinned commit using git archive
+    let build_dir = root.join("target/baseline_tree");
     std::fs::create_dir_all(&build_dir)?;
     let archive_output = Command::new("git")
-        .args(["archive", "origin/main"])
+        .args(["archive", BASELINE_DEPLOYED_SHA])
         .current_dir(&root)
         .output()
-        .context("git archive origin/main")?;
+        .context("git archive baseline sha")?;
     if !archive_output.status.success() {
-        return Err(anyhow!("git archive origin/main failed"));
+        return Err(anyhow!("git archive baseline failed: {archive_output:?}"));
     }
     use std::io::Write;
     let mut tar_child = Command::new("tar")
@@ -292,12 +295,12 @@ pub fn openrail_origin_main_wasm() -> Result<Vec<u8>> {
             "--manifest-path",
             manifest.to_str().unwrap(),
             "--features",
-            "standing,checkout,proof,agent,shopify,settle,woocommerce",
+            "standing,checkout,advance,proof,agent,shopify,subscriptions",
         ])
         .status()
-        .context("cargo near build for origin/main")?;
+        .context("cargo near build for baseline")?;
     if !status.success() {
-        return Err(anyhow!("cargo near build failed for origin/main"));
+        return Err(anyhow!("cargo near build failed for baseline"));
     }
 
     let built_wasm = build_dir.join("target/near/openrail/openrail.wasm");
@@ -306,4 +309,9 @@ pub fn openrail_origin_main_wasm() -> Result<Vec<u8>> {
     let _ = std::fs::write(&cached_path, &bytes);
     let _ = OPENRAIL_ORIGIN_MAIN_WASM_CACHE.set(bytes.clone());
     Ok(bytes)
+}
+
+/// Alias for `openrail_baseline_mainnet_wasm()`.
+pub fn openrail_origin_main_wasm() -> Result<Vec<u8>> {
+    openrail_baseline_mainnet_wasm()
 }

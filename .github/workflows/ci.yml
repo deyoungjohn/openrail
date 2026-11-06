@@ -166,8 +166,8 @@ jobs:
       - name: Set sandbox temp directory
         run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
-      - name: Fetch main for the upgrade test
-        run: git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main
+      - name: Fetch the deployed contract's commit for the upgrade test
+        run: git fetch --no-tags --depth=1 origin 899ad5540d02db8e77c7a98ef1daa24e8df04ae5
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

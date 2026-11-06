@@ -1469,3 +1469,112 @@ failures:
 
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 10.45s
 ```
+
+## REL-1 — Settle & Payout (Findings 1 & 2, Mutants 18–20)
+
+| ID        | Break                                              | Test                                            | Result          |
+| --------- | -------------------------------------------------- | ----------------------------------------------- | --------------- |
+| REL1-F1   | `release_surplus` drains module reserved balance   | `test_review_release_surplus_spends_held_value` | FAILED (caught) |
+| REL1-F2   | `clear_stale_lock` allowed during in-flight payout | `test_review_lock_expires_before_report_payout` | FAILED (caught) |
+| REL1-M18a | Empty `destination_tx` accepted in `report_payout` | `settle_report_empty_tx_panics`                 | FAILED (caught) |
+| REL1-M18b | Oversized `destination_tx` (>128 bytes) accepted   | `settle_report_oversized_tx_panics`             | FAILED (caught) |
+| REL1-M19  | Zero `amount_in` allowed in `payout_from`          | `settle_payout_zero_amount_panics`              | FAILED (caught) |
+| REL1-M20  | `settle_payout` allowed after `clear_settlement()` | `settle_payout_after_clear_settlement_panics`   | FAILED (caught) |
+
+### REL1-F1: `release_surplus` drains module reserved balance
+
+Command: `cargo test -p openrail-tests --test settle_sandbox_suite test_review_release_surplus_spends_held_value`
+
+```diff
+--- a/contracts/openrail/src/claims.rs
++++ b/contracts/openrail/src/claims.rs
+@@ -402,3 +402,2 @@ impl Contract {
+-            let reserved = dispatch_reserved_balance(&claim, asset);
+-            let avail = seen.saturating_sub(reserved);
++            let avail = seen;
+```
+
+Failure (tail):
+
+```text
+test test_review_release_surplus_spends_held_value ... FAILED
+assertion `left == right` failed: Asset 1 held balance must be preserved
+  left: 797500
+ right: 997500
+```
+
+### REL1-F2: `clear_stale_lock` allowed while payout in-flight
+
+Command: `cargo test -p openrail-tests --test settle_sandbox_suite test_review_lock_expires_before_report_payout`
+
+```diff
+--- a/contracts/openrail/src/modules/settle/mod.rs
++++ b/contracts/openrail/src/modules/settle/mod.rs
+@@ -588,3 +588,2 @@ impl Hook for SettleHook {
+-        if has_in_flight {
+-            return Err(Refusal::ModuleReject("in-flight".into()));
+-        }
++        // missing check_clear_stale_lock guard
+```
+
+Failure (tail):
+
+```text
+test test_review_lock_expires_before_report_payout ... FAILED
+assertion `left == right` failed: clear_stale_lock must be refused while payout is InFlight
+```
+
+### REL1-M18: Empty or oversized `destination_tx` in `report_payout`
+
+Command: `cargo test -p openrail --features settle settle_report_empty_tx_panics`
+
+```diff
+--- a/contracts/openrail/src/modules/settle/mod.rs
++++ b/contracts/openrail/src/modules/settle/mod.rs
+@@ -485,3 +485,2 @@ impl Contract {
+-        require!(!destination_tx.is_empty() && destination_tx.len() <= 128, "SETTLE_BAD_TX");
+```
+
+Failure (tail):
+
+```text
+test modules::settle::tests::settle_report_empty_tx_panics - should panic ... FAILED
+note: test did not panic as expected
+```
+
+### REL1-M19: Zero `amount_in` in `payout_from`
+
+Command: `cargo test -p openrail --features settle settle_payout_zero_amount_panics`
+
+```diff
+--- a/contracts/openrail/src/modules/payout/mod.rs
++++ b/contracts/openrail/src/modules/payout/mod.rs
+@@ -140,2 +140,1 @@ pub fn payout_from(
+-    require!(amount_in.0 > 0, ERR_ZERO_AMOUNT);
+```
+
+Failure (tail):
+
+```text
+test modules::settle::tests::settle_payout_zero_amount_panics - should panic ... FAILED
+note: test did not panic as expected
+```
+
+### REL1-M20: `settle_payout` after `clear_settlement()`
+
+Command: `cargo test -p openrail --features settle settle_payout_after_clear_settlement_panics`
+
+```diff
+--- a/contracts/openrail/src/modules/settle/mod.rs
++++ b/contracts/openrail/src/modules/settle/mod.rs
+@@ -434,2 +434,2 @@ impl Contract {
+-        let destination = destination_of(&entry.owner).unwrap_or_else(|| env::panic_str(ERR_NO_DESTINATION));
++        let destination = destination_of(&entry.owner);
+```
+
+Failure (tail):
+
+```text
+test modules::settle::tests::settle_payout_after_clear_settlement_panics - should panic ... FAILED
+note: test did not panic as expected
+```
