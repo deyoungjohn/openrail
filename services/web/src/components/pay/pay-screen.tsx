@@ -57,22 +57,6 @@ function useNow(intervalMs = 1000): number | null {
   return now;
 }
 
-/**
- * The deadline that counts is the one logged on chain (`deadline_requested`, in seconds). The swap provider
- * keeps its own address open for three days after it; that is not what the payer is promised.
- */
-/** What the page shows and the wallet button sends: the quote rounded up to decimals a wallet can enter. */
-const amountOf = (session: Session, route: Route): string =>
-  formatToken(
-    payUnits(session.amount_in, route.origin_decimals, route.payer_asset),
-    route.origin_decimals,
-  );
-
-const deadlineOf = (session: Session): string =>
-  Number.isFinite(session.deadline_requested)
-    ? new Date(session.deadline_requested * 1000).toISOString()
-    : session.deadline;
-
 const timeOf = (iso: string) => {
   const at = new Date(iso);
   const time = at.toLocaleTimeString("en-GB", {
@@ -133,7 +117,7 @@ function QuoteNote({
         ) : null}
       </dl>
       {upto ? <p className="caption">{p.marginNote}</p> : null}
-      <p className="text-[14px] leading-5">{p.locked(timeOf(deadlineOf(session)))}</p>
+      <p className="text-[14px] leading-5">{p.locked(timeOf(session.deadline))}</p>
     </section>
   );
 }
@@ -219,7 +203,7 @@ function SessionView({
   const [short, setShort] = useState(false);
   const chain = chainOfRoute(route);
 
-  const stage = payStage(status, deadlineOf(session), now ?? 0);
+  const stage = payStage(status, session.deadline, now ?? 0);
   const live = now !== null && (stage === "waiting" || stage === "processing");
 
   useEffect(() => {
@@ -333,7 +317,7 @@ function SessionView({
           <div className="flex items-center justify-between px-1">
             <span className="caption">{p.timeLeft}</span>
             <Countdown
-              target={Date.parse(deadlineOf(session))}
+              target={Date.parse(session.deadline)}
               units={["minutes", "seconds"]}
               variant="compact"
               label={p.timeLeft}
