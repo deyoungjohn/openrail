@@ -1272,3 +1272,200 @@ failures:
 
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 15.84s
 ```
+
+## A10 — Storage-credit sponsor pool (`sponsor_suite`)
+
+Deliberate breaks in storage-credit sponsorship and pool management evaluated against the test suite in `contracts/tests/tests/sponsor_suite.rs`.
+
+| ID    | Break                                                                          | Test                                                   | Result          |
+| ----- | ------------------------------------------------------------------------------ | ------------------------------------------------------ | --------------- |
+| A10-1 | Cap ignored: `sponsored_count` not enforced against `sponsor_cap`              | `test_sponsor_first_n_invoices_sponsored_then_refused` | FAILED (caught) |
+| A10-2 | Pool underflow: `sponsor_pool` deducted without checking sufficient balance    | `test_sponsor_pool_never_underflows`                   | FAILED (caught) |
+| A10-3 | Wrong account counted: `caller`/`issuer` count incremented instead of business | `test_sponsor_cap_is_per_business`                     | FAILED (caught) |
+| A10-4 | Own credit skipped: pool drawn even when business holds personal credit        | `test_sponsor_own_credit_used_before_pool`             | FAILED (caught) |
+| A10-5 | Withdraw by anyone: `withdraw_sponsor_pool` lacks root authorization check     | `test_sponsor_pool_deposit_and_root_only_withdraw`     | FAILED (caught) |
+
+### A10-1: Cap ignored: `sponsored_count` not enforced against `sponsor_cap`
+
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_first_n_invoices_sponsored_then_refused -- --ignored`
+
+```diff
+--- a/contracts/openrail/src/issue.rs
++++ b/contracts/openrail/src/issue.rs
+@@ -194,7 +194,7 @@ impl Contract {
+             .0;
+         let is_sponsored = if current_credit < REQUIRED_ISSUE_DEPOSIT.as_yoctonear() {
+             let used = self.sponsored_count.get(&business).copied().unwrap_or(0);
+-            if self.sponsor_pool.0 >= REQUIRED_ISSUE_DEPOSIT.as_yoctonear() && used < self.sponsor_cap {
++            if self.sponsor_pool.0 >= REQUIRED_ISSUE_DEPOSIT.as_yoctonear() {
+                 self.sponsor_pool = U128(self.sponsor_pool.0 - REQUIRED_ISSUE_DEPOSIT.as_yoctonear());
+                 self.sponsored_count.insert(business.clone(), used + 1);
+                 true
+```
+
+Failure (tail):
+
+```text
+test test_sponsor_first_n_invoices_sponsored_then_refused ... FAILED
+
+failures:
+
+---- test_sponsor_first_n_invoices_sponsored_then_refused stdout ----
+
+thread 'test_sponsor_first_n_invoices_sponsored_then_refused' panicked at contracts/tests/tests/sponsor_suite.rs:267:5:
+assertion failed: res_6.is_failure()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_sponsor_first_n_invoices_sponsored_then_refused
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 14.12s
+```
+
+### A10-2: Pool underflow: `sponsor_pool` deducted without checking sufficient balance
+
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_pool_never_underflows -- --ignored`
+
+```diff
+--- a/contracts/openrail/src/issue.rs
++++ b/contracts/openrail/src/issue.rs
+@@ -195,5 +195,5 @@ impl Contract {
+         let is_sponsored = if current_credit < REQUIRED_ISSUE_DEPOSIT.as_yoctonear() {
+             let used = self.sponsored_count.get(&business).copied().unwrap_or(0);
+-            if self.sponsor_pool.0 >= REQUIRED_ISSUE_DEPOSIT.as_yoctonear() && used < self.sponsor_cap {
++            if used < self.sponsor_cap {
+                 self.sponsor_pool = U128(self.sponsor_pool.0.saturating_sub(REQUIRED_ISSUE_DEPOSIT.as_yoctonear()));
+                 self.sponsored_count.insert(business.clone(), used + 1);
+```
+
+Failure (tail):
+
+```text
+test test_sponsor_pool_never_underflows ... FAILED
+
+failures:
+
+---- test_sponsor_pool_never_underflows stdout ----
+
+thread 'test_sponsor_pool_never_underflows' panicked at contracts/tests/tests/sponsor_suite.rs:416:5:
+assertion failed: res_partial.is_failure()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_sponsor_pool_never_underflows
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 12.35s
+```
+
+### A10-3: Wrong account counted: `caller`/`issuer` count incremented instead of business
+
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_cap_is_per_business -- --ignored`
+
+```diff
+--- a/contracts/openrail/src/issue.rs
++++ b/contracts/openrail/src/issue.rs
+@@ -198,3 +198,3 @@ impl Contract {
+                 self.sponsor_pool = U128(self.sponsor_pool.0 - REQUIRED_ISSUE_DEPOSIT.as_yoctonear());
+-                self.sponsored_count.insert(business.clone(), used + 1);
++                self.sponsored_count.insert(env::predecessor_account_id(), used + 1);
+                 true
+```
+
+Failure (tail):
+
+```text
+test test_sponsor_cap_is_per_business ... FAILED
+
+failures:
+
+---- test_sponsor_cap_is_per_business stdout ----
+
+thread 'test_sponsor_cap_is_per_business' panicked at contracts/tests/tests/sponsor_suite.rs:563:5:
+assertion failed: res_carol_1.is_success()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_sponsor_cap_is_per_business
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 16.48s
+```
+
+### A10-4: Own credit skipped: pool drawn even when business holds personal credit
+
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_own_credit_used_before_pool -- --ignored`
+
+```diff
+--- a/contracts/openrail/src/issue.rs
++++ b/contracts/openrail/src/issue.rs
+@@ -189,6 +189,6 @@ impl Contract {
+-        if current_credit >= REQUIRED_ISSUE_DEPOSIT.as_yoctonear() {
+-            self.storage_credit.insert(business.clone(), U128(current_credit - REQUIRED_ISSUE_DEPOSIT.as_yoctonear()));
+-        } else if self.sponsor_pool.0 >= REQUIRED_ISSUE_DEPOSIT.as_yoctonear() && used < self.sponsor_cap {
++        if self.sponsor_pool.0 >= REQUIRED_ISSUE_DEPOSIT.as_yoctonear() && used < self.sponsor_cap {
+             self.sponsor_pool = U128(self.sponsor_pool.0 - REQUIRED_ISSUE_DEPOSIT.as_yoctonear());
+             self.sponsored_count.insert(business.clone(), used + 1);
++        } else if current_credit >= REQUIRED_ISSUE_DEPOSIT.as_yoctonear() {
++            self.storage_credit.insert(business.clone(), U128(current_credit - REQUIRED_ISSUE_DEPOSIT.as_yoctonear()));
+```
+
+Failure (tail):
+
+```text
+test test_sponsor_own_credit_used_before_pool ... FAILED
+
+failures:
+
+---- test_sponsor_own_credit_used_before_pool stdout ----
+
+thread 'test_sponsor_own_credit_used_before_pool' panicked at contracts/tests/tests/sponsor_suite.rs:327:5:
+assertion `left == right` failed: Bob's personal storage credit must be consumed
+  left: 20000000000000000000000
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_sponsor_own_credit_used_before_pool
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 11.89s
+```
+
+### A10-5: Withdraw by anyone: `withdraw_sponsor_pool` lacks root authorization check
+
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_pool_deposit_and_root_only_withdraw -- --ignored`
+
+```diff
+--- a/contracts/openrail/src/issue.rs
++++ b/contracts/openrail/src/issue.rs
+@@ -350,5 +350,3 @@ impl Contract {
+     pub(crate) fn internal_withdraw_sponsor_pool(&mut self, amount: U128) {
+-        require!(
+-            env::predecessor_account_id() == self.root_account,
+-            "root only"
+-        );
++        // missing predecessor authorization check
+         require!(self.sponsor_pool.0 >= amount.0, "insufficient sponsor pool balance");
+```
+
+Failure (tail):
+
+```text
+test test_sponsor_pool_deposit_and_root_only_withdraw ... FAILED
+
+failures:
+
+---- test_sponsor_pool_deposit_and_root_only_withdraw stdout ----
+
+thread 'test_sponsor_pool_deposit_and_root_only_withdraw' panicked at contracts/tests/tests/sponsor_suite.rs:144:5:
+assertion failed: res_withdraw_alice.is_failure()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_sponsor_pool_deposit_and_root_only_withdraw
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 10.45s
+```
