@@ -70,6 +70,41 @@ describe("webhook worker", () => {
     expect(events.listEvents).toHaveBeenCalled();
   });
 
+  it("carries storage_sponsored to a subscribed endpoint", async () => {
+    const store = createMemoryStores().api;
+    store.saveWebhookEndpoint("acme.openrail.near", {
+      ...endpoint,
+      events: ["storage_sponsored"],
+    });
+    const events = {
+      listEvents: vi.fn(async () => ({
+        data: [
+          {
+            id: "8",
+            type: "storage_sponsored",
+            created: 1762077695,
+            data: { business: "acme.near", amount: "20000000000000000000000" },
+          },
+        ],
+        next_cursor: "8",
+      })),
+    };
+    const fetchImpl = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(
+      async () => new Response("ok", { status: 200 }),
+    );
+    const worker = new WebhookWorker({
+      events,
+      store,
+      fetchImpl,
+      validateUrl: async () => undefined,
+      clock: () => new Date("2026-11-02T10:00:00Z"),
+    });
+    await worker.runOnce();
+    expect(store.listDeliveries(endpoint.id)).toHaveLength(1);
+    const body = JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body));
+    expect(body).toMatchObject({ type: "storage_sponsored", data: { business: "acme.near" } });
+  });
+
   it("keeps exactly one delivery per endpoint/event across a restart", async () => {
     const fetchImpl = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(
       async () => new Response("ok", { status: 200 }),

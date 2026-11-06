@@ -13,6 +13,35 @@ interface LegShape {
   amount?: unknown;
 }
 
+function legHoldAmount(leg: unknown): bigint {
+  if (leg === null || typeof leg !== "object") return 0n;
+  const hold = (leg as { Hold?: unknown }).Hold;
+  if (hold === null || typeof hold !== "object") return 0n;
+  const amount = (hold as { amount?: unknown }).amount;
+  try {
+    return typeof amount === "string" ? BigInt(amount) : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
+function heldTotal(legsJson: string): bigint {
+  try {
+    const legs = JSON.parse(legsJson) as unknown;
+    if (!Array.isArray(legs)) return 0n;
+    return legs.reduce((sum: bigint, leg) => sum + legHoldAmount(leg), 0n);
+  } catch {
+    return 0n;
+  }
+}
+
+function holdLeg(leg: unknown): LegShape | null {
+  if (leg === null || typeof leg !== "object") return null;
+  const value = (leg as { Hold?: unknown }).Hold;
+  if (value === null || typeof value !== "object") return null;
+  return value as LegShape;
+}
+
 function payLeg(leg: unknown): LegShape | null {
   if (leg === null || typeof leg !== "object") return null;
   const value = (leg as { Pay?: unknown }).Pay;
@@ -355,7 +384,13 @@ export class IndexerStore {
         );
     }
     const firstPay = legs.map(payLeg).find((leg): leg is LegShape => leg !== null);
-    const asset = typeof firstPay?.asset === "string" ? firstPay.asset : "";
+    const firstHold = legs.map(holdLeg).find((leg): leg is LegShape => leg !== null);
+    const asset =
+      typeof firstPay?.asset === "string"
+        ? firstPay.asset
+        : typeof firstHold?.asset === "string"
+          ? firstHold.asset
+          : "";
     const claim = this.db
       .prepare("SELECT terms_hash FROM claims WHERE token_id = ?")
       .get(event.tokenId) as { terms_hash: string | null } | undefined;
@@ -612,13 +647,14 @@ export class IndexerStore {
     return claims.map((claim) => {
       const bookings = this.db
         .prepare(
-          "SELECT payment, surplus, fee, credit FROM bookings WHERE token_id = ? AND timestamp >= ? AND timestamp < ?",
+          "SELECT payment, surplus, fee, credit, legs_json FROM bookings WHERE token_id = ? AND timestamp >= ? AND timestamp < ?",
         )
         .all(claim.token_id, fromTs, toTs) as unknown as {
         payment: string;
         surplus: string;
         fee: string;
         credit: string;
+        legs_json: string;
       }[];
       let booked = 0n;
       let fee = 0n;
@@ -631,7 +667,7 @@ export class IndexerStore {
         fee += BigInt(booking.fee);
         surplus += BigInt(booking.surplus);
         credit += BigInt(booking.credit);
-        net += payment - BigInt(booking.fee);
+        net += payment - BigInt(booking.fee) - heldTotal(booking.legs_json);
       }
       const status =
         claim.status === "Cancelled" || claim.status === "Closed"
@@ -686,6 +722,8 @@ export class IndexerStore {
     paid_on_time_rate: number | null;
     payments_by_chain: { chain: string; count: number; amount: string }[];
     payments_by_asset: { asset: string; count: number; amount: string }[];
+    paid_out_total: string;
+    held_total: string;
     sample: { claims: number; paid: number; on_time: number };
   } {
     const issueRows = this.db
@@ -699,13 +737,17 @@ export class IndexerStore {
       amount_due: string;
     }[];
     const receipts = this.db
-      .prepare("SELECT token_id, payment, asset, timestamp, origin_json FROM receipts")
+      .prepare(
+        "SELECT token_id, payment, fee, asset, timestamp, origin_json, legs_json FROM receipts",
+      )
       .all() as {
       token_id: string;
       payment: string;
+      fee: string;
       asset: string;
       timestamp: number;
       origin_json: string | null;
+      legs_json: string;
     }[];
     const issued = new Map(issueRows.map((row) => [row.token_id, Number(row.issued_at)]));
     const due = new Map(dueRows.map((row) => [row.token_id, Number(row.due_date)]));
@@ -713,6 +755,8 @@ export class IndexerStore {
     const receiptsByToken = new Map<string, { payment: bigint; timestamp: number }[]>();
     const chain = new Map<string, { count: number; amount: bigint }>();
     const asset = new Map<string, { count: number; amount: bigint }>();
+    let paidOutTotal = 0n;
+    let heldTotalAmount = 0n;
 
     for (const row of receipts) {
       const list = receiptsByToken.get(row.token_id) ?? [];
@@ -735,6 +779,8 @@ export class IndexerStore {
       assetEntry.count += 1;
       assetEntry.amount += BigInt(row.payment);
       asset.set(row.asset, assetEntry);
+      paidOutTotal += BigInt(row.payment) - BigInt(row.fee) - heldTotal(row.legs_json);
+      heldTotalAmount += heldTotal(row.legs_json);
     }
 
     let totalDays = 0;
@@ -777,6 +823,8 @@ export class IndexerStore {
         count: value.count,
         amount: value.amount.toString(),
       })),
+      paid_out_total: paidOutTotal.toString(),
+      held_total: heldTotalAmount.toString(),
       sample: { claims: issued.size, paid, on_time: onTime },
     };
   }

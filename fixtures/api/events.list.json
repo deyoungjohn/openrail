@@ -9,6 +9,15 @@
         "token_id": "c-1",
         "amount_due": "12500000"
       }
+    },
+    {
+      "id": "evt_01J00000000000000000000001",
+      "type": "storage_sponsored",
+      "created": 1762070496,
+      "data": {
+        "business": "acme.near",
+        "amount": "20000000000000000000000"
+      }
     }
   ],
   "next_cursor": null

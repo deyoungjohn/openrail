@@ -19,5 +19,7 @@
     "claims": 1,
     "paid": 1,
     "on_time": 1
-  }
+  },
+  "paid_out_total": "12468750",
+  "held_total": "0"
 }

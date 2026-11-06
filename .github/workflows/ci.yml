@@ -166,6 +166,8 @@ jobs:
       - name: Set sandbox temp directory
         run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
+      - name: Fetch main for the upgrade test
+        run: git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
