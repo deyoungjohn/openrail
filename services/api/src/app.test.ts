@@ -55,6 +55,12 @@ function harness() {
     })),
     status: vi.fn(async () => ({ status: "PENDING_DEPOSIT" })),
   };
+  const cashout = {
+    quote: vi.fn(async (request: { refundTo: string }) => ({
+      deposit_address: "0xdeposit",
+      refund_to: request.refundTo,
+    })),
+  };
   const pokeIndexer = vi.fn(async () => undefined);
   const deps: ApiDeps = {
     config,
@@ -64,7 +70,7 @@ function harness() {
     contract,
     accessKey: { has: async () => true },
     verifier: () => true,
-    cashout: { quote: async () => ({ deposit_address: "0xdeposit" }) },
+    cashout,
     quoteProvider,
     clock,
     spec: { openapi: "3.1.0" },
@@ -73,7 +79,16 @@ function harness() {
       if (!url.startsWith("https://")) throw new UnsafeWebhookUrl("webhook URL must use https");
     },
   };
-  return { app: new ApiApp(deps), auth, secret, issuer, contract, quoteProvider, pokeIndexer };
+  return {
+    app: new ApiApp(deps),
+    auth,
+    secret,
+    issuer,
+    contract,
+    quoteProvider,
+    cashout,
+    pokeIndexer,
+  };
 }
 
 function request(
@@ -292,7 +307,7 @@ describe("invoice route", () => {
   });
 
   it("pokes the indexer after a cash-out quote", async () => {
-    const { app, secret, pokeIndexer } = harness();
+    const { app, secret, pokeIndexer, cashout } = harness();
     const response = await app.handle(
       request(
         "POST",
@@ -303,6 +318,8 @@ describe("invoice route", () => {
     );
     expect(response.status).toBe(201);
     expect(pokeIndexer).toHaveBeenCalledTimes(1);
+    // The refund of an Intents deposit must go to the business account, not to the payout address.
+    expect(cashout.quote.mock.calls[0]?.[0].refundTo).toBe("acme.openrail.near");
   });
 
   it("lists payments for the business", async () => {

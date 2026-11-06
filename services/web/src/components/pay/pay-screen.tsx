@@ -467,7 +467,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     // The price on screen is for the whole amount: it stays in "earlier prices"; parts start fresh.
     if (!split) setLegs([]);
     setSplit(true);
-    setAmountText(centsToApi(remaining));
+    setAmountText("");
     setAmountShown(false);
   };
 
@@ -500,8 +500,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
               : [leg],
         );
         if (partial && !replace) {
-          const left = remainingCents(outstanding, [...legs, leg]);
-          setAmountText(left > 0n ? centsToApi(left) : "");
+          setAmountText("");
           setAmountShown(false);
         }
       } catch (e) {

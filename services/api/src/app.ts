@@ -105,6 +105,8 @@ export interface CashoutPort {
     amount: string;
     destinationChain: string;
     address: string;
+    /** The business account: where the provider returns the money if the cash-out fails. */
+    refundTo: string;
   }): Promise<Record<string, unknown>>;
 }
 
@@ -952,7 +954,7 @@ export class ApiApp {
 
     if (path === "/v1/cashout/quote" && method === "POST") {
       return this.withIdempotency(request, async () => {
-        this.requireAuth(request);
+        const context = this.requireAuth(request);
         const body = (request.body ?? {}) as {
           amount?: string;
           destination_chain?: string;
@@ -969,6 +971,7 @@ export class ApiApp {
           amount: body.amount,
           destinationChain: body.destination_chain,
           address: body.address,
+          refundTo: context.accountId,
         });
         await this.deps.pokeIndexer?.().catch(() => undefined);
         return { status: 201, body: quote };

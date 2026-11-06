@@ -6,6 +6,7 @@ import {
   getEnv,
   loadRoutes,
   nearClientFromEnv,
+  OneClickRequestError,
   requireEnv,
 } from "@openrail/shared";
 import {
@@ -199,26 +200,41 @@ export function createHttpIssuer(baseUrl: string): IssuerPort {
   };
 }
 
+/** The swap provider refused or failed: say so (502) instead of an anonymous 500. */
+export function providerFailure(error: unknown): never {
+  if (error instanceof OneClickRequestError) {
+    const rejected = error.status >= 400 && error.status < 500;
+    throw new ApiError(
+      rejected ? 422 : 502,
+      rejected ? "provider_rejected" : "provider_unavailable",
+      error.message.slice(0, 300),
+    );
+  }
+  throw error;
+}
+
 export function createQuoteProvider(): QuoteProvider {
   const client = createOneClickClientFromEnv();
   return {
     async quote(request) {
-      const response = await client.quote({
-        originAsset: request.originAsset,
-        destinationAsset: request.destinationAsset,
-        amount: request.amount,
-        swapType: request.swapType,
-        slippageTolerance: request.slippageTolerance,
-        refundTo: request.refundTo,
-        recipient: request.recipient,
-        recipientType: "INTENTS",
-        depositType: "ORIGIN_CHAIN",
-        // 1Click rejects a quote without these two (HTTP 400, seen on the first live quote): `dry` false asks
-        // for a real deposit address, and the refund goes back to an address on the chain the payer used.
-        refundType: "ORIGIN_CHAIN",
-        dry: false,
-        deadline: request.deadline,
-      });
+      const response = await client
+        .quote({
+          originAsset: request.originAsset,
+          destinationAsset: request.destinationAsset,
+          amount: request.amount,
+          swapType: request.swapType,
+          slippageTolerance: request.slippageTolerance,
+          refundTo: request.refundTo,
+          recipient: request.recipient,
+          recipientType: "INTENTS",
+          depositType: "ORIGIN_CHAIN",
+          // 1Click rejects a quote without these two (HTTP 400, seen on the first live quote): `dry` false asks
+          // for a real deposit address, and the refund goes back to an address on the chain the payer used.
+          refundType: "ORIGIN_CHAIN",
+          dry: false,
+          deadline: request.deadline,
+        })
+        .catch(providerFailure);
       return {
         quoteId: "",
         depositAddress: response.quote.depositAddress ?? "",
@@ -260,20 +276,23 @@ export function createCashoutPort(): CashoutPort {
       const route = routes.routes.find((entry) => entry.originChain === request.destinationChain);
       if (route === undefined) throw new ApiError(400, "unsupported_chain");
       const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      const response = await client.quote({
-        originAsset: defaultSettlementAsset(),
-        destinationAsset: route.originAssetId,
-        amount: request.amount,
-        swapType: "EXACT_OUTPUT",
-        slippageTolerance: 30,
-        refundTo: request.address,
-        recipient: request.address,
-        recipientType: "DESTINATION_CHAIN",
-        depositType: "INTENTS",
-        refundType: "INTENTS",
-        dry: false,
-        deadline,
-      });
+      const response = await client
+        .quote({
+          originAsset: defaultSettlementAsset(),
+          destinationAsset: route.originAssetId,
+          amount: request.amount,
+          swapType: "EXACT_OUTPUT",
+          slippageTolerance: 30,
+          // The refund of an Intents deposit goes to an Intents account (the business), never to the payout address.
+          refundTo: request.refundTo,
+          recipient: request.address,
+          recipientType: "DESTINATION_CHAIN",
+          depositType: "INTENTS",
+          refundType: "INTENTS",
+          dry: false,
+          deadline,
+        })
+        .catch(providerFailure);
       return {
         amount: request.amount,
         source_asset: defaultSettlementAsset(),
