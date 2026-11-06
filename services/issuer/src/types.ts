@@ -57,7 +57,7 @@ export interface PrepareIssueResult {
   sponsoredRemaining?: number;
 }
 
-/** The number n of the newest claim `c-n` on the contract, or 0 when there is none. */
+/** The next claim number n; `c-n` is safe to predict after the newest claim. */
 export interface TokenCounter {
   nextTokenId(): Promise<number>;
 }

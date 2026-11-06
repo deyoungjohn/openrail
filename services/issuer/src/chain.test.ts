@@ -128,21 +128,55 @@ describe("issuer storage credit view", () => {
 });
 
 describe("ContractTokenCounter", () => {
-  const near = (views: Record<string, unknown>) => ({
+  const near = (views: Record<string, unknown>, errors: Record<string, Error> = {}) => ({
     sendFunctionCall: async () => null,
-    view: async <T>(request: { methodName: string }): Promise<T> => views[request.methodName] as T,
+    view: async <T>(request: { methodName: string }): Promise<T> => {
+      const error = errors[request.methodName];
+      if (error !== undefined) throw error;
+      return views[request.methodName] as T;
+    },
   });
+  const missing = () =>
+    new Error(
+      'RPC_ERROR: {"cause":{"name":"FunctionCallError","info":{"error_message":"MethodNotFound"}}}',
+    );
+
   it("reads the next id from the view", async () => {
     const counter = new ContractTokenCounter(near({ next_token_id: 1 }) as never, "openrail.near");
     expect(await counter.nextTokenId()).toBe(1);
     const later = new ContractTokenCounter(near({ next_token_id: 8 }) as never, "openrail.near");
     expect(await later.nextTokenId()).toBe(8);
   });
-  it("refuses an answer it cannot read", async () => {
+
+  it("falls back to the newest token on a contract without the view", async () => {
+    const counter = new ContractTokenCounter(
+      near(
+        { nft_total_supply: "3", nft_tokens: [{ token_id: "c-7" }] },
+        { next_token_id: missing() },
+      ) as never,
+      "openrail.near",
+    );
+    expect(await counter.nextTokenId()).toBe(8);
+    const empty = new ContractTokenCounter(
+      near({ nft_total_supply: "0" }, { next_token_id: missing() }) as never,
+      "openrail.near",
+    );
+    expect(await empty.nextTokenId()).toBe(1);
+  });
+
+  it("refuses a view answer it cannot read", async () => {
     const counter = new ContractTokenCounter(
       near({ next_token_id: "x" }) as never,
       "openrail.near",
     );
     await expect(counter.nextTokenId()).rejects.toThrow("ISSUER_NEXT_TOKEN_INVALID");
+  });
+
+  it("does not hide other view errors", async () => {
+    const counter = new ContractTokenCounter(
+      near({}, { next_token_id: new Error("RPC_HTTP_503") }) as never,
+      "openrail.near",
+    );
+    await expect(counter.nextTokenId()).rejects.toThrow("RPC_HTTP_503");
   });
 });

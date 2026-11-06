@@ -109,7 +109,13 @@ export class ContractSponsorStatusReader implements SponsorStatusReader {
   }
 }
 
-/** Reads `next_token_id` from the contract view; no raw contract storage. */
+/** True when the RPC says the contract has no such method, so the older read is safe. */
+function methodNotFound(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /methodnotfound|method not found|method is not found|no such method/i.test(message);
+}
+
+/** Reads `next_token_id`; the pre-REL-1 contract falls back to the newest token read. */
 export class ContractTokenCounter implements TokenCounter {
   constructor(
     private readonly near: NearClientLike,
@@ -117,14 +123,43 @@ export class ContractTokenCounter implements TokenCounter {
   ) {}
 
   async nextTokenId(): Promise<number> {
-    const value = await this.near.view<number>({
+    try {
+      const value = await this.near.view<number>({
+        contractId: this.rootAccount,
+        methodName: "next_token_id",
+        args: {},
+        feature: "issuer.next_token_id",
+      });
+      if (!Number.isSafeInteger(value) || value < 1) throw new Error("ISSUER_NEXT_TOKEN_INVALID");
+      return value;
+    } catch (error) {
+      if (!methodNotFound(error)) throw error;
+      return this.legacyNextTokenId();
+    }
+  }
+
+  private async legacyNextTokenId(): Promise<number> {
+    const supply = await this.near.view<string>({
       contractId: this.rootAccount,
-      methodName: "next_token_id",
+      methodName: "nft_total_supply",
       args: {},
-      feature: "issuer.next_token_id",
+      feature: "issuer.token_counter",
     });
-    if (!Number.isSafeInteger(value) || value < 1) throw new Error("ISSUER_NEXT_TOKEN_INVALID");
-    return value;
+    if (typeof supply !== "string" || !/^\d+$/.test(supply))
+      throw new Error("ISSUER_SUPPLY_INVALID");
+    const count = Number(supply);
+    if (!Number.isSafeInteger(count)) throw new Error("ISSUER_SUPPLY_INVALID");
+    if (count === 0) return 1;
+    const page = await this.near.view<{ token_id?: unknown }[]>({
+      contractId: this.rootAccount,
+      methodName: "nft_tokens",
+      args: { from_index: String(count - 1), limit: 1 },
+      feature: "issuer.token_counter",
+    });
+    const id = Array.isArray(page) ? page[0]?.token_id : undefined;
+    const match = typeof id === "string" ? /^c-(\d+)$/.exec(id) : null;
+    if (match === null) throw new Error("ISSUER_LAST_TOKEN_INVALID");
+    return Number(match[1]) + 1;
   }
 }
 
