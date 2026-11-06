@@ -1,0 +1,91 @@
+{
+  "run": "G1",
+  "network": "mainnet",
+  "started_utc": "2026-11-05T23:56:31.902Z",
+  "finished_utc": "2026-11-06T03:03:47.054Z",
+  "result": "PASS",
+  "code_hash": "9Ld841xAaVdsHz2E6Yy5gphhpWhad1qMMExXT59zun8z",
+  "steps": [
+    {
+      "step": 1,
+      "name": "issue",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [
+        "g1-1-2026-11-05T23-56-40Z-18b229f6-1672-4cb0-9f51-080067530732"
+      ],
+      "evidence": {
+        "pay_link": "https://openrail.incepture.dev/c/c-3",
+        "token_id": "c-3",
+        "invoice_id": "inv_5fa24773080db2a695"
+      }
+    },
+    {
+      "step": 2,
+      "name": "ack",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [],
+      "evidence": {
+        "ack_url": "https://openrail.incepture.dev/ack/c-3"
+      }
+    },
+    {
+      "step": 3,
+      "name": "evm payments",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [],
+      "error": "HTTP 401: {\"error\":{\"code\":\"unauthorized\",\"message\":\"unauthorized\"}}"
+    },
+    {
+      "step": 4,
+      "name": "sale",
+      "status": "PASS",
+      "tx_hashes": [
+        "FHVwViUM659Mv2zShnw35J1u7Qc4jtZppMEb8284kqK2"
+      ],
+      "request_ids": [],
+      "evidence": {
+        "buyer": "owed-test.buyer-root.near",
+        "memo": "739173fe1ef9ac9b442c69fee3d6ecaa3e57fc4960ce2d2ad1578750dc6cd02e",
+        "tx": "FHVwViUM659Mv2zShnw35J1u7Qc4jtZppMEb8284kqK2"
+      }
+    },
+    {
+      "step": 5,
+      "name": "sol payment",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": []
+    },
+    {
+      "step": 6,
+      "name": "reconcile refusal",
+      "status": "PASS",
+      "tx_hashes": [
+        "3EVydFG3NskKWGp7RdR8Tdvs4nJUWcRJVXTmH8A8yy25",
+        "HkimQEuyCQv8khwS1sjxmxsRxUnMorFsJZ3CzmrvUFHS"
+      ],
+      "request_ids": [],
+      "evidence": {
+        "third": "iamyoungjohn.near",
+        "refused": true
+      }
+    },
+    {
+      "step": 7,
+      "name": "cash out",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [
+        "g1-7-2026-11-06T03-03-44Z-aa3b38e0-bf33-46bf-8b9b-33e7786c9c6b"
+      ],
+      "evidence": {
+        "quote": "{\"amount\":\"1000000\",\"source_asset\":\"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1\",\"destination_chain\":\"polygon\",\"destination_address\":\"0xDF1e22fc38864C8b3F1bDb44029A75bC1cD9dc23\",\"amount_out\":\"1000000\",\"min_amount_in\":\"1005545\",\"route_cost_usd\":\"0.00\",\"deposit_address\":\"d809d82a484577d72815fd69b3ac6ff1c9d00385522ecd7bcd4fa3ed4814d643\",\"deposit_type\":\"INTENTS\",\"swap_type\":\"EXACT_OUTPUT\",\"route_id\":\"R5\",\"deadline\":\"2026-11-09T04:03:45.949Z\"}",
+        "token_id": "c-3"
+      },
+      "error": "API /v1/cashout/quote failed: HTTP 500 {\"error\":{\"code\":\"internal_error\",\"message\":\"internal error\"}}"
+    }
+  ]
+}

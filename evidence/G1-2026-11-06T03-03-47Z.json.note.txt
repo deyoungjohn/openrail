@@ -1,0 +1,2 @@
+Public copy of the G1 run report. One account name (the buyer, line 50) is masked as buyer-root.near; nothing else is changed.
+sha256 of the unmasked original: 9fafb4a6f24581f1e9d023ba8d27a20f63576218088259a7d2547bc4277a3dd3
