@@ -269,6 +269,12 @@ importers:
         specifier: 7.4.0
         version: 7.4.0
 
+  services/payout:
+    dependencies:
+      '@openrail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+
   services/relayer: {}
 
   services/watcher:

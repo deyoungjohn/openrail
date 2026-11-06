@@ -1,0 +1,57 @@
+/** 1Click quote/status adapters for the payout worker. */
+import { createOneClickClientFromEnv, tokenIdFor, type Chain } from "@openrail/shared";
+import type { Quote, QuotePort, StatusPort, StatusRecord } from "./types.js";
+
+function hashList(value: unknown): { hash: string; explorerUrl?: string }[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") return { hash: entry };
+      const record = entry as { hash?: unknown; explorerUrl?: unknown } | null;
+      if (record === null || typeof record.hash !== "string") return null;
+      return {
+        hash: record.hash,
+        ...(typeof record.explorerUrl === "string" ? { explorerUrl: record.explorerUrl } : {}),
+      };
+    })
+    .filter((entry): entry is { hash: string; explorerUrl?: string } => entry !== null);
+}
+
+export class OneClickInPayout implements QuotePort, StatusPort {
+  private readonly client = createOneClickClientFromEnv();
+
+  async quote(request: Parameters<QuotePort["quote"]>[0]): Promise<Quote> {
+    const destinationAsset = tokenIdFor(request.destination.chain as Chain, "USDC");
+    const response = await this.client.quote({
+      originAsset: request.asset,
+      destinationAsset,
+      amount: request.amount,
+      swapType: "EXACT_INPUT",
+      depositType: "INTENTS",
+      refundTo: request.refundTo,
+      recipient: request.destination.address,
+      recipientType: "DESTINATION_CHAIN",
+      deadline: request.deadline,
+    });
+    const quote = response.quote;
+    return {
+      amountIn: quote.amountIn ?? request.amount,
+      depositAddress: quote.depositAddress ?? "",
+      recipient: String(quote.recipient ?? response.quoteRequest?.recipient ?? ""),
+      destinationAsset,
+      deadline: quote.deadline ?? request.deadline,
+    };
+  }
+
+  async status(depositAddress: string): Promise<StatusRecord> {
+    const response = await this.client.status(depositAddress);
+    const details = response.swapDetails;
+    return {
+      status: response.status ?? "PENDING_DEPOSIT",
+      destinationTxHashes: hashList(details.destinationChainTxHashes),
+      ...(typeof details.amountOut === "string" && response.status === "REFUNDED"
+        ? { refundedAmount: details.amountOut }
+        : {}),
+    };
+  }
+}
