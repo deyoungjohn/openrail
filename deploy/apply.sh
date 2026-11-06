@@ -21,8 +21,8 @@ UNIT_DIR="${OPENRAIL_UNIT_DIR:-/etc/systemd/system}"
 CADDYFILE="${OPENRAIL_CADDYFILE:-/etc/caddy/Caddyfile}"
 SELF_COPY="${OPENRAIL_SELF_COPY:-/usr/local/bin/openrail-apply}"
 HEALTH_WAIT_SECONDS="${OPENRAIL_HEALTH_WAIT:-150}"
-KEEP_RELEASES=2 # the live release and the one to roll back to; each is about 1.2 GB on disk
-KEEP_PACKS=1
+KEEP_RELEASES=1 # only the live release stays unpacked (about 1.2 GB); the previous one is reinstalled from its pack
+KEEP_PACKS=2    # the packs of the live and the previous release (about 260 MB each)
 SERVICES=(indexer issuer watcher api web) # start order: the api needs the indexer and issuer
 TEST_MODE="${OPENRAIL_TEST:-0}"           # tests run in a temp folder: no systemd, no chown
 
@@ -132,29 +132,16 @@ switch_to() { # switch_to <release dir>: move the current link atomically
   run mv -T "$ROOT/current.new" "$ROOT/current"
 }
 
-prune_releases() {
-  local cur prev count=0 dir
+prune_releases() { # after a healthy apply: only the live release stays unpacked
+  local cur count=0 dir
   cur="$(current_target)"
-  prev="$(cat "$ROOT/previous" 2>/dev/null || true)"
   # shellcheck disable=SC2012
   for dir in $(ls -dt "$ROOT"/releases/*/ 2>/dev/null); do
     dir="${dir%/}"
     count=$((count + 1))
-    if ((count > KEEP_RELEASES)) && [[ "$dir" != "$cur" && "$dir" != "$prev" ]]; then
+    if ((count > KEEP_RELEASES)) && [[ "$dir" != "$cur" ]]; then
       say "removing old release $(basename "$dir")"
       run rm -rf "$dir"
-    fi
-  done
-}
-
-prune_packs() { # prune_packs <home>: each pack is ~250 MB; the release folders already hold what rollback needs
-  local home="$1" count=0 pack
-  # shellcheck disable=SC2012
-  for pack in $(ls -t "$home"/openrail-server-*.tar.gz 2>/dev/null); do
-    count=$((count + 1))
-    if ((count > KEEP_PACKS)); then
-      say "removing old pack $(basename "$pack")"
-      run rm -f "$pack"
     fi
   done
 }
@@ -172,7 +159,19 @@ old="$(current_target)"
 case "$mode" in
   rollback)
     prev="$(cat "$ROOT/previous" 2>/dev/null || true)"
-    [[ -n "$prev" && -d "$prev" ]] || { echo "NO_PREVIOUS_RELEASE" >&2; exit 1; }
+    [[ -n "$prev" ]] || { echo "NO_PREVIOUS_RELEASE" >&2; exit 1; }
+    if [[ ! -d "$prev" ]]; then
+      # Only the live release stays unpacked. Reinstall the previous one from its pack, or from GitHub.
+      commit="$(basename "$prev")"
+      commit="${commit%-*}"
+      pack="$(home_of_caller)/openrail-server-$commit.tar.gz"
+      if [[ -f "$pack" ]]; then
+        say "the previous release is not unpacked any more; reinstalling it from $(basename "$pack")"
+        exec "$0" "$pack" ${dry:+--dry-run}
+      fi
+      echo "NO_PREVIOUS_RELEASE: its pack is gone too. Fetch it again: sudo openrail-fetch --apply $commit (GitHub keeps only the newest packs)" >&2
+      exit 1
+    fi
     say "rolling back to $(basename "$prev")"
     switch_to "$prev"
     printf '%s\n' "$old" >"$ROOT/previous"

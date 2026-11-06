@@ -303,7 +303,7 @@ Changed a key or setting only? `./deploy/upload.sh --env-only` (small file), the
 
 The old laptop path still works when GitHub is unavailable: `./deploy/build.sh && ./deploy/upload.sh`, then `sudo openrail-apply`.
 
-`openrail-apply` takes the newest uploaded pack and does everything: unpacks it as a new release, applies an uploaded env file (then shreds it), switches `current`, updates the service files and web server config if they changed, restarts the five services in order, and waits for the health check. **If the new release is not healthy it goes back to the previous one by itself** and tells you which service failed, with its last log lines. It keeps the live release and the previous one (each is about 1.2 GB), and the newest downloaded pack.
+`openrail-apply` takes the newest uploaded pack and does everything: unpacks it as a new release, applies an uploaded env file (then shreds it), switches `current`, updates the service files and web server config if they changed, restarts the five services in order, and waits for the health check. **If the new release is not healthy it goes back to the previous one by itself** and tells you which service failed, with its last log lines. Only the live release stays unpacked (about 1.2 GB); the packs of the live and the previous release stay as files (about 260 MB each). `sudo openrail-apply --rollback` reinstalls the previous one from its pack, or fetch an older build with `sudo openrail-fetch --apply <sha>` (GitHub keeps only the newest five).
 
 Other uses:
 
