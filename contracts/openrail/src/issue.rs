@@ -4,8 +4,12 @@ use crate::claims::{
     format_claim_account, format_token_id, ACCOUNT_CREATION_TRANSFER, GAS_FOR_ON_ISSUE,
     REQUIRED_ISSUE_DEPOSIT,
 };
-use crate::events::{ConfigChangedEvent, IssueEvent, NftMintEvent, QuoteLoggedEvent};
-use crate::types::{Claim, Debtor, Hex32, Lock, Quote, Status, TokenId, TokenMetadata};
+use crate::events::{
+    ConfigChangedEvent, IssueEvent, NftMintEvent, QuoteLoggedEvent, StorageSponsoredEvent,
+};
+use crate::types::{
+    Claim, Debtor, Hex32, Lock, Quote, SponsorStatusView, Status, TokenId, TokenMetadata,
+};
 use crate::Contract;
 use near_sdk::json_types::U128;
 use near_sdk::{env, near, require, AccountId, NearToken};
@@ -20,6 +24,8 @@ pub struct IssueCallbackArgs {
     pub payer_or_business: AccountId,
     pub attached_deposit: U128,
     pub storage_cost: U128,
+    #[serde(default)]
+    pub is_sponsored: bool,
 }
 
 #[near(serializers = [json])]
@@ -144,6 +150,7 @@ impl Contract {
             payer_or_business: caller,
             attached_deposit: U128(attached.as_yoctonear()),
             storage_cost: U128(REQUIRED_ISSUE_DEPOSIT.as_yoctonear()),
+            is_sponsored: false,
         };
         let args_bytes =
             near_sdk::serde_json::to_vec(&OnIssueArgs { args }).expect("failed to serialize args");
@@ -192,14 +199,31 @@ impl Contract {
             .copied()
             .unwrap_or(U128(0))
             .0;
-        require!(
-            current_credit >= REQUIRED_ISSUE_DEPOSIT.as_yoctonear(),
-            "NO_STORAGE_CREDIT"
-        );
-        self.storage_credit.insert(
-            business.clone(),
-            U128(current_credit - REQUIRED_ISSUE_DEPOSIT.as_yoctonear()),
-        );
+
+        let required = REQUIRED_ISSUE_DEPOSIT.as_yoctonear();
+        let is_sponsored = if current_credit >= required {
+            let rem = current_credit - required;
+            if rem == 0 {
+                self.storage_credit.remove(&business);
+            } else {
+                self.storage_credit.insert(business.clone(), U128(rem));
+            }
+            false
+        } else {
+            let used = self.sponsored_count.get(&business).copied().unwrap_or(0);
+            if self.sponsor_pool.0 >= required && used < self.sponsor_cap {
+                self.sponsor_pool = U128(self.sponsor_pool.0 - required);
+                self.sponsored_count.insert(business.clone(), used + 1);
+                StorageSponsoredEvent {
+                    business: business.clone(),
+                    amount: U128(required),
+                }
+                .emit();
+                true
+            } else {
+                env::panic_str("NO_STORAGE_CREDIT");
+            }
+        };
 
         let n = self.next_token_id;
         self.next_token_id += 1;
@@ -246,7 +270,8 @@ impl Contract {
             is_issue_for: true,
             payer_or_business: business,
             attached_deposit: U128(0),
-            storage_cost: U128(REQUIRED_ISSUE_DEPOSIT.as_yoctonear()),
+            storage_cost: U128(required),
+            is_sponsored,
         };
         let args_bytes =
             near_sdk::serde_json::to_vec(&OnIssueArgs { args }).expect("failed to serialize args");
@@ -306,14 +331,30 @@ impl Contract {
             self.token_metadata.remove(&args.token_id);
 
             if args.is_issue_for {
-                let cur = self
-                    .storage_credit
-                    .get(&args.payer_or_business)
-                    .copied()
-                    .unwrap_or(U128(0))
-                    .0;
-                self.storage_credit
-                    .insert(args.payer_or_business, U128(cur + args.storage_cost.0));
+                if args.is_sponsored {
+                    self.sponsor_pool =
+                        U128(self.sponsor_pool.0.saturating_add(args.storage_cost.0));
+                    let cur_used = self
+                        .sponsored_count
+                        .get(&args.payer_or_business)
+                        .copied()
+                        .unwrap_or(0);
+                    if cur_used <= 1 {
+                        self.sponsored_count.remove(&args.payer_or_business);
+                    } else {
+                        self.sponsored_count
+                            .insert(args.payer_or_business, cur_used - 1);
+                    }
+                } else {
+                    let cur = self
+                        .storage_credit
+                        .get(&args.payer_or_business)
+                        .copied()
+                        .unwrap_or(U128(0))
+                        .0;
+                    self.storage_credit
+                        .insert(args.payer_or_business, U128(cur + args.storage_cost.0));
+                }
             } else if args.attached_deposit.0 > 0 {
                 let refund = env::promise_batch_create(&args.payer_or_business);
                 env::promise_batch_action_transfer(
@@ -361,6 +402,48 @@ impl Contract {
         let refund = env::promise_batch_create(&caller);
         env::promise_batch_action_transfer(refund, NearToken::from_yoctonear(amount.0));
         env::promise_return(refund);
+    }
+
+    /// Deposits attached NEAR into the storage-credit sponsor pool (Blueprint REL-1, Card A10).
+    pub(crate) fn internal_deposit_sponsor_pool(&mut self) {
+        let deposit = env::attached_deposit();
+        require!(deposit.as_yoctonear() > 0, "deposit must be positive");
+        self.sponsor_pool = U128(
+            self.sponsor_pool
+                .0
+                .checked_add(deposit.as_yoctonear())
+                .expect("pool overflow"),
+        );
+    }
+
+    /// Withdraws NEAR from the storage-credit sponsor pool (Blueprint REL-1, Card A10).
+    pub(crate) fn internal_withdraw_sponsor_pool(&mut self, amount: U128) {
+        self.assert_root_only();
+        require!(
+            amount.0 <= self.sponsor_pool.0,
+            "insufficient sponsor pool balance"
+        );
+        self.sponsor_pool = U128(self.sponsor_pool.0 - amount.0);
+        let caller = env::predecessor_account_id();
+        let refund = env::promise_batch_create(&caller);
+        env::promise_batch_action_transfer(refund, NearToken::from_yoctonear(amount.0));
+        env::promise_return(refund);
+    }
+
+    /// Sets the per-business sponsor cap (Blueprint REL-1, Card A10).
+    pub(crate) fn internal_set_sponsor_cap(&mut self, cap: u64) {
+        self.assert_root_only();
+        self.sponsor_cap = cap;
+    }
+
+    /// Returns storage-credit sponsorship status for an account (Blueprint REL-1, Card A10).
+    pub(crate) fn internal_sponsor_status(&self, account_id: AccountId) -> SponsorStatusView {
+        let used = self.sponsored_count.get(&account_id).copied().unwrap_or(0);
+        SponsorStatusView {
+            pool: self.sponsor_pool,
+            cap: self.sponsor_cap,
+            used,
+        }
     }
 
     /// Appends a Quote log entry before deposit address is shown.

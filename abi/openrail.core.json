@@ -42,6 +42,10 @@
       "kind": "view"
     },
     {
+      "name": "deposit_sponsor_pool",
+      "kind": "call"
+    },
+    {
       "name": "deposit_storage_credit",
       "kind": "call"
     },
@@ -60,6 +64,10 @@
     {
       "name": "new",
       "kind": "call"
+    },
+    {
+      "name": "next_token_id",
+      "kind": "view"
     },
     {
       "name": "nft_approve",
@@ -161,8 +169,20 @@
       "kind": "call"
     },
     {
+      "name": "set_sponsor_cap",
+      "kind": "call"
+    },
+    {
+      "name": "sponsor_status",
+      "kind": "view"
+    },
+    {
       "name": "storage_credit_of",
       "kind": "view"
+    },
+    {
+      "name": "withdraw_sponsor_pool",
+      "kind": "call"
     },
     {
       "name": "withdraw_storage_credit",
@@ -187,6 +207,7 @@
     "lock_cleared",
     "config_changed",
     "reconcile_failed",
+    "storage_sponsored",
     "nft_mint",
     "nft_transfer"
   ]

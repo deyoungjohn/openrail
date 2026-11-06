@@ -721,3 +721,16 @@ pub struct JsonToken {
     pub metadata: Option<TokenMetadata>,
     pub approved_account_ids: Option<HashMap<AccountId, u64>>,
 }
+
+// ──────────────────────────────────────────────
+// Sponsor Pool Types (Blueprint REL-1, Card A10)
+// ──────────────────────────────────────────────
+
+/// View structure returned by `sponsor_status(account_id)` (Blueprint REL-1, Card A10).
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SponsorStatusView {
+    pub pool: U128,
+    pub cap: u64,
+    pub used: u64,
+}
