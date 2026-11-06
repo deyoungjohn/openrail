@@ -57,6 +57,13 @@ function useNow(intervalMs = 1000): number | null {
   return now;
 }
 
+/** What the page shows and the wallet button sends: the quote rounded up to decimals a wallet can enter. */
+const amountOf = (session: Session, route: Route): string =>
+  formatToken(
+    payUnits(session.amount_in, route.origin_decimals, route.payer_asset),
+    route.origin_decimals,
+  );
+
 const timeOf = (iso: string) => {
   const at = new Date(iso);
   const time = at.toLocaleTimeString("en-GB", {
