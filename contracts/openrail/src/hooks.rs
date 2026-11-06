@@ -3,7 +3,7 @@
 //! Frozen in Phase 0 (P0.3). Core calls `hooks::*` at fixed points.
 //! With no modules enabled, every hook returns the core default (identity).
 
-use crate::types::{Claim, Leg};
+use crate::types::{Claim, Leg, Lock, TokenId};
 use near_sdk::json_types::U128;
 use near_sdk::{near, AccountId};
 use std::fmt;
@@ -172,6 +172,21 @@ pub trait Hook {
             KindRules::default()
         }
     }
+
+    /// Balance of `asset` reserved or held on `claim` by this module,
+    /// which core must not drain when releasing surplus.
+    fn reserved_balance(&self, _claim: &Claim, _asset: &TokenId) -> u128 {
+        0
+    }
+
+    /// Check whether clearing an expired lock on this claim is permitted.
+    /// Core default: Ok(()). A module may refuse if operations (e.g. payout) are still in flight.
+    fn check_clear_stale_lock(&self, _claim: &Claim) -> Result<(), Refusal> {
+        Ok(())
+    }
+
+    /// Callback invoked when a stale lock has been cleared.
+    fn on_lock_cleared(&self, _claim: &mut Claim, _cleared_lock: &Lock) {}
 }
 
 /// Core default hook implementation implementing identity behavior.
@@ -294,6 +309,35 @@ pub fn dispatch_on_booked_with(hooks: &[&dyn Hook], claim: &Claim, booking: &Boo
 }
 
 /// Composed kind_rules: kind 0 is invoice; otherwise queries modules.
+/// Composed reserved_balance: sums reserved balances across all registered module hooks.
+pub fn dispatch_reserved_balance_with(hooks: &[&dyn Hook], claim: &Claim, asset: &TokenId) -> u128 {
+    let mut total: u128 = 0;
+    for hook in hooks {
+        total = total.saturating_add(hook.reserved_balance(claim, asset));
+    }
+    total
+}
+
+/// Composed check_clear_stale_lock: core first, then modules in order; first refusal wins.
+pub fn dispatch_check_clear_stale_lock_with(
+    hooks: &[&dyn Hook],
+    claim: &Claim,
+) -> Result<(), Refusal> {
+    CoreDefaultHook.check_clear_stale_lock(claim)?;
+    for hook in hooks {
+        hook.check_clear_stale_lock(claim)?;
+    }
+    Ok(())
+}
+
+/// Composed on_lock_cleared: invokes all hooks.
+pub fn dispatch_on_lock_cleared_with(hooks: &[&dyn Hook], claim: &mut Claim, cleared_lock: &Lock) {
+    CoreDefaultHook.on_lock_cleared(claim, cleared_lock);
+    for hook in hooks {
+        hook.on_lock_cleared(claim, cleared_lock);
+    }
+}
+
 pub fn dispatch_kind_rules_with(hooks: &[&dyn Hook], kind: u8) -> KindRules {
     if kind == 0 {
         return KindRules::invoice();
@@ -359,4 +403,19 @@ pub fn dispatch_on_booked(claim: &Claim, booking: &Booking) {
 pub fn dispatch_kind_rules(kind: u8) -> KindRules {
     let hooks = registered_hooks();
     dispatch_kind_rules_with(&hooks, kind)
+}
+
+pub fn dispatch_reserved_balance(claim: &Claim, asset: &TokenId) -> u128 {
+    let hooks = registered_hooks();
+    dispatch_reserved_balance_with(&hooks, claim, asset)
+}
+
+pub fn dispatch_check_clear_stale_lock(claim: &Claim) -> Result<(), Refusal> {
+    let hooks = registered_hooks();
+    dispatch_check_clear_stale_lock_with(&hooks, claim)
+}
+
+pub fn dispatch_on_lock_cleared(claim: &mut Claim, cleared_lock: &Lock) {
+    let hooks = registered_hooks();
+    dispatch_on_lock_cleared_with(&hooks, claim, cleared_lock);
 }

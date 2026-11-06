@@ -1,0 +1,11 @@
+{
+  "methods": [
+    "clear_settlement",
+    "report_payout",
+    "set_settlement",
+    "settle_held",
+    "settle_payout",
+    "settle_release",
+    "settlement_of"
+  ]
+}

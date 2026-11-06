@@ -7,9 +7,9 @@
 //! D-S8: each held amount records the owner at booking; a later token transfer never changes who
 //! is paid. State lives under the raw prefix `m:settle:` (deployed state layout unchanged).
 
-use crate::hooks::{Booking, Hook};
+use crate::hooks::{Booking, Hook, Refusal};
 use crate::modules::payout::{self, Payout};
-use crate::types::{Claim, Leg, Lock};
+use crate::types::{Claim, Leg, Lock, TokenId};
 use crate::{Contract, ContractExt};
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
@@ -21,6 +21,8 @@ pub const MODULE_ID: &str = "settle";
 /// Blocks a claim stays locked while a payout is out (reconcile and transfers wait). About 10
 /// minutes; payouts take 0.3–0.6 min (K11). After this anyone may `clear_stale_lock`.
 pub const PAYOUT_LOCK_BLOCKS: u64 = 600;
+/// Root-only escape hatch timeout for dead relayer past payout lock (3 days in blocks).
+pub const DEAD_RELAYER_TIMEOUT_BLOCKS: u64 = 86_400 * 3;
 /// A refunded payout is retried once, then flagged to the business.
 pub const MAX_RETRIES: u8 = 1;
 
@@ -222,6 +224,67 @@ impl Hook for SettleHook {
                         "amount": entry.amount,
                     }),
                 );
+            }
+        }
+    }
+
+    fn reserved_balance(&self, claim: &Claim, asset: &TokenId) -> u128 {
+        let entries = held_of(&claim.token_id);
+        entries
+            .iter()
+            .filter(|e| {
+                &e.asset == asset
+                    && (e.status == HeldStatus::Held
+                        || matches!(e.status, HeldStatus::InFlight { .. })
+                        || matches!(e.status, HeldStatus::Flagged { .. }))
+            })
+            .map(|e| e.amount.0)
+            .sum()
+    }
+
+    fn check_clear_stale_lock(&self, claim: &Claim) -> Result<(), Refusal> {
+        let entries = held_of(&claim.token_id);
+        let has_in_flight = entries
+            .iter()
+            .any(|e| matches!(e.status, HeldStatus::InFlight { .. }));
+        if has_in_flight {
+            let caller = env::predecessor_account_id();
+            let is_root = caller == env::current_account_id();
+            let lock_until = match &claim.lock {
+                Lock::Module { id, until } if id == MODULE_ID => *until,
+                _ => 0,
+            };
+            let current_block = env::block_height();
+            if is_root && current_block >= lock_until.saturating_add(DEAD_RELAYER_TIMEOUT_BLOCKS) {
+                // Root escape hatch after dead relayer timeout
+                Ok(())
+            } else {
+                Err(Refusal::new("SETTLE_PAYOUT_IN_FLIGHT"))
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    fn on_lock_cleared(&self, claim: &mut Claim, cleared_lock: &Lock) {
+        if matches!(cleared_lock, Lock::Module { id, .. } if id == MODULE_ID) {
+            let mut entries = held_of(&claim.token_id);
+            let mut changed = false;
+            for entry in entries.iter_mut() {
+                if matches!(entry.status, HeldStatus::InFlight { .. }) {
+                    if entry.retries < MAX_RETRIES {
+                        entry.retries += 1;
+                        entry.status = HeldStatus::Held;
+                    } else {
+                        entry.status = HeldStatus::Flagged {
+                            reason: "dead relayer lock cleared".to_string(),
+                        };
+                    }
+                    changed = true;
+                }
+            }
+            if changed {
+                save_held(&claim.token_id, &entries);
             }
         }
     }

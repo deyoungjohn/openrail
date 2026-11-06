@@ -614,3 +614,132 @@ fn settle_report_for_another_entry_panics() {
         },
     );
 }
+
+// ──────────────────────────────────────────────
+// Tests killing mutants 18, 19, 20 (ag1 REVIEW)
+// ──────────────────────────────────────────────
+
+#[test]
+#[should_panic(expected = "SETTLE_BAD_TX")]
+fn settle_report_empty_tx_panics() {
+    // Mutant 18: empty destination_tx in report_payout panics with SETTLE_BAD_TX.
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_000_000);
+    forward_result(&mut c, id, true);
+    ctx(RELAYER, vec![]);
+    c.report_payout(
+        "c-1".into(),
+        0,
+        id,
+        PayoutOutcome::Settled {
+            destination_tx: "".into(),
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "SETTLE_BAD_TX")]
+fn settle_report_oversized_tx_panics() {
+    // Mutant 18: oversized (>128 chars) destination_tx in report_payout panics with SETTLE_BAD_TX.
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_000_000);
+    forward_result(&mut c, id, true);
+    ctx(RELAYER, vec![]);
+    c.report_payout(
+        "c-1".into(),
+        0,
+        id,
+        PayoutOutcome::Settled {
+            destination_tx: "x".repeat(129),
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "PAYOUT_ZERO_AMOUNT")]
+fn settle_payout_zero_amount_panics() {
+    // Mutant 19: zero amount_in in payout_from panics with PAYOUT_ZERO_AMOUNT.
+    let _c = contract();
+    po::payout_from(
+        "settle",
+        "c-1#0".into(),
+        acc(ROOT),
+        ASSET.into(),
+        U128(0),
+        acc(DEPOSIT),
+    );
+}
+
+#[test]
+#[should_panic(expected = "SETTLE_NO_DESTINATION")]
+fn settle_payout_after_clear_settlement_panics() {
+    // Mutant 20: settle_payout after clear_settlement() panics with SETTLE_NO_DESTINATION.
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    ctx(BIZ, vec![]);
+    c.clear_settlement();
+    ctx(RELAYER, vec![]);
+    c.settle_payout("c-1".into(), 0, acc(DEPOSIT), U128(1_000_000));
+}
+
+#[test]
+fn settle_clear_stale_lock_refused_while_in_flight() {
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_000_000);
+    forward_result(&mut c, id, true);
+
+    ctx(BIZ, vec![]);
+    let claim = c.claims.get("c-1").unwrap();
+    let hook = SettleHook;
+    let res = hook.check_clear_stale_lock(claim);
+    assert!(
+        res.is_err(),
+        "non-root cannot clear lock while payout is InFlight"
+    );
+}
+
+#[test]
+fn settle_clear_stale_lock_root_escape_hatch_after_dead_relayer() {
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_000_000);
+    forward_result(&mut c, id, true);
+
+    // Call as root after DEAD_RELAYER_TIMEOUT_BLOCKS past lock expiration
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(acc(ROOT))
+        .predecessor_account_id(acc(ROOT))
+        .signer_account_id(acc(ROOT))
+        .block_height(1000 + 600 + DEAD_RELAYER_TIMEOUT_BLOCKS + 1)
+        .prepaid_gas(near_sdk::Gas::from_tgas(300));
+    testing_env!(
+        b.build(),
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        HashMap::default(),
+        vec![]
+    );
+
+    let claim = c.claims.get("c-1").unwrap();
+    let hook = SettleHook;
+    let res = hook.check_clear_stale_lock(claim);
+    assert!(
+        res.is_ok(),
+        "root must be able to clear lock after dead relayer timeout"
+    );
+
+    let mut claim_mut = c.claims.get("c-1").unwrap().clone();
+    let lock = claim_mut.lock.clone();
+    hook.on_lock_cleared(&mut claim_mut, &lock);
+    let entries = held_of(&claim_mut.token_id);
+    assert_eq!(entries[0].status, HeldStatus::Held);
+    assert_eq!(entries[0].retries, 1);
+}

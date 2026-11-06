@@ -31,13 +31,23 @@ export function checkAbi(root: string): { code: number; messages: string[] } {
   const expected = new Set(
     readJson<{ methods: { name: string }[] }>(corePath).methods.map((m) => m.name),
   );
-  const modules = readJson<{ modules: { id: string; enabled: boolean }[] }>(
-    join(root, "openrail.modules.json"),
-  ).modules;
-  for (const m of modules.filter((x) => x.enabled)) {
+  const registry = readJson<{
+    modules: { id: string; enabled: boolean }[];
+    support?: { id: string; enabled_if: string[] }[];
+  }>(join(root, "openrail.modules.json"));
+
+  const enabledModules = new Set(registry.modules.filter((x) => x.enabled).map((x) => x.id));
+  for (const m of registry.modules.filter((x) => x.enabled)) {
     const p = join(root, `contracts/openrail/src/modules/${m.id}/abi.json`);
     if (existsSync(p))
       for (const name of readJson<{ methods: string[] }>(p).methods) expected.add(name);
+  }
+  for (const s of registry.support ?? []) {
+    if (s.enabled_if.some((e) => enabledModules.has(e))) {
+      const p = join(root, `contracts/openrail/src/modules/${s.id}/abi.json`);
+      if (existsSync(p))
+        for (const name of readJson<{ methods: string[] }>(p).methods) expected.add(name);
+    }
   }
 
   const actual = new Set(

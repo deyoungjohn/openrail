@@ -34,10 +34,19 @@ pub struct DestinationView {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum HeldStatusView {
     Held,
-    InFlight { payout_id: u64 },
-    Settled { payout_id: u64, destination_tx: String },
-    Flagged { reason: String },
-    Released { payout_id: u64 },
+    InFlight {
+        payout_id: u64,
+    },
+    Settled {
+        payout_id: u64,
+        destination_tx: String,
+    },
+    Flagged {
+        reason: String,
+    },
+    Released {
+        payout_id: u64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -131,7 +140,9 @@ async fn test_real_vault_forward_through_payout_sandbox() -> Result<()> {
         .await?;
     assert!(set_settle_res.is_success());
 
-    let dest = get_settlement(&env, env.alice.id()).await?.expect("destination set");
+    let dest = get_settlement(&env, env.alice.id())
+        .await?
+        .expect("destination set");
     assert_eq!(dest.chain, "base");
     assert_eq!(dest.address, "0x1111111111111111111111111111111111111111");
 
@@ -294,7 +305,9 @@ async fn test_payout_batch_fits_gas_measured() -> Result<()> {
         .transact()
         .await?;
 
-    let _ = env.issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000).await?;
+    let _ = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
     let _ = env.fund_claim("c-1", 1_000_000, None).await?;
     let _ = env
         .call_as(&env.watcher)
@@ -322,19 +335,33 @@ async fn test_payout_batch_fits_gas_measured() -> Result<()> {
 
     println!("--------------------------------------------------");
     println!("MEASURED PAYOUT GAS CONSUMPTION (SANDBOX):");
-    println!("Total gas burnt for 1 payout: {} gas ({:.3} Tgas)", total_gas_burnt, total_tgas_burnt);
+    println!(
+        "Total gas burnt for 1 payout: {} gas ({:.3} Tgas)",
+        total_gas_burnt, total_tgas_burnt
+    );
 
     // 300 Tgas available for a call. With a 20% margin, budget is 300 * 0.8 = 240 Tgas.
     let safe_max_payouts = (240.0 / total_tgas_burnt).floor() as u64;
-    println!("Safe MAX_PAYOUTS_PER_CALL (240 Tgas budget): {}", safe_max_payouts);
+    println!(
+        "Safe MAX_PAYOUTS_PER_CALL (240 Tgas budget): {}",
+        safe_max_payouts
+    );
     println!("Author's static limit: 7");
     println!("_payout.md planned limit: 14");
     println!("--------------------------------------------------");
 
     // Payout execution must be efficient (well within 35 Tgas per payout)
-    assert!(total_tgas_burnt < 35.0, "payout burnt {:.3} Tgas, exceeding 35 Tgas ceiling", total_tgas_burnt);
+    assert!(
+        total_tgas_burnt < 35.0,
+        "payout burnt {:.3} Tgas, exceeding 35 Tgas ceiling",
+        total_tgas_burnt
+    );
     // At least 7 payouts must fit within the 240 Tgas safe budget
-    assert!(safe_max_payouts >= 7, "safe_max_payouts {} < 7", safe_max_payouts);
+    assert!(
+        safe_max_payouts >= 7,
+        "safe_max_payouts {} < 7",
+        safe_max_payouts
+    );
 
     Ok(())
 }
@@ -374,12 +401,16 @@ async fn test_c4_reconcile_regression_hold_leg_across_two_assets() -> Result<()>
         .transact()
         .await?;
 
-    let _ = env.issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000).await?;
+    let _ = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
 
     // Fund with two distinct settlement assets:
     // Asset 1 (USDC): 600,000
     // Asset 2 (Base OMFT): 400,000
-    let _ = env.fund_claim("c-1", 600_000, Some(DEFAULT_SETTLEMENT_ASSET)).await?;
+    let _ = env
+        .fund_claim("c-1", 600_000, Some(DEFAULT_SETTLEMENT_ASSET))
+        .await?;
     let _ = env.fund_claim("c-1", 400_000, Some(BASE_ASSET)).await?;
 
     let rec_res = env
@@ -418,7 +449,11 @@ async fn test_c4_reconcile_regression_hold_leg_across_two_assets() -> Result<()>
     assert_eq!(held[1].status, HeldStatusView::Held);
 
     // Intended funds remain intact in the claim account on intents.near
-    assert_eq!(env.claim_balance("c-1", Some(DEFAULT_SETTLEMENT_ASSET)).await?, 600_000);
+    assert_eq!(
+        env.claim_balance("c-1", Some(DEFAULT_SETTLEMENT_ASSET))
+            .await?,
+        600_000
+    );
     assert_eq!(env.claim_balance("c-1", Some(BASE_ASSET)).await?, 397_500);
 
     // Zero-delta reconcile is strictly idempotent
@@ -500,11 +535,11 @@ async fn test_c4_reconcile_regression_hold_leg_across_two_assets() -> Result<()>
     Ok(())
 }
 
-/// 4. Review point 1: `release_surplus` spends from `last_seen_balance` which includes held value.
+/// 4. Review point 1: `release_surplus` respects module reserved balance.
 ///
-/// Demonstrates that if surplus arises in Asset 2 while Asset 1 is held by settle,
-/// core `release_surplus` iterates settlement assets in order and takes from Asset 1
-/// (the held asset), depleting the claim account and causing `settle_payout` to fail.
+/// Verifies that if surplus arises in Asset 2 while Asset 1 is held by settle,
+/// core `release_surplus` accounts for `reserved_balance` of Asset 1 and draws
+/// the surplus from Asset 2, leaving the held asset intact so `settle_payout` succeeds.
 #[tokio::test]
 async fn test_review_release_surplus_spends_held_value() -> Result<()> {
     let env = Env::new().await?;
@@ -530,10 +565,14 @@ async fn test_review_release_surplus_spends_held_value() -> Result<()> {
         .transact()
         .await?;
 
-    let _ = env.issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000).await?;
+    let _ = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
 
     // 1. Initial payment in Asset 1 (USDC): 1,000,000
-    let _ = env.fund_claim("c-1", 1_000_000, Some(DEFAULT_SETTLEMENT_ASSET)).await?;
+    let _ = env
+        .fund_claim("c-1", 1_000_000, Some(DEFAULT_SETTLEMENT_ASSET))
+        .await?;
     let _ = env
         .call_as(&env.watcher)
         .call_root("reconcile", json!({ "token_id": "c-1" }), ZERO_NEAR)
@@ -558,9 +597,8 @@ async fn test_review_release_surplus_spends_held_value() -> Result<()> {
     assert_eq!(cv_surplus.surplus.0, 200_000);
 
     // 3. Alice calls release_surplus
-    // Core iterates settlement_assets: [DEFAULT_SETTLEMENT_ASSET, BASE_ASSET, ..]
-    // DEFAULT_SETTLEMENT_ASSET has last_seen_balance = 997_500.
-    // Core takes 200,000 from DEFAULT_SETTLEMENT_ASSET and forwards it to Alice!
+    // Core respects settle module's reserved balance of 997,500 on Asset 1.
+    // Available surplus is therefore drawn from Asset 2 (200,000).
     let rel_surplus_res = env
         .alice
         .call(env.root.id(), "release_surplus")
@@ -570,11 +608,20 @@ async fn test_review_release_surplus_spends_held_value() -> Result<()> {
         .await?;
     assert!(rel_surplus_res.is_success());
 
-    // Claim account on intents.near now holds only 797,500 of Asset 1!
-    let asset1_bal = env.claim_balance("c-1", Some(DEFAULT_SETTLEMENT_ASSET)).await?;
-    assert_eq!(asset1_bal, 797_500, "Asset 1 was drained by release_surplus");
+    // Claim account preserves the 997,500 of Asset 1 held by settle!
+    let asset1_bal = env
+        .claim_balance("c-1", Some(DEFAULT_SETTLEMENT_ASSET))
+        .await?;
+    assert_eq!(
+        asset1_bal, 997_500,
+        "Asset 1 held balance must be preserved"
+    );
 
-    // 4. Now the relayer attempts to execute the 997,500 payout for held entry 0
+    // Asset 2 was depleted for surplus
+    let asset2_bal = env.claim_balance("c-1", Some(BASE_ASSET)).await?;
+    assert_eq!(asset2_bal, 0, "Asset 2 was spent to release surplus");
+
+    // 4. Now the relayer executes the 997,500 payout for held entry 0: succeeds!
     let payout_attempt = env
         .call_as(&env.watcher)
         .call_root(
@@ -588,30 +635,41 @@ async fn test_review_release_surplus_spends_held_value() -> Result<()> {
             ZERO_NEAR,
         )
         .await?;
-
-    // Must fail because last_seen_balance of Asset 1 is only 797,500 (< 997,500)
     assert!(
-        payout_attempt.is_failure(),
-        "settle_payout must be refused when held asset was drained by release_surplus"
+        payout_attempt.is_success(),
+        "settle_payout succeeds because held asset is intact"
     );
 
-    println!("--------------------------------------------------");
-    println!("REVIEW POINT 1 CONFIRMED:");
-    println!("release_surplus spent 200,000 of Asset 1 (held by settle), causing settle_payout refusal");
-    println!("--------------------------------------------------");
+    let p_id: u64 = payout_attempt.json()?;
+    let rep = env
+        .call_as(&env.watcher)
+        .call_root(
+            "report_payout",
+            json!({
+                "token_id": "c-1",
+                "index": 0,
+                "payout_id": p_id,
+                "outcome": {
+                    "outcome": "settled",
+                    "destination_tx": "0xsuccess",
+                },
+            }),
+            ZERO_NEAR,
+        )
+        .await?;
+    assert!(rep.is_success());
 
     Ok(())
 }
 
-/// 5. Review point 2: Lock expires before `report_payout` and refund arrives.
+/// 5. Review point 2: Lock protection while payout is in flight prevents phantom surplus on refund.
 ///
-/// Demonstrates what happens when:
-/// - Payout is in flight, locking claim for 600 blocks.
-/// - Lock expires past 600 blocks and is cleared by `clear_stale_lock`.
-/// - Refund arrives on the claim account.
-/// - Next reconcile books the refund as surplus on the Paid claim.
-/// - `report_payout(Refunded)` then runs and adds to `last_seen_balance` again,
-///   creating a double-credit state discrepancy!
+/// Verifies:
+/// - Payout in flight sets module lock.
+/// - `clear_stale_lock` is refused while payout is InFlight.
+/// - While locked, reconcile cannot run, preventing incoming refund from being booked as surplus.
+/// - Once relayer calls `report_payout(Refunded)`, lock is released, retries incremented,
+///   and no phantom surplus is booked.
 #[tokio::test]
 async fn test_review_lock_expires_before_report_payout() -> Result<()> {
     let env = Env::new().await?;
@@ -637,7 +695,9 @@ async fn test_review_lock_expires_before_report_payout() -> Result<()> {
         .transact()
         .await?;
 
-    let _ = env.issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000).await?;
+    let _ = env
+        .issue_claim(&env.alice, 0, 1_000_000, 1_800_000_000)
+        .await?;
     let _ = env.fund_claim("c-1", 1_000_000, None).await?;
     let _ = env
         .call_as(&env.watcher)
@@ -667,7 +727,7 @@ async fn test_review_lock_expires_before_report_payout() -> Result<()> {
     // 2. Advance 650 blocks past the 600-block lock
     env.advance_blocks(650).await?;
 
-    // 3. Clear the stale lock
+    // 3. Alice attempts to clear the stale lock while payout is InFlight: refused!
     let clear_res = env
         .alice
         .call(env.root.id(), "clear_stale_lock")
@@ -675,34 +735,32 @@ async fn test_review_lock_expires_before_report_payout() -> Result<()> {
         .max_gas()
         .transact()
         .await?;
-    assert!(clear_res.is_success());
+    assert!(
+        clear_res.is_failure(),
+        "clear_stale_lock must be refused while payout is InFlight"
+    );
 
-    let cv_cleared = get_claim(&env, "c-1").await?;
-    assert_eq!(cv_cleared.lock, Lock::None);
+    let cv_locked = get_claim(&env, "c-1").await?;
+    assert!(
+        matches!(cv_locked.lock, Lock::Module { ref id, .. } if id == "settle"),
+        "claim lock must remain Module(settle)"
+    );
 
     // 4. 1Click refund arrives on c-1.openrail.near (997,500 USDC)
     let _ = env.fund_claim("c-1", 997_500, None).await?;
     assert_eq!(env.claim_balance("c-1", None).await?, 997_500);
 
-    // 5. Watcher reconciles because lock is None
+    // 5. Watcher cannot reconcile while claim is locked
     let rec_refund = env
         .call_as(&env.watcher)
         .call_root("reconcile", json!({ "token_id": "c-1" }), ZERO_NEAR)
         .await?;
-    assert!(rec_refund.is_success());
+    assert!(
+        rec_refund.is_failure(),
+        "reconcile must be refused while claim is locked"
+    );
 
-    let cv_reconciled = get_claim(&env, "c-1").await?;
-    println!("--------------------------------------------------");
-    println!("REVIEW POINT 2: STATE AFTER RECONCILE OF REFUND:");
-    println!("Booked total: {}", cv_reconciled.booked_total.0);
-    println!("Surplus: {}", cv_reconciled.surplus.0);
-    println!("--------------------------------------------------");
-
-    // Refund was booked as surplus!
-    assert_eq!(cv_reconciled.surplus.0, 997_500);
-    assert_eq!(cv_reconciled.booked_total.0, 1_997_500);
-
-    // 6. Now relayer reports Refunded
+    // 6. Relayer reports Refunded
     let rep_refund = env
         .call_as(&env.watcher)
         .call_root(
@@ -721,11 +779,29 @@ async fn test_review_lock_expires_before_report_payout() -> Result<()> {
         .await?;
     assert!(rep_refund.is_success());
 
-    // Check held entries
+    // Claim lock is released
+    let cv_after_rep = get_claim(&env, "c-1").await?;
+    assert_eq!(cv_after_rep.lock, Lock::None);
+
+    // Check held entries: retries incremented, status back to Held
     let held_after = get_settle_held(&env, "c-1").await?;
-    println!("Held entry retries: {}, status: {:?}", held_after[0].retries, held_after[0].status);
     assert_eq!(held_after[0].status, HeldStatusView::Held);
     assert_eq!(held_after[0].retries, 1);
+
+    // Surplus is 0! No phantom surplus was booked!
+    assert_eq!(cv_after_rep.surplus.0, 0);
+    assert_eq!(cv_after_rep.booked_total.0, 1_000_000);
+
+    // 7. Watcher can now reconcile cleanly with no phantom surplus
+    let rec_clean = env
+        .call_as(&env.watcher)
+        .call_root("reconcile", json!({ "token_id": "c-1" }), ZERO_NEAR)
+        .await?;
+    assert!(rec_clean.is_success());
+
+    let cv_final = get_claim(&env, "c-1").await?;
+    assert_eq!(cv_final.surplus.0, 0);
+    assert_eq!(cv_final.booked_total.0, 1_000_000);
 
     Ok(())
 }

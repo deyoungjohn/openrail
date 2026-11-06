@@ -147,6 +147,37 @@ async fn test_in_place_upgrade_from_main_preserves_state() -> Result<()> {
     assert_eq!(sponsor_bob.cap, 5);
     assert_eq!(sponsor_bob.used, 0);
 
+    // f) Settle & Payout module views default when state absent
+    let held_c1_pre: Vec<serde_json::Value> = env
+        .root
+        .view("settle_held")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert!(held_c1_pre.is_empty(), "settle_held must default to empty");
+
+    let settle_alice_pre: Option<serde_json::Value> = env
+        .root
+        .view("settlement_of")
+        .args_json(json!({ "account_id": env.alice.id() }))
+        .await?
+        .json()?;
+    assert!(
+        settle_alice_pre.is_none(),
+        "settlement_of must default to None"
+    );
+
+    let relayers_pre: Vec<near_sdk::AccountId> = env
+        .root
+        .view("payout_relayers")
+        .args_json(json!({}))
+        .await?
+        .json()?;
+    assert!(
+        relayers_pre.is_empty(),
+        "payout_relayers must default to empty"
+    );
+
     // 6. Test Card A10 operations on upgraded contract:
     // a) Deposit into sponsor pool
     let pool_deposit = NearToken::from_near(2);
@@ -271,6 +302,116 @@ async fn test_in_place_upgrade_from_main_preserves_state() -> Result<()> {
         .json()?;
     assert!(c2_claim.is_some());
     assert_eq!(c2_claim.unwrap().status, Status::Issued);
+
+    // 7. Test Settle & Payout module operations on upgraded contract:
+    // a) Set payout relayers via root
+    env.root
+        .as_account()
+        .call(env.root.id(), "set_payout_relayers")
+        .args_json(json!({ "relayers": [env.watcher.id()] }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let relayers_post: Vec<near_sdk::AccountId> = env
+        .root
+        .view("payout_relayers")
+        .args_json(json!({}))
+        .await?
+        .json()?;
+    assert_eq!(relayers_post, vec![env.watcher.id().clone()]);
+
+    // b) Alice sets settlement destination
+    env.alice
+        .call(env.root.id(), "set_settlement")
+        .args_json(json!({
+            "chain": "base",
+            "address": "0x1111111111111111111111111111111111111111",
+            "min_amount": U128(100_000),
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let settle_alice_post: Option<serde_json::Value> = env
+        .root
+        .view("settlement_of")
+        .args_json(json!({ "account_id": env.alice.id() }))
+        .await?
+        .json()?;
+    assert!(
+        settle_alice_post.is_some(),
+        "settlement_of must be configured"
+    );
+
+    // c) Fund remaining 600_000 USDC on c-1 (issued before upgrade) and reconcile
+    env.fund_claim("c-1", 600_000, None).await?.into_result()?;
+
+    env.call_as(&env.watcher)
+        .call_root(
+            "reconcile",
+            json!({ "token_id": "c-1" }),
+            NearToken::from_yoctonear(0),
+        )
+        .await?
+        .into_result()?;
+
+    let c1_final: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(c1_final.status, Status::Paid);
+    assert_eq!(c1_final.booked_total.0, 1_000_000);
+
+    // Settle module held leg was recorded on the upgraded contract for c-1!
+    let held_c1_post: Vec<serde_json::Value> = env
+        .root
+        .view("settle_held")
+        .args_json(json!({ "token_id": "c-1" }))
+        .await?
+        .json()?;
+    assert_eq!(held_c1_post.len(), 1, "must record held entry for c-1");
+    assert_eq!(held_c1_post[0]["amount"], "598500");
+
+    // d) Relayer executes payout on held entry
+    let p_res = env
+        .call_as(&env.watcher)
+        .call_root(
+            "settle_payout",
+            json!({
+                "token_id": "c-1",
+                "index": 0,
+                "deposit_address": env.bob.id(),
+                "amount_in": U128(598_500),
+            }),
+            NearToken::from_yoctonear(0),
+        )
+        .await?;
+    assert!(p_res.is_success());
+    let p_id: u64 = p_res.json()?;
+
+    // e) Relayer reports payout settled
+    let rep_res = env
+        .call_as(&env.watcher)
+        .call_root(
+            "report_payout",
+            json!({
+                "token_id": "c-1",
+                "index": 0,
+                "payout_id": p_id,
+                "outcome": {
+                    "outcome": "settled",
+                    "destination_tx": "0xupgrade_settled",
+                },
+            }),
+            NearToken::from_yoctonear(0),
+        )
+        .await?;
+    assert!(rep_res.is_success());
 
     Ok(())
 }

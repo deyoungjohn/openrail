@@ -262,22 +262,24 @@ impl Contract {
         let mut remaining = amount.0;
         let mut legs = Vec::new();
 
-        // Allocate surplus across available balances in settlement assets
+        // Allocate surplus across available balances in settlement assets, excluding module-reserved funds
         for asset in &claim.settlement_assets {
             if remaining == 0 {
                 break;
             }
-            let avail = claim
+            let raw_bal = claim
                 .last_seen_balance
                 .get(asset)
                 .copied()
                 .unwrap_or(near_sdk::json_types::U128(0))
                 .0;
+            let reserved = crate::hooks::dispatch_reserved_balance(&claim, asset);
+            let avail = raw_bal.saturating_sub(reserved);
             if avail > 0 {
                 let take = std::cmp::min(remaining, avail);
                 claim
                     .last_seen_balance
-                    .insert(asset.clone(), near_sdk::json_types::U128(avail - take));
+                    .insert(asset.clone(), near_sdk::json_types::U128(raw_bal - take));
                 remaining -= take;
 
                 legs.push(crate::types::Leg::Pay {

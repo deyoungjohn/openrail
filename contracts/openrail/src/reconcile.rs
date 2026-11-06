@@ -720,7 +720,12 @@ impl Contract {
             return;
         }
 
+        if let Err(refusal) = crate::hooks::dispatch_check_clear_stale_lock(claim) {
+            env::panic_str(&refusal.reason);
+        }
+
         let cleared_lock = std::mem::replace(&mut claim.lock, Lock::None);
+        crate::hooks::dispatch_on_lock_cleared(claim, &cleared_lock);
         LockClearedEvent {
             token_id,
             cleared_lock,
