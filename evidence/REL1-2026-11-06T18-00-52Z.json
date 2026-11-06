@@ -1,0 +1,62 @@
+{
+  "run": "REL1",
+  "network": "mainnet",
+  "started_utc": "2026-11-06T18:00:47.695Z",
+  "finished_utc": "2026-11-06T18:00:52.866Z",
+  "result": "PASS",
+  "code_hash": "AngHSC9LDucXzAhax8GgfgMckaD5UtUZis2ZF2hLcuzZ",
+  "steps": [
+    {
+      "step": 1,
+      "name": "upgrade integrity: code, claims, counter",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [],
+      "evidence": {
+        "code_hash": "AngHSC9LDucXzAhax8GgfgMckaD5UtUZis2ZF2hLcuzZ",
+        "claims": {
+          "c-1": {
+            "owner": "business-root.near",
+            "booked": "6000000"
+          },
+          "c-2": {
+            "owner": "business-root.near",
+            "booked": "3000000"
+          },
+          "c-3": {
+            "owner": "buyer-root.near",
+            "booked": "4000000"
+          }
+        },
+        "next_token_id": 4
+      }
+    },
+    {
+      "step": 2,
+      "name": "live invoice NFT: media follows the claim",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [],
+      "evidence": {
+        "token_id": "c-1",
+        "svg_bytes": 623
+      }
+    },
+    {
+      "step": 3,
+      "name": "new views answer: sponsor pool, payout relayers, settlement",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [],
+      "evidence": {
+        "sponsor": {
+          "pool": "0",
+          "cap": 5,
+          "used": 0
+        },
+        "relayers": [],
+        "settlement": "none"
+      }
+    }
+  ]
+}

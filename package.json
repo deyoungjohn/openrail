@@ -14,7 +14,8 @@
     "gen:modules": "tsx scripts/gen-modules.ts",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "test": "pnpm -r test",
-    "t2:g1": "tsx scripts/t2/g1.ts"
+    "t2:g1": "tsx scripts/t2/g1.ts",
+    "t2:h1": "tsx scripts/t2/h1.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -1,0 +1,2 @@
+Public copy of the REL-1 read-only mainnet run. Account names that contain the event word are masked (business-root.near, buyer-root.near); nothing else is changed.
+sha256 of the unmasked original: 335be27bf82103d18ffa609ced3a091bfe983fb935dd98b55135addde58846d4

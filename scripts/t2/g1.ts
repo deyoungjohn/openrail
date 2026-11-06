@@ -20,6 +20,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import {
@@ -36,12 +37,12 @@ const DEFAULT_API = "https://api.openrail.incepture.dev";
 const DEFAULT_WEB = "https://openrail.incepture.dev";
 const DEFAULT_INDEXER = "http://127.0.0.1:8788";
 const DEFAULT_TIMEOUT_MS = 10 * 60_000;
-const USDC = 1_000_000;
+export const USDC = 1_000_000;
 
-type Network = "mainnet" | "sandbox";
+export type Network = "mainnet" | "sandbox";
 type StepStatus = "PENDING" | "PASS" | "FAIL" | "SKIPPED";
 
-interface StepState {
+export interface StepState {
   status: StepStatus;
   token_id?: string;
   invoice_id?: string;
@@ -76,7 +77,7 @@ export interface G1Report {
   }>;
 }
 
-interface Options {
+export interface Options {
   yesAll: boolean;
   envFile?: string;
   statePath: string;
@@ -84,7 +85,7 @@ interface Options {
   timeoutMs: number;
 }
 
-interface Ctx {
+export interface Ctx {
   options: Options;
   network: Network;
   sandbox: boolean;
@@ -103,14 +104,14 @@ interface Ctx {
   started: boolean;
 }
 
-class StopRun extends Error {}
+export class StopRun extends Error {}
 
-function fail(message: string): never {
+export function fail(message: string): never {
   console.error(message);
   process.exit(2);
 }
 
-function parseArgs(argv: string[]): Options {
+export function parseArgs(argv: string[]): Options {
   const options: Options = {
     yesAll: false,
     statePath: process.env.G1_STATE_PATH ?? join(process.cwd(), "reports/G1-state.json"),
@@ -149,7 +150,7 @@ function parseArgs(argv: string[]): Options {
   return options;
 }
 
-function loadEnvFile(path: string): void {
+export function loadEnvFile(path: string): void {
   if (!existsSync(path)) fail(`ENV_FILE_MISSING: env-file ${path}`);
   const absolute = realpathSync(resolve(path));
   const repoRelative = relative(realpathSync(process.cwd()), absolute);
@@ -179,7 +180,7 @@ function loadEnvFile(path: string): void {
   }
 }
 
-function loadState(path: string, network: Network): G1State {
+export function loadState(path: string, network: Network): G1State {
   if (!existsSync(path)) {
     return { version: 1, network, started_utc: new Date().toISOString(), steps: {} };
   }
@@ -189,24 +190,24 @@ function loadState(path: string, network: Network): G1State {
   return parsed;
 }
 
-function saveState(path: string, state: G1State): void {
+export function saveState(path: string, state: G1State): void {
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.${process.pid}.tmp`;
   writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
   renameSync(temp, path);
 }
 
-function step(state: G1State, number: number): StepState {
+export function step(state: G1State, number: number): StepState {
   const key = String(number);
   state.steps[key] ??= { status: "PENDING", tx_hashes: [], request_ids: [] };
   return state.steps[key]!;
 }
 
-function redactedJson(value: unknown): string {
+export function redactedJson(value: unknown): string {
   return JSON.stringify(redact(value));
 }
 
-async function readJson(
+export async function readJson(
   url: string,
   fetchImpl: typeof fetch,
   bearer?: string,
@@ -221,7 +222,7 @@ async function readJson(
   return body !== null && typeof body === "object" ? (body as Record<string, unknown>) : {};
 }
 
-function rpcUrls(): string[] {
+export function rpcUrls(): string[] {
   const urls = requireEnv("NEAR_RPC_URL")
     .split(",")
     .concat((getEnv("NEAR_RPC_URL_FALLBACK") ?? "").split(","))
@@ -231,7 +232,7 @@ function rpcUrls(): string[] {
 }
 
 /** The first node that answers. A node that times out, answers with something that is not JSON, or errors is skipped. */
-async function rpc(
+export async function rpc(
   method: string,
   params: unknown,
   fetchImpl: typeof fetch,
@@ -277,11 +278,16 @@ function codeHashFromAccount(account: Record<string, unknown>): string | null {
   return typeof hash === "string" ? hash : null;
 }
 
-function claimIsReadable(claim: Record<string, unknown> | null): claim is Record<string, unknown> {
+export function claimIsReadable(
+  claim: Record<string, unknown> | null,
+): claim is Record<string, unknown> {
   return claim !== null && typeof claim.status === "string";
 }
 
-async function viewClaim(ctx: Ctx, tokenId: string): Promise<Record<string, unknown> | null> {
+export async function viewClaim(
+  ctx: Ctx,
+  tokenId: string,
+): Promise<Record<string, unknown> | null> {
   try {
     const bytes = (await rpc(
       "query",
@@ -325,7 +331,7 @@ async function viewConfig(ctx: Ctx): Promise<Record<string, unknown> | null> {
   }
 }
 
-async function preflight(ctx: Ctx): Promise<void> {
+export async function preflight(ctx: Ctx): Promise<void> {
   console.log(`# Openrail G1 ${ctx.network} runner (${ctx.dryRun ? "dry run" : "send mode"})`);
   console.log(`# root=${ctx.root} api=${ctx.api} indexer=${ctx.indexer}`);
   try {
@@ -394,7 +400,12 @@ async function preflight(ctx: Ctx): Promise<void> {
   }
 }
 
-async function approve(ctx: Ctx, stepNumber: number, name: string, action: string): Promise<void> {
+export async function approve(
+  ctx: Ctx,
+  stepNumber: number,
+  name: string,
+  action: string,
+): Promise<void> {
   ctx.currentStep = stepNumber;
   console.log(`\n## Step ${stepNumber}: ${name}`);
   console.log(action);
@@ -408,7 +419,7 @@ function idempotency(prefix: string): string {
   return `${prefix}-${utcStamp()}-${randomUUID()}`;
 }
 
-async function apiWrite(
+export async function apiWrite(
   ctx: Ctx,
   stepNumber: number,
   path: string,
@@ -443,7 +454,7 @@ async function apiWrite(
   return parsed;
 }
 
-async function poll(
+export async function poll(
   ctx: Ctx,
   _stepNumber: number,
   description: string,
@@ -457,14 +468,17 @@ async function poll(
   throw new Error(`TIMEOUT: ${description}`);
 }
 
-function booking(value: Record<string, unknown>, field: string): bigint {
+export function booking(value: Record<string, unknown>, field: string): bigint {
   const raw = value[field];
   if (typeof raw === "string") return BigInt(raw);
   if (typeof raw === "number") return BigInt(raw);
   return 0n;
 }
 
-async function receipts(ctx: Ctx, invoiceId: string): Promise<Array<Record<string, unknown>>> {
+export async function receipts(
+  ctx: Ctx,
+  invoiceId: string,
+): Promise<Array<Record<string, unknown>>> {
   // Receipts belong to the business: this read needs the same key the invoice was created with.
   const key = getEnv("OPENRAIL_API_KEY") ?? getEnv("ISSUER_SERVICE_KEY");
   if (key === undefined) fail("MISSING_ENV: OPENRAIL_API_KEY");
@@ -477,11 +491,11 @@ async function receipts(ctx: Ctx, invoiceId: string): Promise<Array<Record<strin
   return Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
 }
 
-function addTx(state: StepState, hash: string): void {
+export function addTx(state: StepState, hash: string): void {
   if (!state.tx_hashes.includes(hash)) state.tx_hashes.push(hash);
 }
 
-async function sendNear(
+export async function sendNear(
   ctx: Ctx,
   stepNumber: number,
   receiverId: string,
@@ -782,7 +796,7 @@ function clearTsxCache(): void {
   }
 }
 
-function requireOrExit(name: string): string {
+export function requireOrExit(name: string): string {
   if (getEnv(name) === undefined) {
     clearTsxCache();
     console.error(`MISSING_ENV: ${name}`);
@@ -901,7 +915,10 @@ export async function runG1(argv: string[] = process.argv.slice(2)): Promise<num
   }
 }
 
-if (process.env.VITEST === undefined) {
+// Run only when started directly: h1.ts imports this file for its helpers.
+const startedDirectly =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (process.env.VITEST === undefined && startedDirectly) {
   runG1()
     .then((code) => {
       process.exitCode = code;
