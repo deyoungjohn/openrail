@@ -33,7 +33,7 @@ test.describe("signed-in journey on the mock API", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "Invoice created" })).toBeVisible();
     // Email is not available yet: the sheet offers the pay link and the QR code, and no email form.
-    await expect(dialog.getByText("Pay link")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Open invoice" })).toBeVisible();
     await expect(dialog.getByLabel("Client's email")).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Send invoice" })).toHaveCount(0);
   });
