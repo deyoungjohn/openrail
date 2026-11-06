@@ -29,5 +29,11 @@
       "id": "woocommerce",
       "enabled": true
     }
+  ],
+  "support": [
+    {
+      "id": "payout",
+      "enabled_if": ["checkout", "settle"]
+    }
   ]
 }
