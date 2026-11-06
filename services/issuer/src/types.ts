@@ -59,7 +59,7 @@ export interface PrepareIssueResult {
 
 /** The number n of the newest claim `c-n` on the contract, or 0 when there is none. */
 export interface TokenCounter {
-  lastTokenNumber(): Promise<number>;
+  nextTokenId(): Promise<number>;
 }
 
 export interface PrepareIssueBody {

@@ -183,7 +183,7 @@ export class IssuerService {
           : credit < required && sponsor.pool >= required && sponsor.used < sponsor.cap;
       let predicted: { tokenId: string; claimAccount: string } | undefined;
       if (this.tokens !== undefined) {
-        const next = Math.max(await this.tokens.lastTokenNumber(), this.highWater) + 1;
+        const next = Math.max(await this.tokens.nextTokenId(), this.highWater + 1);
         predicted = {
           tokenId: `c-${next}`,
           claimAccount: `c-${next}.${this.config.rootAccount}`,

@@ -132,25 +132,17 @@ describe("ContractTokenCounter", () => {
     sendFunctionCall: async () => null,
     view: async <T>(request: { methodName: string }): Promise<T> => views[request.methodName] as T,
   });
-  it("is 0 on an empty contract", async () => {
-    const counter = new ContractTokenCounter(
-      near({ nft_total_supply: "0" }) as never,
-      "openrail.near",
-    );
-    expect(await counter.lastTokenNumber()).toBe(0);
-  });
-  it("reads the newest token's number", async () => {
-    const counter = new ContractTokenCounter(
-      near({ nft_total_supply: "3", nft_tokens: [{ token_id: "c-7" }] }) as never,
-      "openrail.near",
-    );
-    expect(await counter.lastTokenNumber()).toBe(7);
+  it("reads the next id from the view", async () => {
+    const counter = new ContractTokenCounter(near({ next_token_id: 1 }) as never, "openrail.near");
+    expect(await counter.nextTokenId()).toBe(1);
+    const later = new ContractTokenCounter(near({ next_token_id: 8 }) as never, "openrail.near");
+    expect(await later.nextTokenId()).toBe(8);
   });
   it("refuses an answer it cannot read", async () => {
     const counter = new ContractTokenCounter(
-      near({ nft_total_supply: "x" }) as never,
+      near({ next_token_id: "x" }) as never,
       "openrail.near",
     );
-    await expect(counter.lastTokenNumber()).rejects.toThrow("ISSUER_SUPPLY_INVALID");
+    await expect(counter.nextTokenId()).rejects.toThrow("ISSUER_NEXT_TOKEN_INVALID");
   });
 });

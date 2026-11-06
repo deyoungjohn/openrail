@@ -49,7 +49,9 @@ S1b implements:
 - invoice PDF (`application/pdf` base64 envelope);
 - `Idempotency-Key` storage (same body returns the first response, another body 409);
 - API keys stored as sha256 with scopes, rotated and revoked once;
-- HMAC-SHA256 webhooks (`Openrail-Signature`), delivered only from indexed events;
+- HMAC-SHA256 webhooks (`Openrail-Signature`), delivered only from indexed events.
+  `storage_sponsored` is carried as an event type; module events appear only when
+  their module is enabled;
 - NEP-413 dashboard sessions: `POST /v1/auth/verify` sets the `or_sess` cookie
   (`HttpOnly`, `Secure`, `SameSite=Lax`, `Domain=$COOKIE_DOMAIN`); 7 days sliding,
   capped at 30 days, stored as a sha256 hash so restarts keep it;

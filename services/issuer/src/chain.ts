@@ -109,34 +109,22 @@ export class ContractSponsorStatusReader implements SponsorStatusReader {
   }
 }
 
-/** Reads the newest claim through `nft_total_supply` and `nft_tokens` (views, no raw storage). */
+/** Reads `next_token_id` from the contract view; no raw contract storage. */
 export class ContractTokenCounter implements TokenCounter {
   constructor(
     private readonly near: NearClientLike,
     private readonly rootAccount: string,
   ) {}
 
-  async lastTokenNumber(): Promise<number> {
-    const supply = await this.near.view<string>({
+  async nextTokenId(): Promise<number> {
+    const value = await this.near.view<number>({
       contractId: this.rootAccount,
-      methodName: "nft_total_supply",
+      methodName: "next_token_id",
       args: {},
-      feature: "issuer.token_counter",
+      feature: "issuer.next_token_id",
     });
-    if (typeof supply !== "string" || !/^\d+$/.test(supply))
-      throw new Error("ISSUER_SUPPLY_INVALID");
-    const count = Number(supply);
-    if (count === 0) return 0;
-    const page = await this.near.view<{ token_id?: unknown }[]>({
-      contractId: this.rootAccount,
-      methodName: "nft_tokens",
-      args: { from_index: String(count - 1), limit: 1 },
-      feature: "issuer.token_counter",
-    });
-    const id = Array.isArray(page) ? page[0]?.token_id : undefined;
-    const match = typeof id === "string" ? /^c-(\d+)$/.exec(id) : null;
-    if (match === null) throw new Error("ISSUER_LAST_TOKEN_INVALID");
-    return Number(match[1]);
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error("ISSUER_NEXT_TOKEN_INVALID");
+    return value;
   }
 }
 

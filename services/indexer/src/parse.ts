@@ -7,6 +7,7 @@ export const EVENT_PREFIX = "EVENT_JSON:";
 /** Events that are evidence and are never pruned. */
 export const EVIDENCE_EVENTS = new Set([
   "issue",
+  "storage_sponsored",
   "ack",
   "quote_logged",
   "booked",

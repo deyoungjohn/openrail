@@ -251,7 +251,8 @@ export type WebhookEventType =
   | "invoice.paid"
   | "payment.late"
   | "payout.failed"
-  | "invoice.closed";
+  | "invoice.closed"
+  | "storage_sponsored";
 
 export interface CreateWebhookEndpointRequest {
   url: string;
@@ -694,6 +695,8 @@ export interface Analytics {
     paid: number;
     on_time: number;
   };
+  paid_out_total: U128;
+  held_total: U128;
 }
 
 export interface PaySessionList {

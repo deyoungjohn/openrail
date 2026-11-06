@@ -1219,7 +1219,8 @@
           "invoice.paid",
           "payment.late",
           "payout.failed",
-          "invoice.closed"
+          "invoice.closed",
+          "storage_sponsored"
         ]
       },
       "CreateWebhookEndpointRequest": {
@@ -2779,7 +2780,9 @@
           "paid_on_time_rate",
           "payments_by_chain",
           "payments_by_asset",
-          "sample"
+          "sample",
+          "paid_out_total",
+          "held_total"
         ],
         "properties": {
           "average_days_to_paid": {
@@ -2852,6 +2855,12 @@
                 "type": "integer"
               }
             }
+          },
+          "paid_out_total": {
+            "$ref": "#/components/schemas/U128"
+          },
+          "held_total": {
+            "$ref": "#/components/schemas/U128"
           }
         }
       },
