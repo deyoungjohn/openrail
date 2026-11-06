@@ -760,7 +760,7 @@ export async function runH1(argv: string[] = process.argv.slice(2)): Promise<num
     currentStep: 0,
     started: false,
     set,
-    business: getEnv("H1_BUSINESS_ACCOUNT") ?? "nearhackathons.near",
+    business: requireOrExit("H1_BUSINESS_ACCOUNT"),
     tokens: {},
   };
   for (let i = 0; i < defs.length; i += 1) {

@@ -114,6 +114,7 @@ function run(
         WEB_BASE_URL: httpUrl,
         INDEXER_URL: httpUrl,
         EXPECTED_CODE_HASH: "HASH",
+        H1_BUSINESS_ACCOUNT: "acme.near",
         ...env,
       },
     });
@@ -140,6 +141,12 @@ describe("the H1 / REL-1 runner", () => {
     expect(code).toBe(2);
     expect(out).toContain("usage: pnpm t2:h1 --set rel1|h1");
     expect(writes).toEqual([]);
+  });
+
+  it("names the business account from the environment and exits without it", async () => {
+    const { code, out } = await run(["--set", "rel1"], { H1_BUSINESS_ACCOUNT: "" });
+    expect(code).toBe(1);
+    expect(out).toContain("MISSING_ENV: H1_BUSINESS_ACCOUNT");
   });
 
   it("the h1 set is a dry run by default: it lists every step and writes nothing", async () => {
