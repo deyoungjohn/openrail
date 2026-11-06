@@ -28,6 +28,8 @@ import type {
 
 const PAGE_SIZE = 100;
 const RECONCILING_BLOCKS = 100;
+/** After sending `clear_stale_lock` for a claim, wait this long before sending it again. */
+const CLEAR_BACKOFF_MS = 120_000;
 const YOCTO_PER_NEAR = 1_000_000_000_000_000_000_000_000n;
 
 const TERMINAL_STATUSES = new Set(["Paid", "Cancelled", "Closed"]);
@@ -104,6 +106,8 @@ export class Watcher {
   private readonly lastChecked = new Map<string, number>();
   /** Finished claims and when they were last looked at: late payments to them are booked as surplus for the business. */
   private readonly finished = new Map<string, number>();
+  /** When `clear_stale_lock` was last sent for a claim: a module may refuse it (a payout still out), so do not repeat it every tick. */
+  private readonly clearedAt = new Map<string, number>();
   private lowAlerted = false;
   private belowThreshold = false;
   private lastBlockHeight: number | null = null;
@@ -317,6 +321,9 @@ export class Watcher {
       return;
     }
     if (this.lockExpired(claim.lock, blockHeight)) {
+      const last = this.clearedAt.get(claim.token_id);
+      if (last !== undefined && this.now() - last < CLEAR_BACKOFF_MS) return;
+      this.clearedAt.set(claim.token_id, this.now());
       await this.send(WATCHER_METHODS.clearStaleLock, claim.token_id);
       summary.cleared.push(claim.token_id);
     }

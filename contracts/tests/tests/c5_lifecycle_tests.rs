@@ -841,3 +841,114 @@ async fn test_c5_close_refuses_non_empty_undistributed_until_retried() -> Result
 
     Ok(())
 }
+
+/// Pins the behavior that a late payment on an already `Paid` claim lands in `surplus`
+/// and calling `release_surplus` pays the claim owner (Blueprint REL-1, prompt update 19).
+#[tokio::test]
+async fn test_c5_late_payment_on_paid_claim_lands_in_surplus_and_releases_to_owner() -> Result<()> {
+    let env = Env::new().await?;
+
+    let amount_due = 1_000_000u128; // $1.00 USDC
+    let terms_hash = Hex32::new([42u8; 32]);
+    let due_date = 1_800_000_000u64;
+
+    // 1. Issue claim c-1 to Alice
+    let issue_res = env
+        .issue_claim_with_details(
+            &env.alice,
+            0,
+            Some(Debtor::Near(env.bob.id().clone())),
+            terms_hash,
+            amount_due,
+            due_date,
+            None,
+        )
+        .await?;
+    assert!(issue_res.is_success());
+    let token_id: String = issue_res.json()?;
+
+    // 2. Fund exact amount (1_000_000) and reconcile -> status transitions to Paid
+    let _ = env.fund_claim(&token_id, amount_due, None).await?;
+    let rec_res = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_res.is_success());
+
+    let claim_after_full: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(claim_after_full.status, Status::Paid);
+    assert_eq!(claim_after_full.booked_total.0, amount_due);
+    assert_eq!(claim_after_full.surplus.0, 0);
+
+    // 3. Late payment arrives on already Paid claim (additional 500_000 in settlement asset)
+    let late_payment = 500_000u128;
+    let _ = env.fund_claim(&token_id, late_payment, None).await?;
+
+    let rec_late_res = env
+        .alice
+        .call(env.root.id(), "reconcile")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rec_late_res.is_success());
+
+    // 4. Verify the late payment lands in surplus, status remains Paid, booked_total increases
+    let claim_after_late: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(claim_after_late.status, Status::Paid);
+    assert_eq!(claim_after_late.booked_total.0, amount_due + late_payment);
+    assert_eq!(claim_after_late.surplus.0, late_payment);
+
+    // 5. Owner (Alice) calls release_surplus to withdraw the late payment surplus
+    let rel_res = env
+        .alice
+        .call(env.root.id(), "release_surplus")
+        .args_json(json!({ "token_id": token_id }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(rel_res.is_success());
+
+    // Verify surplus_released and distributed events emitted for owner Alice
+    let surplus_events = env.assert_event(&rel_res, "surplus_released");
+    assert!(
+        !surplus_events.is_empty(),
+        "surplus_released event must be emitted"
+    );
+    assert_eq!(
+        surplus_events[0]["data"][0]["amount"],
+        late_payment.to_string()
+    );
+    assert_eq!(
+        surplus_events[0]["data"][0]["receiver_id"],
+        env.alice.id().as_str()
+    );
+
+    let dist_events = env.assert_event(&rel_res, "distributed");
+    assert!(!dist_events.is_empty(), "distributed event must be emitted");
+
+    // 6. Surplus on claim is now 0 and claim remains Paid
+    let claim_post_release: ClaimView = env
+        .root
+        .view("claim")
+        .args_json(json!({ "token_id": token_id }))
+        .await?
+        .json()?;
+    assert_eq!(claim_post_release.status, Status::Paid);
+    assert_eq!(claim_post_release.surplus.0, 0);
+
+    Ok(())
+}

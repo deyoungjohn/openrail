@@ -293,6 +293,23 @@ describe("watcher decisions", () => {
     expect(fixture.near.calls.map((call) => call.methodName)).toEqual(["clear_stale_lock"]);
   });
 
+  it("does not repeat clear_stale_lock every tick when a module refuses it", async () => {
+    const fixture = setup({
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1", { lock: { Reconciling: { since: 800 } } })],
+      quotes: openQuote(),
+      balances: { "c-1.openrail.near": ["0", "0", "0", "0"] },
+    });
+    fixture.chain.height = 901;
+    await fixture.watcher.tick();
+    fixture.advance(15_000);
+    await fixture.watcher.tick();
+    expect(fixture.near.calls.map((call) => call.methodName)).toEqual(["clear_stale_lock"]);
+    fixture.advance(130_000);
+    await fixture.watcher.tick();
+    expect(fixture.near.calls).toHaveLength(2);
+  });
+
   it("clears an expired transfer window but not a live one", async () => {
     const fixture = setup({
       config: CONFIG_VIEW,

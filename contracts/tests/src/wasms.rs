@@ -19,6 +19,7 @@ static INTENTS_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
 static SIGNER_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
 static USDC_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
 static NFT_RECEIVER_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
+static OPENRAIL_ORIGIN_MAIN_WASM_CACHE: OnceLock<Vec<u8>> = OnceLock::new();
 
 /// Compiles a crate into wasm32-unknown-unknown with `--cfg near`.
 fn compile_wasm(
@@ -230,5 +231,79 @@ pub fn mock_nft_receiver_wasm() -> Result<Vec<u8>> {
         "openrail_mock_nft_receiver.wasm",
     )?;
     let _ = NFT_RECEIVER_WASM_CACHE.set(bytes.clone());
+    Ok(bytes)
+}
+
+/// Returns the `openrail.wasm` root contract bytecode built from `origin/main` (d4bd298).
+pub fn openrail_origin_main_wasm() -> Result<Vec<u8>> {
+    if let Some(cached) = OPENRAIL_ORIGIN_MAIN_WASM_CACHE.get() {
+        return Ok(cached.clone());
+    }
+
+    if let Ok(path) = std::env::var("OPENRAIL_MAIN_WASM") {
+        let bytes =
+            std::fs::read(&path).with_context(|| format!("read OPENRAIL_MAIN_WASM={path}"))?;
+        let _ = OPENRAIL_ORIGIN_MAIN_WASM_CACHE.set(bytes.clone());
+        return Ok(bytes);
+    }
+
+    let root = workspace_root();
+    let cached_path = root.join("target/near/openrail_origin_main.wasm");
+    if cached_path.exists() {
+        let bytes = std::fs::read(&cached_path)
+            .with_context(|| format!("read cached {}", cached_path.display()))?;
+        let _ = OPENRAIL_ORIGIN_MAIN_WASM_CACHE.set(bytes.clone());
+        return Ok(bytes);
+    }
+
+    // Build from origin/main using git archive
+    let build_dir = root.join("target/origin_main_tree");
+    std::fs::create_dir_all(&build_dir)?;
+    let archive_output = Command::new("git")
+        .args(["archive", "origin/main"])
+        .current_dir(&root)
+        .output()
+        .context("git archive origin/main")?;
+    if !archive_output.status.success() {
+        return Err(anyhow!("git archive origin/main failed"));
+    }
+    use std::io::Write;
+    let mut tar_child = Command::new("tar")
+        .args(["-x", "-C", build_dir.to_str().unwrap()])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .context("tar -x -C build_dir")?;
+    tar_child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(&archive_output.stdout)?;
+    let tar_status = tar_child.wait()?;
+    if !tar_status.success() {
+        return Err(anyhow!("tar unpack failed"));
+    }
+
+    let manifest = build_dir.join("contracts/openrail/Cargo.toml");
+    let status = Command::new("cargo")
+        .args([
+            "near",
+            "build",
+            "non-reproducible-wasm",
+            "--manifest-path",
+            manifest.to_str().unwrap(),
+            "--features",
+            "standing,checkout,proof,agent,shopify,settle,woocommerce",
+        ])
+        .status()
+        .context("cargo near build for origin/main")?;
+    if !status.success() {
+        return Err(anyhow!("cargo near build failed for origin/main"));
+    }
+
+    let built_wasm = build_dir.join("target/near/openrail/openrail.wasm");
+    let bytes = std::fs::read(&built_wasm)?;
+    let _ = std::fs::create_dir_all(root.join("target/near"));
+    let _ = std::fs::write(&cached_path, &bytes);
+    let _ = OPENRAIL_ORIGIN_MAIN_WASM_CACHE.set(bytes.clone());
     Ok(bytes)
 }
