@@ -60,7 +60,7 @@ Reads never need a flag.
 | Command                                                               | Notes                                                      |
 | --------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `invoices create ...`                                                 | executes; add `--dry-run` to preview.                      |
-| `invoices send <id> --to you@example.com`                             | emails the pay link; `--dry-run` previews.                 |
+| `invoices send <id> --to you@example.com`                             | not available yet (501); share the pay link.               |
 | `webhooks create --url URL --events invoice.paid,invoice.closed`      | returns the signing secret once.                           |
 | `webhooks test <id>`                                                  | sends a signed test event.                                 |
 | `keys create --name Production --scopes invoices:read,invoices:write` | returns the key secret once.                               |

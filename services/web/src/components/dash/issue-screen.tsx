@@ -133,10 +133,6 @@ function StorageCredit() {
 
 function DoneSheet({ invoice, onClose }: { invoice: Invoice; onClose: () => void }) {
   const t = copy.issue;
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
-  const key = useRef(crypto.randomUUID());
   return (
     <div className="space-y-5">
       <p className="text-[15px]">{t.doneBody}</p>
@@ -174,56 +170,13 @@ function DoneSheet({ invoice, onClose }: { invoice: Invoice; onClose: () => void
           </dd>
         </div>
       </dl>
-      <form
-        className="space-y-4"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setState("sending");
-          try {
-            await dashClient.invoices.send(
-              invoice.id,
-              { to: email, ...(message.trim() ? { message: message.trim() } : {}) },
-              { idempotencyKey: key.current },
-            );
-            setState("sent");
-          } catch {
-            setState("failed");
-          }
-        }}
-      >
-        <Input
-          label={t.emailTo}
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Input
-          label={t.emailMessage}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-        />
-        {state === "failed" ? (
-          <p role="alert" className="text-danger-text text-[14px]">
-            {t.sendFailed}
-          </p>
-        ) : null}
-        {state === "sent" ? (
-          <p role="status" className="text-[14px] font-medium">
-            {t.sent(email)}
-          </p>
-        ) : null}
-        <div className="flex flex-wrap gap-3">
-          <Button type="submit" loading={state === "sending"} disabled={state === "sent"}>
-            {state === "sending" ? t.sending : t.send}
+      <div className="flex flex-wrap gap-3">
+        <Link href={`/app/invoices/${encodeURIComponent(invoice.id)}`}>
+          <Button variant="secondary" onClick={onClose}>
+            {t.openInvoice}
           </Button>
-          <Link href={`/app/invoices/${encodeURIComponent(invoice.id)}`}>
-            <Button variant="secondary" onClick={onClose}>
-              {t.openInvoice}
-            </Button>
-          </Link>
-        </div>
-      </form>
+        </Link>
+      </div>
     </div>
   );
 }

@@ -194,6 +194,7 @@ function dueDays(value: unknown): number {
 function email(sendEmail: unknown, to: unknown): { send_email: boolean; email_to: string | null } {
   const send = sendEmail === undefined ? false : sendEmail;
   if (typeof send !== "boolean") bad("send_email must be true or false");
+  if (send) bad("email is not available yet: send_email must be false");
   if (to !== undefined && to !== null && (typeof to !== "string" || !EMAIL.test(to))) {
     bad("email_to must be an email address");
   }

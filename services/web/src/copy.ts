@@ -590,7 +590,7 @@ export const copy = {
     creditFailed: "The deposit didn't go through. Nothing was charged. Try again.",
     creditUnknown: "We couldn't check your storage credit. You can still create the invoice.",
     doneTitle: "Invoice created",
-    doneBody: "Send your client the pay link, or email it from here.",
+    doneBody: "Send your client the pay link or the QR code.",
     payLink: "Pay link",
     ackLink: "Acceptance link",
     account: "Invoice account",

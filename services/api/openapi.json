@@ -3108,7 +3108,7 @@
     "/v1/invoices/{id}/send": {
       "post": {
         "operationId": "sendInvoice",
-        "summary": "Email the pay link to the debtor",
+        "summary": "Email the pay link (not available yet: answers 501 email_not_available)",
         "tags": ["Invoices"],
         "security": [
           {

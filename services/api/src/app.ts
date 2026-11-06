@@ -732,15 +732,14 @@ export class ApiApp {
         };
       }
       if (action === "send" && method === "POST") {
-        return this.withIdempotency(request, async () => {
-          this.requireScope(this.requireAuth(request), "invoices:write");
-          this.invoiceBy(invoiceId);
-          const body = (request.body ?? {}) as { to?: string };
-          return {
-            status: 200,
-            body: { sent: true, to: body.to ?? "debtor@example.com", message_id: id("msg") },
-          };
-        });
+        // Nothing sends email yet. Say so: never answer "sent" for a message that was not sent.
+        this.requireScope(this.requireAuth(request), "invoices:write");
+        this.invoiceBy(invoiceId);
+        throw new ApiError(
+          501,
+          "email_not_available",
+          "Email sending is not available yet. Share the pay link or the QR code instead.",
+        );
       }
       if (action === "receipts" && method === "GET") {
         const context = this.requireAuth(request);

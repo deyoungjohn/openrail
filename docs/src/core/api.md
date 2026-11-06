@@ -125,7 +125,7 @@ The fixtures for `400`, `401`, `404` and `409` are in `fixtures/api/`.
 | `POST` | `/v1/invoices`               | Create an invoice and issue the claim through the issuer key.                                                              |
 | `GET`  | `/v1/invoices`               | List invoices for the authenticated business.                                                                              |
 | `GET`  | `/v1/invoices/{id}`          | Invoice plus the live claim view.                                                                                          |
-| `POST` | `/v1/invoices/{id}/send`     | Email the pay link.                                                                                                        |
+| `POST` | `/v1/invoices/{id}/send`     | Not available yet: answers 501 `email_not_available`. Share the pay link or the QR code.                                   |
 | `GET`  | `/v1/invoices/{id}/receipts` | Receipts rendered from `booked` events only.                                                                               |
 | `GET`  | `/v1/payments`               | Payments for the business (`id`, `invoice_id`, base-unit `amount`, `origin_chain`, `origin_asset`, `status`, `booked_at`). |
 | `GET`  | `/v1/payments/{id}`          | Payment state; provider fields live under `swap_details`.                                                                  |
@@ -176,8 +176,8 @@ receipts carry `booking_tx_hash`; the cash-out quote carries `source_asset`,
 A template repeats `weekly`, `monthly` or `quarterly` from `start_date`, until
 `end_date` (inclusive) or `count` dates, or until cancelled. On each date at
 06:00 UTC the API issues an ordinary invoice through `issue_for`, numbered
-`<prefix>-001`, `<prefix>-002`, …, due `due_days` later, and emails the pay link
-when `send_email` is on. Nothing is pulled from the client; they pay each
+`<prefix>-001`, `<prefix>-002`, …, due `due_days` later, and returns the pay link
+(`send_email` must be `false`; email is not available yet). Nothing is pulled from the client; they pay each
 invoice like any other.
 
 - Monthly and quarterly dates keep the start day and clamp to the month end:

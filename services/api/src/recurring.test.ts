@@ -102,8 +102,8 @@ const template = {
   repeat: "monthly",
   start_date: "2026-11-06",
   count: 3,
-  send_email: true,
-  email_to: "ap@client.example",
+  send_email: false,
+  email_to: null,
   due_days: 14,
   invoice: {
     invoice_number_prefix: "RET",
@@ -166,7 +166,7 @@ describe("recurring API", () => {
       ["start_date", { ...template, start_date: "2026-02-30" }],
       ["end", { ...template, end_date: "2027-01-01" }],
       ["count", { ...template, count: 0 }],
-      ["email_to", { ...template, email_to: undefined }],
+      ["send_email", { ...template, send_email: true, email_to: "ap@client.example" }],
       ["amount_usd", { ...template, invoice: { ...template.invoice, amount_usd: "-1" } }],
       ["amount_usd", { ...template, invoice: { ...template.invoice, amount_usd: "1.005" } }],
       ["debtor_key", { ...template, invoice: { ...template.invoice, debtor_key: undefined } }],
@@ -247,10 +247,8 @@ describe("recurring scheduler", () => {
     expect(invoice.invoice_number).toBe("RET-001");
     expect(invoice.amount_usd).toBe("1500.00");
     expect(invoice.due_date).toBe("2026-11-20");
-    expect(h.send).toHaveBeenCalledWith(
-      expect.objectContaining({ id: invoice.id }),
-      "ap@client.example",
-    );
+    // Email is not available yet (see docs/internal): nothing is mailed.
+    expect(h.send).not.toHaveBeenCalled();
     const view = await h.app.handle(
       req("GET", `/v1/recurring_invoices/${body.id}`, undefined, h.write),
     );
