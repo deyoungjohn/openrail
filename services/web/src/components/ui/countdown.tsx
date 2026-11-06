@@ -4,18 +4,7 @@ import { Timer } from "lucide-react";
 import { useEffect, useState } from "react";
 import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
-
-const pad = (n: number) => n.toString().padStart(2, "0");
-
-/** 59:59 under an hour, 3:05:09 under a day, "2d 4h" beyond. */
-export function formatLeft(left: number): string {
-  const d = Math.floor(left / 86400);
-  const h = Math.floor((left % 86400) / 3600);
-  const m = Math.floor((left % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}:${pad(m)}:${pad(left % 60)}`;
-  return `${pad(m)}:${pad(left % 60)}`;
-}
+import { formatLeft } from "@/lib/pay";
 
 export function Countdown({ expiresAt }: { expiresAt: number }) {
   // null until mounted, so server and client render the same markup.

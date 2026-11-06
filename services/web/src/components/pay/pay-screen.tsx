@@ -121,6 +121,60 @@ function QuoteNote({
   );
 }
 
+/** Pay straight from the connected wallet instead of copying the address or scanning the code. */
+function WalletPay({ session, route }: { session: Session; route: Route }) {
+  const p = copy.pay;
+  const evm = useEvm();
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  if (route.evm_chain_id === null || !evm.available) return null;
+
+  const send = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      const hash = await evm.pay({
+        chainId: route.evm_chain_id as number,
+        to: session.deposit_address as `0x${string}`,
+        amount: BigInt(session.amount_in),
+        token: route.origin_contract === null ? null : (route.origin_contract as `0x${string}`),
+      });
+      setSent(hash);
+    } catch (e) {
+      const code = (e as { code?: number } | null)?.code;
+      setProblem(code === 4001 ? p.walletRejected : p.walletFailed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const amount = `${formatToken(session.amount_in, route.origin_decimals)} ${route.payer_asset}`;
+  return (
+    <div className="surface-card space-y-3 p-4 sm:p-6">
+      {evm.address ? (
+        <Button type="button" onClick={() => void send()} loading={busy} disabled={sent !== null}>
+          {p.walletPay(amount)}
+        </Button>
+      ) : (
+        <Button type="button" variant="secondary" onClick={() => void evm.connect()}>
+          {p.walletConnect}
+        </Button>
+      )}
+      {sent ? (
+        <p className="caption break-all" role="status">
+          {p.walletSent} {sent}
+        </p>
+      ) : null}
+      {problem ? (
+        <p className="text-danger-text text-[14px]" role="alert">
+          {problem}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function SessionView({
   session,
   route,
@@ -250,6 +304,7 @@ function SessionView({
             amount={`${formatToken(session.amount_in, route.origin_decimals)} ${route.payer_asset}`}
             chain={chain ?? undefined}
           />
+          <WalletPay session={session} route={route} />
           <p className="caption px-1">
             {p.sendOnly(route.payer_asset, chain ? CHAINS[chain] : route.origin_chain)}
           </p>
@@ -350,7 +405,10 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           const r = routes.find((x) => x.id === sess.route_id);
           const cents = legCents(sess.amount_usd);
           const open = Date.parse(sess.deadline) > now || sess.status === "success";
-          if (r && cents !== null && open) {
+          // A price for more than what is still owed is out of date (part of the invoice was paid since).
+          const owed = BigInt(claim?.outstanding ?? "0");
+          const current = cents !== null && (owed === 0n || cents * 10_000n <= owed);
+          if (r && cents !== null && open && current) {
             back.push({ session: sess, route: r, cents, stage: "waiting" });
           }
         }
@@ -369,7 +427,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
         }
       })
       .catch(() => undefined);
-  }, [routes, tokenId]);
+  }, [routes, tokenId, claim]);
 
   // A price made on this page joins the list of addresses once it is replaced.
   useEffect(() => {
@@ -406,6 +464,8 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   };
 
   const turnSplitOn = () => {
+    // The price on screen is for the whole amount: it stays in "earlier prices"; parts start fresh.
+    if (!split) setLegs([]);
     setSplit(true);
     setAmountText(centsToApi(remaining));
     setAmountShown(false);
@@ -533,7 +593,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
         {picker(p.pickUsdc, usdc)}
         {picker(p.pickVolatile, volatile)}
       </div>
-      {!split && legs.length === 0 ? (
+      {!split ? (
         <Button type="button" variant="secondary" onClick={turnSplitOn}>
           {p.mixSplit}
         </Button>

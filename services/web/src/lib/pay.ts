@@ -169,3 +169,15 @@ export function hashStrings(list: unknown): string[] {
     .map((h) => (typeof h === "string" ? h : (h as { hash?: unknown } | null)?.hash))
     .filter((h): h is string => typeof h === "string" && h !== "");
 }
+
+const pad2 = (n: number) => n.toString().padStart(2, "0");
+
+/** Always hours, minutes and seconds: 72h 04m 09s, 3h 05m 09s, 4m 09s, 9s. */
+export function formatLeft(left: number): string {
+  const h = Math.floor(left / 3600);
+  const m = Math.floor((left % 3600) / 60);
+  const sec = left % 60;
+  if (h > 0) return `${h}h ${pad2(m)}m ${pad2(sec)}s`;
+  if (m > 0) return `${m}m ${pad2(sec)}s`;
+  return `${sec}s`;
+}

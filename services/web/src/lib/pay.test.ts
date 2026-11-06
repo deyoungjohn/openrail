@@ -3,6 +3,7 @@ import {
   amountPrefix,
   chainOfRoute,
   formatDueDate,
+  formatLeft,
   formatToken,
   hashStrings,
   payStage,
@@ -209,5 +210,14 @@ describe("hashStrings", () => {
       "0xb",
     ]);
     expect(hashStrings(undefined)).toEqual([]);
+  });
+});
+
+describe("formatLeft", () => {
+  it("is always hours, minutes and seconds", () => {
+    expect(formatLeft(72 * 3600 + 4 * 60 + 9)).toBe("72h 04m 09s");
+    expect(formatLeft(3 * 3600 + 5 * 60 + 9)).toBe("3h 05m 09s");
+    expect(formatLeft(4 * 60 + 9)).toBe("4m 09s");
+    expect(formatLeft(9)).toBe("9s");
   });
 });

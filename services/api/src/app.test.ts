@@ -53,7 +53,7 @@ function harness() {
       amountOut: request.amount,
       spreadBps: 0,
     })),
-    status: vi.fn(async (_address: string) => ({ status: "PENDING_DEPOSIT" })),
+    status: vi.fn(async () => ({ status: "PENDING_DEPOSIT" })),
   };
   const pokeIndexer = vi.fn(async () => undefined);
   const deps: ApiDeps = {

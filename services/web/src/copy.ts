@@ -242,6 +242,11 @@ export const copy = {
     sendOnly: (asset: string, chain: string) =>
       `Send only ${asset} on ${chain}. Anything else may be lost.`,
     timeLeft: "Time left",
+    walletPay: (amount: string) => `Pay ${amount} from my wallet`,
+    walletConnect: "Connect a wallet to pay from it",
+    walletSent: "Sent. Waiting for it to arrive:",
+    walletRejected: "You declined it in your wallet. Nothing was sent.",
+    walletFailed: "The wallet could not send it. Nothing was sent. You can still copy the address.",
     shortRule: (amount: string, asset: string) =>
       `This price is for ${amount} ${asset}. A smaller deposit waits here for the rest and is returned to your refund address if the rest does not arrive before the price expires. To pay less, go back and split the payment first.`,
     shortSeen: (amount: string, asset: string) =>
