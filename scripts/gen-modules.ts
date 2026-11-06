@@ -21,6 +21,12 @@ interface ModuleEntry {
   enabled: boolean;
 }
 
+/** A support component (contract only): compiled in when any module in `enabled_if` is enabled. */
+interface SupportEntry {
+  id: string;
+  enabled_if: string[];
+}
+
 export interface Generated {
   files: Record<string, string>;
   errors: string[];
@@ -30,11 +36,12 @@ function isDir(p: string): boolean {
   return existsSync(p) && statSync(p).isDirectory();
 }
 
-function readModules(root: string): ModuleEntry[] {
+function readRegistry(root: string): { modules: ModuleEntry[]; support: SupportEntry[] } {
   const raw = JSON.parse(readFileSync(join(root, "openrail.modules.json"), "utf8")) as {
     modules: ModuleEntry[];
+    support?: SupportEntry[];
   };
-  return raw.modules;
+  return { modules: raw.modules, support: raw.support ?? [] };
 }
 
 /** Feature names declared in the [features] table of a Cargo.toml (no TOML dependency needed). */
@@ -74,13 +81,18 @@ function serviceFile(svc: string, ids: string[]): string {
   ].join("\n");
 }
 
-function modRs(ids: string[]): string {
+function modRs(ids: string[], support: { id: string; enablers: string[] }[] = []): string {
   const mods = ids.flatMap((id) => [`#[cfg(feature = "${id}")]`, `pub mod ${id};`]);
+  const supportMods = support.flatMap((s) => [
+    `#[cfg(any(${s.enablers.map((e) => `feature = "${e}"`).join(", ")}))]`,
+    `pub mod ${s.id};`,
+  ]);
   const items = ids.flatMap((id) => [`    #[cfg(feature = "${id}")]`, `    "${id}",`]);
   const hookItems = ids.flatMap((id) => [`    #[cfg(feature = "${id}")]`, `    &${id}::HOOK,`]);
   return [
     `// ${HEADER}`,
     ...mods,
+    ...supportMods,
     "",
     "/// Ids of the modules compiled into this build.",
     ...(items.length === 0
@@ -103,7 +115,7 @@ function modRs(ids: string[]): string {
 
 export function generate(root: string): Generated {
   const errors: string[] = [];
-  const modules = readModules(root);
+  const { modules, support } = readRegistry(root);
   const seen = new Set<string>();
   for (const m of modules) {
     if (!ID_RE.test(m.id)) errors.push(`invalid module id: ${JSON.stringify(m.id)}`);
@@ -133,7 +145,19 @@ export function generate(root: string): Generated {
     files[`services/${svc}/src/enabled.ts`] = serviceFile(svc, ids);
   }
   const rustIds = enabled.filter((id) => isDir(join(root, `contracts/openrail/src/modules/${id}`)));
-  files["contracts/openrail/src/modules/mod.rs"] = modRs(rustIds);
+  const supportRs: { id: string; enablers: string[] }[] = [];
+  for (const s of support) {
+    if (!ID_RE.test(s.id)) errors.push(`invalid support id: ${JSON.stringify(s.id)}`);
+    if (seen.has(s.id)) errors.push(`support id clashes with a module id: ${s.id}`);
+    for (const e of s.enabled_if) {
+      if (!seen.has(e)) errors.push(`support ${s.id}: unknown module ${e}`);
+    }
+    const enablers = s.enabled_if.filter((e) => enabled.includes(e));
+    if (enablers.length > 0 && isDir(join(root, `contracts/openrail/src/modules/${s.id}`))) {
+      supportRs.push({ id: s.id, enablers });
+    }
+  }
+  files["contracts/openrail/src/modules/mod.rs"] = modRs(rustIds, supportRs);
   return { files, errors };
 }
 
