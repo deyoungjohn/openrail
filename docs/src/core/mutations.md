@@ -1287,7 +1287,7 @@ Deliberate breaks in storage-credit sponsorship and pool management evaluated ag
 
 ### A10-1: Cap ignored: `sponsored_count` not enforced against `sponsor_cap`
 
-Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_first_n_invoices_sponsored_then_refused -- --ignored`
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_first_n_invoices_sponsored_then_refused`
 
 ```diff
 --- a/contracts/openrail/src/issue.rs
@@ -1325,7 +1325,7 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; 
 
 ### A10-2: Pool underflow: `sponsor_pool` deducted without checking sufficient balance
 
-Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_pool_never_underflows -- --ignored`
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_pool_never_underflows`
 
 ```diff
 --- a/contracts/openrail/src/issue.rs
@@ -1361,7 +1361,7 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; 
 
 ### A10-3: Wrong account counted: `caller`/`issuer` count incremented instead of business
 
-Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_cap_is_per_business -- --ignored`
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_cap_is_per_business`
 
 ```diff
 --- a/contracts/openrail/src/issue.rs
@@ -1395,7 +1395,7 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; 
 
 ### A10-4: Own credit skipped: pool drawn even when business holds personal credit
 
-Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_own_credit_used_before_pool -- --ignored`
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_own_credit_used_before_pool`
 
 ```diff
 --- a/contracts/openrail/src/issue.rs
@@ -1435,7 +1435,7 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; 
 
 ### A10-5: Withdraw by anyone: `withdraw_sponsor_pool` lacks root authorization check
 
-Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_pool_deposit_and_root_only_withdraw -- --ignored`
+Command: `cargo test -p openrail-tests --test sponsor_suite test_sponsor_pool_deposit_and_root_only_withdraw`
 
 ```diff
 --- a/contracts/openrail/src/issue.rs

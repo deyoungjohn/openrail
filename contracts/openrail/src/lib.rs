@@ -28,7 +28,8 @@ use std::collections::HashMap;
 
 pub use types::{
     Ack, AckScheme, Claim, ClaimView, Config, Debtor, DebtorCosig, Hex20, Hex32, HexBytes,
-    JsonToken, KindRules, Leg, Lock, NFTContractMetadata, Quote, Status, TokenId, TokenMetadata,
+    JsonToken, KindRules, Leg, Lock, NFTContractMetadata, Quote, SponsorStatusView, Status,
+    TokenId, TokenMetadata,
 };
 
 // ──────────────────────────────────────────────
@@ -57,6 +58,12 @@ pub const STORAGE_PREFIX_QUOTE_DEDUP: &[u8] = b"qd:";
 pub const STORAGE_PREFIX_UNDISTRIBUTED: &[u8] = b"u:";
 /// Storage prefix for prepaid storage credits map.
 pub const STORAGE_PREFIX_STORAGE_CREDIT: &[u8] = b"s:";
+/// Storage key for sponsor pool available balance (`u128` le bytes).
+pub const STORAGE_KEY_SPONSOR_POOL: &[u8] = b"sp:pool";
+/// Storage key for per-business sponsor cap (`u64` le bytes, default 5).
+pub const STORAGE_KEY_SPONSOR_CAP: &[u8] = b"sp:cap";
+/// Storage prefix for per-business sponsored claims count (`u64` le bytes, default 0).
+pub const STORAGE_PREFIX_SPONSORED_USED: &[u8] = b"sp:used:";
 /// Storage key for contract configuration.
 pub const STORAGE_KEY_CONFIG: &[u8] = b"cfg";
 
@@ -182,6 +189,30 @@ impl Contract {
     /// Deposit: None. Refunds requested amount from `storage_credit[predecessor]` to caller.
     pub fn withdraw_storage_credit(&mut self, amount: U128) {
         self.internal_withdraw_storage_credit(amount)
+    }
+
+    /// Deposits attached NEAR into the storage-credit sponsor pool (Blueprint REL-1, Card A10).
+    ///
+    /// Caller: Anyone.
+    /// Deposit: Attached NEAR deposit credited to `sponsor_pool`.
+    #[payable]
+    pub fn deposit_sponsor_pool(&mut self) {
+        self.internal_deposit_sponsor_pool()
+    }
+
+    /// Withdraws NEAR from the storage-credit sponsor pool (Blueprint REL-1, Card A10).
+    ///
+    /// Caller: Root contract account (`<root>`).
+    /// Effect: Refunds requested amount from `sponsor_pool` to predecessor.
+    pub fn withdraw_sponsor_pool(&mut self, amount: U128) {
+        self.internal_withdraw_sponsor_pool(amount)
+    }
+
+    /// Sets the per-business sponsor cap (Blueprint REL-1, Card A10).
+    ///
+    /// Caller: Root contract account (`<root>`).
+    pub fn set_sponsor_cap(&mut self, cap: u64) {
+        self.internal_set_sponsor_cap(cap)
     }
 
     // ──────────────────────────────────────────
@@ -547,6 +578,16 @@ impl Contract {
     /// Returns prepaid storage credit balance of an account in yoctoNEAR.
     pub fn storage_credit_of(&self, account_id: AccountId) -> U128 {
         self.internal_storage_credit_of(account_id)
+    }
+
+    /// Returns storage-credit sponsorship status for an account (Blueprint REL-1, Card A10).
+    pub fn sponsor_status(&self, account_id: AccountId) -> SponsorStatusView {
+        self.internal_sponsor_status(account_id)
+    }
+
+    /// Returns the next sequential token ID number to be minted.
+    pub fn next_token_id(&self) -> u64 {
+        self.next_token_id
     }
 }
 

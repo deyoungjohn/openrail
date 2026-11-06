@@ -369,6 +369,25 @@ impl ReconcileFailedEvent {
     }
 }
 
+/// Emitted when storage credit is sponsored from the sponsor pool (Blueprint REL-1, Card A10).
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StorageSponsoredEvent {
+    pub business: AccountId,
+    pub amount: U128,
+}
+
+impl StorageSponsoredEvent {
+    pub fn emit(&self) {
+        emit_event(
+            OPENRAIL_EVENT_STANDARD,
+            OPENRAIL_EVENT_VERSION,
+            "storage_sponsored",
+            serde_json::to_value(self).expect("failed to serialize event"),
+        );
+    }
+}
+
 // ──────────────────────────────────────────────
 // NEP-171 Events
 // ──────────────────────────────────────────────

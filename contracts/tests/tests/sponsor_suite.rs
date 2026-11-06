@@ -10,8 +10,7 @@
 //! 5. Failed issuance (claim account creation failure) returns the sponsor draw.
 //! 6. Cap is enforced per business and can be updated by root.
 //! 7. Storage-credit conservation invariant (credits + pool + locked claim storage == net deposits).
-//!
-//! All tests are marked `#[ignore = "A10"]` pending ag2's contract implementation.
+//! 8. `next_token_id` view returns plain sequential u64 counter.
 
 use anyhow::Result;
 use near_sdk::json_types::U128;
@@ -85,7 +84,6 @@ async fn issue_claim_for_business(
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "A10"]
 async fn test_sponsor_pool_deposit_and_root_only_withdraw() -> Result<()> {
     let env = Env::new().await?;
 
@@ -204,7 +202,6 @@ async fn test_sponsor_pool_deposit_and_root_only_withdraw() -> Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "A10"]
 async fn test_sponsor_first_n_invoices_sponsored_then_refused() -> Result<()> {
     let env = Env::new().await?;
 
@@ -283,7 +280,6 @@ async fn test_sponsor_first_n_invoices_sponsored_then_refused() -> Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "A10"]
 async fn test_sponsor_own_credit_used_before_pool() -> Result<()> {
     let env = Env::new().await?;
 
@@ -377,7 +373,6 @@ async fn test_sponsor_own_credit_used_before_pool() -> Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "A10"]
 async fn test_sponsor_pool_never_underflows() -> Result<()> {
     let env = Env::new().await?;
 
@@ -460,7 +455,6 @@ async fn test_sponsor_pool_never_underflows() -> Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "A10"]
 async fn test_sponsor_failed_issuance_returns_draw() -> Result<()> {
     let env = Env::new().await?;
 
@@ -529,7 +523,6 @@ async fn test_sponsor_failed_issuance_returns_draw() -> Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "A10"]
 async fn test_sponsor_cap_is_per_business() -> Result<()> {
     let env = Env::new().await?;
 
@@ -607,7 +600,6 @@ async fn test_sponsor_cap_is_per_business() -> Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "A10"]
 async fn test_sponsor_storage_credit_conservation_invariant() -> Result<()> {
     let env = Env::new().await?;
 
@@ -750,6 +742,88 @@ async fn test_sponsor_storage_credit_conservation_invariant() -> Result<()> {
         total_deposited,
         total_withdrawn,
     );
+
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 8: next_token_id view
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_sponsor_next_token_id_view() -> Result<()> {
+    let env = Env::new().await?;
+
+    // Initial state: next_token_id must return 1 as a plain number
+    let next_id: u64 = env.root.view("next_token_id").await?.json()?;
+    assert_eq!(next_id, 1, "Initial next_token_id must be 1");
+
+    // Deposit credit and issue one claim for Alice
+    env.alice
+        .call(env.root.id(), "deposit_storage_credit")
+        .deposit(REQUIRED_ISSUE_DEPOSIT)
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let res = issue_claim_for_business(&env, env.alice.id(), env.bob.id()).await?;
+    assert!(res.is_success());
+
+    // After issuing c-1, next_token_id must now be 2
+    let next_id_after: u64 = env.root.view("next_token_id").await?.json()?;
+    assert_eq!(next_id_after, 2, "next_token_id must increment to 2");
+
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 9: Measure gas for issue_for with and without sponsor pool
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_sponsor_issue_for_gas_comparison() -> Result<()> {
+    let env = Env::new().await?;
+
+    // 1. Measure issue_for WITHOUT sponsor pool (using personal storage credit)
+    env.alice
+        .call(env.root.id(), "deposit_storage_credit")
+        .deposit(REQUIRED_ISSUE_DEPOSIT)
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let res_own = issue_claim_for_business(&env, env.alice.id(), env.bob.id()).await?;
+    assert!(res_own.is_success());
+    let gas_own = openrail_tests::GasReport::from_result(&res_own);
+
+    // 2. Measure issue_for WITH sponsor pool (sponsored)
+    env.root
+        .call("deposit_sponsor_pool")
+        .deposit(REQUIRED_ISSUE_DEPOSIT)
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let res_sponsored = issue_claim_for_business(&env, env.bob.id(), env.carol.id()).await?;
+    assert!(res_sponsored.is_success());
+    let gas_sponsored = openrail_tests::GasReport::from_result(&res_sponsored);
+
+    println!(
+        "GAS BENCHMARK: issue_for without pool: {:.3} Tgas ({} gas)",
+        gas_own.total_tgas,
+        gas_own.total_gas.as_gas()
+    );
+    println!(
+        "GAS BENCHMARK: issue_for with pool:    {:.3} Tgas ({} gas)",
+        gas_sponsored.total_tgas,
+        gas_sponsored.total_gas.as_gas()
+    );
+
+    assert!(gas_own.total_tgas < 30.0);
+    assert!(gas_sponsored.total_tgas < 30.0);
 
     Ok(())
 }
