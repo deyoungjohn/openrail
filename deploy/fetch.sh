@@ -68,7 +68,13 @@ if [[ "$dry" == 1 ]]; then
   exit 0
 fi
 
-tmp="$(mktemp -d)"
+# Clear what earlier runs left behind: `exec openrail-apply` replaced this shell, so the trap below never
+# ran and every --apply left its ~260 MB download in /tmp. Old leftovers: our own folders, and the
+# anonymous ones that hold a pack.
+find /tmp -maxdepth 1 -type d -name 'openrail-fetch.*' -mmin +10 -exec rm -rf {} + 2>/dev/null || true
+find /tmp -maxdepth 2 -type f -path '/tmp/tmp.*' -name 'openrail-server-*.tar.gz*' -mmin +10 -delete 2>/dev/null || true
+find /tmp -maxdepth 1 -type d -name 'tmp.*' -empty -mmin +10 -delete 2>/dev/null || true
+tmp="$(mktemp -d /tmp/openrail-fetch.XXXXXX)"
 trap 'rm -rf "$tmp"' EXIT
 curl -fL --retry 3 --progress-bar -o "$tmp/$name" "$base/$name"
 curl -fsSL --retry 3 -o "$tmp/$name.sha256" "$base/$name.sha256"
@@ -85,6 +91,9 @@ fi
 if [[ "$apply" == 1 ]]; then
   [[ -x "$APPLY_BIN" ]] || { echo "MISSING_APPLY: install openrail-apply first (RUNBOOK, 'Updating later')" >&2; exit 1; }
   say "applying $dest"
+  # exec skips the EXIT trap: remove the download folder first (the pack was installed at $dest).
+  rm -rf "$tmp"
+  trap - EXIT
   exec "$APPLY_BIN" "$dest"
 fi
 say "downloaded and verified. Put it live with: sudo openrail-apply $dest"

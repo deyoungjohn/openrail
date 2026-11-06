@@ -21,8 +21,8 @@ UNIT_DIR="${OPENRAIL_UNIT_DIR:-/etc/systemd/system}"
 CADDYFILE="${OPENRAIL_CADDYFILE:-/etc/caddy/Caddyfile}"
 SELF_COPY="${OPENRAIL_SELF_COPY:-/usr/local/bin/openrail-apply}"
 HEALTH_WAIT_SECONDS="${OPENRAIL_HEALTH_WAIT:-150}"
-KEEP_RELEASES=4
-KEEP_PACKS=2
+KEEP_RELEASES=2 # the live release and the one to roll back to; each is about 1.2 GB on disk
+KEEP_PACKS=1
 SERVICES=(indexer issuer watcher api web) # start order: the api needs the indexer and issuer
 TEST_MODE="${OPENRAIL_TEST:-0}"           # tests run in a temp folder: no systemd, no chown
 
