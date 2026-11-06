@@ -210,10 +210,12 @@ impl Contract {
             }
             false
         } else {
-            let used = self.sponsored_count.get(&business).copied().unwrap_or(0);
-            if self.sponsor_pool.0 >= required && used < self.sponsor_cap {
-                self.sponsor_pool = U128(self.sponsor_pool.0 - required);
-                self.sponsored_count.insert(business.clone(), used + 1);
+            let pool = sponsor_pool_read();
+            let cap = sponsor_cap_read();
+            let used = sponsored_used_read(&business);
+            if pool >= required && used < cap {
+                sponsor_pool_write(pool - required);
+                sponsored_used_write(&business, used + 1);
                 StorageSponsoredEvent {
                     business: business.clone(),
                     amount: U128(required),
@@ -332,18 +334,11 @@ impl Contract {
 
             if args.is_issue_for {
                 if args.is_sponsored {
-                    self.sponsor_pool =
-                        U128(self.sponsor_pool.0.saturating_add(args.storage_cost.0));
-                    let cur_used = self
-                        .sponsored_count
-                        .get(&args.payer_or_business)
-                        .copied()
-                        .unwrap_or(0);
-                    if cur_used <= 1 {
-                        self.sponsored_count.remove(&args.payer_or_business);
-                    } else {
-                        self.sponsored_count
-                            .insert(args.payer_or_business, cur_used - 1);
+                    let cur_pool = sponsor_pool_read();
+                    sponsor_pool_write(cur_pool.saturating_add(args.storage_cost.0));
+                    let cur_used = sponsored_used_read(&args.payer_or_business);
+                    if cur_used > 0 {
+                        sponsored_used_write(&args.payer_or_business, cur_used - 1);
                     }
                 } else {
                     let cur = self
@@ -408,22 +403,19 @@ impl Contract {
     pub(crate) fn internal_deposit_sponsor_pool(&mut self) {
         let deposit = env::attached_deposit();
         require!(deposit.as_yoctonear() > 0, "deposit must be positive");
-        self.sponsor_pool = U128(
-            self.sponsor_pool
-                .0
-                .checked_add(deposit.as_yoctonear())
-                .expect("pool overflow"),
-        );
+        let cur = sponsor_pool_read();
+        let next = cur
+            .checked_add(deposit.as_yoctonear())
+            .expect("pool overflow");
+        sponsor_pool_write(next);
     }
 
     /// Withdraws NEAR from the storage-credit sponsor pool (Blueprint REL-1, Card A10).
     pub(crate) fn internal_withdraw_sponsor_pool(&mut self, amount: U128) {
         self.assert_root_only();
-        require!(
-            amount.0 <= self.sponsor_pool.0,
-            "insufficient sponsor pool balance"
-        );
-        self.sponsor_pool = U128(self.sponsor_pool.0 - amount.0);
+        let cur = sponsor_pool_read();
+        require!(amount.0 <= cur, "insufficient sponsor pool balance");
+        sponsor_pool_write(cur - amount.0);
         let caller = env::predecessor_account_id();
         let refund = env::promise_batch_create(&caller);
         env::promise_batch_action_transfer(refund, NearToken::from_yoctonear(amount.0));
@@ -433,15 +425,17 @@ impl Contract {
     /// Sets the per-business sponsor cap (Blueprint REL-1, Card A10).
     pub(crate) fn internal_set_sponsor_cap(&mut self, cap: u64) {
         self.assert_root_only();
-        self.sponsor_cap = cap;
+        sponsor_cap_write(cap);
     }
 
     /// Returns storage-credit sponsorship status for an account (Blueprint REL-1, Card A10).
     pub(crate) fn internal_sponsor_status(&self, account_id: AccountId) -> SponsorStatusView {
-        let used = self.sponsored_count.get(&account_id).copied().unwrap_or(0);
+        let pool = sponsor_pool_read();
+        let cap = sponsor_cap_read();
+        let used = sponsored_used_read(&account_id);
         SponsorStatusView {
-            pool: self.sponsor_pool,
-            cap: self.sponsor_cap,
+            pool: U128(pool),
+            cap,
             used,
         }
     }
@@ -559,5 +553,54 @@ impl Contract {
             new_value: paused.to_string(),
         }
         .emit();
+    }
+}
+
+// ──────────────────────────────────────────────
+// Raw Storage Helpers for Sponsor Pool (Card A10)
+// Preserves Contract stored layout for in-place upgrades
+// ──────────────────────────────────────────────
+
+fn sponsor_pool_read() -> u128 {
+    env::storage_read(crate::STORAGE_KEY_SPONSOR_POOL)
+        .and_then(|bytes| bytes.try_into().ok().map(u128::from_le_bytes))
+        .unwrap_or(0)
+}
+
+fn sponsor_pool_write(amount: u128) {
+    env::storage_write(crate::STORAGE_KEY_SPONSOR_POOL, &amount.to_le_bytes());
+}
+
+fn sponsor_cap_read() -> u64 {
+    env::storage_read(crate::STORAGE_KEY_SPONSOR_CAP)
+        .and_then(|bytes| bytes.try_into().ok().map(u64::from_le_bytes))
+        .unwrap_or(5)
+}
+
+fn sponsor_cap_write(cap: u64) {
+    env::storage_write(crate::STORAGE_KEY_SPONSOR_CAP, &cap.to_le_bytes());
+}
+
+fn sponsored_used_key(business: &AccountId) -> Vec<u8> {
+    let mut key =
+        Vec::with_capacity(crate::STORAGE_PREFIX_SPONSORED_USED.len() + business.as_bytes().len());
+    key.extend_from_slice(crate::STORAGE_PREFIX_SPONSORED_USED);
+    key.extend_from_slice(business.as_bytes());
+    key
+}
+
+fn sponsored_used_read(business: &AccountId) -> u64 {
+    let key = sponsored_used_key(business);
+    env::storage_read(&key)
+        .and_then(|bytes| bytes.try_into().ok().map(u64::from_le_bytes))
+        .unwrap_or(0)
+}
+
+fn sponsored_used_write(business: &AccountId, used: u64) {
+    let key = sponsored_used_key(business);
+    if used == 0 {
+        env::storage_remove(&key);
+    } else {
+        env::storage_write(&key, &used.to_le_bytes());
     }
 }

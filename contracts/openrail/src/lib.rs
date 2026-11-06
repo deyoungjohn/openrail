@@ -58,8 +58,12 @@ pub const STORAGE_PREFIX_QUOTE_DEDUP: &[u8] = b"qd:";
 pub const STORAGE_PREFIX_UNDISTRIBUTED: &[u8] = b"u:";
 /// Storage prefix for prepaid storage credits map.
 pub const STORAGE_PREFIX_STORAGE_CREDIT: &[u8] = b"s:";
-/// Storage prefix for sponsored count map (`LookupMap<AccountId, u64>`).
-pub const STORAGE_PREFIX_SPONSORED_COUNT: &[u8] = b"sc:";
+/// Storage key for sponsor pool available balance (`u128` le bytes).
+pub const STORAGE_KEY_SPONSOR_POOL: &[u8] = b"sp:pool";
+/// Storage key for per-business sponsor cap (`u64` le bytes, default 5).
+pub const STORAGE_KEY_SPONSOR_CAP: &[u8] = b"sp:cap";
+/// Storage prefix for per-business sponsored claims count (`u64` le bytes, default 0).
+pub const STORAGE_PREFIX_SPONSORED_USED: &[u8] = b"sp:used:";
 /// Storage key for contract configuration.
 pub const STORAGE_KEY_CONFIG: &[u8] = b"cfg";
 
@@ -93,9 +97,6 @@ pub struct Contract {
     pub quote_dedup: LookupMap<(String, String), ()>,
     pub undistributed: LookupMap<String, Vec<Leg>>,
     pub storage_credit: LookupMap<AccountId, U128>,
-    pub sponsor_pool: U128,
-    pub sponsor_cap: u64,
-    pub sponsored_count: LookupMap<AccountId, u64>,
     pub config: Config,
     pub next_token_id: u64,
 }
@@ -117,9 +118,6 @@ impl Contract {
             quote_dedup: LookupMap::new(STORAGE_PREFIX_QUOTE_DEDUP),
             undistributed: LookupMap::new(STORAGE_PREFIX_UNDISTRIBUTED),
             storage_credit: LookupMap::new(STORAGE_PREFIX_STORAGE_CREDIT),
-            sponsor_pool: U128(0),
-            sponsor_cap: 5,
-            sponsored_count: LookupMap::new(STORAGE_PREFIX_SPONSORED_COUNT),
             config,
             next_token_id: 1,
         }

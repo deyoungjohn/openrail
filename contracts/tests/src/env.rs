@@ -76,6 +76,12 @@ impl Env {
     /// Starts the sandbox, compiles all required WASMs, publishes the vault globally,
     /// patches mocks, initializes `openrail.near`, and sets up test accounts.
     pub async fn new() -> Result<Self> {
+        let root_wasm = crate::wasms::openrail_wasm().context("load root wasm")?;
+        Self::new_with_root_wasm(&root_wasm).await
+    }
+
+    /// Starts the sandbox with a specified root contract WASM (e.g. for upgrade testing).
+    pub async fn new_with_root_wasm(root_wasm: &[u8]) -> Result<Self> {
         let lock = sandbox_lock().clone().lock_owned().await;
 
         let worker = near_workspaces::sandbox()
@@ -83,7 +89,6 @@ impl Env {
             .context("failed to start near-workspaces sandbox")?;
 
         // 1. Build or locate WASMs
-        let root_wasm = crate::wasms::openrail_wasm().context("load root wasm")?;
         let vault_wasm = crate::wasms::vault_wasm().context("load vault wasm")?;
         let intents_wasm = crate::wasms::mock_intents_wasm().context("load mock intents wasm")?;
         let signer_wasm = crate::wasms::mock_signer_wasm().context("load mock signer wasm")?;
@@ -207,7 +212,7 @@ impl Env {
             .patch(&root_id)
             .account(AccountDetailsPatch::default().balance(NearToken::from_near(100)))
             .access_key(root_key.public_key(), AccessKey::full_access())
-            .code(&root_wasm)
+            .code(root_wasm)
             .transact()
             .await
             .context("patch openrail.near")?;
