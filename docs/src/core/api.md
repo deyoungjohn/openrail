@@ -153,7 +153,7 @@ The server checks the signature and that the public key belongs to the account.
 | `POST`       | `/v1/webhook_endpoints/{id}/test`                 | Send a test event.                                                                                  |
 | `GET`        | `/v1/webhook_endpoints/{id}/deliveries`           | Delivery log with attempts and status codes.                                                        |
 | `GET`/`PUT`  | `/v1/business`                                    | Business profile: legal name, payout account, contact.                                              |
-| `GET`        | `/v1/business/storage_credit`                     | Contract balance plus the account and amount for the user's `deposit_storage_credit` call.          |
+| `GET`        | `/v1/business/storage_credit`                     | Own credit, sponsor pool/cap/used/remaining, and the account/amount for `deposit_storage_credit`.   |
 | `GET`        | `/v1/statements?from&to&format=csv\|pdf&token_id` | Statement as a base64 envelope; `token_id` limits it to one claim; totals reconcile with `claim()`. |
 | `GET`        | `/v1/invoices/{id}/pdf`                           | Invoice PDF as a base64 envelope.                                                                   |
 | `GET`        | `/v1/invoices/{id}/open_quotes`                   | Open quotes from the payment log; never reuse an expired one.                                       |

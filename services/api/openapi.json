@@ -365,6 +365,12 @@
               "code": "invalid_webhook_url",
               "message": "webhook URL must use https"
             }
+          },
+          {
+            "error": {
+              "code": "insufficient_storage_credit",
+              "message": "Storage credit is 0 yoctoNEAR and an invoice needs 20000000000000000000000. 5 sponsored invoices remain."
+            }
           }
         ]
       },
@@ -2028,6 +2034,29 @@
           },
           "method": {
             "const": "deposit_storage_credit"
+          },
+          "sponsor": {
+            "type": "object",
+            "required": ["pool", "cap", "used", "remaining"],
+            "properties": {
+              "pool": {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "description": "Unsigned 128-bit integer as a decimal string."
+              },
+              "cap": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "used": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "remaining": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
           }
         }
       },

@@ -481,6 +481,12 @@ export interface StorageCredit {
   contract_id: string;
   amount: U128;
   method: "deposit_storage_credit";
+  sponsor?: {
+    pool: string;
+    cap: number;
+    used: number;
+    remaining: number;
+  };
 }
 
 export interface Statement {

@@ -44,6 +44,7 @@ export interface ApiConfig {
 export interface ContractPort {
   claim(tokenId: string): Promise<Record<string, unknown> & { kind: number }>;
   storageCredit(accountId: string): Promise<{ balance: string; amount: string }>;
+  sponsorStatus?(accountId: string): Promise<{ pool: string; cap: number; used: number }>;
 }
 
 export interface IssuerPort {
@@ -55,6 +56,11 @@ export interface IssuerPort {
     amount?: string;
     /** The account the business deposits storage credit to. */
     account?: string;
+    sponsored?: boolean;
+    sponsorPool?: string;
+    sponsorCap?: number;
+    sponsorUsed?: number;
+    sponsoredRemaining?: number;
   }>;
   issueFor(request: {
     business: string;
@@ -656,6 +662,13 @@ export class ApiApp {
     if (path === "/v1/business/storage_credit" && method === "GET") {
       const context = this.requireAuth(request);
       const credit = await this.deps.contract.storageCredit(context.accountId);
+      let sponsor: Awaited<ReturnType<NonNullable<ContractPort["sponsorStatus"]>>> | undefined;
+      try {
+        sponsor = await this.deps.contract.sponsorStatus?.(context.accountId);
+      } catch {
+        console.warn("sponsor_status unavailable; returning own credit only");
+        sponsor = undefined;
+      }
       return {
         status: 200,
         body: {
@@ -664,6 +677,16 @@ export class ApiApp {
           contract_id: this.deps.config.rootAccount,
           amount: credit.amount,
           method: "deposit_storage_credit",
+          ...(sponsor === undefined
+            ? {}
+            : {
+                sponsor: {
+                  pool: sponsor.pool,
+                  cap: sponsor.cap,
+                  used: sponsor.used,
+                  remaining: Math.max(0, sponsor.cap - sponsor.used),
+                },
+              }),
         },
       };
     }
@@ -1272,12 +1295,17 @@ export class ApiApp {
           );
         }
         if (prepared.storageCredit !== undefined && prepared.amount !== undefined) {
-          if (BigInt(prepared.storageCredit) < BigInt(prepared.amount)) {
+          if (
+            BigInt(prepared.storageCredit) < BigInt(prepared.amount) &&
+            prepared.sponsored !== true
+          ) {
+            const remaining = prepared.sponsoredRemaining ?? 0;
             throw new ApiError(
               402,
               "insufficient_storage_credit",
               `Storage credit is ${prepared.storageCredit} yoctoNEAR and an invoice needs ${prepared.amount}. ` +
-                `Deposit storage credit from ${business.account_id} to ${prepared.account ?? "the root contract"} first.`,
+                `Deposit storage credit from ${business.account_id} to ${prepared.account ?? "the root contract"} first. ` +
+                `${remaining} sponsored invoice${remaining === 1 ? "" : "s"} remain.`,
             );
           }
         }

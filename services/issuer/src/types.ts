@@ -49,6 +49,12 @@ export interface PrepareIssueResult {
    */
   tokenId?: string;
   claimAccount?: string;
+  /** The pool can cover the next invoice when the business has no own credit. */
+  sponsored?: boolean;
+  sponsorPool?: string;
+  sponsorCap?: number;
+  sponsorUsed?: number;
+  sponsoredRemaining?: number;
 }
 
 /** The number n of the newest claim `c-n` on the contract, or 0 when there is none. */
@@ -58,6 +64,17 @@ export interface TokenCounter {
 
 export interface PrepareIssueBody {
   account_id: string;
+}
+
+export interface SponsorStatus {
+  pool: bigint;
+  cap: number;
+  used: number;
+}
+
+/** Reads `sponsor_status(account_id)`. */
+export interface SponsorStatusReader {
+  sponsorStatusOf(business: string): Promise<SponsorStatus>;
 }
 
 /** Reads the business's storage credit through the `storage_credit_of` view. */
