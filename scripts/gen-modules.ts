@@ -82,17 +82,23 @@ function serviceFile(svc: string, ids: string[]): string {
 }
 
 function modRs(ids: string[], support: { id: string; enablers: string[] }[] = []): string {
-  const mods = ids.flatMap((id) => [`#[cfg(feature = "${id}")]`, `pub mod ${id};`]);
-  const supportMods = support.flatMap((s) => [
-    `#[cfg(any(${s.enablers.map((e) => `feature = "${e}"`).join(", ")}))]`,
-    `pub mod ${s.id};`,
-  ]);
+  // rustfmt keeps `mod` items sorted by name; emit them that way so the file is already formatted.
+  const decls = [
+    ...ids.map((id) => ({ id, cfg: `#[cfg(feature = "${id}")]` })),
+    ...support.map((s) => ({
+      id: s.id,
+      cfg: `#[cfg(any(${s.enablers.map((e) => `feature = "${e}"`).join(", ")}))]`,
+    })),
+  ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const mods = decls.flatMap((d) => [d.cfg, `pub mod ${d.id};`]);
   const items = ids.flatMap((id) => [`    #[cfg(feature = "${id}")]`, `    "${id}",`]);
-  const hookItems = ids.flatMap((id) => [`    #[cfg(feature = "${id}")]`, `    &${id}::HOOK,`]);
+  const hookItems = ids.flatMap((id) => [
+    `        #[cfg(feature = "${id}")]`,
+    `        &${id}::HOOK,`,
+  ]);
   return [
     `// ${HEADER}`,
     ...mods,
-    ...supportMods,
     "",
     "/// Ids of the modules compiled into this build.",
     ...(items.length === 0
