@@ -6,6 +6,7 @@
     "settle_held",
     "settle_payout",
     "settle_release",
+    "settle_resolve",
     "settlement_of"
   ]
 }

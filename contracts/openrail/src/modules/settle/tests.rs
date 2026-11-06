@@ -602,7 +602,7 @@ fn settle_report_for_another_entry_panics() {
     let mut c = contract();
     set_destination(&mut c, BIZ, 0);
     book(&mut c, 2_000_000);
-    let id = pay_out(&mut c, 1_000_000);
+    let id = pay_out(&mut c, 1_995_000);
     forward_result(&mut c, id, true);
     ctx(RELAYER, vec![]);
     c.report_payout(
@@ -626,7 +626,7 @@ fn settle_report_empty_tx_panics() {
     let mut c = contract();
     set_destination(&mut c, BIZ, 0);
     book(&mut c, 2_000_000);
-    let id = pay_out(&mut c, 1_000_000);
+    let id = pay_out(&mut c, 1_995_000);
     forward_result(&mut c, id, true);
     ctx(RELAYER, vec![]);
     c.report_payout(
@@ -646,7 +646,7 @@ fn settle_report_oversized_tx_panics() {
     let mut c = contract();
     set_destination(&mut c, BIZ, 0);
     book(&mut c, 2_000_000);
-    let id = pay_out(&mut c, 1_000_000);
+    let id = pay_out(&mut c, 1_995_000);
     forward_result(&mut c, id, true);
     ctx(RELAYER, vec![]);
     c.report_payout(
@@ -692,7 +692,7 @@ fn settle_clear_stale_lock_refused_while_in_flight() {
     let mut c = contract();
     set_destination(&mut c, BIZ, 0);
     book(&mut c, 2_000_000);
-    let id = pay_out(&mut c, 1_000_000);
+    let id = pay_out(&mut c, 1_995_000);
     forward_result(&mut c, id, true);
 
     ctx(BIZ, vec![]);
@@ -710,7 +710,7 @@ fn settle_clear_stale_lock_root_escape_hatch_after_dead_relayer() {
     let mut c = contract();
     set_destination(&mut c, BIZ, 0);
     book(&mut c, 2_000_000);
-    let id = pay_out(&mut c, 1_000_000);
+    let id = pay_out(&mut c, 1_995_000);
     forward_result(&mut c, id, true);
 
     // Call as root after DEAD_RELAYER_TIMEOUT_BLOCKS past lock expiration
@@ -740,6 +740,294 @@ fn settle_clear_stale_lock_root_escape_hatch_after_dead_relayer() {
     let lock = claim_mut.lock.clone();
     hook.on_lock_cleared(&mut claim_mut, &lock);
     let entries = held_of(&claim_mut.token_id);
-    assert_eq!(entries[0].status, HeldStatus::Held);
-    assert_eq!(entries[0].retries, 1);
+    assert_eq!(
+        entries[0].status,
+        HeldStatus::Flagged {
+            reason: "relayer timed out".to_string(),
+        }
+    );
+    assert_eq!(hook.reserved_balance(&claim_mut, &ASSET.to_string()), 0);
+}
+
+#[test]
+#[should_panic(expected = "SETTLE_NOT_HELD")]
+fn settle_escape_hatch_flagged_cannot_be_paid_by_settle_payout() {
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_995_000);
+    forward_result(&mut c, id, true);
+
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(acc(ROOT))
+        .predecessor_account_id(acc(ROOT))
+        .block_height(1000 + 600 + DEAD_RELAYER_TIMEOUT_BLOCKS + 1);
+    testing_env!(
+        b.build(),
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        HashMap::default(),
+        vec![]
+    );
+
+    c.clear_stale_lock("c-1".to_string());
+    let entries = held_of("c-1");
+    assert!(matches!(entries[0].status, HeldStatus::Flagged { .. }));
+
+    // Calling settle_payout on the flagged entry must panic with SETTLE_NOT_HELD
+    ctx(RELAYER, vec![]);
+    c.settle_payout("c-1".to_string(), 0, acc(DEPOSIT), U128(1_995_000));
+}
+
+#[test]
+fn settle_escape_hatch_later_booking_not_spent_by_flagged_entry() {
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_995_000);
+    forward_result(&mut c, id, true);
+
+    // Clear lock via root escape hatch
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(acc(ROOT))
+        .predecessor_account_id(acc(ROOT))
+        .block_height(1000 + 600 + DEAD_RELAYER_TIMEOUT_BLOCKS + 1);
+    testing_env!(
+        b.build(),
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        HashMap::default(),
+        vec![]
+    );
+    c.clear_stale_lock("c-1".to_string());
+
+    let entries = held_of("c-1");
+    assert_eq!(entries.len(), 1);
+    assert!(matches!(entries[0].status, HeldStatus::Flagged { .. }));
+    let hook = SettleHook;
+    assert_eq!(
+        hook.reserved_balance(c.claims.get("c-1").unwrap(), &ASSET.to_string()),
+        0
+    );
+
+    // Later booking in the same asset arrives (e.g. 500_000)
+    book(&mut c, 500_000);
+
+    let entries = held_of("c-1");
+    assert_eq!(entries.len(), 2);
+    assert!(matches!(entries[0].status, HeldStatus::Flagged { .. }));
+    assert_eq!(entries[1].status, HeldStatus::Held);
+    // 25 bps of 500_000 is 1_250 fee, 498_750 held
+    let new_held_amount = entries[1].amount.0;
+    assert_eq!(new_held_amount, 498_750);
+
+    // Reserved balance is ONLY from entry 1, NOT entry 0!
+    assert_eq!(
+        hook.reserved_balance(c.claims.get("c-1").unwrap(), &ASSET.to_string()),
+        new_held_amount
+    );
+
+    // Relayer pays out entry 1: succeeds
+    ctx(RELAYER, vec![]);
+    let p2 = c.settle_payout("c-1".to_string(), 1, acc(DEPOSIT), U128(new_held_amount));
+    forward_result(&mut c, p2, true);
+
+    // Entry 0 remains Flagged and was never spent
+    let entries_after = held_of("c-1");
+    assert!(matches!(
+        entries_after[0].status,
+        HeldStatus::Flagged { .. }
+    ));
+}
+
+#[test]
+#[should_panic(expected = "Unauthorized: root only")]
+fn settle_resolve_non_root_panics() {
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_995_000);
+    forward_result(&mut c, id, true);
+
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(acc(ROOT))
+        .predecessor_account_id(acc(ROOT))
+        .block_height(1000 + 600 + DEAD_RELAYER_TIMEOUT_BLOCKS + 1);
+    testing_env!(
+        b.build(),
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        HashMap::default(),
+        vec![]
+    );
+    c.clear_stale_lock("c-1".to_string());
+
+    ctx(BIZ, vec![]);
+    c.settle_resolve(
+        "c-1".to_string(),
+        0,
+        PayoutOutcome::Settled {
+            destination_tx: "0x123".to_string(),
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "SETTLE_NOT_FLAGGED")]
+fn settle_resolve_non_flagged_panics() {
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+
+    ctx(ROOT, vec![]);
+    c.settle_resolve(
+        "c-1".to_string(),
+        0,
+        PayoutOutcome::Settled {
+            destination_tx: "0x123".to_string(),
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "SETTLE_REFUND_EXCEEDS_SENT")]
+fn settle_resolve_refund_exceeds_sent_panics() {
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_995_000);
+    forward_result(&mut c, id, true);
+
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(acc(ROOT))
+        .predecessor_account_id(acc(ROOT))
+        .block_height(1000 + 600 + DEAD_RELAYER_TIMEOUT_BLOCKS + 1);
+    testing_env!(
+        b.build(),
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        HashMap::default(),
+        vec![]
+    );
+    c.clear_stale_lock("c-1".to_string());
+
+    ctx(ROOT, vec![]);
+    c.settle_resolve(
+        "c-1".to_string(),
+        0,
+        PayoutOutcome::Refunded {
+            amount: U128(2_000_000),
+        },
+    );
+}
+
+#[test]
+fn settle_resolve_root_settled_and_refunded() {
+    let mut c = contract();
+    set_destination(&mut c, BIZ, 0);
+    book(&mut c, 2_000_000);
+    let id = pay_out(&mut c, 1_995_000);
+    forward_result(&mut c, id, true);
+
+    // Clear lock via root escape hatch
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(acc(ROOT))
+        .predecessor_account_id(acc(ROOT))
+        .block_height(1000 + 600 + DEAD_RELAYER_TIMEOUT_BLOCKS + 1);
+    testing_env!(
+        b.build(),
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        HashMap::default(),
+        vec![]
+    );
+    c.clear_stale_lock("c-1".to_string());
+
+    let entries = held_of("c-1");
+    assert!(matches!(entries[0].status, HeldStatus::Flagged { .. }));
+
+    // Root resolves as Settled
+    ctx(ROOT, vec![]);
+    c.settle_resolve(
+        "c-1".to_string(),
+        0,
+        PayoutOutcome::Settled {
+            destination_tx: "0xabc123".to_string(),
+        },
+    );
+    let entries = held_of("c-1");
+    assert_eq!(
+        entries[0].status,
+        HeldStatus::Settled {
+            payout_id: 0,
+            destination_tx: "0xabc123".to_string(),
+        }
+    );
+
+    // Now test Refunded path on c-2
+    let mut c2 = contract();
+    c2.claims
+        .insert("c-2".to_string(), claim("c-2", 10_000_000));
+    set_destination(&mut c2, BIZ, 0);
+
+    // Book and pay on c-2
+    c2.claims.get_mut("c-2").unwrap().lock = Lock::Reconciling { since: 7 };
+    let bytes = near_sdk::serde_json::to_vec(&vec![U128(2_000_000)]).unwrap();
+    ctx(ROOT, vec![PromiseResult::Successful(bytes)]);
+    c2.on_balances("c-2".to_string(), Lock::None, 7, None);
+    if c2.claims.get("c-2").unwrap().lock == (Lock::Reconciling { since: 7 }) {
+        c2.claims.get_mut("c-2").unwrap().lock = Lock::None;
+    }
+
+    ctx(RELAYER, vec![]);
+    let p_c2 = c2.settle_payout("c-2".to_string(), 0, acc(DEPOSIT), U128(1_995_000));
+    ctx(ROOT, vec![PromiseResult::Successful(vec![])]);
+    c2.on_payout(p_c2);
+
+    // Escape hatch on c-2
+    let mut b2 = VMContextBuilder::new();
+    b2.current_account_id(acc(ROOT))
+        .predecessor_account_id(acc(ROOT))
+        .block_height(1000 + 600 + DEAD_RELAYER_TIMEOUT_BLOCKS + 1);
+    testing_env!(
+        b2.build(),
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        HashMap::default(),
+        vec![]
+    );
+    c2.clear_stale_lock("c-2".to_string());
+
+    // Valid refund of 997_500
+    let held_c2_before = held_of("c-2");
+    let orig_amt = held_c2_before[0].amount.0;
+    ctx(ROOT, vec![]);
+    c2.settle_resolve(
+        "c-2".to_string(),
+        0,
+        PayoutOutcome::Refunded {
+            amount: U128(orig_amt),
+        },
+    );
+
+    let entries_c2 = held_of("c-2");
+    assert_eq!(entries_c2[0].status, HeldStatus::Held);
+    assert_eq!(entries_c2[0].amount.0, orig_amt);
+
+    // last_seen_balance is restored
+    let claim_c2 = c2.claims.get("c-2").unwrap();
+    let seen = claim_c2.last_seen_balance.get(ASSET).unwrap().0;
+    assert!(seen >= orig_amt);
+
+    // reserved_balance now reflects the held amount
+    let hook = SettleHook;
+    assert_eq!(
+        hook.reserved_balance(claim_c2, &ASSET.to_string()),
+        orig_amt
+    );
+
+    // Now settle_payout can be called again and succeeds
+    ctx(RELAYER, vec![]);
+    let p_retry = c2.settle_payout("c-2".to_string(), 0, acc(DEPOSIT), U128(orig_amt));
+    assert!(p_retry > 0);
 }

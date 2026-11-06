@@ -43,6 +43,7 @@ pub const ERR_LOCKED: &str = "SETTLE_CLAIM_LOCKED";
 pub const ERR_ASSET_SHORT: &str = "SETTLE_HELD_ASSET_SHORT";
 pub const ERR_REFUND: &str = "SETTLE_REFUND_EXCEEDS_SENT";
 pub const ERR_NOT_OWNER: &str = "SETTLE_NOT_OWNER_AT_BOOKING";
+pub const ERR_NOT_FLAGGED: &str = "SETTLE_NOT_FLAGGED";
 
 const PREFIX_DESTINATION: &[u8] = b"m:settle:d:";
 const PREFIX_HELD: &[u8] = b"m:settle:h:";
@@ -232,12 +233,7 @@ impl Hook for SettleHook {
         let entries = held_of(&claim.token_id);
         entries
             .iter()
-            .filter(|e| {
-                &e.asset == asset
-                    && (e.status == HeldStatus::Held
-                        || matches!(e.status, HeldStatus::InFlight { .. })
-                        || matches!(e.status, HeldStatus::Flagged { .. }))
-            })
+            .filter(|e| &e.asset == asset && e.status == HeldStatus::Held)
             .map(|e| e.amount.0)
             .sum()
     }
@@ -272,14 +268,9 @@ impl Hook for SettleHook {
             let mut changed = false;
             for entry in entries.iter_mut() {
                 if matches!(entry.status, HeldStatus::InFlight { .. }) {
-                    if entry.retries < MAX_RETRIES {
-                        entry.retries += 1;
-                        entry.status = HeldStatus::Held;
-                    } else {
-                        entry.status = HeldStatus::Flagged {
-                            reason: "dead relayer lock cleared".to_string(),
-                        };
-                    }
+                    entry.status = HeldStatus::Flagged {
+                        reason: "relayer timed out".to_string(),
+                    };
                     changed = true;
                 }
             }
@@ -358,7 +349,8 @@ fn start(
         .cloned()
         .unwrap_or_else(|| env::panic_str(ERR_NOT_HELD));
     require!(
-        matches!(entry.status, HeldStatus::Held | HeldStatus::Flagged { .. }),
+        entry.status == HeldStatus::Held
+            || matches!(&entry.status, HeldStatus::Flagged { reason } if reason == "refunded twice"),
         ERR_NOT_HELD
     );
     require!(amount_in.0 > 0 && amount_in.0 <= entry.amount.0, ERR_AMOUNT);
@@ -608,6 +600,58 @@ impl Contract {
             json!({ "token_id": token_id, "index": index, "payout_id": payout_id, "owner": entry.owner }),
         );
         payout_id
+    }
+
+    /// Resolves a flagged entry by hand (Settled or Refunded). Caller: root only.
+    pub fn settle_resolve(&mut self, token_id: String, index: u32, outcome: PayoutOutcome) {
+        self.assert_root_only();
+        let mut entries = held_of(&token_id);
+        let entry = entries
+            .get_mut(index as usize)
+            .unwrap_or_else(|| env::panic_str(ERR_NOT_HELD));
+        require!(
+            matches!(entry.status, HeldStatus::Flagged { .. }),
+            ERR_NOT_FLAGGED
+        );
+        let asset = entry.asset.clone();
+        match outcome {
+            PayoutOutcome::Settled { destination_tx } => {
+                require!(
+                    !destination_tx.is_empty() && destination_tx.len() <= 128,
+                    "SETTLE_BAD_TX"
+                );
+                entry.status = HeldStatus::Settled {
+                    payout_id: 0,
+                    destination_tx: destination_tx.clone(),
+                };
+                save_held(&token_id, &entries);
+                emit(
+                    "settle_resolved",
+                    json!({
+                        "token_id": token_id,
+                        "index": index,
+                        "outcome": "settled",
+                        "destination_tx": destination_tx,
+                    }),
+                );
+            }
+            PayoutOutcome::Refunded { amount } => {
+                require!(amount.0 <= entry.amount.0, ERR_REFUND);
+                entry.amount = amount;
+                entry.status = HeldStatus::Held;
+                save_held(&token_id, &entries);
+                adjust_last_seen(self, &token_id, &asset, amount.0, 0);
+                emit(
+                    "settle_resolved",
+                    json!({
+                        "token_id": token_id,
+                        "index": index,
+                        "outcome": "refunded",
+                        "amount": amount,
+                    }),
+                );
+            }
+        }
     }
 }
 
