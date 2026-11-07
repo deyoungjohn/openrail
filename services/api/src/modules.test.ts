@@ -172,3 +172,81 @@ describe("a broken module cannot stop core events", () => {
     expect(lines.join("\n")).toContain("module bad events hook failed: boom");
   });
 });
+
+describe("module quote window", () => {
+  const claim = async () => ({
+    token_id: "c-1",
+    kind: 0,
+    claim_account: "c-1.openrail.near",
+    terms_hash: "0x" + "a".repeat(64),
+    amount_due: "1000000",
+    outstanding: "1000000",
+    status: "Issued",
+  });
+  function windowHarness(window: ApiModule["quoteWindow"]) {
+    const now = new Date("2026-11-10T10:00:00Z");
+    const auth = new AuthStore(() => now.getTime());
+    const { secret } = auth.createApiKey("acme.openrail.near", "k", "secret", ["invoices:read"]);
+    const quote = vi.fn(async (request: { deadline: string; amount: string }) => ({
+      quoteId: "q_1",
+      depositAddress: "0xdeposit",
+      deadline: request.deadline,
+      amountIn: request.amount,
+      amountOut: request.amount,
+    }));
+    const base = deps([{ id: "windowed", quoteWindow: window }]);
+    const app = new ApiApp({
+      ...base,
+      auth,
+      clock: () => now,
+      contract: { claim, storageCredit: vi.fn() },
+      quoteProvider: { quote },
+    });
+    const pay = (body: Record<string, unknown> = {}) =>
+      app.handle({
+        method: "POST",
+        path: "/v1/pay/sessions",
+        query: new URLSearchParams(),
+        headers: { authorization: `Bearer ${secret}` },
+        body: { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40), ...body },
+      });
+    return { pay, quote };
+  }
+
+  it("module_quote_window_caps_the_quote_deadline", async () => {
+    const at = Math.floor(new Date("2026-11-10T10:05:00Z").getTime() / 1000);
+    const { pay, quote } = windowHarness(async () => ({ notAfter: at }));
+    expect((await pay()).status).toBe(201);
+    expect(quote.mock.calls[0]?.[0].deadline).toBe("2026-11-10T10:05:00.000Z");
+    // a payer cannot ask for a later deadline than the window
+    expect((await pay({ deadline_seconds: 7200 })).status).toBe(201);
+    expect(quote.mock.calls[1]?.[0].deadline).toBe("2026-11-10T10:05:00.000Z");
+    // a shorter ask is honoured
+    expect((await pay({ deadline_seconds: 60 })).status).toBe(201);
+    expect(quote.mock.calls[2]?.[0].deadline).toBe("2026-11-10T10:01:00.000Z");
+  });
+
+  it("module_quote_window_closed_refuses_without_asking_the_provider", async () => {
+    const at = Math.floor(new Date("2026-11-10T10:00:00Z").getTime() / 1000);
+    const { pay, quote } = windowHarness(async () => ({ notAfter: at }));
+    const response = await pay();
+    expect(response.status).toBe(409);
+    expect(quote).not.toHaveBeenCalled();
+  });
+
+  it("module_quote_window_may_refuse_with_its_own_error", async () => {
+    const { pay, quote } = windowHarness(async () => {
+      throw new ApiError(409, "closed_by_module");
+    });
+    const response = await pay();
+    expect(response.status).toBe(409);
+    expect((response.body as { error: { code: string } }).error.code).toBe("closed_by_module");
+    expect(quote).not.toHaveBeenCalled();
+  });
+
+  it("module_without_a_window_leaves_quotes_alone", async () => {
+    const { pay, quote } = windowHarness(async () => undefined);
+    expect((await pay()).status).toBe(201);
+    expect(quote).toHaveBeenCalledTimes(1);
+  });
+});

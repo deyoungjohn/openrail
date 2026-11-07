@@ -4,7 +4,7 @@
  * store. A switched-off module is absent, so none of its routes or events exist.
  */
 import type { DatabaseSync } from "node:sqlite";
-import type { ApiConfig, ApiRequest, ApiResponse, IssuerPort } from "./app.js";
+import type { ApiConfig, ApiRequest, ApiResponse, ContractPort, IssuerPort } from "./app.js";
 import type { ApiStore } from "./stores.js";
 import type { AuthContext } from "./auth.js";
 import type { IndexedEvent } from "./webhooks.js";
@@ -25,6 +25,8 @@ export interface ApiModuleContext {
   store: ApiStore;
   docs: ModuleStore;
   issuer: IssuerPort;
+  /** Read-only view of the claims on chain. */
+  contract: Pick<ContractPort, "claim">;
   clock: () => Date;
   /** Throws the core 401/403 errors. `allowPublishable` admits publishable keys. */
   requireAuth(request: ApiRequest, allowPublishable?: boolean): AuthContext;
@@ -38,6 +40,16 @@ export interface ApiModule {
   route?(request: ApiRequest, context: ApiModuleContext): Promise<ApiResponse | undefined>;
   /** Extra events derived from an indexed event (for example a module-specific event type). */
   events?(event: IndexedEvent, context: ApiModuleContext): IndexedEvent[];
+  /**
+   * Asked before a pay quote is requested for a claim. A module that owns the claim may refuse it
+   * (throw `ApiError`) or cap the quote deadline: `notAfter` is a unix time in seconds, and the
+   * quote's deadline never goes past it. Returns undefined for claims it does not own.
+   */
+  quoteWindow?(tokenId: string, context: ApiModuleContext): Promise<QuoteWindow | undefined>;
+}
+
+export interface QuoteWindow {
+  notAfter: number;
 }
 
 /** Picks the `apiModule` export of each enabled module that has one. */

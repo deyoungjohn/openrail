@@ -886,12 +886,20 @@ export class ApiApp {
           if (error instanceof AddressError) throw new ApiError(400, error.code, error.message);
           throw new ApiError(400, "unknown_route");
         }
+        let deadlineSeconds = body.deadline_seconds;
+        for (const module of this.modules) {
+          const window = await module.quoteWindow?.(body.token_id, this.moduleContext);
+          if (window === undefined) continue;
+          const left = window.notAfter - Math.floor(this.clock().getTime() / 1000);
+          if (left <= 0) throw new ApiError(409, "quote_window_closed");
+          deadlineSeconds = Math.min(deadlineSeconds ?? left, left);
+        }
         const session = await this.quotes.createSession({
           tokenId: body.token_id,
           routeId: body.route_id,
           amountUsd: body.amount_usd,
           refundTo: body.refund_to,
-          deadlineSeconds: body.deadline_seconds,
+          deadlineSeconds,
         });
         this.store.savePaySession(session);
         const quotes = this.store.getOpenQuotes(session.token_id);
@@ -1303,6 +1311,7 @@ export class ApiApp {
       store: this.store,
       docs: this.docs,
       issuer: this.deps.issuer,
+      contract: { claim: (tokenId) => this.deps.contract.claim(tokenId) },
       clock: this.clock,
       requireAuth: (request, allowPublishable) => this.requireAuth(request, allowPublishable),
       requireScope: (context, scope) => this.requireScope(context, scope),
