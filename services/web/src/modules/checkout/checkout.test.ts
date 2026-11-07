@@ -92,6 +92,9 @@ describe("checkout hosted page rules", () => {
     expect(checkoutLiveBanner(base({ status: "accepted" }), null).kind).toBe("paid");
     expect(checkoutLiveBanner(base({ status: "refunded" }), null).kind).toBe("refunded");
     expect(checkoutLiveBanner(base({ status: "expired" }), null).kind).toBe("expired");
+    expect(checkoutLiveBanner(base({ status: "needs_attention" }), null).kind).toBe("late");
+    expect(checkoutStatusLabel(base({ status: "needs_attention" }))).toContain("attention");
+    expect(canQuoteCheckout(base({ status: "needs_attention" }), 0)).toBe(false);
   });
 
   it("checkout_return_url_only_allows_https", () => {

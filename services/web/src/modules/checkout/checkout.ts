@@ -1,7 +1,7 @@
 import { formatToken, type PayStage } from "../../lib/pay";
 
 export type CheckoutStatus =
-  "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired";
+  "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired" | "needs_attention";
 
 export interface PublicCheckout {
   id: string;
@@ -40,6 +40,9 @@ export const checkoutCopy = {
   lateTitle: "Paid after expiry",
   lateBody:
     "Your payment arrived after the order expired. It is safe and held on chain while the merchant accepts or refunds it to your refund address.",
+  needsAttentionTitle: "Needs merchant attention",
+  needsAttentionBody:
+    "Your payment is held safely on chain while the merchant reviews the order balance.",
   refundedTitle: "Refunded",
   refundedBody: "This late payment is being returned to the refund address you gave.",
   overpaidNote: (extra: string) => `Includes ${extra} above the order amount.`,
@@ -84,6 +87,8 @@ export function checkoutStatusLabel(checkout: PublicCheckout): string {
       return checkoutCopy.partialTitle(`$${formatToken(checkout.outstanding, 6)}`);
     case "late":
       return checkoutCopy.lateTitle;
+    case "needs_attention":
+      return checkoutCopy.needsAttentionTitle;
     case "refunded":
       return checkoutCopy.refundedTitle;
     case "expired":
@@ -103,6 +108,13 @@ export function checkoutLiveBanner(
   checkout: PublicCheckout,
   quoteStage: PayStage | null,
 ): LiveBanner {
+  if (checkout.status === "needs_attention") {
+    return {
+      kind: "late",
+      title: checkoutCopy.needsAttentionTitle,
+      body: checkoutCopy.needsAttentionBody,
+    };
+  }
   if (checkout.status === "refunded") {
     return { kind: "refunded", title: checkoutCopy.refundedTitle, body: checkoutCopy.refundedBody };
   }

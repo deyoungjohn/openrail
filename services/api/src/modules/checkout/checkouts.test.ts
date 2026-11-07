@@ -85,7 +85,7 @@ function harness() {
   const refundQuote = vi.fn<RefundQuotePort["quote"]>(async (input) => ({
     quote_id: "rq_1",
     deposit_address: "deposit-near-addr",
-    amount_in: "1990000",
+    amount_in: input.amount === "2000000" ? "1990000" : input.amount,
     amount_out: input.amount,
     deadline: new Date(clock().getTime() + 600_000).toISOString(),
     recipient: input.refundTo,
@@ -382,12 +382,85 @@ describe("checkout API: read the state from the claim", () => {
   });
 
   it("checkout_status_works_when_the_contract_has_no_checkout_state", async () => {
-    // A claim of the checkout kind that was not made by `create_checkout` has no module state yet.
+    // SQ-15: A checkout issued via `issue_for` with `kind = 1` has no `m:checkout:` record
+    // before its first booking (`checkout_state` returns `null`), and every checkout method
+    // falls back to `expiry = claim.due_date`. Verify `pending`, `partial`, `paid`, and `expired`.
     const h = harness();
     const id = await made(h);
     h.chain.states.set(id, null);
+
+    // 1. Pending (booked_total = 0, before due_date)
+    const pending = await get(h, id);
+    expect(pending.body).toMatchObject({
+      status: "pending",
+      outstanding: "2000000",
+      paid_total: "0",
+    });
+    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("pending");
+
+    // 2. Partial (0 < booked_total < amount_due, before due_date)
+    h.chain.claims.set(id, {
+      ...(h.chain.claims.get(id) ?? {}),
+      booked_total: "800000",
+    });
+    const partial = await get(h, id);
+    expect(partial.body).toMatchObject({
+      status: "partial",
+      outstanding: "1200000",
+      paid_total: "800000",
+    });
+    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("partial");
+
+    // 3. Paid (booked_total >= amount_due, before due_date)
+    h.chain.claims.set(id, {
+      ...(h.chain.claims.get(id) ?? {}),
+      booked_total: "2000000",
+    });
+    const paid = await get(h, id);
+    expect(paid.body).toMatchObject({
+      status: "paid",
+      outstanding: "0",
+      paid_total: "2000000",
+    });
+    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("paid");
+
+    // 4. Expired (booked_total = 0, clock past claim.due_date)
+    h.chain.claims.set(id, {
+      ...(h.chain.claims.get(id) ?? {}),
+      booked_total: "0",
+    });
     h.advance(20 * 60_000);
-    expect((await get(h, id)).body.status).toBe("expired");
+    const expired = await get(h, id);
+    expect(expired.body).toMatchObject({
+      status: "expired",
+      outstanding: "2000000",
+      paid_total: "0",
+    });
+    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("expired");
+  });
+
+  it("checkout_flagged_state_maps_to_needs_attention", async () => {
+    const h = harness();
+    const id = await made(h);
+    const expiry = Number(h.chain.claims.get(id)?.due_date);
+    h.chain.claims.set(id, {
+      ...(h.chain.claims.get(id) ?? {}),
+      booked_total: "2000000",
+    });
+    h.chain.states.set(id, {
+      expiry,
+      late: true,
+      refunded: false,
+      accepted: false,
+      order_ref: "ORD-1",
+      notified: [`${id}:2000000`],
+      held_amount: "1995000",
+      flagged: true,
+    });
+    expect((await get(h, id)).body.status).toBe("needs_attention");
+    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe(
+      "needs_attention",
+    );
   });
 
   it("checkout_get_is_scoped_to_the_business", async () => {
@@ -805,12 +878,247 @@ describe("checkout API: late payments never sign for the merchant", () => {
 
   it("checkout_refund_amount_is_the_booked_net_and_never_more", async () => {
     const h = harness();
-    const id = await lateCheckout(h, { held: "1990000" });
+    // 1. Reads contract `held_amount` serialized as U128 string (e.g. 60% late net in partial split)
+    const id = await lateCheckout(h, { held_amount: "1197000" });
     await post(h, id, "refund_quote");
+    expect(h.refundQuote.mock.calls[0]?.[0].amount).toBe("1197000");
+
+    // 2. Reads contract `held_amount` serialized as U128 struct `{ "0": "..." }`
+    const structId = await lateCheckout(h, { held_amount: { 0: "1990000" } });
+    h.refundQuote.mockClear();
+    await post(h, structId, "refund_quote");
     expect(h.refundQuote.mock.calls[0]?.[0].amount).toBe("1990000");
+
+    // 3. Refuses if swap quote returns `amount_in` greater than `held_amount`
+    h.refundQuote.mockImplementationOnce(async (input) => ({
+      quote_id: "rq_over",
+      deposit_address: "deposit-near-addr",
+      amount_in: "1990001",
+      amount_out: input.amount,
+      deadline: new Date().toISOString(),
+      recipient: input.refundTo,
+    }));
+    const over = await post(h, structId, "refund_quote");
+    expect(over.status).toBe(502);
+    expect(over.body.error.code).toBe("refund_quote_exceeds_held_amount");
+
+    // 4. Fallback when mock state omits held_amount
     const second = await lateCheckout(h);
     h.refundQuote.mockClear();
     await post(h, second, "refund_quote");
     expect(h.refundQuote.mock.calls[0]?.[0].amount).toBe("2000000");
+  });
+
+  it("checkout_later_late_arrival_after_refund_shows_late_and_can_be_refunded_again", async () => {
+    const h = harness();
+    const id = await lateCheckout(h, {
+      refunded: true,
+      accepted: false,
+      held_amount: "0",
+      flagged: false,
+    });
+    // Right after first refund (`held_amount: "0"`), status is `refunded` and a second refund is refused
+    const afterFirstRefund = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(afterFirstRefund.body.status).toBe("refunded");
+    expect((await post(h, id, "refund_quote")).body.error.code).toBe("checkout_already_refunded");
+
+    // A later late arrival lands on chain and is held again (`held_amount: "997500"`)
+    const prev = h.chain.states.get(id)!;
+    h.chain.states.set(id, {
+      ...prev,
+      refunded: true,
+      held_amount: "997500",
+    });
+    const afterSecondArrival = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(afterSecondArrival.body.status).toBe("late");
+    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("late");
+
+    h.refundQuote.mockClear();
+    const secondRefund = await post(h, id, "refund_quote");
+    expect(secondRefund.status).toBe(200);
+    expect(h.refundQuote.mock.calls[0]?.[0].amount).toBe("997500");
+    expect(secondRefund.body.action.args.amount_in).toBe("997500");
+  });
+
+  it("checkout_late_actions_refused_when_flagged", async () => {
+    const h = harness();
+    const id = await lateCheckout(h, {
+      held_amount: "1995000",
+      flagged: true,
+    });
+    const acceptRes = await post(h, id, "accept_late");
+    expect(acceptRes.status).toBe(409);
+    expect(acceptRes.body.error.code).toBe("checkout_flagged");
+    const refundRes = await post(h, id, "refund_quote");
+    expect(refundRes.status).toBe(409);
+    expect(refundRes.body.error.code).toBe("checkout_flagged");
+  });
+
+  it("checkout_integration_against_rel2_contract_bundle_snapshots", async () => {
+    // Drives the API against exact JSON views (`claim`, `checkout_state`, `payment_log`)
+    // and `EVENT_JSON` payloads emitted by `openrail::Contract` (`rel2-checkout.bundle`)
+    // for checkouts issued via `issue_for(kind = 1)`.
+    const h = harness();
+    const c1 = (await createCheckout(h, { order_ref: "ORD-BUNDLE-1" })).body.id as string;
+    const expiry = Math.floor(NOW.getTime() / 1000) + 900;
+
+    // 1. Right after `issue_for(kind = 1)`: `checkout_state` is `null` on chain.
+    h.chain.claims.set(c1, {
+      token_id: c1,
+      kind: 1,
+      issuer_id: ACME,
+      owner_id: ACME,
+      claim_account: `${c1}.openrail.near`,
+      debtor: null,
+      amount_due: "2000000",
+      due_date: expiry,
+      status: "Issued",
+      booked_total: "0",
+      distributed_total: "0",
+      fee_total: "0",
+      surplus: "0",
+      credit_total: "0",
+    });
+    h.chain.states.set(c1, null);
+    expect(
+      (await call(h, "GET", `/v1/checkouts/${c1}`, undefined, h.keys.acme)).body,
+    ).toMatchObject({
+      status: "pending",
+      claim_account: `${c1}.openrail.near`,
+      order_ref: "ORD-BUNDLE-1",
+      outstanding: "2000000",
+    });
+
+    // 2. Partial booking (`800000`) on `issue_for(kind = 1)`: contract materializes `CheckoutState`
+    // with `order_ref = token_id` (`c-101`) and emits `checkout_partial` with `order_ref: c-101`
+    // and `total_received: "800000"` (no `booking_seq`).
+    h.chain.claims.set(c1, {
+      ...(h.chain.claims.get(c1) ?? {}),
+      status: "PartiallyPaid",
+      booked_total: "800000",
+      distributed_total: "798000",
+      fee_total: "2000",
+    });
+    h.chain.states.set(c1, {
+      expiry,
+      late: false,
+      refunded: false,
+      accepted: false,
+      order_ref: c1,
+      notified: [`${c1}:800000`],
+      held_amount: "0",
+      flagged: false,
+    });
+    expect(
+      (await call(h, "GET", `/v1/checkouts/${c1}`, undefined, h.keys.acme)).body,
+    ).toMatchObject({
+      status: "partial",
+      order_ref: "ORD-BUNDLE-1",
+      paid_total: "800000",
+      outstanding: "1200000",
+    });
+    const partialNotice = expandEvents(
+      {
+        id: "ev-bundle-partial",
+        type: "checkout_partial",
+        created: 1_762_768_920,
+        data: {
+          token_id: c1,
+          order_ref: c1,
+          due: "2000000",
+          received: "800000",
+          total_received: "800000",
+          remaining: "1200000",
+          status: "partial",
+        },
+        indexed: true,
+      },
+      [h.module],
+      h.context(),
+    )[1];
+    expect(partialNotice).toMatchObject({
+      type: "checkout.partial",
+      data: {
+        token_id: c1,
+        order_ref: "ORD-BUNDLE-1",
+        due: "2000000",
+        received: "800000",
+        total_received: "800000",
+        remaining: "1200000",
+        status: "partial",
+      },
+    });
+    expect(JSON.stringify(partialNotice).toLowerCase()).not.toContain("paid");
+
+    // 3. Late arrival after `expiry + LATE_GRACE_SECONDS`: contract sets `claim.status = "Paid"`,
+    // subtracts held net from `distributed_total` (`"0"`), and sets `held_amount: "997500"`.
+    const c3 = (await createCheckout(h, { order_ref: "ORD-BUNDLE-3" })).body.id as string;
+    h.chain.claims.set(c3, {
+      token_id: c3,
+      kind: 1,
+      issuer_id: ACME,
+      owner_id: ACME,
+      claim_account: `${c3}.openrail.near`,
+      amount_due: "2000000",
+      due_date: expiry,
+      status: "PartiallyPaid",
+      booked_total: "1000000",
+      distributed_total: "0",
+      fee_total: "2500",
+      surplus: "0",
+      credit_total: "0",
+    });
+    h.chain.states.set(c3, {
+      expiry,
+      late: true,
+      refunded: false,
+      accepted: false,
+      order_ref: c3,
+      notified: [`${c3}:1000000`],
+      held_amount: "997500",
+      flagged: false,
+    });
+    h.chain.log.set(c3, [
+      {
+        quote_id: "q-payer-3",
+        deposit_address: "0xdep3",
+        deadline_requested: expiry,
+        refund_to: PAYER_REFUND_TO,
+        route_id: "base-usdc",
+      },
+    ]);
+    const refund1 = await post(h, c3, "refund_quote");
+    expect(refund1.status).toBe(200);
+    expect(refund1.body.action.args).toEqual({
+      token_id: c3,
+      deposit_address: "deposit-near-addr",
+      amount_in: "997500",
+    });
+
+    // After first `refund_late`, `refunded: true` and `held_amount: "0"`; then a second late arrival
+    // (`1000000`, net `997500`) sets `held_amount: "997500"` while `refunded` stays `true`.
+    h.chain.claims.set(c3, {
+      ...(h.chain.claims.get(c3) ?? {}),
+      status: "Paid",
+      booked_total: "2000000",
+      distributed_total: "0",
+      fee_total: "5000",
+    });
+    h.chain.states.set(c3, {
+      expiry,
+      late: true,
+      refunded: true,
+      accepted: false,
+      order_ref: c3,
+      notified: [`${c3}:1000000`, `${c3}:2000000`],
+      held_amount: "997500",
+      flagged: false,
+    });
+    expect((await call(h, "GET", `/v1/checkouts/${c3}`, undefined, h.keys.acme)).body.status).toBe(
+      "late",
+    );
+    const refund2 = await post(h, c3, "refund_quote");
+    expect(refund2.status).toBe(200);
+    expect(refund2.body.action.args.amount_in).toBe("997500");
   });
 });

@@ -38,7 +38,7 @@ const USD_RE = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?$/;
 const EMPTY_ITEMS_SHA256 = createHash("sha256").update("[]").digest("hex");
 
 export type CheckoutStatus =
-  "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired";
+  "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired" | "needs_attention";
 
 export interface CheckoutItem {
   name: string;
@@ -84,7 +84,10 @@ export interface ChainCheckoutState {
   late: boolean;
   refunded: boolean;
   accepted?: boolean;
+  held_amount?: string | { 0?: string };
   held?: string;
+  flagged?: boolean;
+  notified?: string[];
   order_ref: string;
 }
 
@@ -205,6 +208,11 @@ function unwrapU128(value: unknown): string | undefined {
   return undefined;
 }
 
+function heldAmountOf(state: ChainCheckoutState | null): string | undefined {
+  if (state === null) return undefined;
+  return unwrapU128(state.held_amount) ?? unwrapU128(state.held);
+}
+
 function normaliseClaim(
   claim: Record<string, unknown>,
   stored: StoredCheckout,
@@ -226,6 +234,9 @@ function statusOf(
   stored: StoredCheckout,
   nowSec: number,
 ): CheckoutStatus {
+  if (state?.flagged === true) return "needs_attention";
+  const held = toBig(heldAmountOf(state));
+  if (state?.late === true && held > 0n) return "late";
   if (state?.refunded === true) return "refunded";
   if (state?.accepted === true) return "accepted";
   const due = toBig(claim.amount_due);
@@ -370,12 +381,17 @@ function noticeId(event: IndexedEvent, tokenId: string, data: Record<string, unk
   ) {
     return createHash("sha256").update(tokenId).update(String(seq)).digest("hex");
   }
+  const bookedKey =
+    unwrapU128(data.total_paid) ??
+    unwrapU128(data.total_received) ??
+    (typeof data.booked_at === "number" ? String(data.booked_at) : undefined) ??
+    (typeof data.payout_id === "number" ? String(data.payout_id) : undefined);
   return createHash("sha256")
     .update(tokenId)
     .update("\u0000")
     .update(event.type)
     .update("\u0000")
-    .update(String(seq ?? event.id))
+    .update(String(seq ?? bookedKey ?? event.id))
     .digest("hex");
 }
 
@@ -471,17 +487,25 @@ export class Checkouts {
     const tokenId =
       typeof raw.token_id === "string" && raw.token_id !== "" ? raw.token_id : undefined;
     if (tokenId === undefined) return [];
-    if (context.docs.get<StoredCheckout>(NS_CHECKOUTS, tokenId) === undefined) return [];
+    const stored = context.docs.get<StoredCheckout>(NS_CHECKOUTS, tokenId);
+    if (stored === undefined) return [];
+    const orderRef =
+      typeof raw.order_ref === "string" && raw.order_ref !== "" && raw.order_ref !== tokenId
+        ? raw.order_ref
+        : stored.order_ref;
     const id = noticeId(event, tokenId, raw);
     if (mapped === "checkout.partial") {
       // A partial notice must never contain the word "paid".
       const clean: Record<string, unknown> = {
         token_id: tokenId,
-        ...(typeof raw.order_ref === "string" ? { order_ref: raw.order_ref } : {}),
+        order_ref: orderRef,
         ...(raw.due === undefined ? {} : { due: String(unwrapU128(raw.due) ?? raw.due) }),
         ...(raw.received === undefined
           ? {}
           : { received: String(unwrapU128(raw.received) ?? raw.received) }),
+        ...(raw.total_received === undefined
+          ? {}
+          : { total_received: String(unwrapU128(raw.total_received) ?? raw.total_received) }),
         ...(raw.remaining === undefined
           ? {}
           : { remaining: String(unwrapU128(raw.remaining) ?? raw.remaining) }),
@@ -505,7 +529,7 @@ export class Checkouts {
         id,
         type: mapped,
         created: event.created,
-        data: { ...raw, token_id: tokenId, status },
+        data: { ...raw, token_id: tokenId, order_ref: orderRef, status },
         indexed: true,
       },
     ];
@@ -726,7 +750,11 @@ export class Checkouts {
       chain.checkoutState(stored.token_id).catch(() => null),
     ]);
     const claim = normaliseClaim(rawClaim, stored);
-    if (state?.refunded === true) {
+    if (state?.flagged === true) {
+      throw new ApiError(409, "checkout_flagged", "this checkout is flagged for accounting review");
+    }
+    const held = toBig(heldAmountOf(state));
+    if (state?.refunded === true && held <= 0n) {
       throw new ApiError(
         409,
         "checkout_already_refunded",
@@ -816,10 +844,9 @@ export class Checkouts {
       throw new ApiError(409, "no_recorded_refund_to");
     }
 
+    const heldRaw = heldAmountOf(state);
     const net =
-      state.held !== undefined && /^\d+$/.test(state.held)
-        ? BigInt(state.held)
-        : toBig(claim.booked_total) - toBig(claim.fee_total);
+      heldRaw !== undefined ? BigInt(heldRaw) : toBig(claim.booked_total) - toBig(claim.fee_total);
     if (net <= 0n) {
       throw new ApiError(409, "nothing_to_refund", "no net balance is held on this checkout");
     }
@@ -836,6 +863,14 @@ export class Checkouts {
         502,
         "refund_quote_recipient_mismatch",
         "the swap quote recipient does not match the recorded refund_to",
+      );
+    }
+    const amountIn = toBig(quote.amount_in);
+    if (amountIn <= 0n || amountIn > net) {
+      throw new ApiError(
+        502,
+        "refund_quote_exceeds_held_amount",
+        "the swap quote amount_in exceeds the held balance on this checkout",
       );
     }
 
