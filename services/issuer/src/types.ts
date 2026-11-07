@@ -18,6 +18,8 @@ export interface IssueForRequest {
   metadata?: Record<string, unknown>;
   /** The id `prepareIssue` predicted; a different minted id is refused as TOKEN_ID_MISMATCH. */
   expectedTokenId?: string;
+  /** REL-2: `<username>-<ref>` label for the claim account; sent only when CLAIM_LABELS is on. */
+  claimLabel?: string;
 }
 
 export interface LogQuoteRequest {

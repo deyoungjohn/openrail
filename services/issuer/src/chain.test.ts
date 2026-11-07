@@ -162,6 +162,17 @@ describe("ContractTokenCounter", () => {
       "openrail.near",
     );
     expect(await empty.nextTokenId()).toBe(1);
+    const labelled = new ContractTokenCounter(
+      near(
+        {
+          nft_total_supply: "3",
+          nft_tokens: [{ token_id: "c-7" }, { token_id: "belmonte-9f3c2a7d41b8" }],
+        },
+        { next_token_id: missing() },
+      ) as never,
+      "openrail.near",
+    );
+    expect(await labelled.nextTokenId()).toBe(8);
   });
 
   it("refuses a view answer it cannot read", async () => {
