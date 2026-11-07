@@ -4,6 +4,8 @@ import { usePresence } from "motion/react";
 import type { ReactNode } from "react";
 
 export interface PresenceGateRenderProps {
+  /** False from the moment the item starts to leave. */
+  isPresent: boolean;
   /** Spread onto the control: an element that is leaving takes no clicks and no focus. */
   gate: { inert?: boolean; tabIndex?: number; "aria-hidden"?: boolean };
 }
@@ -16,6 +18,11 @@ export function PresenceGate({
 }) {
   const [present] = usePresence();
   return (
-    <>{children({ gate: present ? {} : { inert: true, tabIndex: -1, "aria-hidden": true } })}</>
+    <>
+      {children({
+        isPresent: present,
+        gate: present ? {} : { inert: true, tabIndex: -1, "aria-hidden": true },
+      })}
+    </>
   );
 }

@@ -5,6 +5,7 @@ import {
   byMonth,
   byStream,
   earningsFrom,
+  inDayRange,
   inTimeRange,
   lastSevenDays,
   overview,
@@ -105,5 +106,17 @@ describe("a payment whose time is unknown", () => {
     expect(inTimeRange(0, "all", NOW)).toBe(true);
     expect(inTimeRange(0, "30d", NOW)).toBe(false);
     expect(topPayers(e2)[0]).toEqual({ name: "Acme", cents: 200n });
+  });
+});
+
+describe("inDayRange", () => {
+  it("includes both ends, treats no range as everything, and never matches an unknown time", () => {
+    const at = Date.parse("2026-11-10T23:59:00Z");
+    expect(inDayRange(at, { from: "2026-11-10", to: "2026-11-10" })).toBe(true);
+    expect(inDayRange(at, { from: "2026-11-11", to: "2026-11-12" })).toBe(false);
+    expect(inDayRange(at, { from: "2026-11-10" })).toBe(true);
+    expect(inDayRange(at, null)).toBe(true);
+    expect(inDayRange(0, { from: "2026-11-01", to: "2026-11-30" })).toBe(false);
+    expect(inDayRange(0, null)).toBe(true);
   });
 });

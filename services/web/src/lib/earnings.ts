@@ -232,3 +232,17 @@ export function inTimeRange(ms: number, range: TimeRange, nowMs: number): boolea
   const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
   return ms > nowMs - days * DAY_MS && ms <= nowMs + DAY_MS;
 }
+
+/** A range of calendar days (UTC, `YYYY-MM-DD`, both ends included); `to` may be missing while the end is being chosen. */
+export interface DayRange {
+  from: string;
+  to?: string;
+}
+
+/** Whether a time falls inside the days chosen; no range means every time, and an unknown time never matches a range. */
+export function inDayRange(ms: number, range: DayRange | null): boolean {
+  if (range === null) return true;
+  if (ms === 0) return false;
+  const day = new Date(ms).toISOString().slice(0, 10);
+  return day >= range.from && day <= (range.to ?? range.from);
+}

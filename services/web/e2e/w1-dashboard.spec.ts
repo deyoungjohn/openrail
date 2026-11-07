@@ -134,8 +134,11 @@ test.describe("dashboard", () => {
     await expect(months.getByRole("cell").filter({ hasText: "$250.50" })).toHaveCount(0);
 
     // The last 7 days leave out the receipt from 40 days ago.
-    const time = page.getByRole("group", { name: "Time" }).last();
-    await time.getByRole("button", { name: "7 days" }).click();
+    await page
+      .getByRole("button", { name: /^Time:/ })
+      .last()
+      .click();
+    await page.getByRole("button", { name: "Last 7 days" }).click();
     await expect(from).toContainText("$100.00");
     await expect(from).not.toContainText("$200.00");
 

@@ -110,9 +110,10 @@ test.describe("statements", () => {
     await signIn(context);
   });
 
-  async function request(page: Page, from = "2026-11-01", to = "2026-11-30") {
-    await page.getByLabel("From", { exact: true }).fill(from);
-    await page.getByLabel("To", { exact: true }).fill(to);
+  // The period comes from the date range picker: "This month" is one click and never goes backwards.
+  async function request(page: Page) {
+    await page.getByRole("button", { name: /Statement period/ }).click();
+    await page.getByRole("button", { name: "This month" }).click();
     await page.getByRole("button", { name: "Get statement" }).click();
   }
 
@@ -186,7 +187,7 @@ test.describe("statements", () => {
     await expect(page.getByRole("link", { name: /Download s\.pdf/ })).toBeVisible();
   });
 
-  test("an empty period, a backwards period and a failure are explained", async ({ page }) => {
+  test("an empty period and a failure are explained", async ({ page }) => {
     await mockApi(page, {
       "GET /v1/statements": {
         body: statement({
@@ -199,16 +200,15 @@ test.describe("statements", () => {
     await request(page);
     await expect(page.getByText("No payments in this period")).toBeVisible();
 
-    await request(page, "2026-11-30", "2026-11-01");
-    await expect(page.getByText("The start date must be before the end date")).toBeVisible();
+    // A backwards period cannot be chosen any more: the range picker puts the two dates in order.
 
     const p2 = await page.context().newPage();
     await mockApi(p2, {
       "GET /v1/statements": { status: 500, body: { error: { code: "internal", message: "x" } } },
     });
     await p2.goto("/app/statements");
-    await p2.getByLabel("From", { exact: true }).fill("2026-11-01");
-    await p2.getByLabel("To", { exact: true }).fill("2026-11-30");
+    await p2.getByRole("button", { name: /Statement period/ }).click();
+    await p2.getByRole("button", { name: "This month" }).click();
     await p2.getByRole("button", { name: "Get statement" }).click();
     await expect(p2.locator("main [role=alert]")).toBeVisible();
   });

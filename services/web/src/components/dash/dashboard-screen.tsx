@@ -10,14 +10,13 @@ import {
   byChain,
   byMonth,
   byStream,
-  inTimeRange,
+  inDayRange,
   lastSevenDays,
   overview,
   revenueSummary,
   topPayers,
   type Earning,
   type Stream,
-  type TimeRange,
 } from "@/lib/earnings";
 import { formatUsd } from "@/lib/format";
 import { useEarnings } from "@/lib/use-earnings";
@@ -25,6 +24,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { CHAINS } from "../ui/chain-badge";
 import { DataTable, type DataTableColumn } from "../ui/data-table";
+import { DateRangeField, type DateRange } from "../ui/date-range-field";
 import {
   MonthlyRevenueCard,
   OverviewCard,
@@ -100,10 +100,6 @@ function Pills<T extends string>({
   );
 }
 
-const timeOptions = (Object.keys(copy.dash.timeRanges) as TimeRange[]).map((value) => ({
-  value,
-  label: copy.dash.timeRanges[value],
-}));
 const streamOptions: { value: Stream | "all"; label: string }[] = [
   { value: "all", label: copy.dash.allStreams },
   { value: "invoice", label: copy.dash.streamLabels.invoice },
@@ -111,16 +107,16 @@ const streamOptions: { value: Stream | "all"; label: string }[] = [
   { value: "pay_link", label: copy.dash.streamLabels.pay_link },
 ];
 
-function Collections({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs: number }) {
+function Collections({ earnings }: { earnings: readonly Earning[] }) {
   const d = copy.dash;
-  const [range, setRange] = useState<TimeRange>("all");
+  const [range, setRange] = useState<DateRange | null>(null);
   const [stream, setStream] = useState<Stream | "all">("all");
   const filtered = useMemo(
     () =>
       earnings.filter(
-        (e) => inTimeRange(e.time, range, nowMs) && (stream === "all" || e.stream === stream),
+        (e) => inDayRange(e.time, range) && (stream === "all" || e.stream === stream),
       ),
-    [earnings, range, stream, nowMs],
+    [earnings, range, stream],
   );
   const months = useMemo(() => byMonth(filtered).reverse(), [filtered]);
   const chains = useMemo(() => byChain(filtered), [filtered]);
@@ -167,7 +163,12 @@ function Collections({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs:
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <Pills label={d.timeFilter} value={range} options={timeOptions} onChange={setRange} />
+        <DateRangeField
+          label={d.timeFilter}
+          value={range}
+          onChange={setRange}
+          placeholder={d.allTime}
+        />
         <Pills label={d.streamFilter} value={stream} options={streamOptions} onChange={setStream} />
       </div>
       <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -196,8 +197,10 @@ function Collections({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs:
   );
 }
 
-function Activity({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs: number }) {
+function Activity({ earnings }: { earnings: readonly Earning[] }) {
   const d = copy.dash;
+  const [range, setRange] = useState<DateRange | null>(null);
+  const shown = useMemo(() => earnings.filter((e) => inDayRange(e.time, range)), [earnings, range]);
   const columns: DataTableColumn<Earning>[] = [
     { id: "payer", header: d.payer, sortable: true, value: (r) => r.payer },
     {
@@ -246,22 +249,24 @@ function Activity({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs: nu
   ];
   return (
     <DataTable
-      data={earnings}
+      data={shown}
       columns={columns}
       rowId={(r) => r.id}
       rowLabel={(r) => `${r.payer}, ${r.product}`}
+      toolbar={
+        <DateRangeField
+          label={d.timeFilter}
+          value={range}
+          onChange={setRange}
+          placeholder={d.allTime}
+        />
+      }
       title={d.activity}
       caption={d.activity}
       defaultSort={{ id: "time", dir: "desc" }}
       pageSize={8}
       searchable
       filters={[
-        {
-          id: "time",
-          label: d.timeFilter,
-          options: timeOptions,
-          apply: (r, v) => inTimeRange(r.time, v as TimeRange, nowMs),
-        },
         {
           id: "stream",
           label: d.streamFilter,
@@ -384,7 +389,7 @@ export function DashboardScreen() {
               {loading ? (
                 <DataTable data={[]} columns={[]} rowId={() => ""} title={d.activity} loading />
               ) : (
-                <Activity earnings={earnings} nowMs={nowMs} />
+                <Activity earnings={earnings} />
               )}
             </div>
             <div className="min-w-0">
@@ -396,7 +401,7 @@ export function DashboardScreen() {
             </div>
           </div>
 
-          {loading ? null : <Collections earnings={earnings} nowMs={nowMs} />}
+          {loading ? null : <Collections earnings={earnings} />}
         </>
       )}
     </div>

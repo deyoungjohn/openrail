@@ -9,7 +9,8 @@ import { csvToTable, sha256OfBase64, statementFilename } from "@/lib/w5";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { Input, Select } from "../ui/input";
+import { DateRangeField } from "../ui/date-range-field";
+import { Select } from "../ui/input";
 import { EmptyState } from "../ui/state";
 import { Table, type Column } from "../ui/table";
 
@@ -144,14 +145,21 @@ export function StatementsScreen() {
           void submit();
         }}
       >
-        <div className="grid gap-6 sm:grid-cols-3">
-          <Input
-            label={t.from}
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-          <Input label={t.to} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        <div className="grid items-end gap-6 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <p className="text-[14px] leading-5 font-medium">{t.period}</p>
+            <DateRangeField
+              label={t.period}
+              value={{ from, to }}
+              placeholder={t.missing}
+              max={today()}
+              onChange={(range) => {
+                if (range === null) return;
+                setFrom(range.from);
+                setTo(range.to ?? range.from);
+              }}
+            />
+          </div>
           <Select
             label={t.format}
             value={format}

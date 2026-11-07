@@ -64,8 +64,8 @@ test.describe("signed-in journey on the mock API", () => {
     ]);
 
     await page.goto("/app/statements");
-    await page.getByLabel("From", { exact: true }).fill("2026-11-01");
-    await page.getByLabel("To", { exact: true }).fill("2026-11-30");
+    await page.getByRole("button", { name: /Statement period/ }).click();
+    await page.getByRole("button", { name: "This month" }).click();
     await page.getByRole("button", { name: "Get statement" }).click();
     await expect(
       page.getByRole("link", { name: /Download statement-2026-11-01-2026-11-30\.csv/ }),

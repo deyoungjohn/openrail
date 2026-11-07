@@ -536,6 +536,7 @@ export const copy = {
     allStreams: "All streams",
     timeRanges: { all: "All time", "7d": "7 days", "30d": "30 days", "90d": "90 days" },
     timeFilter: "Time",
+    allTime: "All time",
     streamFilter: "Stream",
     noEarnings: "No money in yet",
   },
@@ -679,6 +680,7 @@ export const copy = {
     title: "Statements",
     intro:
       "Download your payments for a period as a CSV or a PDF. The fingerprint lets you check the file was not changed.",
+    period: "Statement period",
     from: "From",
     to: "To",
     format: "Format",

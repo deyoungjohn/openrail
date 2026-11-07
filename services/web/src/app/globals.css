@@ -114,6 +114,12 @@
   --color-danger-text: var(--danger-text);
   --color-on-danger: var(--on-danger);
   --color-info: var(--info);
+  /* names the ported motion components use */
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-muted-foreground: var(--text-muted);
+  --color-ring: var(--accent);
+  --color-card: var(--surface);
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --radius-control: 10px;
