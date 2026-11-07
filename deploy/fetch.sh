@@ -80,7 +80,7 @@ curl -fL --retry 3 --progress-bar -o "$tmp/$name" "$base/$name"
 curl -fsSL --retry 3 -o "$tmp/$name.sha256" "$base/$name.sha256"
 ( cd "$tmp" && sha256sum -c "$name.sha256" ) || { echo "CHECKSUM_MISMATCH: refusing to use $name" >&2; exit 1; }
 install -m 0644 "$tmp/$name" "$dest"
-[[ -n "${SUDO_USER:-}" ]] && chown "$SUDO_USER": "$dest" || true
+if [[ -n "${SUDO_USER:-}" ]]; then chown "$SUDO_USER": "$dest" || true; fi
 ls -lh "$dest"
 
 # Keep this command up to date from the pack it just verified.

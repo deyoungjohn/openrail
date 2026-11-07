@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Source this file, then call:  load_openrail_env [NAME_PATTERN ...]
 #
 # Reads the laptop env file (default ~/.openrail/openrail.env, override with OPENRAIL_ENV) and exports ONLY the

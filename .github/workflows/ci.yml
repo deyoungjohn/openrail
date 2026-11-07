@@ -34,6 +34,7 @@ jobs:
       modules: ${{ steps.filter.outputs.modules }}
       core: ${{ steps.filter.outputs.core }}
       web: ${{ steps.filter.outputs.web }}
+      deploy: ${{ steps.filter.outputs.deploy }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
@@ -79,6 +80,12 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'package.json'
+            deploy:
+              - '.github/workflows/ci.yml'
+              - 'deploy/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
 
   # Quick checks: secrets scan, docs build, and lint (format + clippy + eslint) merged
   quick:
@@ -239,6 +246,28 @@ jobs:
       - name: Every enabled module
         run: cargo test -p openrail --features "$(scripts/enabled-features)"
 
+  # Deploy scripts: shellcheck, pack build, and end-to-end install/rollback/fetch in a temp root.
+  deploy-scripts:
+    name: deploy-scripts
+    timeout-minutes: 45
+    needs: changes
+    if: (github.event_name == 'push') || (needs.changes.outputs.deploy == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck
+      - name: Shellcheck deploy scripts
+        run: shellcheck deploy/*.sh deploy/lib/*.sh
+      - name: Run the deploy scripts end to end
+        run: pnpm exec vitest run deploy/deploy-scripts.test.ts
+
   # Web verification: test, typecheck, and build web service
   web:
     name: web
@@ -295,7 +324,7 @@ jobs:
   ci-ok:
     name: ci-ok
     timeout-minutes: 15
-    needs: [changes, quick, contract, core-only, each-module, all-enabled, web, e2e]
+    needs: [changes, quick, contract, core-only, each-module, all-enabled, web, e2e, deploy-scripts]
     if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
@@ -308,11 +337,13 @@ jobs:
           EACH_RES: ${{ needs.each-module.result }}
           ALL_RES: ${{ needs.all-enabled.result }}
           WEB_RES: ${{ needs.web.result }}
+          DEPLOY_RES: ${{ needs.deploy-scripts.result }}
           E2E_RES: ${{ needs.e2e.result }}
           FILTER_CONTRACTS: ${{ needs.changes.outputs.contracts }}
           FILTER_MODULES: ${{ needs.changes.outputs.modules }}
           FILTER_CORE: ${{ needs.changes.outputs.core }}
           FILTER_WEB: ${{ needs.changes.outputs.web }}
+          FILTER_DEPLOY: ${{ needs.changes.outputs.deploy }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           echo "Changes: $CHANGES_RES"
@@ -322,6 +353,7 @@ jobs:
           echo "Each-module: $EACH_RES (filter: $FILTER_MODULES)"
           echo "All-enabled: $ALL_RES (filter: $FILTER_MODULES)"
           echo "Web: $WEB_RES (filter: $FILTER_WEB)"
+          echo "Deploy scripts: $DEPLOY_RES (filter: $FILTER_DEPLOY)"
           echo "E2E: $E2E_RES"
 
           # 1. changes job must have succeeded
@@ -331,7 +363,7 @@ jobs:
           fi
 
           # 2. Check for outright failures or cancellations across all jobs
-          for res in "$QUICK_RES" "$CONTRACT_RES" "$CORE_RES" "$EACH_RES" "$ALL_RES" "$WEB_RES" "$E2E_RES"; do
+          for res in "$QUICK_RES" "$CONTRACT_RES" "$CORE_RES" "$EACH_RES" "$ALL_RES" "$WEB_RES" "$E2E_RES" "$DEPLOY_RES"; do
             if [ "$res" = "failure" ] || [ "$res" = "cancelled" ]; then
               echo "Error: One or more jobs failed or were cancelled ($res)."
               exit 1
@@ -373,6 +405,13 @@ jobs:
           if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_WEB" = "true" ]; then
             if [ "$WEB_RES" != "success" ]; then
               echo "Error: 'web' job was required but result is $WEB_RES."
+              exit 1
+            fi
+          fi
+
+          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_DEPLOY" = "true" ]; then
+            if [ "$DEPLOY_RES" != "success" ]; then
+              echo "Error: 'deploy-scripts' job was required but result is $DEPLOY_RES."
               exit 1
             fi
           fi

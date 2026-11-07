@@ -135,28 +135,16 @@ switch_to() { # switch_to <release dir>: move the current link atomically
 prune_releases() { # after a healthy apply: only the live release stays unpacked
   local cur count=0 dir
   cur="$(current_target)"
-  # shellcheck disable=SC2012
-  for dir in $(ls -dt "$ROOT"/releases/*/ 2>/dev/null); do
+  while IFS= read -r dir; do
     dir="${dir%/}"
     count=$((count + 1))
     if ((count > KEEP_RELEASES)) && [[ "$dir" != "$cur" ]]; then
       say "removing old release $(basename "$dir")"
       run rm -rf "$dir"
     fi
-  done
+  done < <(ls -dt "$ROOT"/releases/*/ 2>/dev/null)
 }
 
-prune_packs() { # prune_packs <home>: each pack is ~250 MB; keep the packs of the live and the previous release
-  local home="$1" count=0 pack
-  # shellcheck disable=SC2012
-  for pack in $(ls -t "$home"/openrail-server-*.tar.gz 2>/dev/null); do
-    count=$((count + 1))
-    if ((count > KEEP_PACKS)); then
-      say "removing old pack $(basename "$pack")"
-      run rm -f "$pack"
-    fi
-  done
-}
 
 # ---------------------------------------------------------------------------------------------------------------
 home_of_caller() {
@@ -179,7 +167,11 @@ case "$mode" in
       pack="$(home_of_caller)/openrail-server-$commit.tar.gz"
       if [[ -f "$pack" ]]; then
         say "the previous release is not unpacked any more; reinstalling it from $(basename "$pack")"
-        exec "$0" "$pack" ${dry:+--dry-run}
+        if [[ "$dry" == 1 ]]; then
+          exec "$0" "$pack" --dry-run
+        else
+          exec "$0" "$pack"
+        fi
       fi
       echo "NO_PREVIOUS_RELEASE: its pack is gone too. Fetch it again: sudo openrail-fetch --apply $commit (GitHub keeps only the newest packs)" >&2
       exit 1
