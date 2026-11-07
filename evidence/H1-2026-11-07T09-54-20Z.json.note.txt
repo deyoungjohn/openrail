@@ -1,0 +1,2 @@
+Public copy of the H1 adversarial mainnet run. Account names that contain the event word are masked (business-root.near, buyer-root.near); nothing else is changed.
+sha256 of the unmasked original: 4307c19673ec379f57b1ade304a9be6181d0d356c3778965632dacd924f179cc

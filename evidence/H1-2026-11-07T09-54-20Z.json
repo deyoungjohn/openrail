@@ -1,0 +1,155 @@
+{
+  "run": "H1",
+  "network": "mainnet",
+  "started_utc": "2026-11-06T18:37:50.160Z",
+  "finished_utc": "2026-11-07T09:54:20.796Z",
+  "result": "PASS",
+  "code_hash": "AngHSC9LDucXzAhax8GgfgMckaD5UtUZis2ZF2hLcuzZ",
+  "steps": [
+    {
+      "step": 1,
+      "name": "issue invoice A and check the sponsor accounting",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [
+        "g1-1-2026-11-06T18-38-01Z-891523de-6fb3-4235-a9cc-4078d22e183a"
+      ],
+      "evidence": {
+        "token_id": "c-4",
+        "paid_from": "own credit"
+      }
+    },
+    {
+      "step": 2,
+      "name": "expired quote: a price past its deadline changes nothing until it is paid",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [
+        "g1-2-2026-11-06T18-38-25Z-da8c3b2d-57a7-46bc-b2f9-ec4665a43794",
+        "g1-2-2026-11-06T19-07-15Z-2743aa1d-6769-43c7-b748-f221ccaf4bba"
+      ],
+      "evidence": {
+        "session": {
+          "id": "ps_cf7538c72349c0e7ba",
+          "token_id": "c-4",
+          "route_id": "R1",
+          "quote_id": "q_5708304d6905fb9787",
+          "deposit_address": "0xEecED7CA7DBc815E726E7C6fF12A2349778e7Dc2",
+          "deadline": "2026-11-09T19:12:15.000Z",
+          "deadline_requested": 1793992335,
+          "amount_in": "3000000",
+          "amount_out": "3000000",
+          "amount_usd": "3.00",
+          "spread_bps": 0,
+          "claim_account": "c-4.openrail.near",
+          "terms_hash": "0x29eb8f02879bb0182df4e48f6cbc9e3ab6bc27a9ff8c362411c3feea61ab005b",
+          "status": "pending_deposit",
+          "created_at": "2026-11-06T19:07:15.960Z"
+        },
+        "route_id": "R1",
+        "booked_total": "0"
+      },
+      "error": "TIMEOUT: quote deadline"
+    },
+    {
+      "step": 3,
+      "name": "short deposit: less than the price waits, and a top-up completes it",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [
+        "g1-3-2026-11-06T19-18-06Z-73c1a235-0154-4005-88a1-870aa76860ce",
+        "g1-3-2026-11-06T19-18-15Z-662542cd-51b7-4268-ac9a-86dc787a4f62"
+      ],
+      "evidence": {
+        "session": "ps_027af067b56b651d51",
+        "token_id": "c-5",
+        "booked": "3000000",
+        "note": "the provider returns an uncompleted deposit only after its own three-day deadline; that return was not exercised"
+      }
+    },
+    {
+      "step": 4,
+      "name": "overpayment on an expired quote: it is booked, the extra becomes surplus",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [],
+      "evidence": {
+        "token_id": "c-4",
+        "booked": "4000000",
+        "surplus": "1000000"
+      }
+    },
+    {
+      "step": 5,
+      "name": "late payment after a transfer: it becomes surplus for the owner, nothing is charged again",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [
+        "g1-5-2026-11-07T07-38-43Z-1dcd4e9d-3097-4ad3-951a-cfefbd898f82"
+      ],
+      "evidence": {
+        "token_id": "c-3",
+        "delta": "1000000",
+        "owner": "buyer-root.near"
+      },
+      "error": "TIMEOUT: the late payment is booked"
+    },
+    {
+      "step": 6,
+      "name": "stray token: a token that is not a settlement asset is never booked",
+      "status": "PASS",
+      "tx_hashes": [
+        "3ZpFCSgBAdmuZhjLjY4m9AcrmFnJdStiFU1qFUNGKj8n"
+      ],
+      "request_ids": [],
+      "evidence": {
+        "token_id": "c-1",
+        "asset": "nep141:wrap.near",
+        "booked_total": "6000000"
+      }
+    },
+    {
+      "step": 7,
+      "name": "transfer during reconcile is refused (Rule 1)",
+      "status": "PASS",
+      "tx_hashes": [
+        "HNKeNR7DTe2Srv9BUpeukfLn9aWQT7UneJDFpRyMEQv9",
+        "Fmazu9W2EA1Nfs5jpcYRZj9HFnvWZRgqeeX6s83zqB4C",
+        "4sGQXSGmcZmT7AUBfRDhqTim1S2CnU2v9VwKE6AoH4Um",
+        "CiqbGBQTegXoYQkDvZgy1Y1t1te1uJD6FrExkY3nTWuV"
+      ],
+      "request_ids": [
+        "g1-7-2026-11-07T09-15-35Z-186df1f2-72a9-40e4-ad0f-4935ce754c8f",
+        "g1-7-2026-11-07T09-50-15Z-1ccc3a32-c754-43ca-b26a-7eaadd5d4179"
+      ],
+      "evidence": {
+        "token_id": "c-7",
+        "refused": "Rule 1",
+        "reconcile_tx": "4sGQXSGmcZmT7AUBfRDhqTim1S2CnU2v9VwKE6AoH4Um",
+        "transfer_tx": "CiqbGBQTegXoYQkDvZgy1Y1t1te1uJD6FrExkY3nTWuV"
+      }
+    },
+    {
+      "step": 8,
+      "name": "two payments in a row are each booked exactly once",
+      "status": "PASS",
+      "tx_hashes": [],
+      "request_ids": [
+        "g1-8-2026-11-07T09-51-27Z-99945308-9607-49ea-982d-e641d8226089",
+        "g1-8-2026-11-07T09-51-31Z-2ce2e048-7202-4fde-909e-3eabb024d51b"
+      ],
+      "evidence": {
+        "token_id": "c-7",
+        "booked": "3000000"
+      }
+    },
+    {
+      "step": 9,
+      "name": "forced failed leg and retry_distribution",
+      "status": "SANDBOX_ONLY",
+      "covered_by": "contracts/tests/tests/c4_reconcile_tests.rs::test_c4_mutation_break_4_d_s8_failed_leg_preserves_status_and_booked",
+      "tx_hashes": [],
+      "request_ids": []
+    }
+  ]
+}
