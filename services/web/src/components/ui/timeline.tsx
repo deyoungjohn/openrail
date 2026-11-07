@@ -1,4 +1,5 @@
-import { Check, Circle, Loader2, X } from "lucide-react";
+import { Check, Circle, X } from "lucide-react";
+import { Loader } from "./loader";
 import type { ReactNode } from "react";
 import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
@@ -54,7 +55,9 @@ export function Timeline({
             {s.status === "done" ? (
               <Check size={16} strokeWidth={1.5} aria-hidden />
             ) : s.status === "current" ? (
-              <Loader2 size={16} strokeWidth={1.5} className="animate-spin" aria-hidden />
+              <span aria-hidden>
+                <Loader variant="spinner" size={16} label="" className="text-accent-text" />
+              </span>
             ) : s.status === "failed" ? (
               <X size={16} strokeWidth={1.5} aria-hidden />
             ) : (

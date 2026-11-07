@@ -1,7 +1,7 @@
-import { Loader2 } from "lucide-react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { copy } from "@/copy";
+import { Loader } from "./loader";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -46,7 +46,20 @@ export function Button({
       {...rest}
     >
       {loading ? (
-        <Loader2 size={18} strokeWidth={1.5} className="animate-spin" aria-hidden />
+        <span aria-hidden>
+          <Loader
+            variant="spinner"
+            size={18}
+            label=""
+            className={
+              variant === "primary"
+                ? "text-on-accent"
+                : variant === "danger"
+                  ? "text-on-danger"
+                  : "text-accent"
+            }
+          />
+        </span>
       ) : (
         icon
       )}
