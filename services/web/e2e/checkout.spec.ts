@@ -317,6 +317,41 @@ test("late-then-refunded-again lifecycle: transitions across late, refunded, sec
   await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
 });
 
+test("older invoice pay link /c/c-1 redirects to /pay/c-1", async ({ page }) => {
+  await page.goto("/c/c-1");
+  await expect(page).toHaveURL(/\/pay\/c-1$/);
+});
+
+test("checkout page supports opaque token ids (<username>-<hash>.openrail.near)", async ({
+  page,
+}) => {
+  const opaqueId = "alice-9f3c2a7d41b8.openrail.near";
+  await mockCheckout(page, {
+    checkout: {
+      id: opaqueId,
+      token_id: opaqueId,
+      claim_account: `${opaqueId}.claims.openrail.near`,
+      merchant: "alice.openrail.near",
+      order_ref: "ORD-OPAQUE-1",
+      amount_usd: "5.00",
+      amount_due: "5000000",
+      outstanding: "5000000",
+      paid_total: "0",
+      surplus: "0",
+      status: "pending",
+      expires_at: inMinutes(15),
+      return_url: null,
+      server_time: new Date().toISOString(),
+      routes: fixture("pay.claims.get").routes,
+      sessions: [],
+    },
+  });
+  await page.goto(`/c/${encodeURIComponent(opaqueId)}`);
+  await expect(page.getByRole("heading", { name: "Pay alice.openrail.near" })).toBeVisible();
+  await expect(page.getByText("$5.00").first()).toBeVisible();
+  await expect(page.getByText("ORD-OPAQUE-1")).toBeVisible();
+});
+
 for (const scheme of ["light", "dark"] as const) {
   test(`checkout page at 360px, ${scheme}: no horizontal scroll, no WCAG AA violations`, async ({
     page,

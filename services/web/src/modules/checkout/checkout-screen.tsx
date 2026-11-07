@@ -11,6 +11,7 @@ import { Countdown } from "@/components/ui/countdown";
 import { Input } from "@/components/ui/input";
 import { QrPanel } from "@/components/ui/qr-panel";
 import { EmptyState, ErrorState } from "@/components/ui/state";
+import { ErrorNote } from "@/components/ui/error-note";
 import { Tabs } from "@/components/ui/tabs";
 import { Timeline } from "@/components/ui/timeline";
 import { EvmWalletView } from "@/components/wallet-buttons";
@@ -195,11 +196,7 @@ function WalletPay({ session, route }: { session: PaySession; route: Route }) {
           {p.walletSent} {sent}
         </p>
       ) : null}
-      {problem ? (
-        <p className="text-danger-text text-[14px]" role="alert">
-          {problem}
-        </p>
-      ) : null}
+      <ErrorNote>{problem ? problem : null}</ErrorNote>
     </div>
   );
 }
@@ -370,7 +367,7 @@ function SessionView({
               ? checkoutCopy.settlingBody
               : ""}
         </p>
-        {pollFailed ? <p className="text-danger-text mt-2 text-[14px]">{p.pollError}</p> : null}
+        <ErrorNote>{pollFailed ? p.pollError : null}</ErrorNote>
       </Card>
     </div>
   );

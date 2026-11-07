@@ -1,4 +1,4 @@
-import { mockClaims } from "@/lib/mock-data";
+import { mockClaims } from "../../lib/mock-data";
 
 /**
  * Resolves the kind of a claim for route dispatching on `/c/<id>`:
@@ -60,10 +60,7 @@ export async function resolveClaimKind(id: string): Promise<number | null> {
   }
 
   // 3. Try API public endpoints
-  const API_URL =
-    process.env.API_URL ??
-    process.env.NEXT_PUBLIC_API_URL ??
-    "http://127.0.0.1:8787";
+  const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8787";
 
   try {
     const res = await fetch(`${API_URL}/v1/public/checkouts/${encodeURIComponent(id)}`, {
