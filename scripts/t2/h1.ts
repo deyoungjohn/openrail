@@ -34,6 +34,7 @@ import {
   readJson,
   requireOrExit,
   rpc,
+  rpcUrls,
   saveState,
   sendNear,
   step,
@@ -122,6 +123,56 @@ async function claimOf(ctx: H1Ctx, tokenId: string): Promise<Record<string, unkn
   const claim = await viewClaim(ctx, tokenId);
   must(claimIsReadable(claim), `claim ${tokenId} unreadable`);
   return claim;
+}
+
+/**
+ * Sign a call and broadcast it. `commit` waits for the first outcome and returns the contract's failure text if it
+ * panicked (a panic is a normal RPC answer, not an RPC error); `async` returns as soon as the node has the transaction.
+ */
+async function signAndSend(
+  ctx: H1Ctx,
+  stepNumber: number,
+  call: { method: string; args: Record<string, unknown>; gas: bigint; deposit: bigint },
+  signer: { accountEnv: string; keyEnv: string },
+  wait: "commit" | "async",
+): Promise<{ hash: string; failure: string | null }> {
+  const near = nearClientFromEnv({
+    signer: { accountIdEnv: signer.accountEnv, privateKeyEnv: signer.keyEnv },
+  });
+  const signed = await near.signFunctionCall({
+    receiverId: ctx.root,
+    methodName: call.method,
+    args: call.args,
+    gas: call.gas,
+    deposit: call.deposit,
+    feature: `h1.step${stepNumber}`,
+  });
+  ctx.started = true;
+  const response = await ctx.fetchImpl(rpcUrls()[0] as string, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: `h1-${stepNumber}`,
+      method: wait === "commit" ? "broadcast_tx_commit" : "broadcast_tx_async",
+      params: [signed.signedTxBase64],
+    }),
+  });
+  const body = (await response.json()) as {
+    error?: unknown;
+    result?: { status?: { Failure?: unknown } };
+  };
+  if (!response.ok || body.error !== undefined)
+    throw new Error(
+      `NEAR ${call.method} was not accepted: ${redactString(JSON.stringify(body.error).slice(0, 300))}`,
+    );
+  const failure = body.result?.status?.Failure;
+  step(ctx.state, stepNumber).tx_hashes.push(signed.txHash);
+  console.log(`  tx ${signed.txHash}`);
+  return {
+    hash: signed.txHash,
+    failure: failure === undefined ? null : redactString(JSON.stringify(failure)),
+  };
 }
 
 function formatUnits(raw: string, decimals: number): string {
@@ -559,45 +610,55 @@ const H1: StepDef[] = [
     usd: 0,
     readOnly: false,
     async run(ctx, state) {
-      const tokenId = getEnv("H1_TRANSFER_TOKEN") ?? "c-3";
-      const third = getEnv("G1_THIRD_ACCOUNT") ?? getEnv("FEE_ACCOUNT");
-      must(third !== undefined, "set G1_THIRD_ACCOUNT");
+      // The claim must still be unpaid: a paid claim refuses a transfer for its status (Rule 2) before the
+      // lock is even looked at, so this step issues invoice C (it is paid in the next step).
+      const tokenId = await issueInvoice(ctx, 7, "C");
+      state.token_id = tokenId;
+      const to = getEnv("G1_THIRD_ACCOUNT") ?? getEnv("FEE_ACCOUNT");
+      must(to !== undefined, "set G1_THIRD_ACCOUNT");
       const owner = String((await claimOf(ctx, tokenId)).owner_id);
       must(
-        owner === getEnv("G1_BUYER_ACCOUNT"),
-        `the owner ${owner} is not the account whose key is in G1_BUYER_ACCOUNT`,
+        owner === getEnv("H1_OWNER_ACCOUNT"),
+        `the owner ${owner} is not the account in H1_OWNER_ACCOUNT`,
       );
-      await sendNear(
+      // Reconcile and the transfer go out back to back: the transfer must meet the Reconciling lock.
+      const reconcile = await signAndSend(
         ctx,
         7,
-        ctx.root,
-        "reconcile",
-        { token_id: tokenId },
-        250_000_000_000_000n,
-        0n,
-        "WATCHER_ACCOUNT_ID",
-        "WATCHER_PRIVATE_KEY",
+        {
+          method: "reconcile",
+          args: { token_id: tokenId },
+          gas: 250_000_000_000_000n,
+          deposit: 0n,
+        },
+        { accountEnv: "WATCHER_ACCOUNT_ID", keyEnv: "WATCHER_PRIVATE_KEY" },
+        "async",
       );
-      let refused = false;
-      try {
-        await sendNear(
-          ctx,
-          7,
-          ctx.root,
-          "nft_transfer",
-          { receiver_id: third, token_id: tokenId, approval_id: null, memo: null },
-          100_000_000_000_000n,
-          1n,
-          "G1_BUYER_ACCOUNT",
-          "G1_BUYER_PRIVATE_KEY",
-        );
-      } catch (error) {
-        refused = error instanceof Error && error.message.includes("Rule 1");
-        if (!refused) throw error;
-      }
-      must(refused, "the transfer was not refused with Rule 1");
+      const transfer = await signAndSend(
+        ctx,
+        7,
+        {
+          method: "nft_transfer",
+          args: { receiver_id: to, token_id: tokenId, approval_id: null, memo: null },
+          gas: 100_000_000_000_000n,
+          deposit: 1n,
+        },
+        { accountEnv: "H1_OWNER_ACCOUNT", keyEnv: "H1_OWNER_PRIVATE_KEY" },
+        "commit",
+      );
+      must(transfer.failure !== null, "the transfer went through during a reconcile");
+      must(
+        transfer.failure.includes("Rule 1"),
+        `the transfer was refused, but not by Rule 1: ${transfer.failure}`,
+      );
+      await sleep(30_000);
       must(String((await claimOf(ctx, tokenId)).owner_id) === owner, "the owner changed");
-      state.evidence = { token_id: tokenId, refused: true };
+      state.evidence = {
+        token_id: tokenId,
+        refused: "Rule 1",
+        reconcile_tx: reconcile.hash,
+        transfer_tx: transfer.hash,
+      };
     },
   },
   {
@@ -605,8 +666,7 @@ const H1: StepDef[] = [
     usd: 3,
     readOnly: false,
     async run(ctx, state) {
-      const tokenId = await issueInvoice(ctx, 8, "C");
-      state.token_id = tokenId;
+      const tokenId = recorded(ctx, "C");
       const routes = (await routesOf(ctx, tokenId)).filter(
         (r) => r.swap_type === "FLEX_INPUT" && r.evm_chain_id !== null,
       );
@@ -768,7 +828,7 @@ export async function runH1(argv: string[] = process.argv.slice(2)): Promise<num
     business: requireOrExit("H1_BUSINESS_ACCOUNT"),
     tokens: {},
   };
-  // Invoices issued by earlier steps (a resumed run): step 1 issued A, step 3 B, step 8 C.
+  // Invoices issued by earlier steps (a resumed run): step 1 issued A, step 3 B, step 7 C.
   for (const [number, label] of [
     [1, "A"],
     [3, "B"],

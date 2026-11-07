@@ -182,7 +182,7 @@ describe("the H1 / REL-1 runner", () => {
     });
     expect(code).toBe(1);
     expect(out).toMatch(
-      /MISSING_ENV: (ISSUER_PRIVATE_KEY|WATCHER_PRIVATE_KEY|ONECLICK_JWT|OPENRAIL_API_KEY|H1_REFUND_EVM|G1_EVM_DEBTOR_ADDRESS)/,
+      /MISSING_ENV: (ISSUER_PRIVATE_KEY|WATCHER_PRIVATE_KEY|ONECLICK_JWT|OPENRAIL_API_KEY|H1_REFUND_EVM|G1_EVM_DEBTOR_ADDRESS|H1_OWNER_ACCOUNT|H1_OWNER_PRIVATE_KEY)/,
     );
     expect(writes).toEqual([]);
   });
@@ -197,6 +197,8 @@ describe("the H1 / REL-1 runner", () => {
       OPENRAIL_API_KEY: "x",
       H1_REFUND_EVM: "0x" + "11".repeat(20),
       G1_EVM_DEBTOR_ADDRESS: "0x" + "22".repeat(20),
+      H1_OWNER_ACCOUNT: "owner.near",
+      H1_OWNER_PRIVATE_KEY: "x",
     };
     for (const answer of ["yes\n", "Yes\n", "y\n", "\n"]) {
       const { code, out } = await run(["--set", "h1"], env, answer);
