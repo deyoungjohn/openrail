@@ -92,8 +92,14 @@ export class PayoutWorker {
         }
         await this.startPayout(tokenId, index, entry, summary);
       }
+      await this.processCheckoutRefunds(tokenId, summary);
     }
     return summary;
+  }
+
+  /** Stub for REL-2 checkout refunds: ag4 implements against REL2-checkout-refund tests. */
+  private async processCheckoutRefunds(_tokenId: string, _summary: WorkerSummary): Promise<void> {
+    // stub: does nothing
   }
 
   private async startPayout(

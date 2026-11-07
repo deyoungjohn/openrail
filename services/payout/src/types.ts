@@ -37,6 +37,14 @@ export interface PayoutRecord {
 export type PayoutOutcome =
   { Settled: { destination_tx: string } } | { Refunded: { amount: string } };
 
+export interface CheckoutRefundEvent {
+  tokenId: string;
+  refundTo: string;
+  amount: string;
+  asset: string;
+  status?: "Pending" | { InFlight: { payout_id: number } } | { Settled: { destination_tx: string } };
+}
+
 export interface ChainPort {
   settleHeld(tokenId: string): Promise<HeldEntry[]>;
   settlementOf(owner: string): Promise<Destination | null>;
@@ -55,6 +63,15 @@ export interface ChainPort {
   ): Promise<void>;
   payout(payoutId: number): Promise<PayoutRecord | null>;
   balanceYocto(): Promise<bigint>;
+
+  // Checkout refund support:
+  checkoutRefundEvents?(tokenId: string): Promise<CheckoutRefundEvent[]>;
+  bookedNet?(tokenId: string): Promise<string>;
+  refundLate?(
+    tokenId: string,
+    depositAddress: string,
+    amountIn: string,
+  ): Promise<{ payoutId: number; txHash: string }>;
 }
 
 export interface QuoteRequest {

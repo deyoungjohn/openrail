@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   ChainPort,
+  CheckoutRefundEvent,
   HeldEntry,
   PayoutOutcome,
   PayoutRecord,
@@ -18,7 +19,10 @@ class FakeChain implements ChainPort {
   readonly reports: { tokenId: string; index: number; payoutId: number; outcome: PayoutOutcome }[] =
     [];
   readonly payouts = new Map<number, PayoutRecord>();
+  readonly checkoutRefunds = new Map<string, CheckoutRefundEvent[]>();
+  readonly bookedNets = new Map<string, string>();
   failSend = false;
+  failCheckoutSend = false;
   recheckToInFlight = false;
   private nextId = 1;
   private heldCalls = 0;
@@ -81,6 +85,36 @@ class FakeChain implements ChainPort {
   }
   async balanceYocto(): Promise<bigint> {
     return 2n * 10n ** 24n;
+  }
+
+  async checkoutRefundEvents(tokenId: string): Promise<CheckoutRefundEvent[]> {
+    return this.checkoutRefunds.get(tokenId) ?? [];
+  }
+
+  async bookedNet(tokenId: string): Promise<string> {
+    return this.bookedNets.get(tokenId) ?? "2000000";
+  }
+
+  async refundLate(tokenId: string, deposit: string, amount: string) {
+    const refund = this.checkoutRefunds.get(tokenId)?.[0];
+    const payoutId = this.nextId++;
+    this.sent.push({ tokenId, index: 0, deposit, amount });
+    if (this.failSend || this.failCheckoutSend) throw new Error("network ambiguous");
+    if (refund) {
+      refund.status = { InFlight: { payout_id: payoutId } };
+    }
+    this.payouts.set(payoutId, {
+      id: payoutId,
+      module_id: "checkout",
+      reference: `${tokenId}#refund`,
+      source: `${tokenId}.openrail.near`,
+      asset: refund?.asset ?? "nep141:usdc",
+      amount_in: amount,
+      deposit_address: deposit,
+      status: "Sent",
+      created_block: 1,
+    });
+    return { payoutId, txHash: "tx-checkout-refund" };
   }
 }
 
@@ -235,5 +269,118 @@ describe("settle payout worker", () => {
     const summary = await worker.tick();
     expect(chain.sent).toHaveLength(0);
     expect(summary.skipped[0]).toContain("no destination");
+  });
+});
+
+function checkoutFixture(
+  quoteRecipient = "0x" + "e".repeat(40),
+  alert?: (message: string, data?: Record<string, unknown>) => void,
+  amount = "2000000",
+  bookedNet = "2000000",
+) {
+  const chain = new FakeChain();
+  const refundTo = "0x" + "e".repeat(40);
+  chain.checkoutRefunds.set("c-chk-1", [
+    {
+      tokenId: "c-chk-1",
+      refundTo,
+      amount,
+      asset: "nep141:usdc",
+    },
+  ]);
+  chain.bookedNets.set("c-chk-1", bookedNet);
+
+  const quote: QuotePort = {
+    quote: vi.fn(async (): Promise<Quote> => ({
+      amountIn: amount,
+      depositAddress: "deposit-checkout",
+      recipient: quoteRecipient,
+      deadline: "2026-11-08T00:00:00Z",
+    })),
+  };
+  const status: StatusPort = {
+    status: vi.fn(async () => ({
+      status: "SUCCESS",
+      destinationTxHashes: [{ hash: "dest-tx-checkout" }],
+    })),
+  };
+  const worker = new PayoutWorker({
+    discovery: { tokens: async () => ["c-chk-1"] },
+    chain,
+    quote,
+    status,
+    logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+    clock: () => Date.parse("2026-11-07T00:00:00Z"),
+    sleep: async () => undefined,
+    settleRecheckMs: 0,
+    ...(alert === undefined ? {} : { alert }),
+  });
+  return { chain, quote, status, worker, refundTo };
+}
+
+describe("checkout refund payout worker", () => {
+  // REL2-checkout-refund: ag4 implements against these tests
+  it.skip("checkout_refund_quote_recipient_checked_before_send", async () => {
+    const alert = vi.fn();
+    const { chain, worker } = checkoutFixture("0x" + "f".repeat(40), alert);
+    const summary = await worker.tick();
+    expect(chain.sent).toHaveLength(0);
+    expect(summary.errors.some((e) => e.includes("recipient mismatch"))).toBe(true);
+    expect(alert).toHaveBeenCalledWith(
+      expect.stringContaining("recipient mismatch"),
+      expect.any(Object),
+    );
+  });
+
+  // REL2-checkout-refund: ag4 implements against these tests
+  it.skip("checkout_refund_amount_never_exceeds_booked_net", async () => {
+    const alert = vi.fn();
+    const { chain, worker } = checkoutFixture(undefined, alert, "3000000", "2000000");
+    const summary = await worker.tick();
+    expect(chain.sent).toHaveLength(0);
+    expect(summary.errors.some((e) => e.includes("exceeds booked net"))).toBe(true);
+    expect(alert).toHaveBeenCalledWith(
+      expect.stringContaining("exceeds booked net"),
+      expect.any(Object),
+    );
+  });
+
+  // REL2-checkout-refund: ag4 implements against these tests
+  it.skip("checkout_refund_resumes_after_restart_without_resending", async () => {
+    const { chain, worker } = checkoutFixture();
+    const first = await worker.tick();
+    expect(first.sent).toHaveLength(1);
+    expect(chain.sent).toHaveLength(1);
+
+    const restarted = new PayoutWorker({
+      discovery: { tokens: async () => ["c-chk-1"] },
+      chain,
+      quote: { quote: async () => Promise.reject(new Error("must not quote on resume")) },
+      status: {
+        status: async () => ({
+          status: "SUCCESS",
+          destinationTxHashes: [{ hash: "dest-tx-checkout" }],
+        }),
+      },
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      sleep: async () => undefined,
+      settleRecheckMs: 0,
+    });
+
+    const second = await restarted.tick();
+    expect(chain.sent).toHaveLength(1);
+    expect(second.settled).toHaveLength(1);
+  });
+
+  // REL2-checkout-refund: ag4 implements against these tests
+  it.skip("checkout_refund_ambiguous_send_not_retried", async () => {
+    const { chain, worker } = checkoutFixture();
+    chain.failCheckoutSend = true;
+    await worker.tick();
+    expect(chain.sent).toHaveLength(1);
+
+    const second = await worker.tick();
+    expect(chain.sent).toHaveLength(1);
+    expect(second.skipped.some((s) => s.includes("uncertain"))).toBe(true);
   });
 });
