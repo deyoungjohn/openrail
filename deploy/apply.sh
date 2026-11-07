@@ -146,6 +146,18 @@ prune_releases() { # after a healthy apply: only the live release stays unpacked
   done
 }
 
+prune_packs() { # prune_packs <home>: each pack is ~250 MB; keep the packs of the live and the previous release
+  local home="$1" count=0 pack
+  # shellcheck disable=SC2012
+  for pack in $(ls -t "$home"/openrail-server-*.tar.gz 2>/dev/null); do
+    count=$((count + 1))
+    if ((count > KEEP_PACKS)); then
+      say "removing old pack $(basename "$pack")"
+      run rm -f "$pack"
+    fi
+  done
+}
+
 # ---------------------------------------------------------------------------------------------------------------
 home_of_caller() {
   if [[ -n "${OPENRAIL_HOME:-}" ]]; then printf '%s\n' "$OPENRAIL_HOME"; return; fi # tests

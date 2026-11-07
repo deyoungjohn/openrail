@@ -9,6 +9,7 @@ import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { isNearAccountId } from "@/lib/near-account";
 import { onboardingSteps, type OnboardingStepId } from "@/lib/onboarding";
+import { useStorageCredit } from "@/lib/use-storage-credit";
 import { useAsync } from "@/lib/use-async";
 import { cn } from "@/lib/cn";
 import { useAuth } from "../auth/auth-provider";
@@ -132,7 +133,7 @@ export function OnboardingScreen() {
       }),
     [],
   );
-  const [credit, reloadCredit] = useAsync(() => dashClient.business.storageCredit(), []);
+  const [credit, , watchCredit] = useStorageCredit();
   const [invoices] = useAsync(() => dashClient.invoices.list({ limit: 1 }), []);
 
   if (biz.state === "error")
@@ -226,7 +227,7 @@ export function OnboardingScreen() {
                     ) : null}
                     {open && s.id === "credit" ? (
                       <div className="mt-4">
-                        <StorageCreditCard credit={credit} reload={reloadCredit} />
+                        <StorageCreditCard credit={credit} reload={watchCredit} />
                       </div>
                     ) : null}
                     {open && s.id === "invoice" ? (

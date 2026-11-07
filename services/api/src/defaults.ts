@@ -5,6 +5,7 @@ import {
   defaultSettlementAsset,
   getEnv,
   loadRoutes,
+  type NearClient,
   nearClientFromEnv,
   OneClickRequestError,
   requireEnv,
@@ -122,6 +123,29 @@ export function createAccessKeyPort(
   };
 }
 
+/**
+ * The business's prepaid storage credit, read from the contract on every call (`storage_credit_of`), so a deposit
+ * shows as soon as it is on chain. `amount` is the deposit the page suggests (an env default).
+ */
+export async function storageCreditOf(
+  near: Pick<NearClient, "view">,
+  rootAccount: string,
+  accountId: string,
+): Promise<{ balance: string; amount: string }> {
+  const value = await near.view<unknown>({
+    contractId: rootAccount,
+    methodName: "storage_credit_of",
+    args: { account_id: accountId },
+    feature: "api.storage_credit",
+  });
+  if (typeof value !== "string" || !/^\d+$/.test(value))
+    throw new ApiError(502, "storage_credit_unreadable");
+  return {
+    balance: value,
+    amount: getEnv("STORAGE_CREDIT_AMOUNT") ?? "100000000000000000000000",
+  };
+}
+
 export function createContractPort(rootAccount: string): ContractPort {
   const near = nearClientFromEnv();
   return {
@@ -148,11 +172,8 @@ export function createContractPort(rootAccount: string): ContractPort {
         used: Number(status.used ?? 0),
       };
     },
-    async storageCredit() {
-      return {
-        balance: getEnv("STORAGE_CREDIT_BALANCE") ?? "0",
-        amount: getEnv("STORAGE_CREDIT_AMOUNT") ?? "1000000000000000000000000",
-      };
+    async storageCredit(accountId) {
+      return storageCreditOf(near, rootAccount, accountId);
     },
   };
 }

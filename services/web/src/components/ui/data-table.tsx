@@ -163,55 +163,61 @@ export function DataTable<T>({
   return (
     <section className={cn(shell, className)} aria-label={title}>
       {showBar ? (
-        <div className="flex flex-wrap items-center gap-3 px-4 pt-4 pb-3 sm:px-6">
-          {title ? (
-            <h3 className="mr-auto text-[18px] leading-[26px] font-semibold">{title}</h3>
-          ) : (
-            <span className="mr-auto" />
-          )}
-          {filters.map((f) => (
-            <div
-              key={f.id}
-              role="group"
-              aria-label={f.label}
-              className="flex flex-wrap items-center gap-1"
-            >
-              {f.options.map((o) => {
-                const on = chosen[f.id] === o.value;
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => setChosen((c) => ({ ...c, [f.id]: o.value }))}
-                    className={cn(
-                      "h-8 rounded-full px-3 text-[13px] font-medium transition-colors",
-                      on ? "bg-accent text-on-accent" : "bg-surface-2 text-muted hover:text-text",
-                    )}
-                  >
-                    {o.label}
-                  </button>
-                );
-              })}
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 pt-4 pb-3 sm:px-6">
+          {title ? <h3 className="text-[18px] leading-[26px] font-semibold">{title}</h3> : null}
+          {/* The controls sit in one block next to the title: filters and search on the first row, the toolbar
+              (time pills, date picker) on the second, every row pushed to the right edge. */}
+          <div className="flex min-w-0 flex-1 basis-[28rem] flex-col items-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {filters.map((f) => (
+                <div
+                  key={f.id}
+                  role="group"
+                  aria-label={f.label}
+                  className="flex flex-wrap items-center gap-1"
+                >
+                  {f.options.map((o) => {
+                    const on = chosen[f.id] === o.value;
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setChosen((c) => ({ ...c, [f.id]: o.value }))}
+                        className={cn(
+                          "h-8 rounded-full px-3 text-[13px] font-medium transition-colors",
+                          on
+                            ? "bg-accent text-on-accent"
+                            : "bg-surface-2 text-muted hover:text-text",
+                        )}
+                      >
+                        {o.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+              {searchable ? (
+                <label className="relative">
+                  <span className="sr-only">{t.search}</span>
+                  <Search
+                    aria-hidden
+                    size={16}
+                    className="absolute top-1/2 left-3 -translate-y-1/2 text-muted"
+                  />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t.search}
+                    className="h-9 w-44 rounded-full border border-border bg-transparent pr-3 pl-9 text-[14px] outline-none focus-visible:border-accent"
+                  />
+                </label>
+              ) : null}
             </div>
-          ))}
-          {searchable ? (
-            <label className="relative">
-              <span className="sr-only">{t.search}</span>
-              <Search
-                aria-hidden
-                size={16}
-                className="absolute top-1/2 left-3 -translate-y-1/2 text-muted"
-              />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t.search}
-                className="h-9 w-44 rounded-full border border-border bg-transparent pr-3 pl-9 text-[14px] outline-none focus-visible:border-accent"
-              />
-            </label>
-          ) : null}
-          {toolbar}
+            {toolbar ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">{toolbar}</div>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

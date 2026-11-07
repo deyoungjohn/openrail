@@ -12,6 +12,7 @@ import { formatUsd } from "@/lib/format";
 import { formatNear, storageCreditLow } from "@/lib/near-amount";
 import { DepositControl } from "../setup/deposit-control";
 import { invoiceTotalCents, lineCents, validateIssue, type IssueForm } from "@/lib/invoice-model";
+import { useStorageCredit } from "@/lib/use-storage-credit";
 import { useAsync } from "@/lib/use-async";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
@@ -74,7 +75,7 @@ function Preview({
 
 function StorageCredit() {
   const t = copy.issue;
-  const [credit, reload] = useAsync(() => dashClient.business.storageCredit(), []);
+  const [credit, , watchDeposit] = useStorageCredit();
   const [sent, setSent] = useState(false);
   const balance = credit.state === "ready" ? BigInt(credit.data.balance) : null;
   const low = balance !== null && storageCreditLow(balance);
@@ -100,7 +101,7 @@ function StorageCredit() {
               suggestedYocto={credit.data.amount}
               onSent={() => {
                 setSent(true);
-                reload();
+                watchDeposit();
               }}
             />
           ) : null}

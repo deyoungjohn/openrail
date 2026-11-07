@@ -16,6 +16,7 @@ export function StorageCreditCard({
   reload,
 }: {
   credit: Async<Credit>;
+  /** Called when a deposit was sent: the parent watches the balance until it changes. */
   reload: () => void;
 }) {
   const t = copy.setup;

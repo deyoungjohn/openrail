@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { isNearAccountId } from "@/lib/near-account";
+import { useStorageCredit } from "@/lib/use-storage-credit";
 import { useAsync } from "@/lib/use-async";
 import { AccountBar } from "../auth/account-bar";
 import { Button } from "../ui/button";
@@ -108,7 +109,7 @@ function ProfileCard({
 export function SettingsScreen() {
   const s = copy.settings;
   const [biz, reload] = useAsync(() => dashClient.business.get(), []);
-  const [credit, reloadCredit] = useAsync(() => dashClient.business.storageCredit(), []);
+  const [credit, , watchCredit] = useStorageCredit();
   const [saved, setSaved] = useState<Business | null>(null);
 
   const business = saved ?? (biz.state === "ready" ? biz.data : null);
@@ -127,7 +128,7 @@ export function SettingsScreen() {
         <ProfileCard key={business.updated_at} business={business} onSaved={setSaved} />
       ) : null}
 
-      <StorageCreditCard credit={credit} reload={reloadCredit} />
+      <StorageCreditCard credit={credit} reload={watchCredit} />
 
       <Card title={s.signedInTitle}>
         <AccountBar />
