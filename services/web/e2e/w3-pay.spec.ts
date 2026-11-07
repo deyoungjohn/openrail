@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { pickRoute } from "./helpers";
 import { expect, test, type Page, type Route as PwRoute } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
@@ -35,7 +36,7 @@ const REFUND = "0x53C5D39A5828BaDf817E40f22d75d96D731f8239";
 
 /** Picks a chain, gives the refund address and asks for the price. */
 async function pick(page: Page, name = "USDC on Base", refund = REFUND) {
-  await page.getByRole("button", { name }).click();
+  await pickRoute(page, name);
   await page.getByLabel("Refund address").fill(refund);
   await page.getByRole("button", { name: "Get price" }).click();
 }
@@ -91,12 +92,19 @@ test("shows who to pay, the amount and the chains to pay from", async ({ page })
   await mockApi(page);
   await page.goto("/pay/c-1");
   const main = page.getByRole("main");
-  await expect(main.getByRole("heading", { level: 1 })).toHaveText("Pay Acme Ltd");
+  await expect(main.getByRole("heading", { level: 1 })).toHaveText("INV-2026-001");
+  await expect(main.getByText("Acme Ltd").first()).toBeVisible();
   await expect(main.getByText("$12.50").first()).toBeVisible();
-  await expect(main.getByText("Invoice INV-2026-001")).toBeVisible();
-  await expect(main.getByRole("button", { name: "USDC on Base" })).toBeVisible();
-  await expect(main.getByRole("button", { name: "ETH on Base" })).toBeVisible();
-  await expect(main.getByRole("button", { name: "USDC on BNB Chain" })).toBeVisible();
+  await expect(main.getByText("INV-2026-001").first()).toBeVisible();
+  // The invoice's own details are on the page, then the two selects that choose how to pay.
+  await expect(main.getByText("Northwind")).toHaveCount(0);
+  await expect(main.getByText("Billed to")).toBeVisible();
+  await expect(main.getByText("Terms fingerprint")).toBeVisible();
+  await main.getByRole("button", { name: /^Pay with/ }).click();
+  await expect(page.getByRole("option")).toHaveText(["USDC", "ETH"]);
+  await page.getByRole("option", { name: "USDC", exact: true }).click();
+  await main.getByRole("button", { name: /^Network/ }).click();
+  await expect(page.getByRole("option")).toHaveText(["Base", "BNB Chain"]);
 });
 
 test("USDC route: exact amount, then the address, and the locked amount comes first", async ({
@@ -137,7 +145,8 @@ test("ETH route: 'you pay up to', every digit, and the margin explained", async 
   await pick(page, "ETH on Base");
   const quote = page.getByRole("region", { name: "Your price" });
   await expect(quote).toContainText("You pay up to");
-  await expect(quote).toContainText("3.812345678901234 ETH");
+  // The amount is rounded up to what a wallet can enter (six decimals), never down, so it is never short.
+  await expect(quote).toContainText("3.812346 ETH");
   await expect(quote).toContainText("0.30%");
   await expect(quote).toContainText("Price protection margin");
 });
@@ -245,7 +254,7 @@ for (const scheme of ["light", "dark"] as const) {
 test("the refund address is checked before any price is requested", async ({ page }) => {
   const calls = await mockApi(page);
   await page.goto("/pay/c-1");
-  await page.getByRole("button", { name: "USDC on Base" }).click();
+  await pickRoute(page, "USDC on Base");
   await page.getByLabel("Refund address").fill("0x123");
   await page.getByRole("button", { name: "Get price" }).click();
   await expect(page.getByText("starts with 0x")).toBeVisible();
@@ -264,32 +273,34 @@ test("a connected wallet fills in the refund address", async ({ page }) => {
   await mockApi(page);
   await page.goto("/pay/c-1");
   // The wallet tab fills the address in; the first tab (pay from any wallet) never does.
-  await page.getByRole("tab", { name: "Use a connected wallet" }).click();
-  await page.getByRole("button", { name: "USDC on Base" }).click();
+  await page.getByRole("tab", { name: "Pay with your wallet" }).click();
+  await pickRoute(page, "USDC on Base");
   await expect(page.getByLabel("Refund address")).toHaveValue(REFUND);
 });
 
-test("two columns from 1024px: the picker stays on the left, the price and progress on the right", async ({
+test("one centered column on a desktop: the price comes under the picker, not beside it", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockApi(page);
   await page.goto("/pay/c-1");
   await pick(page);
-  const picker = page.getByRole("region", { name: "Choose how you pay" });
+  const picker = page.getByRole("region", { name: "Pay this invoice" });
   const quote = page.getByRole("region", { name: "Your price" });
   await expect(quote).toBeVisible();
   const a = (await picker.boundingBox())!;
   const b = (await quote.boundingBox())!;
-  expect(b.x).toBeGreaterThan(a.x + a.width - 1);
-  expect(Math.abs(b.y - a.y)).toBeLessThan(200);
+  expect(b.y).toBeGreaterThan(a.y + a.height - 1);
+  expect(Math.abs(b.x - a.x)).toBeLessThan(2);
+  // The column is centered in the window.
+  expect(Math.abs(a.x + a.width / 2 - 640)).toBeLessThan(8);
 });
 
 test("one column on a phone, in reading order", async ({ page }) => {
   await mockApi(page);
   await page.goto("/pay/c-1");
   await pick(page);
-  const picker = (await page.getByRole("region", { name: "Choose how you pay" }).boundingBox())!;
+  const picker = (await page.getByRole("region", { name: "Pay this invoice" }).boundingBox())!;
   const quote = (await page.getByRole("region", { name: "Your price" }).boundingBox())!;
   expect(quote.y).toBeGreaterThan(picker.y + picker.height - 1);
   expect(Math.abs(quote.x - picker.x)).toBeLessThan(2);

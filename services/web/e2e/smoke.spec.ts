@@ -1,4 +1,4 @@
-import { pickDate } from "./helpers";
+import { pickDate, pickRoute } from "./helpers";
 import { expect, test } from "@playwright/test";
 
 // The signed-in journey against the real mock API (`MOCK=1`, started by playwright.config.ts),
@@ -44,8 +44,8 @@ test.describe("signed-in journey on the mock API", () => {
 
   test("a client pays: pay page, price, address, then the receipt", async ({ page }) => {
     await page.goto("/pay/c-1");
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Pay");
-    await page.getByRole("button", { name: /Base/ }).first().click();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("INV-");
+    await pickRoute(page, "USDC on Base");
     await page.getByLabel("Refund address").fill("0x53C5D39A5828BaDf817E40f22d75d96D731f8239");
     await page.getByRole("button", { name: "Get price" }).click();
     // The mock's pay-session fixture has a fixed deadline (2 Nov 2026), so once that day has

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { fixture, mockApi, type Handlers } from "./api-mock";
-import { signIn } from "./helpers";
+import { signIn, pickRoute } from "./helpers";
 
 // The accessibility sweep (update 26): reduced motion stops loading animations, the tab order on the
 // pages with forms and wallets follows the visual order, and every icon-only control has a name.
@@ -156,22 +156,25 @@ test.describe("tab order follows the visual order", () => {
   }) => {
     await mockApi(page, base());
     await page.goto("/pay/c-1");
-    await expect(page.getByRole("button", { name: /USDC on Base/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Pay with/ })).toBeVisible();
     // The selected tab is the one stop of the tab list; the other tab is reached with the arrow keys.
     expectOrder(await mainTabOrder(page), [
-      "Pay from any wallet or exchange",
-      "USDC on Base",
-      "USDC on BNB Chain",
+      /^Copy acme/,
+      /^Copy c-1/,
+      /^Copy 0xaaaa/,
+      "What this invoice says",
+      "Pay with your wallet",
+      /^Pay with/,
       "Split this payment",
     ]);
 
-    await page.getByRole("button", { name: /USDC on Base/ }).click();
+    await pickRoute(page, "USDC on Base");
     await page.getByLabel("Refund address").fill(SIGNER);
     await page.getByRole("button", { name: "Get price" }).click();
     await expect(page.getByRole("region", { name: "Your price" })).toBeVisible();
     const order = await mainTabOrder(page);
     const idx = (re: RegExp) => order.findIndex((n) => re.test(n));
-    expect(idx(/USDC on Base/), order.join(" | ")).toBeLessThan(idx(/^Refund address$/));
+    expect(idx(/^Network/), order.join(" | ")).toBeLessThan(idx(/^Refund address$/));
     expect(idx(/^Refund address$/)).toBeLessThan(idx(/^Get price$/));
     expect(idx(/^Get price$/)).toBeLessThan(idx(/^Copy 0xeeee/));
   });

@@ -1,3 +1,4 @@
+import { pickRoute } from "./helpers";
 import { expect, test, type Page } from "@playwright/test";
 import { axeClean } from "./setup-axe";
 import { fixture, mockApi, type Handlers } from "./api-mock";
@@ -52,7 +53,7 @@ function payApi(w: World, outstanding = "12500000"): Handlers {
 const world = (over: Partial<World> = {}): World => ({ posts: [], status: {}, ...over });
 
 async function chooseAndGetPrice(page: Page, network: string, amount?: string) {
-  await page.getByRole("button", { name: network }).click();
+  await pickRoute(page, network);
   await page.getByLabel("Refund address").fill(REFUND);
   if (amount !== undefined) await page.getByLabel("Amount for this part").fill(amount);
   await page.getByRole("button", { name: /^Get price/ }).click();
@@ -65,9 +66,11 @@ test.describe("H10: pay from any wallet or exchange, without connecting", () => 
     await mockApi(page, payApi(world()));
     await page.goto("/pay/c-1");
     const tabs = page.getByRole("tablist", { name: "How you pay" });
-    await expect(tabs.getByRole("tab").first()).toHaveText("Pay from any wallet or exchange");
+    // The wallet comes first; paying from any wallet or exchange is the second tab.
+    await expect(tabs.getByRole("tab").first()).toHaveText("Pay with your wallet");
     await expect(tabs.getByRole("tab").first()).toHaveAttribute("aria-selected", "true");
-    await expect(tabs.getByRole("tab").nth(1)).toHaveText("Use a connected wallet");
+    await expect(tabs.getByRole("tab").nth(1)).toHaveText("Pay from any wallet or exchange");
+    await tabs.getByRole("tab").nth(1).click();
     const panel = page.getByRole("tabpanel");
     await expect(panel).toContainText("Exchanges often take a withdrawal fee");
     await expect(panel).toContainText("refunded to that address and nowhere else");
@@ -79,7 +82,7 @@ test.describe("H10: pay from any wallet or exchange, without connecting", () => 
     const w = world();
     await mockApi(page, payApi(w));
     await page.goto("/pay/c-1");
-    await page.getByRole("button", { name: "USDC on Base" }).click();
+    await pickRoute(page, "USDC on Base");
     // Nothing yet: no address field answer, no price.
     await expect(page.getByRole("region", { name: "Your price" })).toHaveCount(0);
     await page.getByRole("button", { name: "Get price" }).click();
@@ -105,14 +108,13 @@ test.describe("H10: pay from any wallet or exchange, without connecting", () => 
   }) => {
     await mockApi(page, payApi(world()));
     await page.goto("/pay/c-1");
-    const first = page.getByRole("tab", { name: "Pay from any wallet or exchange" });
+    const first = page.getByRole("tab", { name: "Pay with your wallet" });
     await first.focus();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("tab", { name: "Use a connected wallet" })).toBeFocused();
-    await expect(page.getByRole("tab", { name: "Use a connected wallet" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect(page.getByRole("tab", { name: "Pay from any wallet or exchange" })).toBeFocused();
+    await expect(
+      page.getByRole("tab", { name: "Pay from any wallet or exchange" }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   test("the wallet tab fills in the refund address from a connected wallet", async ({ page }) => {
@@ -126,8 +128,8 @@ test.describe("H10: pay from any wallet or exchange, without connecting", () => 
     }, REFUND);
     await mockApi(page, payApi(world()));
     await page.goto("/pay/c-1");
-    await page.getByRole("tab", { name: "Use a connected wallet" }).click();
-    await page.getByRole("button", { name: "USDC on Base" }).click();
+    await page.getByRole("tab", { name: "Pay with your wallet" }).click();
+    await pickRoute(page, "USDC on Base");
     await expect(page.getByLabel("Refund address")).toHaveValue(REFUND);
   });
 
@@ -142,7 +144,8 @@ test.describe("H10: pay from any wallet or exchange, without connecting", () => 
     }, REFUND);
     await mockApi(page, payApi(world()));
     await page.goto("/pay/c-1");
-    await page.getByRole("button", { name: "USDC on Base" }).click();
+    await page.getByRole("tab", { name: "Pay from any wallet or exchange" }).click();
+    await pickRoute(page, "USDC on Base");
     await expect(page.getByLabel("Refund address")).toHaveValue("");
   });
 
@@ -151,9 +154,9 @@ test.describe("H10: pay from any wallet or exchange, without connecting", () => 
       await page.emulateMedia({ colorScheme: scheme });
       await mockApi(page, payApi(world()));
       await page.goto("/pay/c-1");
-      await page.getByRole("button", { name: "USDC on Base" }).click();
+      await pickRoute(page, "USDC on Base");
       await axeClean(page);
-      await page.getByRole("tab", { name: "Use a connected wallet" }).click();
+      await page.getByRole("tab", { name: "Pay from any wallet or exchange" }).click();
       await axeClean(page);
     });
   }
@@ -221,7 +224,7 @@ test.describe("H9: split this payment", () => {
     await mockApi(page, payApi(w));
     await page.goto("/pay/c-1");
     await page.getByRole("button", { name: "Split this payment" }).click();
-    await page.getByRole("button", { name: "USDC on Base" }).click();
+    await pickRoute(page, "USDC on Base");
     await page.getByLabel("Refund address").fill(REFUND);
     for (const [amount, message] of [
       ["", "Enter an amount"],
@@ -248,7 +251,7 @@ test.describe("H9: split this payment", () => {
     // The first price was already out of date, so nothing is held back for it.
     await expect(parts).toContainText("$12.50");
     // A refunded part gives its amount back too.
-    await page.getByRole("button", { name: "USDC on Base" }).click();
+    await pickRoute(page, "USDC on Base");
     await page.getByLabel("Amount for this part").fill("5.00");
     await page.getByRole("button", { name: "Get price for this part" }).click();
     await expect(parts).toContainText("$7.50");
@@ -284,7 +287,7 @@ test.describe("H9: split this payment", () => {
     await mockApi(page, payApi(world(), "4000000"));
     await page.goto("/pay/c-1");
     await page.getByRole("button", { name: "Split this payment" }).click();
-    await page.getByRole("button", { name: "USDC on Base" }).click();
+    await pickRoute(page, "USDC on Base");
     await expect(page.getByLabel("Amount for this part")).toHaveValue("4.00");
   });
 

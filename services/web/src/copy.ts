@@ -216,7 +216,21 @@ export const copy = {
     routeLabel: (asset: string, chain: string) => `${asset} on ${chain}`,
     tabsLabel: "How you pay",
     tabPaste: "Pay from any wallet or exchange",
-    tabWallet: "Use a connected wallet",
+    tabWallet: "Pay with your wallet",
+    payWith: "Pay with",
+    network: "Network",
+    invoiceCardLabel: "Invoice",
+    invoiceWord: "Invoice",
+    fromLabel: "From",
+    billedTo: "Billed to",
+    amountDue: "Amount due",
+    stillDue: "Still to pay",
+    ofInvoice: (total: string, paid: string) => `${paid} of ${total} already paid`,
+    claimAccountLabel: "This invoice's own account",
+    fingerprintLabel: "Terms fingerprint",
+    termsSummary: "What this invoice says",
+    termsCheck:
+      "The fingerprint above is a hash of these terms and every other detail. It is recorded on NEAR, so anyone can check that the invoice was not changed.",
     exchangeWarn:
       "Paying from an exchange? Exchanges often take a withdrawal fee. Make sure the amount that arrives is the exact amount in your price, or the payment may come up short and be refunded.",
     refundRule:
@@ -246,11 +260,11 @@ export const copy = {
     },
     mixPartFailed:
       "We couldn't get a price for that part. Nothing was charged. Your other parts are kept. Try again.",
-    pickTitle: "Choose how you pay",
+    pickTitle: "Pay this invoice",
     pickUsdc: "Pay with USDC",
     pickVolatile: "Pay with ETH or SOL",
     pickHelp:
-      "Pick the network your money is on. You will see the exact amount before you send anything.",
+      "Choose the token and the network your money is on. You will see the exact amount before you send anything.",
     getting: "Getting your price",
     quoteTitle: "Your price",
     youSendExact: "You send exactly",

@@ -10,7 +10,7 @@ test("the pay link finds the invoice by its reference", async ({ page }) => {
     "GET /v1/pay/claims/{id}": () => ({ body: { ...claim, status: "Issued" } }),
   });
   await page.goto("/acme-ltd/inv/9f3c2a7d41b86e0c15");
-  await expect(page.getByRole("button", { name: /USDC on Base/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Pay with/ })).toBeVisible();
 });
 
 test("the acceptance link finds the invoice by its reference", async ({ page }) => {
