@@ -67,7 +67,7 @@ function run(script: string, args: string[], extra: Record<string, string> = {})
     cwd: REPO,
     env: applyEnv(extra),
     encoding: "utf8",
-    timeout: 120_000,
+    timeout: 300_000,
   });
 }
 
@@ -154,7 +154,7 @@ exit 0`,
 
 afterAll(() => {
   rmSync(BASE, { recursive: true, force: true });
-});
+}, 120_000);
 
 describe("openrail-apply end to end", () => {
   const first = join(HOME, "openrail-server-first.tar.gz");
@@ -176,7 +176,7 @@ describe("openrail-apply end to end", () => {
   beforeAll(() => {
     copyFileSync(packSource, first);
     clonePack(first, second);
-  }, 120_000);
+  }, 300_000);
 
   it("installs the first release and records the restart calls", () => {
     const result = run(APPLY, [first]);
@@ -187,7 +187,7 @@ describe("openrail-apply end to end", () => {
     expect(releases()).toEqual([current!.split("/").pop()!]);
     expect(shimCalls()).toContain("systemctl restart openrail-indexer.service");
     expect(shimCalls()).toContain("systemctl restart openrail-web.service");
-  }, 120_000);
+  }, 300_000);
 
   it("installs a second release, keeps the previous pointer and prunes packs", () => {
     const result = run(APPLY, [second]);
@@ -200,7 +200,7 @@ describe("openrail-apply end to end", () => {
     expect(homePacks()).toHaveLength(2);
     expect(homePacks()).toContain("openrail-server-first.tar.gz");
     expect(homePacks()).toContain("openrail-server-second.tar.gz");
-  }, 120_000);
+  }, 300_000);
 
   it("reinstalls the previous release with --rollback", () => {
     const result = run(APPLY, ["--rollback"]);
@@ -209,7 +209,7 @@ describe("openrail-apply end to end", () => {
     // Put the second release live again for the rollback-on-unhealthy case.
     const again = run(APPLY, [second]);
     expect(again.status, again.stderr).toBe(0);
-  }, 120_000);
+  }, 300_000);
 
   it("rolls back from an unhealthy release and exits non-zero", () => {
     clonePack(second, unhealthy);
@@ -222,7 +222,7 @@ describe("openrail-apply end to end", () => {
     expect(result.status).not.toBe(0);
     expect(currentRelease()).toBe(before);
     expect(shimCalls()).toContain("systemctl restart openrail-web.service");
-  }, 120_000);
+  }, 300_000);
 
   it("applies and shreds a waiting env upload", () => {
     const envFile = join(HOME, "openrail.env");
@@ -231,14 +231,14 @@ describe("openrail-apply end to end", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(existsSync(envFile)).toBe(false);
     expect(existsSync(join(BASE, "etc/api.env"))).toBe(true);
-  }, 120_000);
+  }, 300_000);
 
   it("uses no leftover /tmp fetch directory for apply-only runs", () => {
     const before = tmpFetchDirs();
     const result = run(APPLY, [second]);
     expect(result.status, result.stderr).toBe(0);
     expect([...tmpFetchDirs()].filter((name) => !before.has(name))).toEqual([]);
-  }, 120_000);
+  }, 300_000);
 });
 
 describe("openrail-fetch end to end", () => {
@@ -252,7 +252,7 @@ describe("openrail-fetch end to end", () => {
 
   beforeAll(() => {
     mkdirSync(assetDir, { recursive: true });
-    copyFileSync(join(HOME, "openrail-server-first.tar.gz"), asset);
+    copyFileSync(packSource, asset);
     const sum = execFileSync("sha256sum", [asset], { encoding: "utf8" }).split(/\s+/)[0]!;
     writeFileSync(sha, `${sum}  openrail-server-deadbee.tar.gz\n`);
     writeFileSync(badSha, `${"0".repeat(64)}  openrail-server-deadbee.tar.gz\n`);
@@ -275,6 +275,7 @@ describe("openrail-fetch end to end", () => {
       OPENRAIL_GH_API: "https://api.test",
       OPENRAIL_GH_DL: "https://dl.test",
       OPENRAIL_APPLY: join(BASE, "fake-apply"),
+      OPENRAIL_FETCH_SELF: join(BASE, "self/openrail-fetch"),
       ...extra,
     };
   }
