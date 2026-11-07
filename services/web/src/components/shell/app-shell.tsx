@@ -22,7 +22,7 @@ import { cn } from "@/lib/cn";
 import { readStored, writeStored } from "@/lib/storage";
 import { Modal } from "../ui/modal";
 import { ThemeToggle } from "../ui/theme-toggle";
-import { Brand } from "../brand";
+import { Brand, BrandMark } from "../brand";
 import { AccountBar } from "../auth/account-bar";
 import { AuthGate } from "../auth/auth-gate";
 import { useAuth } from "../auth/auth-provider";
@@ -86,13 +86,8 @@ function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: (
 
 function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   return (
-    <Link href="/app" className="flex h-11 items-center px-3">
-      <Brand className={collapsed ? "sr-only" : undefined} />
-      {collapsed ? (
-        <span aria-hidden className="mx-auto text-[18px] leading-6 font-semibold">
-          {copy.brand[0]}
-        </span>
-      ) : null}
+    <Link href="/app" className="flex h-11 items-center px-3" aria-label={copy.brand}>
+      {collapsed ? <BrandMark className="mx-auto h-6 w-auto" /> : <Brand className="h-7 w-auto" />}
     </Link>
   );
 }
@@ -169,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Menu size={18} strokeWidth={1.5} aria-hidden />
           </button>
-          <Brand className="text-[16px] leading-6 font-semibold md:hidden" />
+          <Brand className="h-6 w-auto md:hidden" />
           <div className="ml-auto hidden items-center gap-3 sm:flex">
             <AccountBar />
           </div>

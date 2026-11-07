@@ -6,11 +6,11 @@ import { ThemeToggle } from "../ui/theme-toggle";
 
 /** Frame for pages clients open from a link (ack, pay, receipt). Mobile first, no login. */
 export function PublicShell({ children, wide }: { children: ReactNode; wide?: boolean }) {
-  const width = wide ? "max-w-[1040px]" : "${width}";
+  const width = wide ? "max-w-[1040px]" : "max-w-[640px]";
   return (
     <div className="flex min-h-dvh flex-col">
       <header className={`mx-auto flex h-14 w-full ${width} items-center justify-between px-4`}>
-        <Link href="/">
+        <Link href="/" aria-label={copy.brand}>
           <Brand />
         </Link>
         <ThemeToggle />

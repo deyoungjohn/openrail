@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { copy } from "@/copy";
 
@@ -7,7 +8,7 @@ export default function Landing() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-[1200px] flex-col px-4">
       <header className="flex h-16 items-center justify-between">
-        <span className="text-[18px] font-semibold">{copy.brand}</span>
+        <Brand className="h-8 w-auto" />
         <ThemeToggle />
       </header>
       <main className="flex flex-1 flex-col items-start justify-center gap-6 py-16">
