@@ -1,16 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiApp, type ApiDeps, ApiError } from "./app.js";
+import { describe, expect, it, vi } from "vitest";
+import { ApiApp, type ApiDeps } from "./app.js";
 import { AuthStore } from "./auth.js";
-import {
-  isImplicitAccountId,
-  isValidUsername,
-  normalizeUsername,
-  usernameProblem,
-  usernameAvailability,
-  payLink,
-  ackLink,
-  refOf,
-} from "./links.js";
+import { isImplicitAccountId, usernameProblem, payLink, ackLink, refOf } from "./links.js";
 
 const BASE_TIME = Date.parse("2026-11-02T10:00:00Z");
 
@@ -187,7 +178,9 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
     it("allows legal_name (display name) to contain free text, spaces, and punctuation without affecting username", async () => {
       const h = createHarness();
       const res = await h.app.handle(
-        req("PUT", "/v1/business", h.namedSecret, { legal_name: "Belmonte Apparels & Co. (Global)" }),
+        req("PUT", "/v1/business", h.namedSecret, {
+          legal_name: "Belmonte Apparels & Co. (Global)",
+        }),
       );
       expect(res.status).toBe(200);
       const body = res.body as Record<string, unknown>;
@@ -260,8 +253,22 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
 
     it("rejects reserved top-level names (3-32 chars)", () => {
       const reservedList = [
-        "app", "pay", "ack", "inv", "statement", "login",
-        "setup", "docs", "admin", "www", "help", "support", "openrail", "near", "settings", "invoices"
+        "app",
+        "pay",
+        "ack",
+        "inv",
+        "statement",
+        "login",
+        "setup",
+        "docs",
+        "admin",
+        "www",
+        "help",
+        "support",
+        "openrail",
+        "near",
+        "settings",
+        "invoices",
       ];
       for (const name of reservedList) {
         expect(usernameProblem(name, "alice.near")).toBe("reserved");
@@ -351,13 +358,13 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
     it("returns { available: false, reason: 'taken' } for a username already held by another business", async () => {
       const h = createHarness();
       // other.near takes "other-handle"
-      await h.app.handle(
-        req("PUT", "/v1/business", h.otherSecret, { username: "other-handle" }),
-      );
+      await h.app.handle(req("PUT", "/v1/business", h.otherSecret, { username: "other-handle" }));
 
       // namedAccount checks "other-handle"
       const res = await h.app.handle(
-        req("GET", "/v1/business/username_available", h.namedSecret, undefined, { u: "other-handle" }),
+        req("GET", "/v1/business/username_available", h.namedSecret, undefined, {
+          u: "other-handle",
+        }),
       );
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ available: false, reason: "taken" });
@@ -367,7 +374,9 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
       const h = createHarness();
       // namedAccount already has "belmonte.near"
       const res1 = await h.app.handle(
-        req("GET", "/v1/business/username_available", h.namedSecret, undefined, { u: "belmonte.near" }),
+        req("GET", "/v1/business/username_available", h.namedSecret, undefined, {
+          u: "belmonte.near",
+        }),
       );
       expect(res1.status).toBe(200);
       expect(res1.body).toEqual({ available: true, reason: "available" });
@@ -475,9 +484,7 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
     it("delays the release of the previous username for 30 days", async () => {
       const h = createHarness();
       // otherAccount changes username to "first-handle"
-      await h.app.handle(
-        req("PUT", "/v1/business", h.otherSecret, { username: "first-handle" }),
-      );
+      await h.app.handle(req("PUT", "/v1/business", h.otherSecret, { username: "first-handle" }));
 
       // 31 days pass so otherAccount can change again
       h.advanceTime(31 * 24 * 60 * 60 * 1000);
@@ -491,7 +498,9 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
       // 5 days later, namedAccount tries to claim "first-handle"
       h.advanceTime(5 * 24 * 60 * 60 * 1000);
       const resAvail = await h.app.handle(
-        req("GET", "/v1/business/username_available", h.namedSecret, undefined, { u: "first-handle" }),
+        req("GET", "/v1/business/username_available", h.namedSecret, undefined, {
+          u: "first-handle",
+        }),
       );
       expect(resAvail.body).toEqual({ available: false, reason: "taken" });
 
@@ -504,7 +513,9 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
       // 26 more days pass (total > 30 days since release)
       h.advanceTime(26 * 24 * 60 * 60 * 1000);
       const resAvailAfter = await h.app.handle(
-        req("GET", "/v1/business/username_available", h.namedSecret, undefined, { u: "first-handle" }),
+        req("GET", "/v1/business/username_available", h.namedSecret, undefined, {
+          u: "first-handle",
+        }),
       );
       expect(resAvailAfter.body).toEqual({ available: true, reason: "available" });
 
@@ -521,9 +532,7 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
     it("refuses invoice creation when business has no username (implicit account)", async () => {
       const h = createHarness();
       // Implicit account has username: null initially
-      const res = await h.app.handle(
-        req("POST", "/v1/invoices", h.implicitSecret, sampleInvoice),
-      );
+      const res = await h.app.handle(req("POST", "/v1/invoices", h.implicitSecret, sampleInvoice));
       expect(res.status).toBe(409);
       expect(getErrorCode(res.body)).toBe("username_required");
     });
@@ -537,9 +546,7 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
       expect(putRes.status).toBe(200);
 
       // Now create invoice
-      const res = await h.app.handle(
-        req("POST", "/v1/invoices", h.implicitSecret, sampleInvoice),
-      );
+      const res = await h.app.handle(req("POST", "/v1/invoices", h.implicitSecret, sampleInvoice));
       expect(res.status).toBe(201);
       const body = res.body as Record<string, unknown>;
       expect(body).toHaveProperty("id");
@@ -551,9 +558,7 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
       const h = createHarness();
       await h.app.handle(req("PUT", "/v1/business", h.namedSecret, { username: "belmonte" }));
 
-      const res = await h.app.handle(
-        req("POST", "/v1/invoices", h.namedSecret, sampleInvoice),
-      );
+      const res = await h.app.handle(req("POST", "/v1/invoices", h.namedSecret, sampleInvoice));
       expect(res.status).toBe(201);
       const body = res.body as { id: string; pay_link: string; ack_url: string };
 
@@ -594,15 +599,11 @@ describe("Business Username Specification (prompts/ag3.md update 27)", () => {
       expect(renameRes.status).toBe(200);
 
       // Fetch by original id
-      const fetchById = await h.app.handle(
-        req("GET", `/v1/invoices/${invoice.id}`, h.namedSecret),
-      );
+      const fetchById = await h.app.handle(req("GET", `/v1/invoices/${invoice.id}`, h.namedSecret));
       expect(fetchById.status).toBe(200);
 
       // Fetch by ref (without inv_ prefix)
-      const fetchByRef = await h.app.handle(
-        req("GET", `/v1/invoices/${ref}`, h.namedSecret),
-      );
+      const fetchByRef = await h.app.handle(req("GET", `/v1/invoices/${ref}`, h.namedSecret));
       expect(fetchByRef.status).toBe(200);
       const invoiceData = (fetchByRef.body as { invoice?: { id: string } }).invoice;
       expect(invoiceData?.id).toBe(invoice.id);
