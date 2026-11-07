@@ -826,7 +826,11 @@ export class ApiApp {
             token_id: invoice.token_id,
             filename: `${invoice.invoice_number}.pdf`,
             content_type: "application/pdf",
-            content_base64: renderInvoicePdfBase64(invoice.terms, invoice.terms_hash),
+            content_base64: renderInvoicePdfBase64(
+              invoice.terms,
+              invoice.terms_hash,
+              invoice.created_at,
+            ),
             sha256: invoice.terms_hash,
             generated_at: nowIso(this.clock),
           },
