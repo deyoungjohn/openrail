@@ -12,6 +12,7 @@ import {
 } from "react";
 import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "./tooltip";
 
 type Tone = "success" | "info" | "error";
 interface ToastItem {
@@ -70,14 +71,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <p className="text-[14px] leading-5 font-medium">{t.title}</p>
                 {t.body ? <p className="caption">{t.body}</p> : null}
               </div>
-              <button
-                type="button"
-                onClick={() => dismiss(t.id)}
-                aria-label={copy.toast.dismiss}
-                className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2"
-              >
-                <X size={16} strokeWidth={1.5} aria-hidden />
-              </button>
+              <Tooltip label={copy.toast.dismiss} side="top">
+                <button
+                  type="button"
+                  onClick={() => dismiss(t.id)}
+                  aria-label={copy.toast.dismiss}
+                  className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2"
+                >
+                  <X size={16} strokeWidth={1.5} aria-hidden />
+                </button>
+              </Tooltip>
             </div>
           );
         })}

@@ -81,16 +81,21 @@ async function main(): Promise<void> {
           ),
           rpcSource,
         );
-  // Rows written by the old time bug (1970) get their real block time, in the background.
-  void repairTimes({
-    store,
-    baseUrl: getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
-    apiKey: getEnv("NEARBLOCKS_API_KEY") ?? "",
-    budget,
-    log: (message) => logger.warn(message),
-  }).then((fixed) => {
-    if (fixed > 0) logger.info(`repaired the time of ${fixed} transactions`);
-  });
+  // Rows written by the old time bug (1970) get their real block time, now and every ten minutes until none is left.
+  const repairRound = (): void => {
+    void repairTimes({
+      store,
+      rpcUrls,
+      baseUrl: getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
+      apiKey: getEnv("NEARBLOCKS_API_KEY") ?? "",
+      budget,
+      log: (message) => logger.warn(message),
+    }).then((fixed) => {
+      if (fixed > 0) logger.info(`repaired the time of ${fixed} transactions`);
+      if (store.badTimeTxs().length > 0) setTimeout(repairRound, 10 * 60_000);
+    });
+  };
+  repairRound();
   const near = nearClientFromEnv();
   const claimReader = new ContractClaimReader(near, rootAccount);
 

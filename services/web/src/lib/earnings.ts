@@ -37,6 +37,7 @@ export interface Earning {
 }
 
 const DAY_MS = 86_400_000;
+const KNOWN_TIME_FROM = Date.UTC(2001, 0, 1);
 
 const ASSET_CHAIN: [string, string][] = [
   ["base-", "base"],
@@ -69,8 +70,11 @@ export function earningsFrom(
   for (const inv of invoices) {
     const stream = inv.stream ?? "invoice";
     for (const r of receipts[inv.id] ?? []) {
-      const time = Date.parse(r.time);
-      if (!Number.isFinite(time)) continue;
+      const parsed = Date.parse(r.time);
+      if (!Number.isFinite(parsed)) continue;
+      // A time before 2001 cannot be real (the indexer once stored 1970): keep the payment, say its time is
+      // unknown (0) and leave it out of every figure that depends on when.
+      const time = parsed < KNOWN_TIME_FROM ? 0 : parsed;
       const sender = r.origin_tx?.sender;
       out.push({
         id: r.id,
@@ -195,7 +199,10 @@ export function byStream(earnings: readonly Earning[]): { stream: Stream; cents:
 
 export function byMonth(earnings: readonly Earning[]): { month: string; cents: bigint }[] {
   const m = new Map<string, bigint>();
-  for (const e of earnings) m.set(monthKey(e.time), (m.get(monthKey(e.time)) ?? 0n) + e.cents);
+  for (const e of earnings) {
+    if (e.time === 0) continue;
+    m.set(monthKey(e.time), (m.get(monthKey(e.time)) ?? 0n) + e.cents);
+  }
   return [...m]
     .map(([month, cents]) => ({ month, cents }))
     .sort((a, b) => a.month.localeCompare(b.month));
@@ -221,6 +228,7 @@ export type TimeRange = "all" | "7d" | "30d" | "90d";
 /** Whether a time falls inside the range that ends now. */
 export function inTimeRange(ms: number, range: TimeRange, nowMs: number): boolean {
   if (range === "all") return true;
+  if (ms === 0) return false;
   const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
   return ms > nowMs - days * DAY_MS && ms <= nowMs + DAY_MS;
 }

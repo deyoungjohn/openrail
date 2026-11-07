@@ -31,6 +31,7 @@ import {
   TopClientsCard,
   WeeklyActivityCard,
 } from "../ui/stat-cards";
+import { Tooltip } from "../ui/tooltip";
 
 const CREATE = (
   <Link href="/app/invoices/new">
@@ -232,7 +233,7 @@ function Activity({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs: nu
       header: d.time,
       sortable: true,
       value: (r) => r.time,
-      cell: (r) => when.format(r.time),
+      cell: (r) => (r.time > 0 ? when.format(r.time) : "—"),
     },
     {
       id: "cents",
@@ -270,13 +271,15 @@ function Activity({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs: nu
       ]}
       emptyState={{ title: d.activityEmpty, body: d.activityEmptyBody }}
       rowActions={(r) => (
-        <Link
-          href={`/r/${encodeURIComponent(r.txHash)}`}
-          aria-label={`Receipt for ${r.product}`}
-          className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text"
-        >
-          <Receipt aria-hidden size={16} />
-        </Link>
+        <Tooltip label={`Receipt for ${r.product}`} side="left">
+          <Link
+            href={`/r/${encodeURIComponent(r.txHash)}`}
+            aria-label={`Receipt for ${r.product}`}
+            className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text"
+          >
+            <Receipt aria-hidden size={16} />
+          </Link>
+        </Tooltip>
       )}
     />
   );

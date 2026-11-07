@@ -5,6 +5,7 @@ import { useState } from "react";
 import { copy } from "@/copy";
 import { middleTruncate } from "@/lib/format";
 import { ChainIcon, type ChainId } from "./chain-badge";
+import { Tooltip } from "./tooltip";
 
 export function AddressChip({
   value,
@@ -46,28 +47,37 @@ export function AddressChip({
         {middleTruncate(value, head, tail)}
       </code>
       {/* On paper there is no hover and no copy button, so the whole value is written out. */}
-      <button
-        type="button"
-        onClick={onCopy}
-        aria-label={copied ? copy.address.copied : `${copy.address.copy} ${middleTruncate(value)}`}
-        className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text print:hidden"
+      <Tooltip
+        label={copied ? copy.address.copied : `${copy.address.copy} ${middleTruncate(value)}`}
+        side="top"
       >
-        {copied ? (
-          <Check size={16} strokeWidth={1.5} aria-hidden />
-        ) : (
-          <Copy size={16} strokeWidth={1.5} aria-hidden />
-        )}
-      </button>
-      {href ? (
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer noopener"
-          aria-label={`${copy.address.view}: ${middleTruncate(value)}`}
+        <button
+          type="button"
+          onClick={onCopy}
+          aria-label={
+            copied ? copy.address.copied : `${copy.address.copy} ${middleTruncate(value)}`
+          }
           className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text print:hidden"
         >
-          <ExternalLink size={16} strokeWidth={1.5} aria-hidden />
-        </a>
+          {copied ? (
+            <Check size={16} strokeWidth={1.5} aria-hidden />
+          ) : (
+            <Copy size={16} strokeWidth={1.5} aria-hidden />
+          )}
+        </button>
+      </Tooltip>
+      {href ? (
+        <Tooltip label={`${copy.address.view}: ${middleTruncate(value)}`} side="top">
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-label={`${copy.address.view}: ${middleTruncate(value)}`}
+            className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text print:hidden"
+          >
+            <ExternalLink size={16} strokeWidth={1.5} aria-hidden />
+          </a>
+        </Tooltip>
       ) : null}
     </span>
   );

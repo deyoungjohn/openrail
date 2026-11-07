@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "./tooltip";
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -112,14 +113,16 @@ export function Modal({
             <h2 id="modal-title" className="text-[18px] leading-[26px] font-semibold">
               {title}
             </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={copy.modal.close}
-              className="ml-auto grid size-8 place-items-center rounded-md text-muted hover:bg-surface-2"
-            >
-              <X size={18} strokeWidth={1.5} aria-hidden />
-            </button>
+            <Tooltip label={copy.modal.close} side="left">
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={copy.modal.close}
+                className="ml-auto grid size-8 place-items-center rounded-md text-muted hover:bg-surface-2"
+              >
+                <X size={18} strokeWidth={1.5} aria-hidden />
+              </button>
+            </Tooltip>
           </header>
           <div className="overflow-y-auto p-6">{children}</div>
         </div>

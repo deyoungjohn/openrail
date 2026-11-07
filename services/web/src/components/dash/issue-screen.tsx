@@ -19,6 +19,7 @@ import { Card } from "../ui/card";
 import { Skeleton } from "../ui/state";
 import { Input, Select } from "../ui/input";
 import { Modal } from "../ui/modal";
+import { Tooltip } from "../ui/tooltip";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blankLine = { description: "", quantity: "1", unit: "" };
@@ -347,17 +348,19 @@ export function IssueScreen() {
                   onChange={(e) => setLine(i, { unit: e.target.value })}
                   error={err(`line.${i}.amount`)}
                 />
-                <button
-                  type="button"
-                  aria-label={t.removeLine(i + 1)}
-                  disabled={form.lines.length === 1}
-                  onClick={() =>
-                    setForm((f) => ({ ...f, lines: f.lines.filter((_, j) => j !== i) }))
-                  }
-                  className="mt-1 grid size-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2 disabled:opacity-40"
-                >
-                  <Trash2 size={18} strokeWidth={1.5} aria-hidden />
-                </button>
+                <Tooltip label={t.removeLine(i + 1)} side="top">
+                  <button
+                    type="button"
+                    aria-label={t.removeLine(i + 1)}
+                    disabled={form.lines.length === 1}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, lines: f.lines.filter((_, j) => j !== i) }))
+                    }
+                    className="mt-1 grid size-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2 disabled:opacity-40"
+                  >
+                    <Trash2 size={18} strokeWidth={1.5} aria-hidden />
+                  </button>
+                </Tooltip>
               </div>
             ))}
             {err("lines") ? <p className="text-danger-text text-[14px]">{errors.lines}</p> : null}

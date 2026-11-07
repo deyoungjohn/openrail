@@ -26,6 +26,7 @@ import { Brand, BrandMark } from "../brand";
 import { AccountBar } from "../auth/account-bar";
 import { AuthGate } from "../auth/auth-gate";
 import { useAuth } from "../auth/auth-provider";
+import { Tooltip } from "../ui/tooltip";
 
 interface NavItem {
   href: string;
@@ -134,18 +135,20 @@ export function AppShell({ children }: { children: ReactNode }) {
           className={cn("flex items-center gap-2 pt-3", collapsed ? "flex-col" : "justify-between")}
         >
           <ThemeToggle />
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={collapsed ? copy.nav.expand : copy.nav.collapse}
-            className="grid size-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2"
-          >
-            {collapsed ? (
-              <ChevronsRight size={18} strokeWidth={1.5} aria-hidden />
-            ) : (
-              <ChevronsLeft size={18} strokeWidth={1.5} aria-hidden />
-            )}
-          </button>
+          <Tooltip label={collapsed ? copy.nav.expand : copy.nav.collapse} side="top">
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={collapsed ? copy.nav.expand : copy.nav.collapse}
+              className="grid size-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2"
+            >
+              {collapsed ? (
+                <ChevronsRight size={18} strokeWidth={1.5} aria-hidden />
+              ) : (
+                <ChevronsLeft size={18} strokeWidth={1.5} aria-hidden />
+              )}
+            </button>
+          </Tooltip>
         </div>
       </aside>
 
@@ -156,14 +159,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       >
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-bg px-4 md:px-6">
-          <button
-            type="button"
-            onClick={() => setMenu(true)}
-            aria-label={copy.nav.openMenu}
-            className="grid size-9 place-items-center rounded-[10px] border border-border bg-surface md:hidden"
-          >
-            <Menu size={18} strokeWidth={1.5} aria-hidden />
-          </button>
+          <Tooltip label={copy.nav.openMenu} side="bottom">
+            <button
+              type="button"
+              onClick={() => setMenu(true)}
+              aria-label={copy.nav.openMenu}
+              className="grid size-9 place-items-center rounded-[10px] border border-border bg-surface md:hidden"
+            >
+              <Menu size={18} strokeWidth={1.5} aria-hidden />
+            </button>
+          </Tooltip>
           <Brand className="h-6 w-auto md:hidden" />
           <div className="ml-auto hidden items-center gap-3 sm:flex">
             <AccountBar />

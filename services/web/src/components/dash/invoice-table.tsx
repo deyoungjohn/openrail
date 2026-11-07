@@ -11,6 +11,7 @@ import { formatDueDate } from "@/lib/pay";
 import { DataTable, type DataTableColumn } from "../ui/data-table";
 import type { ViewState } from "../ui/card";
 import { StatusChip } from "../ui/status-chip";
+import { Tooltip } from "../ui/tooltip";
 
 /** Save the invoice's PDF (the API answers a base64 envelope). */
 async function savePdf(id: string, number: string): Promise<void> {
@@ -107,17 +108,19 @@ export function InvoiceTable({
         error={state === "error" ? { body: d.loadError, onRetry } : null}
         emptyState={{ title: d.emptyTitle, body: d.emptyBody, action: emptyAction }}
         rowActions={(r) => (
-          <button
-            type="button"
-            aria-label={`${d.downloadPdf} ${r.invoice_number}`}
-            onClick={() => {
-              setFailed(null);
-              savePdf(r.id, r.invoice_number).catch(() => setFailed(r.invoice_number));
-            }}
-            className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
-          >
-            <Download aria-hidden size={16} />
-          </button>
+          <Tooltip label={`${d.downloadPdf} ${r.invoice_number}`} side="left">
+            <button
+              type="button"
+              aria-label={`${d.downloadPdf} ${r.invoice_number}`}
+              onClick={() => {
+                setFailed(null);
+                savePdf(r.id, r.invoice_number).catch(() => setFailed(r.invoice_number));
+              }}
+              className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+            >
+              <Download aria-hidden size={16} />
+            </button>
+          </Tooltip>
         )}
       />
       {failed ? (

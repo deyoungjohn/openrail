@@ -94,3 +94,16 @@ describe("chainOfReceipt", () => {
     expect(chainOfReceipt({ asset: "x", origin_tx: { chain: "polygon" } })).toBe("polygon");
   });
 });
+
+describe("a payment whose time is unknown", () => {
+  it("is kept, shows no time, and is left out of every figure that depends on when", () => {
+    const e2 = earningsFrom(inv, { i1: [r("old", "i1", "2000000", "1970-01-01T00:29:53Z")] });
+    expect(e2).toHaveLength(1);
+    expect(e2[0]?.time).toBe(0);
+    expect(revenueSummary(e2, NOW).currentCents).toBe(0n);
+    expect(byMonth(e2)).toEqual([]);
+    expect(inTimeRange(0, "all", NOW)).toBe(true);
+    expect(inTimeRange(0, "30d", NOW)).toBe(false);
+    expect(topPayers(e2)[0]).toEqual({ name: "Acme", cents: 200n });
+  });
+});

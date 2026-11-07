@@ -14,6 +14,7 @@ import { Input, Select } from "../ui/input";
 import { Modal } from "../ui/modal";
 import { DataTable, type DataTableColumn } from "../ui/data-table";
 import { Tabs } from "../ui/tabs";
+import { Tooltip } from "../ui/tooltip";
 
 const WHEN = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -214,28 +215,32 @@ function ApiKeysPanel() {
           rowActions={(k) =>
             k.revoked_at ? null : (
               <span className="flex justify-end gap-1">
-                <button
-                  type="button"
-                  aria-label={t.rotate(k.name)}
-                  onClick={() => {
-                    setActionFailed(false);
-                    setRotate(k);
-                  }}
-                  className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
-                >
-                  <RotateCw aria-hidden size={16} />
-                </button>
-                <button
-                  type="button"
-                  aria-label={t.revoke(k.name)}
-                  onClick={() => {
-                    setActionFailed(false);
-                    setRevoke(k);
-                  }}
-                  className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-danger/10 hover:text-danger-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
-                >
-                  <Trash2 aria-hidden size={16} />
-                </button>
+                <Tooltip label={t.rotate(k.name)} side="left">
+                  <button
+                    type="button"
+                    aria-label={t.rotate(k.name)}
+                    onClick={() => {
+                      setActionFailed(false);
+                      setRotate(k);
+                    }}
+                    className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                  >
+                    <RotateCw aria-hidden size={16} />
+                  </button>
+                </Tooltip>
+                <Tooltip label={t.revoke(k.name)} side="left">
+                  <button
+                    type="button"
+                    aria-label={t.revoke(k.name)}
+                    onClick={() => {
+                      setActionFailed(false);
+                      setRevoke(k);
+                    }}
+                    className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-danger/10 hover:text-danger-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                  >
+                    <Trash2 aria-hidden size={16} />
+                  </button>
+                </Tooltip>
               </span>
             )
           }

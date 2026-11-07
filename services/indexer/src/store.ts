@@ -697,15 +697,15 @@ export class IndexerStore {
   }
 
   /** Transactions whose stored time cannot be real (before 2001): written by the old time bug, waiting for repair. */
-  txHashesWithBadTime(): string[] {
+  badTimeTxs(): { txHash: string; blockHeight: number }[] {
     const rows = this.db
       .prepare(
-        "SELECT tx_hash FROM events WHERE block_timestamp < 1000000000 AND tx_hash != '' " +
-          "UNION SELECT tx_hash FROM bookings WHERE timestamp < 1000000000 AND tx_hash != '' " +
-          "UNION SELECT tx_hash FROM receipts WHERE timestamp < 1000000000 AND tx_hash != ''",
+        "SELECT tx_hash AS txHash, block_height AS blockHeight FROM events WHERE block_timestamp < 1000000000 AND tx_hash != '' " +
+          "UNION SELECT tx_hash, block_height FROM bookings WHERE timestamp < 1000000000 AND tx_hash != '' " +
+          "UNION SELECT tx_hash, block_height FROM receipts WHERE timestamp < 1000000000 AND tx_hash != ''",
       )
-      .all() as unknown as { tx_hash: string }[];
-    return rows.map((r) => r.tx_hash);
+      .all() as unknown as { txHash: string; blockHeight: number }[];
+    return rows;
   }
 
   /** Sets the true block time (Unix seconds) on everything this transaction wrote. */
