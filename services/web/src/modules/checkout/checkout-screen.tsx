@@ -439,11 +439,7 @@ export function CheckoutScreen({ id }: { id: string }) {
   // Refresh the checkout status while it is open or settling so partial, paid and late transitions appear live.
   useEffect(() => {
     if (!checkout) return;
-    if (
-      checkout.status === "paid" ||
-      checkout.status === "accepted" ||
-      checkout.status === "refunded"
-    ) {
+    if (checkout.status === "paid" || checkout.status === "accepted") {
       return;
     }
     let off = false;
