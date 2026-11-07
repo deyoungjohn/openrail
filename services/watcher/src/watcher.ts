@@ -28,6 +28,8 @@ import type {
 
 const PAGE_SIZE = 100;
 const RECONCILING_BLOCKS = 100;
+/** How often a finished claim is read again (its quotes and balance are then checked by the loop's own cadence). */
+const FINISHED_RECHECK_MS = 30_000;
 /** After sending `clear_stale_lock` for a claim, wait this long before sending it again. */
 const CLEAR_BACKOFF_MS = 120_000;
 const YOCTO_PER_NEAR = 1_000_000_000_000_000_000_000_000n;
@@ -196,7 +198,9 @@ export class Watcher {
           const id = token?.token_id;
           if (typeof id !== "string" || claims.has(id)) continue;
           const seenAt = this.finished.get(id);
-          if (seenAt !== undefined && this.now() - seenAt < this.config.slowIntervalMs) continue;
+          // A finished claim is looked at again soon: a late payment on a fresh quote must not wait for the
+          // slow cadence (the loop below still reads its balance only when a quote is open or the slow cadence is due).
+          if (seenAt !== undefined && this.now() - seenAt < FINISHED_RECHECK_MS) continue;
           const claim = await this.near.view<ClaimView | null>({
             contractId: this.config.rootAccount,
             methodName: "claim",
