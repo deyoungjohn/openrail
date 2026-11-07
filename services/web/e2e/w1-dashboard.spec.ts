@@ -71,119 +71,103 @@ async function axeClean(page: Page) {
   expect(r.violations).toEqual([]);
 }
 
+const receipt = (id: string, usd: string, chain: string, time: string) => ({
+  ...fixture("invoices.receipts").data[0],
+  id,
+  amount: units(usd),
+  time,
+  origin_tx: { chain, hash: `0x${id}`, sender: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" },
+  booking_tx_hash: `0x${id}`,
+});
+const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+const RECEIPTS = {
+  data: [
+    receipt("r1", "100.00", "base", ago(1)),
+    receipt("r2", "50.50", "solana", ago(2)),
+    receipt("r3", "100.00", "base", ago(40)),
+  ],
+};
+
 test.describe("dashboard", () => {
-  test("shows exact totals, the status mix and the top clients", async ({ page }) => {
+  test("shows the money that came in: revenue, activity, streams and top clients", async ({
+    page,
+  }) => {
     await mockApi(page, {
       "GET /v1/invoices": { body: LIST },
-      "GET /v1/payments": { body: { data: [] } },
+      "GET /v1/invoices/{id}/receipts": { body: RECEIPTS },
     });
     await page.goto("/app");
     const main = page.getByRole("main");
-    await expect(main.getByText("Outstanding")).toBeVisible();
-    // 100.00 + 40.00 open; 250.50 paid; 40.00 overdue; the cancelled invoice is in no total.
-    await expect(main.locator("p", { hasText: /^\$140\.00$/ }).first()).toBeVisible();
-    await expect(main.locator("p", { hasText: /^\$250\.50$/ })).toBeVisible();
-    await expect(main.locator("p", { hasText: /^\$40\.00$/ }).first()).toBeVisible();
+    await expect(main.getByRole("region", { name: "Monthly revenue" })).toBeVisible();
+    await expect(main.getByRole("region", { name: "Weekly activity" })).toBeVisible();
+    await expect(main.getByRole("region", { name: "Overview" })).toBeVisible();
+    const activity = main.getByRole("region", { name: "Recent activity" });
+    await expect(activity.getByRole("cell", { name: "Northwind Studio" }).first()).toBeVisible();
+    await expect(activity.getByText("Invoice INV-1").first()).toBeVisible();
+    // Streams: every receipt here is an invoice payment (250.50 in all).
     await expect(
-      main.getByRole("img", { name: /Paid: 1, Waiting for payment: 1, Overdue: 1/ }),
+      main.getByRole("img", { name: /Invoice: \$250\.50, Checkout: \$0\.00, Pay link: \$0\.00/ }),
     ).toBeVisible();
-    const clients = main
-      .getByRole("heading", { name: "Top clients" })
-      .locator("xpath=ancestor::section");
+    const clients = main.getByRole("region", { name: "Top clients" });
     await expect(clients.getByText("Northwind Studio")).toBeVisible();
     await expect(clients.getByText("$250.50")).toBeVisible();
-    await expect(clients.getByText("Contoso")).toHaveCount(0);
-    await expect(main.getByRole("link", { name: "INV-1" })).toHaveAttribute(
-      "href",
-      "/app/invoices/inv_1",
-    );
+    // The totals (outstanding, collected, overdue) live on the invoices page now.
+    await expect(main.getByText("Outstanding")).toHaveCount(0);
   });
 
-  test("shows where clients paid from and collections by month, from settled payments only", async ({
+  test("shows collections by month and where clients paid from, with time and stream filters", async ({
     page,
   }) => {
-    const pay = (
-      id: string,
-      amount: string,
-      origin_chain: string,
-      booked_at: string,
-      status = "success",
-    ) => ({
-      id,
-      invoice_id: "inv_1",
-      amount,
-      origin_chain,
-      origin_asset: "a",
-      status,
-      booked_at,
-    });
     await mockApi(page, {
       "GET /v1/invoices": { body: LIST },
-      "GET /v1/payments": {
-        body: {
-          data: [
-            pay("p1", "10000000", "base", "2026-10-03T10:00:00Z"),
-            pay("p2", "5000000", "base", "2026-11-01T10:00:00Z"),
-            pay("p3", "2500000", "solana", "2026-11-02T10:00:00Z"),
-            pay("p4", "9000000", "ethereum", "2026-11-02T10:00:00Z", "failed"),
-          ],
-        },
-      },
+      "GET /v1/invoices/{id}/receipts": { body: RECEIPTS },
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/app");
     const from = page.getByRole("region", { name: "Where clients paid from" });
     await expect(from).toContainText("Base");
-    await expect(from).toContainText("$15.00");
+    await expect(from).toContainText("$200.00");
     await expect(from).toContainText("Solana");
-    await expect(from).toContainText("$2.50");
+    await expect(from).toContainText("$50.50");
     await expect(from).not.toContainText("Ethereum");
     const months = page.getByRole("region", { name: "Collections by month" });
-    await expect(
-      months.getByRole("img", { name: /2026-10: \$10\.00, 2026-11: \$7\.50/ }),
-    ).toBeVisible();
+    await expect(months.getByRole("cell").filter({ hasText: "$250.50" })).toHaveCount(0);
+
+    // The last 7 days leave out the receipt from 40 days ago.
+    const time = page.getByRole("group", { name: "Time" }).last();
+    await time.getByRole("button", { name: "7 days" }).click();
+    await expect(from).toContainText("$100.00");
+    await expect(from).not.toContainText("$200.00");
+
+    // No checkout or pay link payments exist: the tables say so.
+    await page
+      .getByRole("group", { name: "Stream" })
+      .last()
+      .getByRole("button", { name: "Checkout" })
+      .click();
+    await expect(from).toContainText("No payments yet");
+    await expect(months).toContainText("No payments yet");
   });
 
-  test("no payments yet, and a failed payments load, are said plainly", async ({ page }) => {
+  test("no payments yet, and a failed load, are said plainly", async ({ page }) => {
     await mockApi(page, {
       "GET /v1/invoices": { body: LIST },
-      "GET /v1/payments": { body: { data: [] } },
+      "GET /v1/invoices/{id}/receipts": { body: { data: [] } },
     });
     await page.goto("/app");
+    await expect(page.getByRole("region", { name: "Recent activity" })).toContainText(
+      "No payments yet",
+    );
     await expect(page.getByRole("region", { name: "Where clients paid from" })).toContainText(
       "No payments yet",
     );
 
     const p2 = await page.context().newPage();
     await mockApi(p2, {
-      "GET /v1/invoices": { body: LIST },
-      "GET /v1/payments": { status: 500, body: { error: { code: "internal", message: "x" } } },
+      "GET /v1/invoices": { status: 500, body: { error: { code: "internal", message: "x" } } },
     });
     await p2.goto("/app");
-    await expect(
-      p2
-        .getByRole("region", { name: "Where clients paid from" })
-        .getByRole("button", { name: "Try again" }),
-    ).toBeVisible();
-  });
-
-  test("a partly paid invoice counts only what is still owed, from the API", async ({ page }) => {
-    const partly = inv("inv_9", {
-      status: "PartiallyPaid",
-      amount_usd: "100.00",
-      debtor_legal_name: "Half Co",
-      due_date: day(10),
-      outstanding: "40000000",
-      paid_total: "60000000",
-    });
-    await mockApi(page, {
-      "GET /v1/invoices": { body: { data: [partly], next_cursor: null } },
-      "GET /v1/payments": { body: { data: [] } },
-    });
-    await page.goto("/app");
-    const main = page.getByRole("main");
-    await expect(main.locator("p", { hasText: /^\$40\.00$/ }).first()).toBeVisible();
-    await expect(main.locator("p", { hasText: /^\$60\.00$/ })).toBeVisible();
+    await expect(p2.getByRole("button", { name: "Try again" }).first()).toBeVisible();
   });
 
   test("empty: invites the first invoice", async ({ page }) => {
@@ -203,12 +187,13 @@ test.describe("dashboard", () => {
         fail
           ? { status: 500, body: { error: { code: "internal", message: "x" } } }
           : { body: LIST },
+      "GET /v1/invoices/{id}/receipts": { body: RECEIPTS },
     });
     await page.goto("/app");
     await expect(page.locator("main [role=alert]").first()).toBeVisible();
     fail = false;
     await page.getByRole("button", { name: "Try again" }).first().click();
-    await expect(page.getByRole("link", { name: "INV-1" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Recent activity" })).toBeVisible();
   });
 
   for (const scheme of ["light", "dark"] as const) {
@@ -216,20 +201,59 @@ test.describe("dashboard", () => {
       await page.emulateMedia({ colorScheme: scheme });
       await mockApi(page, {
         "GET /v1/invoices": { body: LIST },
-        "GET /v1/payments": { body: { data: [] } },
+        "GET /v1/invoices/{id}/receipts": { body: RECEIPTS },
       });
       await page.goto("/app");
-      await expect(page.getByRole("link", { name: "INV-1" })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Recent activity" })).toBeVisible();
       await axeClean(page);
     });
   }
 });
 
 test.describe("invoices list", () => {
+  test("shows exact totals, the four cards and the invoices", async ({ page }) => {
+    await mockApi(page, {
+      "GET /v1/invoices": { body: LIST },
+      "GET /v1/invoices/{id}/receipts": { body: RECEIPTS },
+    });
+    await page.goto("/app/invoices");
+    const main = page.getByRole("main");
+    await expect(main.getByRole("region", { name: "Monthly revenue" })).toBeVisible();
+    await expect(main.getByRole("region", { name: "Top clients" })).toBeVisible();
+    await expect(main.getByText("Outstanding")).toBeVisible();
+    // 100.00 + 40.00 open; 250.50 paid; 40.00 overdue; the cancelled invoice is in no total.
+    await expect(main.locator("p", { hasText: /^\$140\.00$/ }).first()).toBeVisible();
+    await expect(main.locator("p", { hasText: /^\$250\.50$/ })).toBeVisible();
+    await expect(main.locator("p", { hasText: /^\$40\.00$/ }).first()).toBeVisible();
+    await expect(main.getByRole("link", { name: "INV-1" })).toHaveAttribute(
+      "href",
+      "/app/invoices/inv_1",
+    );
+  });
+
+  test("a partly paid invoice counts only what is still owed, from the API", async ({ page }) => {
+    const partly = inv("inv_9", {
+      status: "PartiallyPaid",
+      amount_usd: "100.00",
+      debtor_legal_name: "Half Co",
+      due_date: day(10),
+      outstanding: "40000000",
+      paid_total: "60000000",
+    });
+    await mockApi(page, {
+      "GET /v1/invoices": { body: { data: [partly], next_cursor: null } },
+      "GET /v1/invoices/{id}/receipts": { body: { data: [] } },
+    });
+    await page.goto("/app/invoices");
+    const main = page.getByRole("main");
+    await expect(main.locator("p", { hasText: /^\$40\.00$/ }).first()).toBeVisible();
+    await expect(main.locator("p", { hasText: /^\$60\.00$/ })).toBeVisible();
+  });
+
   test("tabs carry counts and filter the table", async ({ page }) => {
     await mockApi(page, {
       "GET /v1/invoices": { body: LIST },
-      "GET /v1/payments": { body: { data: [] } },
+      "GET /v1/invoices/{id}/receipts": { body: { data: [] } },
     });
     await page.goto("/app/invoices");
     const tabs = page.getByRole("tablist", { name: "Invoice status" });

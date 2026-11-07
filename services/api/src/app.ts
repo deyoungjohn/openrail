@@ -300,6 +300,29 @@ function allowedOrigins(): string[] {
     .filter((origin) => origin !== "");
 }
 
+const toBig = (v: unknown): bigint => (typeof v === "string" && /^\d+$/.test(v) ? BigInt(v) : 0n);
+
+/**
+ * What is still owed, read from the claim's own counters (blueprint 2.3): amount due, less what was
+ * booked without the surplus, less credit, never below zero. An explicit `outstanding` wins (fixtures).
+ */
+export function outstandingOf(claim: Record<string, unknown>): string {
+  if (typeof claim.outstanding === "string") return claim.outstanding;
+  if (typeof claim.amount_due !== "string") return "0";
+  const owed =
+    toBig(claim.amount_due) -
+    (toBig(claim.booked_total) - toBig(claim.surplus)) -
+    toBig(claim.credit_total);
+  return (owed < 0n ? 0n : owed).toString();
+}
+
+/** Money applied to the invoice so far: what was booked, without the surplus. */
+export function paidTotalOf(claim: Record<string, unknown>, fallback: string): string {
+  if (typeof claim.booked_total !== "string") return fallback;
+  const paid = toBig(claim.booked_total) - toBig(claim.surplus);
+  return (paid < 0n ? 0n : paid).toString();
+}
+
 export class ApiApp {
   readonly store: ApiStore;
   readonly recurring: RecurringStore;
@@ -383,7 +406,7 @@ export class ApiApp {
       tokenId: String(claim.token_id ?? tokenId),
       claimAccount: String(claim.claim_account ?? ""),
       termsHash: String(claim.terms_hash ?? ""),
-      outstanding: String(claim.outstanding ?? claim.amount_due ?? "0"),
+      outstanding: typeof claim.amount_due === "string" ? outstandingOf(claim) : "0",
       amountDue: String(claim.amount_due ?? "0"),
       kindRules: kindRules(Number(claim.kind ?? 0)),
     };
@@ -393,6 +416,48 @@ export class ApiApp {
     const invoice = this.store.getInvoice(idOrToken);
     if (invoice === undefined) throw new ApiError(404, "invoice_not_found");
     return invoice;
+  }
+
+  private readonly claimCache = new Map<string, { at: number; claim: Record<string, unknown> }>();
+
+  /**
+   * The invoices as they are on chain now: status, what is still owed and what was paid come from each
+   * claim, not from the record written at creation (which never changes). A claim that cannot be read
+   * keeps its stored values. Reads are cached for ten seconds and run eight at a time.
+   */
+  private async liveInvoices(invoices: InvoiceRecord[]): Promise<unknown[]> {
+    const now = this.clock().getTime();
+    const out: unknown[] = new Array<unknown>(invoices.length);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const index = next++;
+        const invoice = invoices[index];
+        if (invoice === undefined) return;
+        let claim: Record<string, unknown> | undefined;
+        const cached = this.claimCache.get(invoice.token_id);
+        if (cached !== undefined && now - cached.at < 10_000) claim = cached.claim;
+        else {
+          try {
+            claim = await this.deps.contract.claim(invoice.token_id);
+            this.claimCache.set(invoice.token_id, { at: now, claim });
+          } catch {
+            claim = undefined;
+          }
+        }
+        out[index] =
+          claim === undefined || typeof claim.amount_due !== "string"
+            ? this.invoiceView(invoice)
+            : {
+                ...this.invoiceView(invoice),
+                ...(typeof claim.status === "string" ? { status: claim.status } : {}),
+                outstanding: outstandingOf(claim),
+                paid_total: paidTotalOf(claim, invoice.paid_total),
+              };
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(8, invoices.length) }, worker));
+    return out;
   }
 
   private invoiceView(invoice: InvoiceRecord): Omit<InvoiceRecord, "terms"> & { terms?: Terms } {
@@ -701,9 +766,7 @@ export class ApiApp {
       return {
         status: 200,
         body: {
-          data: this.store
-            .listInvoices(context.accountId)
-            .map((invoice) => this.invoiceView(invoice)),
+          data: await this.liveInvoices(this.store.listInvoices(context.accountId)),
         },
       };
     }
@@ -724,8 +787,10 @@ export class ApiApp {
           body: {
             invoice: {
               ...this.invoiceView(invoice),
-              outstanding: String(claim.outstanding ?? invoice.outstanding),
-              paid_total: String(claim.booked_total ?? invoice.paid_total),
+              ...(typeof claim.status === "string" ? { status: claim.status as never } : {}),
+              outstanding:
+                typeof claim.amount_due === "string" ? outstandingOf(claim) : invoice.outstanding,
+              paid_total: paidTotalOf(claim, invoice.paid_total),
             },
             claim: { ...claim, kind_rules: kindRules(Number(claim.kind ?? 0)) },
           },
@@ -893,9 +958,10 @@ export class ApiApp {
           terms_hash: invoice.terms_hash,
           amount_due: invoice.amount_due,
           amount_usd: invoice.amount_usd,
-          outstanding: String(claim.outstanding ?? invoice.amount_due),
+          outstanding:
+            typeof claim.amount_due === "string" ? outstandingOf(claim) : invoice.amount_due,
+          status: typeof claim.status === "string" ? (claim.status as never) : invoice.status,
           due_date: invoice.due_date,
-          status: invoice.status,
           pay_link: invoice.pay_link,
           terms: invoice.terms,
           routes: allowedRoutes(this.routes).map((route) => ({

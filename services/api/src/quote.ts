@@ -176,6 +176,8 @@ export class QuoteService {
 
     const decimals = route.swapType === "EXACT_OUTPUT" ? 6 : route.originDecimals;
     const outstanding = BigInt(claim.outstanding);
+    if (input.amountUsd === undefined && outstanding === 0n)
+      throw new QuoteError(409, "nothing_to_pay", "this invoice is already paid");
     const amountBaseUnits =
       input.amountUsd !== undefined
         ? parseUsdToBaseUnits(input.amountUsd, decimals)

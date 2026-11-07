@@ -4,18 +4,38 @@ import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { copy } from "@/copy";
-import { dashClient } from "@/lib/client";
-import { chipFor } from "@/lib/invoice-model";
-import { useAsync } from "@/lib/use-async";
+import { chipFor, summarize } from "@/lib/invoice-model";
+import { lastSevenDays, overview, revenueSummary, topPayers } from "@/lib/earnings";
+import { useEarnings } from "@/lib/use-earnings";
 import { Button } from "../ui/button";
+import { KpiTile } from "../ui/kpi-tile";
+import {
+  MonthlyRevenueCard,
+  OverviewCard,
+  TopClientsCard,
+  WeeklyActivityCard,
+} from "../ui/stat-cards";
 import { Tabs } from "../ui/tabs";
 import { InvoiceTable } from "./invoice-table";
 
 export function InvoicesScreen() {
   const p = copy.invoicesPage;
-  const [list, retry] = useAsync(() => dashClient.invoices.list({ limit: 100 }), []);
-  const nowSec = useMemo(() => Math.floor(Date.now() / 1000), [list.state]);
-  const rows = list.state === "ready" ? list.data.data : [];
+  const d = copy.dash;
+  const [list, retry] = useEarnings();
+  const nowMs = useMemo(() => Date.now(), [list.state]);
+  const nowSec = Math.floor(nowMs / 1000);
+  const rows = list.state === "ready" ? list.data.invoices : [];
+  // These cards show invoices only: this page is about them. The dashboard shows every stream.
+  const earnings = useMemo(
+    () => (list.state === "ready" ? list.data.earnings.filter((e) => e.stream === "invoice") : []),
+    [list],
+  );
+  const s = useMemo(() => summarize(rows, nowSec), [rows, nowSec]);
+  const rev = useMemo(() => revenueSummary(earnings, nowMs), [earnings, nowMs]);
+  const week = useMemo(() => lastSevenDays(earnings, nowMs), [earnings, nowMs]);
+  const over = useMemo(() => overview(earnings, nowMs), [earnings, nowMs]);
+  const clients = useMemo(() => topPayers(earnings, 3), [earnings]);
+
   const kind = (i: (typeof rows)[number]) => chipFor(i, nowSec, false).kind;
   const by = {
     all: rows,
@@ -24,6 +44,8 @@ export function InvoicesScreen() {
     overdue: rows.filter((i) => kind(i) === "overdue"),
   };
   const state = list.state === "ready" ? "ready" : list.state;
+  const cards = list.state === "loading" ? "loading" : "ready";
+  const tile = list.state === "ready" ? (rows.length === 0 ? "empty" : "ready") : list.state;
   const table = (r: typeof rows) => (
     <InvoiceTable
       caption={p.title}
@@ -45,6 +67,31 @@ export function InvoicesScreen() {
           </Button>
         </Link>
       </header>
+
+      <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MonthlyRevenueCard
+          cents={rev.currentCents}
+          deltaPct={rev.deltaPct}
+          series={rev.series}
+          state={cards}
+        />
+        <WeeklyActivityCard days={week} state={cards} />
+        <OverviewCard rows={over} state={cards} />
+        <TopClientsCard clients={clients} state={cards} />
+      </div>
+
+      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiTile label={d.outstanding} cents={s.outstandingCents} state={tile} />
+        <KpiTile label={d.collected} cents={s.paidCents} state={tile} />
+        <KpiTile label={d.overdue} cents={s.overdueCents} state={tile} />
+        <div className="surface-card p-5">
+          <p className="text-[14px] leading-5 font-medium text-muted">{d.invoices}</p>
+          <p className="tabular mt-2 text-[32px] leading-[1.1] font-bold">
+            {list.state === "ready" ? s.counts.all : "–"}
+          </p>
+        </div>
+      </div>
+
       <Tabs
         label={p.tabs}
         items={[

@@ -9,6 +9,7 @@
  * and stop once a page reaches already-indexed heights. A quiet poll is one NearBlocks call.
  */
 import type { BudgetGovernor } from "./budget.js";
+import { toSeconds } from "./time.js";
 import type { EventSource, SourceBlock, SourcePage, SourceReceipt } from "./types.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -42,16 +43,7 @@ interface TxStatus {
   }[];
 }
 
-function timestampSeconds(value: number | string | undefined): number {
-  if (value === undefined) return 0;
-  if (typeof value === "string" && !/^\d+$/.test(value)) {
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
-  }
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
-  return numeric > 1_000_000_000_000 ? Math.floor(numeric / 1_000_000_000) : Math.floor(numeric);
-}
+const timestampSeconds = toSeconds;
 
 function cursorHeight(cursor: string | null): number {
   if (cursor === null) return 0;

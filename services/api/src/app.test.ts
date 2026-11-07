@@ -360,6 +360,48 @@ describe("invoice route", () => {
     expect((await poll()).status).toBe("success");
   });
 
+  it("the invoice list and detail show the claim's state on chain, not the record from creation", async () => {
+    const { app, secret, contract } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    contract.claim.mockResolvedValue({
+      token_id: "c-1",
+      kind: 0,
+      claim_account: "c-1.openrail.near",
+      terms_hash: "0x" + "a".repeat(64),
+      amount_due: "12500000",
+      booked_total: "4000000",
+      surplus: "0",
+      credit_total: "0",
+      status: "PartiallyPaid",
+    } as never);
+    const list = await app.handle(request("GET", "/v1/invoices", undefined, secret));
+    const row = (list.body as { data: Array<Record<string, string>> }).data[0];
+    expect(row).toMatchObject({
+      status: "PartiallyPaid",
+      outstanding: "8500000",
+      paid_total: "4000000",
+    });
+
+    // An overpayment: the surplus is not money applied to the invoice, and nothing is owed any more.
+    contract.claim.mockResolvedValue({
+      token_id: "c-1",
+      kind: 0,
+      claim_account: "c-1.openrail.near",
+      terms_hash: "0x" + "a".repeat(64),
+      amount_due: "12500000",
+      booked_total: "14000000",
+      surplus: "1500000",
+      credit_total: "0",
+      status: "Paid",
+    } as never);
+    const detail = await app.handle(request("GET", `/v1/invoices/${row?.id}`, undefined, secret));
+    expect((detail.body as { invoice: Record<string, string> }).invoice).toMatchObject({
+      status: "Paid",
+      outstanding: "0",
+      paid_total: "12500000",
+    });
+  });
+
   it("pokes the indexer after a cash-out quote", async () => {
     const { app, secret, pokeIndexer, cashout } = harness();
     const response = await app.handle(

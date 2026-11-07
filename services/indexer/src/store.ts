@@ -696,10 +696,31 @@ export class IndexerStore {
     });
   }
 
+  /** Transactions whose stored time cannot be real (before 2001): written by the old time bug, waiting for repair. */
+  txHashesWithBadTime(): string[] {
+    const rows = this.db
+      .prepare(
+        "SELECT tx_hash FROM events WHERE block_timestamp < 1000000000 AND tx_hash != '' " +
+          "UNION SELECT tx_hash FROM bookings WHERE timestamp < 1000000000 AND tx_hash != '' " +
+          "UNION SELECT tx_hash FROM receipts WHERE timestamp < 1000000000 AND tx_hash != ''",
+      )
+      .all() as unknown as { tx_hash: string }[];
+    return rows.map((r) => r.tx_hash);
+  }
+
+  /** Sets the true block time (Unix seconds) on everything this transaction wrote. */
+  setTxTime(txHash: string, seconds: number): void {
+    this.db.prepare("UPDATE events SET block_timestamp = ? WHERE tx_hash = ?").run(seconds, txHash);
+    this.db.prepare("UPDATE bookings SET timestamp = ? WHERE tx_hash = ?").run(seconds, txHash);
+    this.db.prepare("UPDATE receipts SET timestamp = ? WHERE tx_hash = ?").run(seconds, txHash);
+  }
+
   /** Deletes prunable operational events older than the cutoff; evidence is never touched. */
   pruneTransient(cutoffTimestamp: number): number {
     const events = this.db
-      .prepare("SELECT id, event FROM events WHERE block_timestamp < ?")
+      .prepare(
+        "SELECT id, event FROM events WHERE block_timestamp < ? AND block_timestamp >= 1000000000",
+      )
       .all(cutoffTimestamp) as unknown as { id: number; event: string }[];
     const toDelete = events
       .filter((event) => PRUNABLE_EVENTS.has(event.event))

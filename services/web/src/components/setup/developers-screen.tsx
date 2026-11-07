@@ -1,7 +1,7 @@
 "use client";
 
 import type { ApiKey, ApiKeyCreated, WebhookEndpoint } from "@openrail/api-client";
-import { Plus } from "lucide-react";
+import { Plus, RotateCw, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
@@ -12,7 +12,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input, Select } from "../ui/input";
 import { Modal } from "../ui/modal";
-import { Table, type Column } from "../ui/table";
+import { DataTable, type DataTableColumn } from "../ui/data-table";
 import { Tabs } from "../ui/tabs";
 
 const WHEN = new Intl.DateTimeFormat("en-US", {
@@ -126,55 +126,53 @@ function ApiKeysPanel() {
     reload();
   };
 
-  const columns: Column<ApiKey>[] = [
+  const columns: DataTableColumn<ApiKey>[] = [
     {
-      key: "name",
+      id: "name",
       header: t.cols.name,
-      render: (k) => <span className="font-medium">{k.name}</span>,
+      sortable: true,
+      value: (k) => k.name,
+      cell: (k) => <span className="font-medium">{k.name}</span>,
     },
     {
-      key: "prefix",
+      id: "prefix",
       header: t.cols.key,
-      render: (k) => <code className="font-mono text-[13px]">{k.prefix}</code>,
+      value: (k) => k.prefix,
+      cell: (k) => (
+        <code className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono text-[12px]">
+          {k.prefix}
+          {"••••••••••••"}
+        </code>
+      ),
     },
-    { key: "scopes", header: t.cols.scopes, render: (k) => k.scopes.join(", ") || "—" },
     {
-      key: "used",
-      header: t.cols.lastUsed,
-      render: (k) =>
-        k.revoked_at ? t.revoked : k.last_used_at ? t.lastUsed(when(k.last_used_at)) : t.neverUsed,
-    },
-    {
-      key: "actions",
-      header: "",
-      hideLabelOnCard: true,
-      render: (k) =>
-        k.revoked_at ? null : (
-          <span className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label={t.rotate(k.name)}
-              onClick={() => {
-                setActionFailed(false);
-                setRotate(k);
-              }}
-            >
-              {t.rotateShort}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label={t.revoke(k.name)}
-              onClick={() => {
-                setActionFailed(false);
-                setRevoke(k);
-              }}
-            >
-              {t.revokeShort}
-            </Button>
+      id: "scopes",
+      header: t.cols.scopes,
+      hideBelow: "sm",
+      value: (k) => k.scopes.join(" "),
+      cell: (k) =>
+        k.scopes.length === 0 ? (
+          "—"
+        ) : (
+          <span className="flex flex-wrap gap-1">
+            {k.scopes.map((scope) => (
+              <span
+                key={scope}
+                className="inline-flex rounded-full bg-surface-2 px-2 py-0.5 text-[12px] font-medium text-muted"
+              >
+                {scope}
+              </span>
+            ))}
           </span>
         ),
+    },
+    {
+      id: "used",
+      header: t.cols.lastUsed,
+      hideBelow: "md",
+      value: (k) => (k.revoked_at ? t.revoked : (k.last_used_at ?? t.neverUsed)),
+      cell: (k) =>
+        k.revoked_at ? t.revoked : k.last_used_at ? t.lastUsed(when(k.last_used_at)) : t.neverUsed,
     },
   ];
 
@@ -204,7 +202,44 @@ function ApiKeysPanel() {
         onRetry={reload}
       >
         <p className="caption mb-3">{t.keyCount(active.length)}</p>
-        <Table caption={t.keysTitle} columns={columns} rows={rows} rowKey={(k) => k.id} />
+        <DataTable
+          data={rows}
+          columns={columns}
+          rowId={(k) => k.id}
+          rowLabel={(k) => `${k.name} key`}
+          caption={t.keysTitle}
+          variant="minimal"
+          density="compact"
+          pageSize={8}
+          rowActions={(k) =>
+            k.revoked_at ? null : (
+              <span className="flex justify-end gap-1">
+                <button
+                  type="button"
+                  aria-label={t.rotate(k.name)}
+                  onClick={() => {
+                    setActionFailed(false);
+                    setRotate(k);
+                  }}
+                  className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                >
+                  <RotateCw aria-hidden size={16} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={t.revoke(k.name)}
+                  onClick={() => {
+                    setActionFailed(false);
+                    setRevoke(k);
+                  }}
+                  className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-danger/10 hover:text-danger-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                >
+                  <Trash2 aria-hidden size={16} />
+                </button>
+              </span>
+            )
+          }
+        />
       </Card>
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t.createKey}>
@@ -577,21 +612,39 @@ function EventsPanel() {
     [type],
   );
   const rows = events.state === "ready" ? events.data.data : [];
-  const columns: Column<(typeof rows)[number]>[] = [
+  const columns: DataTableColumn<(typeof rows)[number]>[] = [
     {
-      key: "type",
+      id: "type",
       header: t.cols.type,
-      render: (e) => <code className="font-mono text-[13px]">{e.type}</code>,
+      sortable: true,
+      value: (e) => e.type,
+      cell: (e) => (
+        <code className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono text-[12px]">
+          {e.type}
+        </code>
+      ),
     },
     {
-      key: "id",
+      id: "id",
       header: t.cols.event,
-      render: (e) => <code className="font-mono text-[13px]">{e.id}</code>,
+      hideBelow: "sm",
+      value: (e) => e.id,
+      cell: (e) => <code className="font-mono text-[13px]">{e.id}</code>,
     },
     {
-      key: "time",
+      id: "token",
+      header: t.cols.token,
+      hideBelow: "md",
+      value: (e) => String((e.data as { token_id?: unknown } | undefined)?.token_id ?? ""),
+    },
+    {
+      id: "time",
       header: t.cols.time,
-      render: (e) => when(new Date(e.created * 1000).toISOString()),
+      sortable: true,
+      value: (e) => e.created,
+      // A time before 2001 cannot be real: say so instead of showing 1 January 1970.
+      cell: (e) =>
+        e.created > 1_000_000_000 ? when(new Date(e.created * 1000).toISOString()) : "—",
     },
   ];
   return (
@@ -613,7 +666,18 @@ function EventsPanel() {
           ))}
         </Select>
       </div>
-      <Table caption={t.eventsTitle} columns={columns} rows={rows} rowKey={(e) => e.id} />
+      <DataTable
+        data={rows}
+        columns={columns}
+        rowId={(e) => e.id}
+        rowLabel={(e) => `${e.type} ${e.id}`}
+        caption={t.eventsTitle}
+        variant="minimal"
+        defaultSort={{ id: "time", dir: "desc" }}
+        pageSize={10}
+        searchable
+        searchText={(e) => `${e.type} ${e.id} ${JSON.stringify(e.data ?? {})}`}
+      />
     </Card>
   );
 }

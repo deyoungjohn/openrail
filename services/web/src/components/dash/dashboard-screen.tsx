@@ -1,20 +1,36 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Receipt } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
-import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, XAxis } from "recharts";
+import { useMemo, useState } from "react";
+import { Cell, Pie, PieChart } from "recharts";
 import { copy } from "@/copy";
-import { dashClient } from "@/lib/client";
+import { cn } from "@/lib/cn";
+import {
+  byChain,
+  byMonth,
+  byStream,
+  inTimeRange,
+  lastSevenDays,
+  overview,
+  revenueSummary,
+  topPayers,
+  type Earning,
+  type Stream,
+  type TimeRange,
+} from "@/lib/earnings";
 import { formatUsd } from "@/lib/format";
-import { paymentsByChain, paymentsByMonth, summarize } from "@/lib/invoice-model";
-import { formatUsdc } from "@/lib/format";
-import { useAsync } from "@/lib/use-async";
+import { useEarnings } from "@/lib/use-earnings";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { CHAINS } from "../ui/chain-badge";
-import { KpiTile } from "../ui/kpi-tile";
-import { InvoiceTable } from "./invoice-table";
+import { DataTable, type DataTableColumn } from "../ui/data-table";
+import {
+  MonthlyRevenueCard,
+  OverviewCard,
+  TopClientsCard,
+  WeeklyActivityCard,
+} from "../ui/stat-cards";
 
 const CREATE = (
   <Link href="/app/invoices/new">
@@ -24,99 +40,310 @@ const CREATE = (
   </Link>
 );
 
-const CHAIN_COLORS = [
-  "var(--accent)",
-  "var(--info)",
-  "var(--success)",
-  "var(--warning)",
-  "var(--text-muted)",
+const STREAM_COLOR: Record<Stream, string> = {
+  invoice: "var(--accent)",
+  checkout: "var(--info)",
+  pay_link: "var(--success)",
+};
+
+const when = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function StreamChip({ stream }: { stream: Stream }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-[12px] font-medium">
+      <span
+        aria-hidden
+        className="size-1.5 rounded-full"
+        style={{ background: STREAM_COLOR[stream] }}
+      />
+      {copy.dash.streamLabels[stream]}
+    </span>
+  );
+}
+
+function Pills<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "h-8 rounded-full px-3 text-[13px] font-medium transition-colors",
+            value === o.value
+              ? "bg-accent text-on-accent"
+              : "bg-surface-2 text-muted hover:text-text",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const timeOptions = (Object.keys(copy.dash.timeRanges) as TimeRange[]).map((value) => ({
+  value,
+  label: copy.dash.timeRanges[value],
+}));
+const streamOptions: { value: Stream | "all"; label: string }[] = [
+  { value: "all", label: copy.dash.allStreams },
+  { value: "invoice", label: copy.dash.streamLabels.invoice },
+  { value: "checkout", label: copy.dash.streamLabels.checkout },
+  { value: "pay_link", label: copy.dash.streamLabels.pay_link },
 ];
 
-function Payments() {
+function Collections({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs: number }) {
   const d = copy.dash;
-  const [pay, retry] = useAsync(() => dashClient.payments.list(), []);
-  const rows = pay.state === "ready" ? pay.data.data : [];
-  const chains = paymentsByChain(rows);
-  const months = paymentsByMonth(rows);
-  const state = pay.state === "ready" ? (chains.length === 0 ? "empty" : "ready") : pay.state;
-  const summary = months.map((m) => `${m.month}: ${formatUsdc(m.units)}`).join(", ");
+  const [range, setRange] = useState<TimeRange>("all");
+  const [stream, setStream] = useState<Stream | "all">("all");
+  const filtered = useMemo(
+    () =>
+      earnings.filter(
+        (e) => inTimeRange(e.time, range, nowMs) && (stream === "all" || e.stream === stream),
+      ),
+    [earnings, range, stream, nowMs],
+  );
+  const months = useMemo(() => byMonth(filtered).reverse(), [filtered]);
+  const chains = useMemo(() => byChain(filtered), [filtered]);
+
+  const monthCols: DataTableColumn<(typeof months)[number]>[] = [
+    { id: "month", header: d.month, sortable: true, value: (r) => r.month },
+    {
+      id: "cents",
+      header: d.amount,
+      sortable: true,
+      numeric: true,
+      value: (r) => Number(r.cents),
+      cell: (r) => formatUsd(r.cents),
+      formatTotal: (n) => formatUsd(BigInt(Math.round(n))),
+    },
+  ];
+  const chainCols: DataTableColumn<(typeof chains)[number]>[] = [
+    {
+      id: "chain",
+      header: d.network,
+      sortable: true,
+      value: (r) => CHAINS[r.chain as keyof typeof CHAINS] ?? r.chain,
+    },
+    {
+      id: "count",
+      header: d.payments,
+      sortable: true,
+      numeric: true,
+      hideBelow: "sm",
+      value: (r) => r.count,
+    },
+    {
+      id: "cents",
+      header: d.amount,
+      sortable: true,
+      numeric: true,
+      value: (r) => Number(r.cents),
+      cell: (r) => formatUsd(r.cents),
+      formatTotal: (n) => formatUsd(BigInt(Math.round(n))),
+    },
+  ];
+  const empty = { title: d.noPayments, body: d.noPaymentsBody };
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-3">
-      <div className="min-w-0 lg:col-span-2">
-        <Card
-          title={d.byMonth}
-          state={state}
-          emptyTitle={d.noPayments}
-          emptyBody={d.noPaymentsBody}
-          errorBody={d.loadError}
-          onRetry={retry}
-        >
-          <div className="h-[200px] w-full" role="img" aria-label={summary}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={months.map((m) => ({ month: m.month, usdc: Number(m.units) / 1_000_000 }))}
-                className="max-w-full"
-              >
-                <XAxis
-                  dataKey="month"
-                  tickLine={false}
-                  axisLine={false}
-                  stroke="var(--text-muted)"
-                  fontSize={12}
-                />
-                <Bar
-                  dataKey="usdc"
-                  fill="var(--accent)"
-                  radius={[4, 4, 0, 0]}
-                  isAnimationActive={false}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="caption">{summary}</p>
-        </Card>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <Pills label={d.timeFilter} value={range} options={timeOptions} onChange={setRange} />
+        <Pills label={d.streamFilter} value={stream} options={streamOptions} onChange={setStream} />
       </div>
-      <Card
-        title={d.paidFrom}
-        state={state}
-        emptyTitle={d.noPayments}
-        emptyBody={d.noPaymentsBody}
-        errorBody={d.loadError}
-        onRetry={retry}
-      >
-        <ul className="space-y-2">
-          {chains.map((c, i) => (
-            <li key={c.chain} className="flex items-center gap-2 text-[14px]">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <DataTable
+          data={months}
+          columns={monthCols}
+          rowId={(r) => r.month}
+          title={d.byMonth}
+          caption={d.byMonth}
+          totals={["cents"]}
+          pageSize={6}
+          emptyState={empty}
+        />
+        <DataTable
+          data={chains}
+          columns={chainCols}
+          rowId={(r) => r.chain}
+          title={d.paidFrom}
+          caption={d.paidFrom}
+          totals={["cents"]}
+          pageSize={6}
+          emptyState={empty}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Activity({ earnings, nowMs }: { earnings: readonly Earning[]; nowMs: number }) {
+  const d = copy.dash;
+  const columns: DataTableColumn<Earning>[] = [
+    { id: "payer", header: d.payer, sortable: true, value: (r) => r.payer },
+    {
+      id: "product",
+      header: d.product,
+      hideBelow: "sm",
+      sortable: true,
+      value: (r) => r.product,
+      cell: (r) => (
+        <Link
+          href={`/app/invoices/${encodeURIComponent(r.invoiceId)}`}
+          className="text-accent-text hover:underline"
+        >
+          {r.product}
+        </Link>
+      ),
+    },
+    {
+      id: "stream",
+      header: d.stream,
+      hideBelow: "md",
+      value: (r) => r.stream,
+      cell: (r) => <StreamChip stream={r.stream} />,
+    },
+    {
+      id: "chain",
+      header: d.network,
+      hideBelow: "lg",
+      value: (r) => CHAINS[r.chain as keyof typeof CHAINS] ?? r.chain,
+    },
+    {
+      id: "time",
+      header: d.time,
+      sortable: true,
+      value: (r) => r.time,
+      cell: (r) => when.format(r.time),
+    },
+    {
+      id: "cents",
+      header: d.amount,
+      sortable: true,
+      numeric: true,
+      value: (r) => Number(r.cents),
+      cell: (r) => formatUsd(r.cents),
+    },
+  ];
+  return (
+    <DataTable
+      data={earnings}
+      columns={columns}
+      rowId={(r) => r.id}
+      rowLabel={(r) => `${r.payer}, ${r.product}`}
+      title={d.activity}
+      caption={d.activity}
+      defaultSort={{ id: "time", dir: "desc" }}
+      pageSize={8}
+      searchable
+      filters={[
+        {
+          id: "time",
+          label: d.timeFilter,
+          options: timeOptions,
+          apply: (r, v) => inTimeRange(r.time, v as TimeRange, nowMs),
+        },
+        {
+          id: "stream",
+          label: d.streamFilter,
+          options: streamOptions,
+          apply: (r, v) => r.stream === v,
+        },
+      ]}
+      emptyState={{ title: d.activityEmpty, body: d.activityEmptyBody }}
+      rowActions={(r) => (
+        <Link
+          href={`/r/${encodeURIComponent(r.txHash)}`}
+          aria-label={`Receipt for ${r.product}`}
+          className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text"
+        >
+          <Receipt aria-hidden size={16} />
+        </Link>
+      )}
+    />
+  );
+}
+
+function Streams({ earnings }: { earnings: readonly Earning[] }) {
+  const d = copy.dash;
+  const data = byStream(earnings);
+  const total = data.reduce((n, s) => n + s.cents, 0n);
+  const label = data.map((s) => `${d.streamLabels[s.stream]}: ${formatUsd(s.cents)}`).join(", ");
+  return (
+    <Card title={d.streamsTitle} info={d.streamsInfo}>
+      <div className="flex items-center gap-4">
+        <PieChart width={120} height={120} role="img" aria-label={label}>
+          <Pie
+            data={
+              total === 0n
+                ? [{ stream: "none", value: 1, color: "var(--surface-2)" }]
+                : data.map((s) => ({
+                    stream: s.stream,
+                    value: Number(s.cents),
+                    color: STREAM_COLOR[s.stream],
+                  }))
+            }
+            dataKey="value"
+            innerRadius={36}
+            outerRadius={56}
+            stroke="none"
+            isAnimationActive={false}
+          >
+            {(total === 0n
+              ? [{ color: "var(--surface-2)" }]
+              : data.map((s) => ({ color: STREAM_COLOR[s.stream] }))
+            ).map((m, i) => (
+              <Cell key={i} fill={m.color} />
+            ))}
+          </Pie>
+        </PieChart>
+        <ul className="space-y-1.5 text-[14px]">
+          {data.map((s) => (
+            <li key={s.stream} className="flex items-center gap-2">
               <span
                 aria-hidden
                 className="size-2.5 rounded-full"
-                style={{ background: CHAIN_COLORS[Math.min(i, CHAIN_COLORS.length - 1)] }}
+                style={{ background: STREAM_COLOR[s.stream] }}
               />
-              <span>{CHAINS[c.chain as keyof typeof CHAINS] ?? c.chain}</span>
-              <span className="tabular ml-auto font-medium">{formatUsdc(c.units)}</span>
+              <span>{d.streamLabels[s.stream]}</span>
+              <span className="tabular ml-auto pl-3 font-medium">{formatUsd(s.cents)}</span>
             </li>
           ))}
         </ul>
-      </Card>
-    </div>
+      </div>
+    </Card>
   );
 }
 
 export function DashboardScreen() {
   const d = copy.dash;
-  const [list, retry] = useAsync(() => dashClient.invoices.list({ limit: 100 }), []);
-  const nowSec = useMemo(() => Math.floor(Date.now() / 1000), [list.state]);
-  const rows = list.state === "ready" ? list.data.data : [];
-  const s = useMemo(() => summarize(rows, nowSec), [rows, nowSec]);
-  const tile = list.state === "ready" ? (rows.length === 0 ? "empty" : "ready") : list.state;
-
-  const mix = [
-    { name: d.paid, value: s.counts.paid, color: "var(--success)" },
-    { name: d.waiting, value: s.counts.waiting, color: "var(--info)" },
-    { name: d.overdueLabel, value: s.counts.overdue, color: "var(--danger)" },
-  ];
-  const mixTotal = mix.reduce((n, m) => n + m.value, 0);
+  const [load, retry] = useEarnings();
+  const nowMs = useMemo(() => Date.now(), [load.state]);
+  const earnings = load.state === "ready" ? load.data.earnings : [];
+  const noInvoices = load.state === "ready" && load.data.invoices.length === 0;
+  const loading = load.state === "loading";
+  const rev = useMemo(() => revenueSummary(earnings, nowMs), [earnings, nowMs]);
+  const week = useMemo(() => lastSevenDays(earnings, nowMs), [earnings, nowMs]);
+  const over = useMemo(() => overview(earnings, nowMs), [earnings, nowMs]);
+  const clients = useMemo(() => topPayers(earnings, 3), [earnings]);
 
   return (
     <div className="space-y-6">
@@ -125,7 +352,7 @@ export function DashboardScreen() {
         {CREATE}
       </header>
 
-      {list.state === "ready" && rows.length === 0 ? (
+      {noInvoices ? (
         <div className="surface-card">
           <div className="px-4 py-12 text-center">
             <h2 className="text-[18px] leading-[26px] font-semibold">{d.emptyTitle}</h2>
@@ -133,116 +360,40 @@ export function DashboardScreen() {
             <div className="mt-4 flex justify-center">{CREATE}</div>
           </div>
         </div>
+      ) : load.state === "error" ? (
+        <Card state="error" errorBody={d.loadError} onRetry={retry} />
       ) : (
         <>
-          <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiTile label={d.outstanding} cents={s.outstandingCents} state={tile} />
-            <KpiTile label={d.collected} cents={s.paidCents} state={tile} />
-            <KpiTile label={d.overdue} cents={s.overdueCents} state={tile} />
-            <div className="surface-card p-5">
-              <p className="text-[14px] leading-5 font-medium text-muted">{d.invoices}</p>
-              <p className="tabular mt-2 text-[32px] leading-[1.1] font-bold">
-                {list.state === "ready" ? s.counts.all : "–"}
-              </p>
-            </div>
+          <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MonthlyRevenueCard
+              cents={rev.currentCents}
+              deltaPct={rev.deltaPct}
+              series={rev.series}
+              state={loading ? "loading" : "ready"}
+            />
+            <WeeklyActivityCard days={week} state={loading ? "loading" : "ready"} />
+            <OverviewCard rows={over} state={loading ? "loading" : "ready"} />
+            <TopClientsCard clients={clients} state={loading ? "loading" : "ready"} />
           </div>
 
           <div className="grid items-start gap-4 lg:grid-cols-3">
             <div className="min-w-0 lg:col-span-2">
-              <Card
-                title={d.latest}
-                state={
-                  list.state === "error" ? "error" : list.state === "loading" ? "loading" : "ready"
-                }
-                errorBody={d.loadError}
-                onRetry={retry}
-              >
-                <InvoiceTable caption={d.latest} rows={rows.slice(0, 5)} nowSec={nowSec} />
-                <p className="mt-3 text-right text-[14px]">
-                  <Link href="/app/invoices" className="text-accent-text hover:underline">
-                    {d.viewAll}
-                  </Link>
-                </p>
-              </Card>
+              {loading ? (
+                <DataTable data={[]} columns={[]} rowId={() => ""} title={d.activity} loading />
+              ) : (
+                <Activity earnings={earnings} nowMs={nowMs} />
+              )}
             </div>
-            <div className="min-w-0 space-y-4">
-              <Card
-                title={d.statusMix}
-                info={d.statusMixInfo}
-                state={list.state === "ready" ? "ready" : list.state}
-              >
-                <div className="flex items-center gap-4">
-                  <PieChart
-                    width={120}
-                    height={120}
-                    role="img"
-                    aria-label={mix.map((m) => `${m.name}: ${m.value}`).join(", ")}
-                  >
-                    <Pie
-                      data={
-                        mixTotal === 0
-                          ? [{ name: "none", value: 1, color: "var(--surface-2)" }]
-                          : mix
-                      }
-                      dataKey="value"
-                      innerRadius={36}
-                      outerRadius={56}
-                      stroke="none"
-                      isAnimationActive={false}
-                    >
-                      {(mixTotal === 0 ? [{ color: "var(--surface-2)" }] : mix).map((m, i) => (
-                        <Cell key={i} fill={m.color} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                  <ul className="space-y-1.5 text-[14px]">
-                    {mix.map((m) => (
-                      <li key={m.name} className="flex items-center gap-2">
-                        <span
-                          aria-hidden
-                          className="size-2.5 rounded-full"
-                          style={{ background: m.color }}
-                        />
-                        <span>{m.name}</span>
-                        <span className="tabular ml-auto font-medium">{m.value}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </Card>
-              <Card
-                title={d.topClients}
-                state={
-                  list.state === "ready"
-                    ? s.topClients.length === 0
-                      ? "empty"
-                      : "ready"
-                    : list.state
-                }
-                emptyBody={d.topClientsEmpty}
-              >
-                <ul className="divide-y divide-border">
-                  {s.topClients.slice(0, 5).map((c) => (
-                    <li key={c.name} className="flex items-center gap-3 py-2.5">
-                      <span
-                        aria-hidden
-                        className="grid size-9 place-items-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent-text"
-                      >
-                        {c.name.slice(0, 2).toUpperCase()}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[14px] font-medium">
-                        {c.name}
-                      </span>
-                      <span className="tabular text-[14px] font-medium">
-                        {formatUsd(c.totalCents)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
+            <div className="min-w-0">
+              {loading ? (
+                <Card title={d.streamsTitle} state="loading" />
+              ) : (
+                <Streams earnings={earnings} />
+              )}
             </div>
           </div>
-          <Payments />
+
+          {loading ? null : <Collections earnings={earnings} nowMs={nowMs} />}
         </>
       )}
     </div>

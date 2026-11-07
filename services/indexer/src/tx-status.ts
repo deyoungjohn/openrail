@@ -42,6 +42,38 @@ export class RpcTxStatusReader implements TxStatusReader {
     if (rpcUrls.length === 0) throw new Error("NEAR_RPC_INVALID: at least one RPC URL");
   }
 
+  /** The block's own time: the outcome does not carry it, so ask for the block header; ingestion time is the last resort. */
+  private async blockSeconds(
+    url: string,
+    blockHash: string | undefined,
+    given: number | undefined,
+  ): Promise<number> {
+    if (given !== undefined) return toSeconds(given);
+    if (blockHash !== undefined) {
+      try {
+        const response = await this.fetchImpl(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "block",
+            params: { block_id: blockHash },
+          }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        const body = (await response.json()) as {
+          result?: { header?: { timestamp?: number | string } };
+        };
+        const ts = body.result?.header?.timestamp;
+        if (ts !== undefined) return toSeconds(ts);
+      } catch {
+        /* fall through to the clock */
+      }
+    }
+    return Math.floor(Date.now() / 1000);
+  }
+
   async fetch(hash: string, signer: string): Promise<TxStatusResult> {
     let lastError: unknown;
     for (const url of this.rpcUrls) {
@@ -83,8 +115,10 @@ export class RpcTxStatusReader implements TxStatusReader {
           signerId: result.transaction?.signer_id ?? signer,
           blockHeight: first?.block_height ?? result.transaction_outcome?.block_height ?? 0,
           blockHash: first?.block_hash ?? result.transaction_outcome?.block_hash ?? hash,
-          blockTimestamp: toSeconds(
-            result.transaction_outcome?.outcome?.block_timestamp ?? Date.now(),
+          blockTimestamp: await this.blockSeconds(
+            url,
+            first?.block_hash ?? result.transaction_outcome?.block_hash,
+            result.transaction_outcome?.outcome?.block_timestamp,
           ),
           receipts,
         };

@@ -28,6 +28,7 @@ import { Indexer } from "./indexer.js";
 import { EvmOriginVerifier, OneClickReceiptEnricher, StatusAmountVerifier } from "./receipt.js";
 import { FallbackEventSource } from "./fallback.js";
 import { NearBlocksEventSource } from "./nearblocks.js";
+import { repairTimes } from "./time-repair.js";
 import { RpcEventSource, nearRpcUrls } from "./source.js";
 import { IndexerStore } from "./store.js";
 import { HttpEventSink } from "./webhook.js";
@@ -80,6 +81,16 @@ async function main(): Promise<void> {
           ),
           rpcSource,
         );
+  // Rows written by the old time bug (1970) get their real block time, in the background.
+  void repairTimes({
+    store,
+    baseUrl: getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
+    apiKey: getEnv("NEARBLOCKS_API_KEY") ?? "",
+    budget,
+    log: (message) => logger.warn(message),
+  }).then((fixed) => {
+    if (fixed > 0) logger.info(`repaired the time of ${fixed} transactions`);
+  });
   const near = nearClientFromEnv();
   const claimReader = new ContractClaimReader(near, rootAccount);
 
