@@ -129,7 +129,7 @@ export function DateWheelField({
           </MorphPopoverContent>
         </MorphPopover>
       </div>
-      <ErrorNote>{error ? error : null}</ErrorNote>
+      <ErrorNote variant="field">{error ? error : null}</ErrorNote>
     </div>
   );
 }

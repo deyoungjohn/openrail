@@ -72,12 +72,26 @@ function Frame({
           {label}
         </label>
       </div>
-      <ErrorNote id={`${id}-note`}>{error ? error : null}</ErrorNote>
-      {!error && helper ? (
-        <p id={`${id}-note`} className="caption mt-1.5 px-1">
-          {helper}
-        </p>
-      ) : null}
+      {/* One cell holds both the helper line and the error: the cell is as tall as the taller of the two, so
+          swapping one for the other moves nothing. */}
+      <div className="grid">
+        {helper ? (
+          <p
+            id={error ? undefined : `${id}-note`}
+            aria-hidden={error ? true : undefined}
+            className={cn("caption col-start-1 row-start-1 mt-1.5 px-1", error && "invisible")}
+          >
+            {helper}
+          </p>
+        ) : null}
+        <ErrorNote
+          variant="field"
+          id={error ? `${id}-note` : undefined}
+          className="col-start-1 row-start-1 mt-1.5 px-1"
+        >
+          {error ? error : null}
+        </ErrorNote>
+      </div>
     </div>
   );
 }

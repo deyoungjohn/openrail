@@ -146,7 +146,10 @@ export const copy = {
     rejected: "You cancelled in your wallet. Nothing was sent. Try again when you're ready.",
     failed: "We couldn't send your confirmation. Nothing was charged. Try again in a moment.",
     doneTitle: "Accepted by client",
-    doneBody: "Thanks. The sender can see that you accepted these terms. You can close this page.",
+    doneBody: "Thanks. The sender can see that you accepted these terms.",
+    payHint:
+      "You can pay this invoice now, from any wallet or exchange, or later from the same link.",
+    payNow: "Pay this invoice",
     alreadyTitle: "Accepted by client",
     alreadyBody: "These terms were already accepted. Nothing more to do.",
     closedTitle: "This invoice can't be accepted",

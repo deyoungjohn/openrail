@@ -57,7 +57,12 @@ describe("invoice PDF layout contract", () => {
     ).toContain("ISSUE DATE");
   });
 
-  it("prints every terms field and the hash", () => {
+  it("does not print the line items hash (the page shows no line items, so it would be a number nobody can use)", () => {
+    expect(content()).not.toContain(terms.line_items_sha256);
+    expect(content()).not.toContain("Line items SHA-256");
+  });
+
+  it("prints the terms fields a reader needs and the terms hash", () => {
     const pdf = content();
     for (const value of [
       terms.issuer_legal_name,
@@ -68,7 +73,6 @@ describe("invoice PDF layout contract", () => {
       "Dec 1, 2026",
       terms.claim_account,
       terms.pay_link,
-      terms.line_items_sha256,
       hash,
       ...terms.clauses,
     ]) {

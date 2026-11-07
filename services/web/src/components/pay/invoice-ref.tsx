@@ -47,8 +47,15 @@ export function PayByRef({ invoiceRef }: { invoiceRef: string }) {
 }
 
 /** The acceptance page for an invoice link. */
-export function AckByRef({ invoiceRef }: { invoiceRef: string }) {
+export function AckByRef({ invoiceRef, business }: { invoiceRef: string; business: string }) {
   return (
-    <InvoiceRef invoiceRef={invoiceRef}>{(tokenId) => <AckScreen tokenId={tokenId} />}</InvoiceRef>
+    <InvoiceRef invoiceRef={invoiceRef}>
+      {(tokenId) => (
+        <AckScreen
+          tokenId={tokenId}
+          payHref={`/${encodeURIComponent(business)}/inv/${encodeURIComponent(invoiceRef)}`}
+        />
+      )}
+    </InvoiceRef>
   );
 }

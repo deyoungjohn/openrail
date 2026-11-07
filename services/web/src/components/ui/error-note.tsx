@@ -3,42 +3,42 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * An error message that never moves anything. It takes no room in the page: the text floats just under the place
- * it is written, like a tooltip that is always open, so showing or clearing it never shifts a field, a button or
- * a row (DESIGN.md, hard rule: error text must not change the layout). The slot is always in the page, empty
- * when there is nothing to say, so a neighbour's spacing never changes either: write
- * `<ErrorNote>{problem ? text : null}</ErrorNote>`. Use it for field errors and for the failure line under a
- * form's button. A message that needs a whole panel belongs in `ErrorState`.
+ * Error text that never moves the page (DESIGN.md, hard rule). The space for it is always there, empty when there
+ * is nothing to say, and the message fills that space when it comes: nothing else is pushed, and the text never
+ * covers a control. `field` is one line under a field (a longer message is cut with an ellipsis and its full text
+ * is the tooltip); `form` is three lines under a form's button. Write
+ * `<ErrorNote>{problem ? text : null}</ErrorNote>`, so the space exists whether or not there is a message.
  */
 export function ErrorNote({
   children,
+  variant = "form",
   className,
   id,
 }: {
   children?: ReactNode;
+  variant?: "field" | "form";
   className?: string;
   id?: string;
 }) {
+  const text = typeof children === "string" ? children : undefined;
   return (
-    <span className="relative block h-0 w-full" id={id}>
+    <div
+      id={id}
+      className={cn(variant === "field" ? "h-5" : "h-[3.75rem]", "w-full print:hidden", className)}
+      {...(children ? { role: "alert" } : {})}
+    >
       {children ? (
-        <span
-          role="alert"
+        <p
+          title={text}
           className={cn(
-            "pointer-events-none absolute top-1.5 left-0 z-30 flex w-max max-w-[min(22rem,calc(100vw-2rem))] items-start gap-1.5",
-            "rounded-md bg-text px-2 py-1 text-[12px] leading-4 font-medium text-bg shadow-md print:hidden",
-            className,
+            "text-danger-text flex items-start gap-1.5 text-[13px] leading-5",
+            variant === "field" ? "truncate" : "line-clamp-3",
           )}
         >
-          <AlertCircle
-            aria-hidden
-            size={14}
-            strokeWidth={1.75}
-            className="mt-px shrink-0 text-danger"
-          />
-          <span>{children}</span>
-        </span>
+          <AlertCircle aria-hidden size={14} strokeWidth={1.75} className="mt-[3px] shrink-0" />
+          <span className={variant === "field" ? "truncate" : undefined}>{children}</span>
+        </p>
       ) : null}
-    </span>
+    </div>
   );
 }

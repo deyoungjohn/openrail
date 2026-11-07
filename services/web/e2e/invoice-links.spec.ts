@@ -31,3 +31,11 @@ test("an unknown reference says so plainly", async ({ page }) => {
   await page.goto("/acme-ltd/inv/ffffffffffffffffff");
   await expect(page.getByText("We can't find this invoice")).toBeVisible();
 });
+
+test("an older pay link ending in /c/<claim id> opens the pay page", async ({ page }) => {
+  await mockApi(page, {
+    "GET /v1/pay/claims/{id}": () => ({ body: { ...claim, status: "Issued" } }),
+  });
+  await page.goto("/c/c-1");
+  await expect(page).toHaveURL(/\/pay\/c-1$/);
+});
