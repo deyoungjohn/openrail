@@ -32,15 +32,6 @@ function writeShim(name: string, body: string): void {
   chmodSync(path, 0o755);
 }
 
-function makePack(source: string, target: string, mutate?: (dir: string) => void): string {
-  const dir = mkdtempSync(join(BASE, "pack-"));
-  execFileSync("tar", ["-xzf", source, "-C", dir]);
-  mutate?.(dir);
-  execFileSync("tar", ["-czf", target, "-C", dir, "."]);
-  rmSync(dir, { recursive: true, force: true });
-  return target;
-}
-
 function applyEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
