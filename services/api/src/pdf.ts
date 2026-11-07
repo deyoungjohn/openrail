@@ -175,10 +175,11 @@ function drawTop(builder: PageBuilder, terms: Terms, issuedAt?: string): void {
   const detailsX = 360;
   let detailY = blockTop;
   const details: Array<[string, string]> = [];
-  if (issuedAt !== undefined) {
-    const date = issuedAt.slice(0, 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) details.push(["ISSUE DATE", date]);
-  }
+  const issueDate = issuedAt?.slice(0, 10);
+  details.push([
+    "ISSUE DATE",
+    issueDate !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : "—",
+  ]);
   details.push(["DUE DATE", terms.due_date], ["CLAIM ACCOUNT", terms.claim_account]);
   for (const [caption, value] of details) {
     label(builder, caption, detailsX, detailY);
