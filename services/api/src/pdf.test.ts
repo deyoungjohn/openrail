@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderInvoicePdf } from "./pdf.js";
+import { measureTextWidth, renderInvoicePdf, RIGHT_EDGE } from "./pdf.js";
 import { buildTerms, termsHash } from "./terms.js";
 
 const terms = buildTerms({
@@ -65,7 +65,7 @@ describe("invoice PDF layout contract", () => {
       terms.debtor_legal_name,
       terms.debtor_key,
       terms.amount_usd,
-      terms.due_date,
+      "Dec 1, 2026",
       terms.claim_account,
       terms.pay_link,
       terms.line_items_sha256,
@@ -74,6 +74,16 @@ describe("invoice PDF layout contract", () => {
     ]) {
       expect(pdf).toContain(value.replace(/[()\\]/g, (c) => `\\${c}`));
     }
+  });
+
+  it("formats dates in UTC without a locale lookup", () => {
+    const pdf = content();
+    expect(pdf).toContain("Dec 1, 2026");
+    expect(pdf).not.toContain("2026-12-01T00:00:00Z");
+    const withIssue = Buffer.from(renderInvoicePdf(terms, hash, "2026-11-01T00:00:00Z")).toString(
+      "latin1",
+    );
+    expect(withIssue).toContain("Nov 1, 2026");
   });
 
   it("uses the invoice number as the table description and the terms amount as TOTAL", () => {
@@ -101,6 +111,36 @@ describe("invoice PDF layout contract", () => {
     expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
     expect((pdf.match(/\/Type \/Page(?!s)/g) ?? []).length).toBeGreaterThan(1);
     expect(pdf).toContain("Clause 18");
+  });
+
+  it("aligns every right edge to the rule and headings", () => {
+    const pdf = Buffer.from(renderInvoicePdf(terms, hash, "2026-11-01T00:00:00Z")).toString(
+      "latin1",
+    );
+    const fonts = new Map([
+      ["Invoice", ["/F3", 30]],
+      [terms.invoice_number, ["/F1", 9]],
+      ["Nov 1, 2026", ["/F1", 9]],
+      ["Dec 1, 2026", ["/F1", 9]],
+      [terms.claim_account, ["/F1", 9]],
+      ["$12.50", ["/F1", 9]],
+    ] as const);
+    for (const [value, [font, size]] of fonts) {
+      const escaped = value
+        .replace(/[()\\]/g, (c) => `\\${c}`)
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = new RegExp(
+        `/${font.slice(1)} ${size} Tf[\\s\\S]*?1 0 0 1 ([0-9.]+) [0-9.]+ Tm\\n\\(${escaped}\\) Tj`,
+      ).exec(pdf);
+      expect(match, `missing right-aligned text: ${value}`).not.toBeNull();
+      const x = Number(match![1]);
+      expect(Math.abs(x + measureTextWidth(font, value, size) - RIGHT_EDGE), value).toBeLessThan(
+        0.02,
+      );
+    }
+    for (const line of pdf.matchAll(/ (\d+\.\d+) (\d+\.\d+) m (\d+\.\d+) (\d+\.\d+) l S/g)) {
+      if (Number(line[3]) > 100) expect(Number(line[3])).toBeCloseTo(RIGHT_EDGE, 2);
+    }
   });
 
   it("does not overflow with long names or non-Latin text", () => {

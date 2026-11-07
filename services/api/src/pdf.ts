@@ -13,11 +13,12 @@ const PAGE_HEIGHT = 792;
 const MARGIN = 56;
 const RIGHT = PAGE_WIDTH - MARGIN;
 const WIDTH = RIGHT - MARGIN;
+export const RIGHT_EDGE = RIGHT;
 const ACCENT = "0.247 0.275 0.996";
 const INK = "0.12 0.12 0.12";
 const GRAY = "0.42 0.42 0.42";
 
-type Font = "/F1" | "/F2" | "/F3" | "/F4";
+export type Font = "/F1" | "/F2" | "/F3" | "/F4";
 
 interface PageBuilder {
   pages: string[];
@@ -34,38 +35,75 @@ function escapePdfText(value: string): string {
     .replace(/\)/g, "\\)");
 }
 
-/** A deterministic approximation of the standard-font width; only layout depends on it. */
-function textWidth(value: string, size: number): number {
-  let units = 0;
-  for (const char of value) {
-    if ("il.,'!:;|".includes(char)) units += 0.28;
-    else if ("mwMW@".includes(char)) units += 0.82;
-    else if (char === " ") units += 0.27;
-    else if (char >= "A" && char <= "Z") units += 0.64;
-    else units += 0.52;
-  }
-  return units * size;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function formatDate(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (match === null) return "—";
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return "—";
+  return `${MONTHS[month - 1]} ${day}, ${year}`;
 }
 
-function wrapText(value: string, maxWidth: number, size: number): string[] {
+// Adobe standard-font widths (per 1000 em) for the printable ASCII range. Keeping these
+// lets right-aligned text end on the same x as the rules without embedding a font.
+const HELVETICA = [
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+  556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667,
+  611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+  667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500,
+  222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+];
+const HELVETICA_BOLD = [
+  278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+  556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667,
+  611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+  667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556,
+  278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584,
+];
+const TIMES_BOLD = [
+  250, 333, 555, 500, 500, 1000, 833, 278, 333, 333, 500, 570, 250, 333, 250, 278, 500, 500, 500,
+  500, 500, 500, 500, 500, 500, 500, 333, 333, 570, 570, 570, 500, 930, 722, 667, 722, 722, 667,
+  611, 778, 778, 389, 500, 778, 667, 944, 722, 778, 611, 778, 722, 556, 667, 722, 722, 1000, 722,
+  722, 667, 333, 278, 333, 581, 500, 333, 500, 556, 444, 556, 444, 333, 500, 556, 278, 333, 556,
+  278, 833, 556, 500, 556, 556, 444, 389, 333, 556, 500, 722, 500, 500, 444, 394, 220, 394, 520,
+];
+
+function glyphWidth(font: Font, char: string): number {
+  const code = char.charCodeAt(0);
+  if (code < 0x20 || code > 0x7e) return font === "/F3" ? 500 : 556;
+  const index = code - 0x20;
+  const table = font === "/F2" ? HELVETICA_BOLD : font === "/F3" ? TIMES_BOLD : HELVETICA;
+  return table[index] ?? (font === "/F3" ? 500 : 556);
+}
+
+export function measureTextWidth(font: Font, value: string, size: number): number {
+  let units = 0;
+  for (const char of value) units += glyphWidth(font, char);
+  return (units / 1000) * size;
+}
+
+function wrapText(value: string, maxWidth: number, size: number, font: Font = "/F1"): string[] {
   const words = value.split(/\s+/).filter((word) => word !== "");
   if (words.length === 0) return [""];
   const lines: string[] = [];
   let line = "";
   for (const word of words) {
     const candidate = line === "" ? word : `${line} ${word}`;
-    if (textWidth(candidate, size) <= maxWidth) {
+    if (measureTextWidth(font, candidate, size) <= maxWidth) {
       line = candidate;
       continue;
     }
     if (line !== "") lines.push(line);
-    if (textWidth(word, size) <= maxWidth) {
+    if (measureTextWidth(font, word, size) <= maxWidth) {
       line = word;
       continue;
     }
     let piece = "";
     for (const char of word) {
-      if (textWidth(piece + char, size) > maxWidth && piece !== "") {
+      if (measureTextWidth(font, piece + char, size) > maxWidth && piece !== "") {
         lines.push(piece);
         piece = "";
       }
@@ -103,7 +141,7 @@ function text(
   align: "left" | "right" = "left",
 ): void {
   const escaped = escapePdfText(value);
-  const startX = align === "right" ? x - textWidth(value, size) : x;
+  const startX = align === "right" ? x - measureTextWidth(font, value, size) : x;
   builder.content += `BT\n${font} ${size} Tf\n${color} rg\n1 0 0 1 ${startX.toFixed(2)} ${y.toFixed(2)} Tm\n(${escaped}) Tj\nET\n`;
 }
 
@@ -133,7 +171,7 @@ function wrapped(
   color: string,
   lineHeight = size + 2,
 ): void {
-  for (const part of wrapText(value, maxWidth, size)) {
+  for (const part of wrapText(value, maxWidth, size, font)) {
     text(builder, x, builder.y, size, font, color, part);
     builder.y -= lineHeight;
   }
@@ -141,7 +179,7 @@ function wrapped(
 
 function drawClauses(builder: PageBuilder, terms: Terms, invoice: string): void {
   for (const clause of terms.clauses) {
-    const lines = wrapText(`- ${clause}`, WIDTH, 7);
+    const lines = wrapText(`- ${clause}`, WIDTH, 7, "/F1");
     for (const part of lines) {
       if (builder.y < MARGIN + 14) beginPage(builder, `Invoice ${invoice} (continued)`);
       text(builder, MARGIN, builder.y, 7, "/F1", GRAY, part);
@@ -174,13 +212,11 @@ function drawTop(builder: PageBuilder, terms: Terms, issuedAt?: string): void {
 
   const detailsX = 360;
   let detailY = blockTop;
-  const details: Array<[string, string]> = [];
-  const issueDate = issuedAt?.slice(0, 10);
-  details.push([
-    "ISSUE DATE",
-    issueDate !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : "—",
-  ]);
-  details.push(["DUE DATE", terms.due_date], ["CLAIM ACCOUNT", terms.claim_account]);
+  const details: Array<[string, string]> = [
+    ["ISSUE DATE", issuedAt !== undefined ? formatDate(issuedAt) : "—"],
+    ["DUE DATE", formatDate(terms.due_date)],
+    ["CLAIM ACCOUNT", terms.claim_account],
+  ];
   for (const [caption, value] of details) {
     label(builder, caption, detailsX, detailY);
     text(builder, RIGHT, detailY, 9, "/F1", INK, value, "right");
@@ -190,7 +226,7 @@ function drawTop(builder: PageBuilder, terms: Terms, issuedAt?: string): void {
 }
 
 function drawTable(builder: PageBuilder, terms: Terms): void {
-  builder.y = Math.min(builder.y, 470);
+  builder.y = builder.y - 40;
   const top = builder.y;
   label(builder, "DESCRIPTION", MARGIN, top);
   text(builder, RIGHT, top, 7, "/F2", ACCENT, "AMOUNT", "right");
@@ -214,7 +250,7 @@ function drawTable(builder: PageBuilder, terms: Terms): void {
 
 function drawTotals(builder: PageBuilder, terms: Terms): void {
   const amount = `$${terms.amount_usd}`;
-  builder.y -= 80;
+  builder.y -= 12;
   line(builder, 360, builder.y, RIGHT, builder.y, 1.2, ACCENT);
   builder.y -= 18;
   text(builder, 360, builder.y, 10, "/F2", INK, "TOTAL");
@@ -223,7 +259,7 @@ function drawTotals(builder: PageBuilder, terms: Terms): void {
 }
 
 function drawPayment(builder: PageBuilder, terms: Terms): void {
-  builder.y = Math.min(builder.y - 20, 250);
+  builder.y = builder.y - 16;
   label(builder, "PAYMENT INSTRUCTIONS", MARGIN, builder.y);
   builder.y -= 16;
   wrapped(builder, terms.pay_link, MARGIN, WIDTH, 9, "/F1", INK);
