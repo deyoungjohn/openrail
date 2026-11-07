@@ -120,9 +120,14 @@ async function viewJson(
 }
 
 async function claimOf(ctx: H1Ctx, tokenId: string): Promise<Record<string, unknown>> {
-  const claim = await viewClaim(ctx, tokenId);
-  must(claimIsReadable(claim), `claim ${tokenId} unreadable`);
-  return claim;
+  // A claim issued a moment ago is not in a final block yet: give the chain a little time before giving up.
+  const end = Date.now() + 40_000;
+  for (;;) {
+    const claim = await viewClaim(ctx, tokenId);
+    if (claimIsReadable(claim)) return claim;
+    if (Date.now() > end) throw new Error(`CHECK_FAILED: claim ${tokenId} unreadable`);
+    await sleep(2_000);
+  }
 }
 
 /**
@@ -428,7 +433,7 @@ const H1: StepDef[] = [
     usd: 3,
     readOnly: false,
     async run(ctx, state) {
-      const tokenId = await issueInvoice(ctx, 3, "B");
+      const tokenId = ctx.tokens.B ?? (await issueInvoice(ctx, 3, "B"));
       state.token_id = tokenId;
       const routes = await routesOf(ctx, tokenId);
       const route = routes.find((r) => r.swap_type === "FLEX_INPUT" && r.evm_chain_id !== null);
@@ -612,7 +617,7 @@ const H1: StepDef[] = [
     async run(ctx, state) {
       // The claim must still be unpaid: a paid claim refuses a transfer for its status (Rule 2) before the
       // lock is even looked at, so this step issues invoice C (it is paid in the next step).
-      const tokenId = await issueInvoice(ctx, 7, "C");
+      const tokenId = ctx.tokens.C ?? (await issueInvoice(ctx, 7, "C"));
       state.token_id = tokenId;
       const to = getEnv("G1_THIRD_ACCOUNT") ?? getEnv("FEE_ACCOUNT");
       must(to !== undefined, "set G1_THIRD_ACCOUNT");
@@ -872,6 +877,7 @@ export async function runH1(argv: string[] = process.argv.slice(2)): Promise<num
       try {
         await def.run(ctx, state);
         state.status = "PASS";
+        delete state.error;
         console.log("  PASS");
       } catch (error) {
         state.status = "FAIL";
