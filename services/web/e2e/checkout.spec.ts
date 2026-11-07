@@ -33,7 +33,7 @@ const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString()
 const REFUND = "0x53C5D39A5828BaDf817E40f22d75d96D731f8239";
 
 interface Setup {
-  checkout?: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  checkout?: Record<string, any> | (() => Record<string, any>); // eslint-disable-line @typescript-eslint/no-explicit-any
   checkoutStatus?: number;
   sessions?: Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
   statuses?: Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -43,23 +43,26 @@ async function mockCheckout(page: Page, s: Setup = {}) {
   const routes = [...fixture("pay.claims.get").routes, ETH_ROUTE];
   const expiresAt = inMinutes(15);
   const requestedUnix = Math.floor(Date.parse(expiresAt) / 1000);
-  const checkout = s.checkout ?? {
-    id: "c-101",
-    token_id: "c-101",
-    claim_account: "c-101.claims.openrail.near",
-    merchant: "acme.openrail.near",
-    order_ref: "ORD-42",
-    amount_usd: "2.00",
-    amount_due: "2000000",
-    outstanding: "2000000",
-    paid_total: "0",
-    surplus: "0",
-    status: "pending",
-    expires_at: expiresAt,
-    return_url: "https://shop.example/thanks?order=ORD-42",
-    routes,
-    sessions: [],
-  };
+  const checkout =
+    typeof s.checkout === "function"
+      ? s.checkout()
+      : (s.checkout ?? {
+          id: "c-101",
+          token_id: "c-101",
+          claim_account: "c-101.claims.openrail.near",
+          merchant: "acme.openrail.near",
+          order_ref: "ORD-42",
+          amount_usd: "2.00",
+          amount_due: "2000000",
+          outstanding: "2000000",
+          paid_total: "0",
+          surplus: "0",
+          status: "pending",
+          expires_at: expiresAt,
+          return_url: "https://shop.example/thanks?order=ORD-42",
+          routes,
+          sessions: [],
+        });
   const sessions = s.sessions ?? [
     {
       ...fixture("pay.sessions.create"),
@@ -86,9 +89,10 @@ async function mockCheckout(page: Page, s: Setup = {}) {
     const url = new URL(req.url());
     if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
     if (url.pathname.startsWith("/v1/public/checkouts/")) {
+      const payload = typeof s.checkout === "function" ? s.checkout() : (s.checkout ?? checkout);
       return s.checkoutStatus && s.checkoutStatus !== 200
         ? json(route, s.checkoutStatus, { error: { code: "checkout_not_found" } })
-        : json(route, 200, checkout);
+        : json(route, 200, payload);
     }
     if (url.pathname === "/v1/pay/sessions" && req.method() === "POST") {
       calls.posts.push(req.postDataJSON());
@@ -246,6 +250,71 @@ test("partial, late, not found and error states", async ({ page }) => {
   await broken.goto("/c/c-err");
   await expect(broken.locator("main [role=alert]")).toBeVisible();
   await expect(broken.getByRole("button", { name: "Try again" })).toBeVisible();
+});
+
+test("late-then-refunded-again lifecycle: transitions across late, refunded, second late arrival, and second refund", async ({
+  page,
+}) => {
+  let state = "late";
+  const routes = fixture("pay.claims.get").routes;
+  const lateCheckout = (status: string, paid: string) => ({
+    id: "c-103",
+    token_id: "c-103",
+    claim_account: "c-103.claims.openrail.near",
+    merchant: "acme.openrail.near",
+    order_ref: "ORD-99",
+    amount_usd: "2.00",
+    amount_due: "2000000",
+    outstanding: paid === "2000000" ? "0" : "1000000",
+    paid_total: paid,
+    surplus: "0",
+    status,
+    expires_at: new Date(Date.now() - 300_000).toISOString(),
+    return_url: null,
+    routes,
+    sessions: [],
+  });
+
+  await mockCheckout(page, {
+    checkout: () => {
+      switch (state) {
+        case "late":
+          return lateCheckout("late", "1000000");
+        case "refunded":
+          return lateCheckout("refunded", "1000000");
+        case "late_again":
+          return lateCheckout("late", "2000000");
+        case "refunded_again":
+          return lateCheckout("refunded", "2000000");
+        default:
+          return lateCheckout("late", "1000000");
+      }
+    },
+  });
+
+  await page.goto("/c/c-103");
+  // 1. Initial late state: banner shows "Paid after expiry" and quote form is omitted
+  await expect(page.getByText("Paid after expiry")).toBeVisible();
+  await expect(page.getByText("Your payment arrived after the order expired")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
+
+  // 2. Merchant refunds late payment 1 -> live poll updates status to "refunded"
+  state = "refunded";
+  await expect(page.getByText("Refunded", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.getByText("This late payment is being returned to the refund address you gave."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
+
+  // 3. Second late arrival lands on chain and is held -> live poll updates status back to "late"
+  state = "late_again";
+  await expect(page.getByText("Paid after expiry")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
+
+  // 4. Merchant refunds second late payment -> live poll updates status back to "refunded"
+  state = "refunded_again";
+  await expect(page.getByText("Refunded", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
 });
 
 for (const scheme of ["light", "dark"] as const) {
