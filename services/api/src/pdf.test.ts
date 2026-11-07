@@ -33,3 +33,87 @@ describe("invoice PDF", () => {
     expect(pdf).toContain("INV \\(1\\) \\\\ test");
   });
 });
+
+describe("invoice PDF layout contract", () => {
+  const hash = termsHash(terms);
+  const content = () => Buffer.from(renderInvoicePdf(terms, hash)).toString("latin1");
+
+  it("has the reference layout facts without third-party content", () => {
+    const pdf = content();
+    expect(pdf).toContain("/BaseFont /Helvetica");
+    expect(pdf).toContain("/BaseFont /Helvetica-Bold");
+    expect(pdf).toContain("/BaseFont /Times-Bold");
+    expect(pdf).toContain("Invoice");
+    expect(pdf).toContain("FROM");
+    expect(pdf).toContain("BILLED TO");
+    expect(pdf).toContain("DESCRIPTION");
+    expect(pdf).toContain("AMOUNT");
+    expect(pdf).toContain("TOTAL");
+    expect(pdf).toContain("PAYMENT INSTRUCTIONS");
+    expect(pdf).toContain("0.247 0.275 0.996 rg");
+    expect(pdf).toContain("Tf");
+    expect(
+      Buffer.from(renderInvoicePdf(terms, hash, "2026-11-01T00:00:00Z")).toString("latin1"),
+    ).toContain("ISSUE DATE");
+  });
+
+  it("prints every terms field and the hash", () => {
+    const pdf = content();
+    for (const value of [
+      terms.issuer_legal_name,
+      terms.issuer_account,
+      terms.debtor_legal_name,
+      terms.debtor_key,
+      terms.amount_usd,
+      terms.due_date,
+      terms.claim_account,
+      terms.pay_link,
+      terms.line_items_sha256,
+      hash,
+      ...terms.clauses,
+    ]) {
+      expect(pdf).toContain(value.replace(/[()\\]/g, (c) => `\\${c}`));
+    }
+  });
+
+  it("uses the invoice number as the table description and the terms amount as TOTAL", () => {
+    const pdf = content();
+    expect(pdf).toContain(terms.invoice_number);
+    expect(pdf).toContain("$12.50");
+    expect(pdf).not.toMatch(/\bHOURS\b|\bRATE\b|\bTAX\b|\bSUBTOTAL\b/);
+  });
+
+  it("is byte-for-byte deterministic for the same terms", () => {
+    expect(Buffer.from(renderInvoicePdf(terms, hash))).toEqual(
+      Buffer.from(renderInvoicePdf(terms, hash)),
+    );
+  });
+
+  it("wraps long clauses and adds a page when needed", () => {
+    const longClauses = Array.from(
+      { length: 18 },
+      (_, i) =>
+        `Clause ${i + 1}: ${"This sentence repeats to force wrapping across a narrow page column. ".repeat(4)}`,
+    );
+    const longTerms = { ...terms, clauses: longClauses };
+    const pdf = Buffer.from(renderInvoicePdf(longTerms, termsHash(longTerms))).toString("latin1");
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
+    expect((pdf.match(/\/Type \/Page(?!s)/g) ?? []).length).toBeGreaterThan(1);
+    expect(pdf).toContain("Clause 18");
+  });
+
+  it("does not overflow with long names or non-Latin text", () => {
+    const tricky = {
+      ...terms,
+      issuer_legal_name: "A".repeat(180),
+      debtor_legal_name: "債権者株式会社",
+      clauses: ["条項: " + "長い文章".repeat(80)],
+    };
+    const pdf = Buffer.from(renderInvoicePdf(tricky, termsHash(tricky))).toString("latin1");
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
+    expect(pdf).not.toContain("\u0000");
+    expect(pdf).toContain("?".repeat(2));
+  });
+});
