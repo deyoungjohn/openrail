@@ -13,6 +13,7 @@ import type {
   LogQuoteRequest,
   NearClientLike,
   StorageCreditReader,
+  TokenCounter,
 } from "./types.js";
 
 const ROOT = "openrail.near";
@@ -83,6 +84,8 @@ function fixture(
     sponsor?: {
       sponsorStatusOf(business: string): Promise<{ pool: bigint; cap: number; used: number }>;
     };
+    tokens?: TokenCounter;
+    claimLabels?: boolean;
   } = {},
 ): Fixture {
   const config: IssuerServiceConfig = {
@@ -92,6 +95,7 @@ function fixture(
     accountPollMs: 1,
     now: () => 1_800_000_000_000,
     sleep: async () => {},
+    ...(options.claimLabels === undefined ? {} : { claimLabels: options.claimLabels }),
   };
   const issuer = new FakeNear(options.issuerResult, options.claim);
   const relay = new FakeNear();
@@ -106,6 +110,7 @@ function fixture(
     logger,
     ...(options.indexer === undefined ? {} : { indexer: options.indexer }),
     ...(options.sponsor === undefined ? {} : { sponsor: options.sponsor }),
+    ...(options.tokens === undefined ? {} : { tokens: options.tokens }),
   });
   return { service, issuer, relay, credit, accounts, config };
 }
@@ -316,6 +321,49 @@ describe("issuer logQuote and acknowledgeEvm", () => {
       status: 502,
       code: "NEAR_CALL_FAILED",
     });
+  });
+});
+
+describe("issuer claim labels", () => {
+  const LABEL = "belmonte-9f3c2a7d41b8";
+
+  it("sends claim_label and accepts the labelled token", async () => {
+    const { service, issuer, accounts } = fixture({
+      claimLabels: true,
+      issuerResult: () => ok(LABEL),
+      accounts: [true],
+    });
+    const result = await service.issueFor({ ...ISSUE, claimLabel: LABEL });
+    expect(issuer.calls[0]?.args).toMatchObject({ claim_label: LABEL });
+    expect(result.tokenId).toBe(LABEL);
+    expect(result.claimAccount).toBe(`${LABEL}.${ROOT}`);
+    expect(accounts.calls).toContain(`${LABEL}.${ROOT}`);
+  });
+
+  it("ignores claim_label while the flag is off", async () => {
+    const { service, issuer } = fixture({ issuerResult: () => ok("c-5") });
+    const result = await service.issueFor({ ...ISSUE, claimLabel: LABEL });
+    expect(issuer.calls[0]?.args).not.toHaveProperty("claim_label");
+    expect(result.tokenId).toBe("c-5");
+  });
+
+  it("refuses an invalid label before sending", async () => {
+    const { service, issuer } = fixture({ claimLabels: true });
+    await expect(service.issueFor({ ...ISSUE, claimLabel: "Bad.Label" })).rejects.toMatchObject({
+      status: 400,
+      code: "invalid_claim_label",
+    });
+    expect(issuer.calls).toHaveLength(0);
+  });
+
+  it("does not predict a numbered id when labels are on", async () => {
+    const { service } = fixture({
+      claimLabels: true,
+      tokens: { nextTokenId: async () => 1 },
+    });
+    const prepared = await service.prepareIssue("acme.near");
+    expect(prepared.tokenId).toBeUndefined();
+    expect(prepared.claimAccount).toBeUndefined();
   });
 });
 

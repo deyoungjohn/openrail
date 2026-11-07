@@ -544,6 +544,12 @@ export class IndexerStore {
     return inserted;
   }
 
+  hasClaim(tokenId: string): boolean {
+    return (
+      this.db.prepare("SELECT 1 FROM claims WHERE token_id = ? LIMIT 1").get(tokenId) !== undefined
+    );
+  }
+
   eventsAfter(afterId: number, limit: number, tokenId?: string): EventRow[] {
     const rows = (tokenId === undefined
       ? this.db

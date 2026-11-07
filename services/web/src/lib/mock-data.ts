@@ -48,6 +48,15 @@ export const mockClaims: Record<string, Claim> = {
     debtor: { kind: "evm", address: TEST_SIGNER },
     ack: { scheme: "evm", chainId: 8453, signer: TEST_SIGNER, block: 123_456 },
   },
+  // REL-2 label: the token id and the account label agree without a `c-<n>` shape.
+  "belmonte-9f3c2a7d41b8": {
+    ...base,
+    tokenId: "belmonte-9f3c2a7d41b8",
+    invoiceNumber: "INV-0005",
+    claimAccount: "belmonte-9f3c2a7d41b8.openrail.near",
+    debtor: { kind: "near", account: "northwind.near" },
+    ack: null,
+  },
   // Paid without ever being acknowledged: can be neither accepted nor sold.
   "c-4": {
     ...base,

@@ -160,11 +160,8 @@ export class Indexer {
       return { accepted: false, reason: "register_tx_not_configured", events: 0 };
     }
     const status = await this.txStatus.fetch(hash, signer);
-    const receiver = status.receiverId;
-    const validReceiver =
-      receiver === this.rootAccount ||
-      (receiver.startsWith("c-") && receiver.endsWith(`.${this.rootAccount}`));
-    if (!validReceiver) return { accepted: false, reason: "receiver_not_root", events: 0 };
+    if (!this.isAcceptedReceiver(status.receiverId))
+      return { accepted: false, reason: "receiver_not_root", events: 0 };
     const inserted = this.store.ingestBlock({
       height: status.blockHeight,
       hash: status.blockHash,
@@ -176,6 +173,16 @@ export class Indexer {
       await this.enrich(event);
     }
     return { accepted: true, events: inserted.length };
+  }
+
+  /** Root, or a known claim account under the root (old `c-n` and labelled alike). */
+  private isAcceptedReceiver(receiver: string): boolean {
+    if (this.rootAccount === undefined) return false;
+    if (receiver === this.rootAccount) return true;
+    const suffix = `.${this.rootAccount}`;
+    if (!receiver.endsWith(suffix)) return false;
+    const label = receiver.slice(0, -suffix.length);
+    return label !== "" && this.store.hasClaim(label);
   }
 
   /** Deletes prunable operational events; evidence kinds are never touched. */

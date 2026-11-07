@@ -150,16 +150,23 @@ export class ContractTokenCounter implements TokenCounter {
     const count = Number(supply);
     if (!Number.isSafeInteger(count)) throw new Error("ISSUER_SUPPLY_INVALID");
     if (count === 0) return 1;
-    const page = await this.near.view<{ token_id?: unknown }[]>({
-      contractId: this.rootAccount,
-      methodName: "nft_tokens",
-      args: { from_index: String(count - 1), limit: 1 },
-      feature: "issuer.token_counter",
-    });
-    const id = Array.isArray(page) ? page[0]?.token_id : undefined;
-    const match = typeof id === "string" ? /^c-(\d+)$/.exec(id) : null;
-    if (match === null) throw new Error("ISSUER_LAST_TOKEN_INVALID");
-    return Number(match[1]) + 1;
+    // Labelled claims may sit after the newest numbered one, so scan backwards for the first c-<n>.
+    for (let end = count; end > 0; end -= 100) {
+      const from = Math.max(0, end - 100);
+      const page = await this.near.view<{ token_id?: unknown }[]>({
+        contractId: this.rootAccount,
+        methodName: "nft_tokens",
+        args: { from_index: String(from), limit: String(end - from) },
+        feature: "issuer.token_counter",
+      });
+      if (!Array.isArray(page)) break;
+      for (let index = page.length - 1; index >= 0; index -= 1) {
+        const id = page[index]?.token_id;
+        const match = typeof id === "string" ? /^c-(\d+)$/.exec(id) : null;
+        if (match !== null) return Number(match[1]) + 1;
+      }
+    }
+    throw new Error("ISSUER_LAST_TOKEN_INVALID");
   }
 }
 

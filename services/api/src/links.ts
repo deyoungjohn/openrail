@@ -72,6 +72,22 @@ export const suggestUsername = (legalName: string): string => clean(legalName);
 /** The part of an invoice id (`inv_<hex>`) that goes in a link. */
 export const refOf = (invoiceId: string): string => invoiceId.replace(/^inv_/, "");
 
+/**
+ * The claim label: the username made URL-safe, cut to 32, then the first 12 hex of the invoice ref.
+ * The claim account is `<label>.<root>`; the contract enforces the final NEAR length/rules.
+ */
+export function claimLabel(username: string, ref: string): string {
+  const prefix =
+    username
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32)
+      .replace(/-+$/g, "") || "business";
+  const hash = ref.replace(/^inv_/, "").slice(0, 12).toLowerCase();
+  return `${prefix}-${hash}`;
+}
+
 export const payLink = (base: string, username: string, ref: string): string =>
   `${base}/${username}/inv/${ref}`;
 

@@ -46,6 +46,8 @@ export interface IssuerServiceConfig {
   accountPollMs: number;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
+  /** REL-2: send and accept `<username>-<ref>` labels. Off until the contract supports them. */
+  claimLabels?: boolean;
 }
 
 export interface IssuerServiceDeps {
@@ -151,12 +153,13 @@ export class IssuerService {
       accountPollMs: deps.config?.accountPollMs ?? DEFAULT_ACCOUNT_POLL_MS,
       now: deps.config?.now ?? Date.now,
       sleep: deps.config?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
+      claimLabels: deps.config?.claimLabels ?? false,
     };
   }
 
   /**
-   * Reports the business's storage credit and the account/amount to top up. The token id is
-   * deliberately not predicted; it comes from the `issue_for` result.
+   * Reports the storage credit and top-up account. Without labels it also predicts the next
+   * numbered id; with labels the API already knows the id, so no prediction is reported.
    */
   async prepareIssue(business: string): Promise<PrepareIssueResult> {
     return this.mutex.run(async () => {
@@ -182,7 +185,7 @@ export class IssuerService {
             : undefined
           : credit < required && sponsor.pool >= required && sponsor.used < sponsor.cap;
       let predicted: { tokenId: string; claimAccount: string } | undefined;
-      if (this.tokens !== undefined) {
+      if (this.tokens !== undefined && this.config.claimLabels !== true) {
         const next = Math.max(await this.tokens.nextTokenId(), this.highWater + 1);
         predicted = {
           tokenId: `c-${next}`,
@@ -213,6 +216,10 @@ export class IssuerService {
     request: IssueForRequest,
   ): Promise<{ txHash: string; tokenId: string; claimAccount: string }> {
     return this.mutex.run(async () => {
+      const labelled = this.config.claimLabels === true && request.claimLabel !== undefined;
+      if (labelled && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(request.claimLabel as string)) {
+        throw new IssuerError(400, "invalid_claim_label");
+      }
       const result = await this.issuerNear.sendFunctionCall({
         receiverId: this.config.rootAccount,
         methodName: "issue_for",
@@ -224,6 +231,7 @@ export class IssuerService {
           amount_due: request.amountDue,
           due_date: request.dueDate,
           metadata: request.metadata ?? null,
+          ...(labelled ? { claim_label: request.claimLabel } : {}),
         },
         gas: ISSUE_GAS,
         deposit: 0n,
@@ -232,10 +240,12 @@ export class IssuerService {
       assertSuccess(result);
 
       const tokenId = returnStringOf(result);
-      if (!/^c-\d+$/.test(tokenId)) {
+      const numbered = /^c-(\d+)$/.exec(tokenId);
+      if (numbered !== null) {
+        this.highWater = Math.max(this.highWater, Number(numbered[1]));
+      } else if (!labelled || tokenId !== request.claimLabel) {
         throw new IssuerError(502, "NEAR_RETURN_INVALID");
       }
-      this.highWater = Math.max(this.highWater, Number(tokenId.slice(2)));
       if (request.expectedTokenId !== undefined && request.expectedTokenId !== tokenId) {
         // The claim exists but its terms name another account: the caller must start again with the new count.
         throw new IssuerError(

@@ -82,16 +82,10 @@ function isNoneLock(lock: ClaimLock): boolean {
   return lock === "None" || (typeof lock === "object" && lock !== null && "None" in lock);
 }
 
-function nextIssuerFrom(page: ClaimView[], fallback: number): number {
-  let highest = 0;
-  for (const claim of page) {
-    const match = /^c-(\d+)$/.exec(claim.token_id);
-    if (match?.[1] !== undefined) {
-      const value = Number(match[1]);
-      if (Number.isFinite(value)) highest = Math.max(highest, value);
-    }
-  }
-  return highest > 0 ? highest + 1 : fallback + PAGE_SIZE;
+function nextIssuerFrom(_page: ClaimView[], fallback: number): number {
+  // Labels are not ordered by number, so the issuer feed advances by page size; labelled claims
+  // are still enumerated by nft_tokens below.
+  return fallback + PAGE_SIZE;
 }
 
 export class Watcher {
