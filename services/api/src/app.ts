@@ -34,6 +34,15 @@ import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
 import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
 import { UnsafeWebhookUrl, validateWebhookUrl } from "./webhook-url.js";
+import {
+  ackLink,
+  isImplicitAccountId,
+  normalizeUsername,
+  payLink,
+  refOf,
+  usernameAvailability,
+  usernameProblem,
+} from "./links.js";
 
 export interface ApiConfig {
   rootAccount: string;
@@ -118,11 +127,14 @@ export interface CashoutPort {
 
 export interface BusinessRecord {
   account_id: string;
+  username: string | null;
   legal_name: string;
   payout_account: string;
   contact_email: string;
   created_at: string;
   updated_at: string;
+  /** Internal: set when the business replaces a non-null username. Never returned. */
+  username_changed_at?: string;
 }
 
 export interface InvoiceRecord {
@@ -193,12 +205,20 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly rule?: string;
+  readonly details?: Record<string, unknown>;
 
-  constructor(status: number, code: string, message = code, rule?: string) {
+  constructor(
+    status: number,
+    code: string,
+    message = code,
+    rule?: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
     this.rule = rule;
+    this.details = details;
   }
 }
 
@@ -413,9 +433,22 @@ export class ApiApp {
   }
 
   private invoiceBy(idOrToken: string): InvoiceRecord {
-    const invoice = this.store.getInvoice(idOrToken);
+    // A public link carries the invoice id without its `inv_` prefix.
+    const invoice = this.store.getInvoice(idOrToken) ?? this.store.getInvoice(`inv_${idOrToken}`);
     if (invoice === undefined) throw new ApiError(404, "invoice_not_found");
     return invoice;
+  }
+
+  private businessView(record: BusinessRecord): Omit<BusinessRecord, "username_changed_at"> {
+    return {
+      account_id: record.account_id,
+      username: record.username,
+      legal_name: record.legal_name,
+      payout_account: record.payout_account,
+      contact_email: record.contact_email,
+      created_at: record.created_at,
+      updated_at: record.updated_at,
+    };
   }
 
   private readonly claimCache = new Map<string, { at: number; claim: Record<string, unknown> }>();
@@ -466,9 +499,16 @@ export class ApiApp {
 
   private business(accountId: string): BusinessRecord {
     const existing = this.store.getBusiness(accountId);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) {
+      if (existing.username === undefined) {
+        existing.username = isImplicitAccountId(accountId) ? null : accountId.toLowerCase();
+        this.store.saveBusiness(existing);
+      }
+      return existing;
+    }
     const created: BusinessRecord = {
       account_id: accountId,
+      username: isImplicitAccountId(accountId) ? null : accountId.toLowerCase(),
       legal_name: accountId,
       payout_account: accountId,
       contact_email: "billing@example.com",
@@ -530,6 +570,7 @@ export class ApiApp {
             code: error.code,
             message: error.message,
             ...(error.rule ? { rule: error.rule } : {}),
+            ...(error.details ?? {}),
           },
         },
       };
@@ -714,15 +755,90 @@ export class ApiApp {
       const context = this.requireAuth(request);
       const current = this.business(context.accountId);
       if (method === "PUT") {
-        const body = (request.body ?? {}) as Partial<BusinessRecord>;
-        Object.assign(current, {
-          ...(body.legal_name === undefined ? {} : { legal_name: body.legal_name }),
-          ...(body.payout_account === undefined ? {} : { payout_account: body.payout_account }),
-          ...(body.contact_email === undefined ? {} : { contact_email: body.contact_email }),
-          updated_at: nowIso(this.clock),
-        });
+        const body = (request.body ?? {}) as {
+          username?: unknown;
+          legal_name?: unknown;
+          payout_account?: unknown;
+          contact_email?: unknown;
+        };
+        if (body.username !== undefined) {
+          if (typeof body.username !== "string") throw new ApiError(400, "invalid_username");
+          const requested = normalizeUsername(body.username);
+          const same = current.username !== null && requested === current.username;
+          const taken = same ? false : this.store.usernameTaken(requested, this.clock().getTime());
+          if (!same) {
+            const problem = usernameProblem(requested, context.accountId);
+            if (problem !== null) {
+              throw new ApiError(
+                400,
+                "invalid_username",
+                problem === "reserved"
+                  ? "Username is reserved"
+                  : "Username must be 3-32 lowercase letters, digits, - or _",
+              );
+            }
+            if (taken) throw new ApiError(409, "username_taken", "Username is already taken");
+          }
+          if (!same) {
+            const now = this.clock();
+            if (current.username !== null && current.username_changed_at !== undefined) {
+              const allowedAt = Date.parse(current.username_changed_at) + 30 * 24 * 60 * 60 * 1000;
+              if (now.getTime() < allowedAt) {
+                const allowedIso = new Date(allowedAt).toISOString();
+                throw new ApiError(
+                  429,
+                  "username_change_too_soon",
+                  `Username can be changed again on ${allowedIso}`,
+                  undefined,
+                  { allowed_at: allowedIso },
+                );
+              }
+            }
+            if (current.username !== null) {
+              this.store.releaseBusinessUsername(
+                current.username,
+                now.getTime() + 30 * 24 * 60 * 60 * 1000,
+              );
+              current.username_changed_at = nowIso(this.clock);
+            }
+            current.username = requested;
+          }
+        }
+        if (body.legal_name !== undefined) {
+          if (typeof body.legal_name !== "string") throw new ApiError(400, "invalid_request");
+          current.legal_name = body.legal_name;
+        }
+        if (body.payout_account !== undefined) {
+          if (typeof body.payout_account !== "string") throw new ApiError(400, "invalid_request");
+          current.payout_account = body.payout_account;
+        }
+        if (body.contact_email !== undefined) {
+          if (typeof body.contact_email !== "string") throw new ApiError(400, "invalid_request");
+          current.contact_email = body.contact_email;
+        }
+        current.updated_at = nowIso(this.clock);
+        try {
+          this.store.saveBusiness(current);
+        } catch (error) {
+          if (error instanceof Error && error.message === "username_taken")
+            throw new ApiError(409, "username_taken", "Username is already taken");
+          throw error;
+        }
       }
-      return { status: 200, body: current };
+      return { status: 200, body: this.businessView(current) };
+    }
+    if (path === "/v1/business/username_available" && method === "GET") {
+      const context = this.requireAuth(request);
+      const current = this.business(context.accountId);
+      const candidate = normalizeUsername(request.query.get("u") ?? "");
+      if (current.username !== null && candidate === current.username) {
+        return { status: 200, body: { available: true, reason: "available" } };
+      }
+      const taken = this.store.usernameTaken(candidate, this.clock().getTime());
+      return {
+        status: 200,
+        body: usernameAvailability(candidate, context.accountId, taken),
+      };
     }
     if (path === "/v1/business/storage_credit" && method === "GET") {
       const context = this.requireAuth(request);
@@ -1350,6 +1466,16 @@ export class ApiApp {
         throw new ApiError(400, "invalid_request", `${field} required`);
     }
     const business = this.business(accountId);
+    if (business.username === null) {
+      throw new ApiError(
+        409,
+        "username_required",
+        "A username is required before issuing an invoice.",
+      );
+    }
+    const invoiceId = id("inv");
+    const username = business.username;
+    const ref = refOf(invoiceId);
     // The terms hash binds the claim account, which is only known from the id the issuer predicts. Concurrent
     // requests would predict the same id, so they go one at a time; a prediction that turns out wrong (an
     // earlier mint failed after taking its id) is retried once with the corrected count.
@@ -1388,7 +1514,7 @@ export class ApiApp {
           due_date: dateToUtc(body.due_date as string),
           line_items_sha256: body.line_items_sha256 ?? stableLineItems(body.line_items ?? []),
           claim_account: prepared.claimAccount,
-          pay_link: body.pay_link ?? `${this.deps.config.payBaseUrl}/c/${prepared.tokenId}`,
+          pay_link: body.pay_link ?? payLink(this.deps.config.payBaseUrl, username, ref),
           assignment_agreement_sha256: body.assignment_agreement_sha256,
           clauses: [...CORE_CLAUSES, ...(body.clauses ?? [])],
         });
@@ -1419,7 +1545,7 @@ export class ApiApp {
     );
     const { prepared, hash, debtor, terms, amountDue } = await run;
     const invoice: InvoiceRecord = {
-      id: id("inv"),
+      id: invoiceId,
       token_id: prepared.tokenId,
       claim_account: prepared.claimAccount,
       status: "Issued",
@@ -1436,7 +1562,7 @@ export class ApiApp {
       issuer_legal_name: terms.issuer_legal_name,
       debtor_legal_name: terms.debtor_legal_name,
       pay_link: terms.pay_link,
-      ack_url: `${this.deps.config.payBaseUrl}/ack/${prepared.tokenId}`,
+      ack_url: ackLink(this.deps.config.payBaseUrl, username, ref),
       created_at: nowIso(this.clock),
       created_block: 0,
       terms,

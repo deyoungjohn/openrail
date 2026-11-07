@@ -8,6 +8,7 @@ import type { StoredResponse } from "./idempotency.js";
 import type { RecurringStore } from "./recurring.js";
 import { createMemoryRecurringStore, createSqliteRecurringStore } from "./recurring-store.js";
 import { createMemoryModuleStore, createSqliteModuleStore, type ModuleStore } from "./modules.js";
+import { isImplicitAccountId } from "./links.js";
 
 export interface OutboxRow {
   endpointId: string;
@@ -62,6 +63,9 @@ export interface ApiStore {
   getOpenQuotes(tokenId: string): Record<string, unknown>[];
   saveOpenQuotes(tokenId: string, quotes: Record<string, unknown>[]): void;
   getBusiness(accountId: string): BusinessRecord | undefined;
+  getBusinessByUsername(username: string): BusinessRecord | undefined;
+  usernameTaken(username: string, now: number): boolean;
+  releaseBusinessUsername(username: string, releaseAt: number): void;
   saveBusiness(record: BusinessRecord): void;
   listEvents(): Record<string, unknown>[];
   appendEvent(event: Record<string, unknown>): void;
@@ -128,6 +132,7 @@ export function createMemoryStores(): Stores {
   const paySessions = new Map<string, PaySession>();
   const openQuotes = new Map<string, Record<string, unknown>[]>();
   const businesses = new Map<string, BusinessRecord>();
+  const usernameClaims = new Map<string, { accountId: string; releasedAt: number | null }>();
   const events: Record<string, unknown>[] = [];
   const workerState = new Map<string, string>();
   const keys = new Map<string, ApiKeyRecord>();
@@ -231,7 +236,36 @@ export function createMemoryStores(): Stores {
       getOpenQuotes: (tokenId) => openQuotes.get(tokenId) ?? [],
       saveOpenQuotes: (tokenId, quotes) => openQuotes.set(tokenId, quotes),
       getBusiness: (accountId) => businesses.get(accountId),
-      saveBusiness: (record) => businesses.set(record.account_id, record),
+      getBusinessByUsername: (username) =>
+        [...businesses.values()].find(
+          (record) =>
+            typeof record.username === "string" &&
+            record.username.toLowerCase() === username.toLowerCase(),
+        ),
+      usernameTaken(username, now) {
+        const claim = usernameClaims.get(username.toLowerCase());
+        return claim !== undefined && (claim.releasedAt === null || claim.releasedAt > now);
+      },
+      releaseBusinessUsername(username, releaseAt) {
+        const claim = usernameClaims.get(username.toLowerCase());
+        if (claim !== undefined) claim.releasedAt = releaseAt;
+      },
+      saveBusiness(record) {
+        if (typeof record.username === "string") {
+          const key = record.username.toLowerCase();
+          const claim = usernameClaims.get(key);
+          const now = Date.parse(record.updated_at);
+          if (
+            claim !== undefined &&
+            claim.accountId !== record.account_id &&
+            (claim.releasedAt === null || claim.releasedAt > now)
+          ) {
+            throw new Error("username_taken");
+          }
+          usernameClaims.set(key, { accountId: record.account_id, releasedAt: null });
+        }
+        businesses.set(record.account_id, record);
+      },
       listEvents: () => events,
       appendEvent: (event) => events.push(event),
       getWorkerState: (key) => workerState.get(key),
@@ -307,7 +341,8 @@ export function createSqliteStores(path: string): Stores {
     CREATE TABLE IF NOT EXISTS webhook_outbox (endpoint_id TEXT NOT NULL, event_id TEXT NOT NULL, event TEXT NOT NULL, attempt INTEGER NOT NULL, next_attempt_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (endpoint_id, event_id));
     CREATE TABLE IF NOT EXISTS pay_sessions (id TEXT PRIMARY KEY, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS open_quotes (token_id TEXT PRIMARY KEY, body TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS business_profiles (account_id TEXT PRIMARY KEY, body TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS business_profiles (account_id TEXT PRIMARY KEY, username TEXT, body TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS username_claims (username TEXT PRIMARY KEY COLLATE NOCASE, account_id TEXT NOT NULL, released_at INTEGER);
     CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS worker_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, hash TEXT UNIQUE NOT NULL, body TEXT NOT NULL);
@@ -317,6 +352,40 @@ export function createSqliteStores(path: string): Stores {
     CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
     INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, datetime('now'));
   `);
+
+  const businessColumns = db.prepare("PRAGMA table_info(business_profiles)").all() as {
+    name?: unknown;
+  }[];
+  if (!businessColumns.some((column) => column.name === "username")) {
+    db.exec("ALTER TABLE business_profiles ADD COLUMN username TEXT");
+  }
+  const oldBusinesses = db
+    .prepare("SELECT account_id, username, body FROM business_profiles")
+    .all() as { account_id: string; username: string | null; body: string }[];
+  for (const row of oldBusinesses) {
+    const record = parseJson<BusinessRecord>(row.body);
+    let username = typeof row.username === "string" ? row.username : record.username;
+    if (record.username === undefined) {
+      username = isImplicitAccountId(row.account_id) ? null : row.account_id.toLowerCase();
+    }
+    record.username = username ?? null;
+    db.prepare("UPDATE business_profiles SET username = ?, body = ? WHERE account_id = ?").run(
+      record.username,
+      JSON.stringify(record),
+      row.account_id,
+    );
+    if (record.username !== null) {
+      db.prepare(
+        "INSERT INTO username_claims (username, account_id, released_at) VALUES (?, ?, NULL) ON CONFLICT(username) DO UPDATE SET account_id = excluded.account_id, released_at = NULL",
+      ).run(record.username, row.account_id);
+    }
+  }
+  db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS business_profiles_username_unique ON business_profiles(username COLLATE NOCASE) WHERE username IS NOT NULL",
+  );
+  db.exec(
+    "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, datetime('now'))",
+  );
 
   const api: ApiStore = {
     listInvoices(accountId) {
@@ -472,10 +541,53 @@ export function createSqliteStores(path: string): Stores {
         .get(accountId);
       return row === undefined ? undefined : parseJson<BusinessRecord>(row.body);
     },
-    saveBusiness(record) {
+    getBusinessByUsername(username) {
+      const row = db
+        .prepare("SELECT body FROM business_profiles WHERE username = ? COLLATE NOCASE")
+        .get(username);
+      return row === undefined ? undefined : parseJson<BusinessRecord>(row.body);
+    },
+    usernameTaken(username, now) {
+      const row = db
+        .prepare(
+          "SELECT released_at FROM username_claims WHERE username = ? COLLATE NOCASE AND (released_at IS NULL OR released_at > ?)",
+        )
+        .get(username, now) as { released_at: number | null } | undefined;
+      return row !== undefined;
+    },
+    releaseBusinessUsername(username, releaseAt) {
       db.prepare(
-        "INSERT INTO business_profiles (account_id, body) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET body = excluded.body",
-      ).run(record.account_id, JSON.stringify(record));
+        "UPDATE username_claims SET released_at = ? WHERE username = ? COLLATE NOCASE",
+      ).run(releaseAt, username);
+    },
+    saveBusiness(record) {
+      if (typeof record.username === "string") {
+        const claimed = db
+          .prepare(
+            "SELECT account_id, released_at FROM username_claims WHERE username = ? COLLATE NOCASE",
+          )
+          .get(record.username) as { account_id: string; released_at: number | null } | undefined;
+        const now = Date.parse(record.updated_at);
+        if (
+          claimed !== undefined &&
+          claimed.account_id !== record.account_id &&
+          (claimed.released_at === null || claimed.released_at > now)
+        ) {
+          throw new Error("username_taken");
+        }
+        db.prepare(
+          "INSERT INTO username_claims (username, account_id, released_at) VALUES (?, ?, NULL) ON CONFLICT(username) DO UPDATE SET account_id = excluded.account_id, released_at = NULL",
+        ).run(record.username, record.account_id);
+      }
+      try {
+        db.prepare(
+          "INSERT INTO business_profiles (account_id, username, body) VALUES (?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET username = excluded.username, body = excluded.body",
+        ).run(record.account_id, record.username ?? null, JSON.stringify(record));
+      } catch (error) {
+        if (error instanceof Error && /UNIQUE constraint failed/.test(error.message))
+          throw new Error("username_taken", { cause: error });
+        throw error;
+      }
     },
     listEvents() {
       return db

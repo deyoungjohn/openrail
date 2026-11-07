@@ -99,24 +99,26 @@ The fixtures for `400`, `401`, `404` and `409` are in `fixtures/api/`.
 
 ## Error codes
 
-| Code                                                                                                                                                         | HTTP | Meaning                                                |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------------------------------------------------------ |
-| `invalid_request`                                                                                                                                            | 400  | Missing or malformed field.                            |
-| `invalid_terms`                                                                                                                                              | 400  | Canonical terms validation failed.                     |
-| `invalid_refund_address`                                                                                                                                     | 400  | Missing or wrong-chain `refund_to` / cash-out address. |
-| `unknown_route`                                                                                                                                              | 400  | Route is not allow-listed.                             |
-| `unsupported_chain`                                                                                                                                          | 422  | Chain is not supported for this action.                |
-| `quote_failed`                                                                                                                                               | 502  | The provider returned no deposit address.              |
-| `invoice_not_found`, `claim_not_found`, `payment_not_found`, `receipt_not_found`, `pay_session_not_found`, `webhook_endpoint_not_found`, `api_key_not_found` | 404  | Resource does not exist for this business.             |
-| `idempotency_key_reuse`                                                                                                                                      | 409  | Same key with a different body.                        |
-| `unauthorized`, `invalid_api_key`, `session_expired`, `invalid_nonce`, `challenge_expired`, `wrong_account`, `invalid_signature`, `wrong_signer`             | 401  | Authentication failed.                                 |
-| `already_acknowledged`                                                                                                                                       | 409  | The claim already has an acknowledgement.              |
-| `contract_wallet`                                                                                                                                            | 422  | EIP-1271 contract wallets are not supported.           |
-| `insufficient_scope`                                                                                                                                         | 403  | Missing key scope; the message names it.               |
-| `csrf_origin`, `csrf_content_type`                                                                                                                           | 403  | Cookie-authenticated request failed the CSRF checks.   |
-| `forbidden`                                                                                                                                                  | 403  | Key kind is not allowed on this endpoint.              |
-| `not_found`                                                                                                                                                  | 404  | Unknown route.                                         |
-| `internal_error`                                                                                                                                             | 500  | Unexpected server error.                               |
+| Code                                                                                                                                                         | HTTP        | Meaning                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------ |
+| `invalid_request`                                                                                                                                            | 400         | Missing or malformed field.                                        |
+| `invalid_terms`                                                                                                                                              | 400         | Canonical terms validation failed.                                 |
+| `invalid_refund_address`                                                                                                                                     | 400         | Missing or wrong-chain `refund_to` / cash-out address.             |
+| `unknown_route`                                                                                                                                              | 400         | Route is not allow-listed.                                         |
+| `unsupported_chain`                                                                                                                                          | 422         | Chain is not supported for this action.                            |
+| `quote_failed`                                                                                                                                               | 502         | The provider returned no deposit address.                          |
+| `invoice_not_found`, `claim_not_found`, `payment_not_found`, `receipt_not_found`, `pay_session_not_found`, `webhook_endpoint_not_found`, `api_key_not_found` | 404         | Resource does not exist for this business.                         |
+| `idempotency_key_reuse`                                                                                                                                      | 409         | Same key with a different body.                                    |
+| `invalid_username`, `username_taken`, `username_change_too_soon`                                                                                             | 400/409/429 | Username shape/reserved, already taken, or changed within 30 days. |
+| `username_required`                                                                                                                                          | 409         | The business must choose a username before issuing.                |
+| `unauthorized`, `invalid_api_key`, `session_expired`, `invalid_nonce`, `challenge_expired`, `wrong_account`, `invalid_signature`, `wrong_signer`             | 401         | Authentication failed.                                             |
+| `already_acknowledged`                                                                                                                                       | 409         | The claim already has an acknowledgement.                          |
+| `contract_wallet`                                                                                                                                            | 422         | EIP-1271 contract wallets are not supported.                       |
+| `insufficient_scope`                                                                                                                                         | 403         | Missing key scope; the message names it.                           |
+| `csrf_origin`, `csrf_content_type`                                                                                                                           | 403         | Cookie-authenticated request failed the CSRF checks.               |
+| `forbidden`                                                                                                                                                  | 403         | Key kind is not allowed on this endpoint.                          |
+| `not_found`                                                                                                                                                  | 404         | Unknown route.                                                     |
+| `internal_error`                                                                                                                                             | 500         | Unexpected server error.                                           |
 
 ## Core routes
 
@@ -145,22 +147,30 @@ The server checks the signature and that the public key belongs to the account.
 
 ## Developers, business and reporting
 
-| Method       | Path                                              | Purpose                                                                                             |
-| ------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `GET`/`POST` | `/v1/api_keys`                                    | List keys, or create one (secret shown once).                                                       |
-| `POST`       | `/v1/api_keys/{id}/rotate`                        | Rotate; the old key stops working.                                                                  |
-| `DELETE`     | `/v1/api_keys/{id}`                               | Revoke a key.                                                                                       |
-| `GET`/`POST` | `/v1/webhook_endpoints`                           | List endpoints or create one (secret shown once).                                                   |
-| `DELETE`     | `/v1/webhook_endpoints/{id}`                      | Delete an endpoint.                                                                                 |
-| `POST`       | `/v1/webhook_endpoints/{id}/test`                 | Send a test event.                                                                                  |
-| `GET`        | `/v1/webhook_endpoints/{id}/deliveries`           | Delivery log with attempts and status codes.                                                        |
-| `GET`/`PUT`  | `/v1/business`                                    | Business profile: legal name, payout account, contact.                                              |
-| `GET`        | `/v1/business/storage_credit`                     | Own credit, sponsor pool/cap/used/remaining, and the account/amount for `deposit_storage_credit`.   |
-| `GET`        | `/v1/statements?from&to&format=csv\|pdf&token_id` | Statement as a base64 envelope; `token_id` limits it to one claim; totals reconcile with `claim()`. |
-| `GET`        | `/v1/invoices/{id}/pdf`                           | Invoice PDF as a base64 envelope.                                                                   |
-| `GET`        | `/v1/invoices/{id}/open_quotes`                   | Open quotes from the payment log; never reuse an expired one.                                       |
-| `POST`       | `/v1/cashout/quote`                               | Route cost and the 1Click deposit address for the holder's `mt_transfer`.                           |
-| `GET`        | `/v1/receipts/{booking_tx_hash}`                  | Public receipt built from the `booked` event (no key).                                              |
+| Method       | Path                                              | Purpose                                                                                                      |
+| ------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `GET`/`POST` | `/v1/api_keys`                                    | List keys, or create one (secret shown once).                                                                |
+| `POST`       | `/v1/api_keys/{id}/rotate`                        | Rotate; the old key stops working.                                                                           |
+| `DELETE`     | `/v1/api_keys/{id}`                               | Revoke a key.                                                                                                |
+| `GET`/`POST` | `/v1/webhook_endpoints`                           | List endpoints or create one (secret shown once).                                                            |
+| `DELETE`     | `/v1/webhook_endpoints/{id}`                      | Delete an endpoint.                                                                                          |
+| `POST`       | `/v1/webhook_endpoints/{id}/test`                 | Send a test event.                                                                                           |
+| `GET`        | `/v1/webhook_endpoints/{id}/deliveries`           | Delivery log with attempts and status codes.                                                                 |
+| `GET`/`PUT`  | `/v1/business`                                    | Business profile: `legal_name` (display name), `username` (handle), `account_id` (NEAR), payout and contact. |
+| `GET`        | `/v1/business/username_available?u=`              | `{available, reason}` for a candidate handle; the caller's own handle stays available.                       |
+| `GET`        | `/v1/business/storage_credit`                     | Own credit, sponsor pool/cap/used/remaining, and the account/amount for `deposit_storage_credit`.            |
+| `GET`        | `/v1/statements?from&to&format=csv\|pdf&token_id` | Statement as a base64 envelope; `token_id` limits it to one claim; totals reconcile with `claim()`.          |
+| `GET`        | `/v1/invoices/{id}/pdf`                           | Invoice PDF as a base64 envelope.                                                                            |
+| `GET`        | `/v1/invoices/{id}/open_quotes`                   | Open quotes from the payment log; never reuse an expired one.                                                |
+| `POST`       | `/v1/cashout/quote`                               | Route cost and the 1Click deposit address for the holder's `mt_transfer`.                                    |
+| `GET`        | `/v1/receipts/{booking_tx_hash}`                  | Public receipt built from the `booked` event (no key).                                                       |
+
+A username is 3 to 32 lowercase letters, digits, `-` or `_`; it starts and ends with a letter or
+digit, has no repeated separators, and is never a reserved page name. A dotted handle is allowed
+only for the caller's own NEAR account id. Pay and acceptance links are
+`<base>/<username>/inv/<ref>` and `<base>/<username>/inv/ack/<ref>`; `<ref>` resolves the invoice
+after a rename. A username change is limited to once per 30 days, and the previous handle is not
+released to other businesses until those 30 days pass.
 
 Invoice objects carry `outstanding` and `paid_total` (base-unit strings);
 receipts carry `booking_tx_hash`; the cash-out quote carries `source_asset`,
