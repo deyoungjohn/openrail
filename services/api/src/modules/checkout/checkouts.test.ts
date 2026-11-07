@@ -4,7 +4,12 @@ import { ApiApp, ApiError, type ApiDeps } from "../../app.js";
 import { AuthStore } from "../../auth.js";
 import { expandEvents } from "../../modules.js";
 import type { IndexedEvent } from "../../webhooks.js";
-import type { CheckoutChain, ChainCheckoutState, LoggedQuote, RefundQuotePort } from "./checkouts.js";
+import type {
+  CheckoutChain,
+  ChainCheckoutState,
+  LoggedQuote,
+  RefundQuotePort,
+} from "./checkouts.js";
 import type { CheckoutPort } from "./checkout-port.js";
 import { createCheckoutApiModule } from "./index.js";
 
@@ -123,7 +128,7 @@ function harness() {
 }
 
 type H = ReturnType<typeof harness>;
-type Res = { status: number; body: Record<string, any>; headers?: Record<string, string> };
+type Res = { status: number; body: Record<string, any>; headers?: Record<string, string> }; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 function call(
   h: H,
@@ -276,14 +281,24 @@ describe("checkout API: create", () => {
         .digest("hex"),
     );
     await createCheckout(h, { order_ref: "ORD-2" });
-    expect(h.create.mock.calls[1]?.[0].itemsSha256).toBe(createHash("sha256").update("[]").digest("hex"));
+    expect(h.create.mock.calls[1]?.[0].itemsSha256).toBe(
+      createHash("sha256").update("[]").digest("hex"),
+    );
   });
 
   it("checkout_create_needs_a_secret_key_with_write_scope", async () => {
     const h = harness();
     expect((await createCheckout(h, {}, h.keys.acmeRead)).status).toBe(403);
-    const anonymous = await call(h, "POST", "/v1/checkouts", { order_ref: "A", amount_usd: "2.00" });
+    const anonymous = await call(
+      h,
+      "POST",
+      "/v1/checkouts",
+      { order_ref: "A", amount_usd: "2.00" },
+      "bad_secret",
+    );
     expect(anonymous.status).toBe(401);
+    const pub = h.app.moduleContext;
+    void pub;
     expect(h.create).not.toHaveBeenCalled();
   });
 });
@@ -301,12 +316,20 @@ describe("checkout API: read the state from the claim", () => {
     const id = await made(h);
     expect((await get(h, id)).body.status).toBe("pending");
     // 1 USD booked: partial, and the amounts come from the claim
-    h.chain.claims.set(id, { ...(h.chain.claims.get(id) ?? {}), booked_total: "1000000", status: "PartiallyPaid" });
+    h.chain.claims.set(id, {
+      ...(h.chain.claims.get(id) ?? {}),
+      booked_total: "1000000",
+      status: "PartiallyPaid",
+    });
     const partial = (await get(h, id)).body;
     expect(partial.status).toBe("partial");
     expect(partial.outstanding).toBe("1000000");
     expect(partial.paid_total).toBe("1000000");
-    h.chain.claims.set(id, { ...(h.chain.claims.get(id) ?? {}), booked_total: "2000000", status: "Paid" });
+    h.chain.claims.set(id, {
+      ...(h.chain.claims.get(id) ?? {}),
+      booked_total: "2000000",
+      status: "Paid",
+    });
     const paid = (await get(h, id)).body;
     expect(paid.status).toBe("paid");
     expect(paid.outstanding).toBe("0");
@@ -346,7 +369,13 @@ describe("checkout API: read the state from the claim", () => {
     h.chain.claims.set(id, { ...(h.chain.claims.get(id) ?? {}), booked_total: "2000000" });
     h.chain.states.set(id, { expiry, late: true, refunded: false, order_ref: "ORD-1" });
     expect((await get(h, id)).body.status).toBe("late");
-    h.chain.states.set(id, { expiry, late: true, refunded: false, accepted: true, order_ref: "ORD-1" });
+    h.chain.states.set(id, {
+      expiry,
+      late: true,
+      refunded: false,
+      accepted: true,
+      order_ref: "ORD-1",
+    });
     expect((await get(h, id)).body.status).toBe("accepted");
     h.chain.states.set(id, { expiry, late: true, refunded: true, order_ref: "ORD-1" });
     expect((await get(h, id)).body.status).toBe("refunded");
@@ -396,7 +425,9 @@ describe("checkout API: read the state from the claim", () => {
     );
     expect(next.body.data).toHaveLength(3);
     expect(next.body.has_more).toBe(false);
-    const all = [...first.body.data, ...next.body.data].map((row: any) => row.order_ref);
+    const all = [...first.body.data, ...next.body.data].map(
+      (row: { order_ref: string }) => row.order_ref,
+    );
     expect(new Set(all).size).toBe(5);
     expect(all).not.toContain("theirs");
     for (const row of first.body.data) expect(row.status).toBe("pending");
@@ -418,6 +449,9 @@ describe("checkout API: read the state from the claim", () => {
     });
     expect(typeof view.body.expires_at).toBe("string");
     expect(typeof view.body.server_time).toBe("string");
+    expect(Array.isArray(view.body.routes)).toBe(true);
+    expect(view.body.routes.length).toBeGreaterThan(0);
+    expect(Array.isArray(view.body.sessions)).toBe(true);
     const text = JSON.stringify(view.body);
     expect(text).not.toMatch(/idempotency|secret|items_sha256/i);
     expect((await call(h, "GET", "/v1/public/checkouts/nope")).status).toBe(404);
@@ -477,9 +511,14 @@ describe("checkout API: events", () => {
   });
   const expand = (h: H, event: IndexedEvent) => expandEvents(event, [h.module], h.context());
   const derived = (h: H, event: IndexedEvent) => expand(h, event).slice(1);
+  async function withTwo(h = harness()) {
+    await createCheckout(h, { order_ref: "ORD-1" });
+    await createCheckout(h, { order_ref: "ORD-2" });
+    return h;
+  }
 
   it("checkout_events_are_built_only_from_the_contract_events", async () => {
-    const h = harness();
+    const h = await withTwo();
     const table: [string, string][] = [
       ["checkout_created", "checkout.created"],
       ["checkout_paid", "checkout.paid"],
@@ -500,27 +539,25 @@ describe("checkout API: events", () => {
       expect(expand(h, event)).toEqual([event]);
     }
     // creating a checkout through the API raises no event by itself
-    await createCheckout(h);
+    await createCheckout(h, { order_ref: "ORD-3" });
     expect(h.issueFor).not.toHaveBeenCalled();
   });
 
-  it("checkout_notification_idempotent", () => {
-    const h = harness();
+  it("checkout_notification_idempotent", async () => {
+    const h = await withTwo();
     const event = base("checkout_paid", { booking_seq: 7 });
     const a = derived(h, event)[0];
     const b = derived(h, { ...event, id: "another-log-line-of-the-same-booking" })[0];
     expect(a?.id).toBe(b?.id);
-    expect(a?.id).toBe(
-      createHash("sha256").update("c-101").update("7").digest("hex"),
-    );
+    expect(a?.id).toBe(createHash("sha256").update("c-101").update("7").digest("hex"));
     const next = derived(h, base("checkout_paid", { booking_seq: 8 }))[0];
     expect(next?.id).not.toBe(a?.id);
     const other = derived(h, { ...event, data: { ...event.data, token_id: "c-102" } })[0];
     expect(other?.id).not.toBe(a?.id);
   });
 
-  it("checkout_notification_ids_differ_between_kinds_of_notice", () => {
-    const h = harness();
+  it("checkout_notification_ids_differ_between_kinds_of_notice", async () => {
+    const h = await withTwo();
     const ids = ["checkout_created", "checkout_accepted", "checkout_refund_started"].map(
       (type) => derived(h, base(type, {}))[0]?.id,
     );
@@ -531,11 +568,16 @@ describe("checkout API: events", () => {
     expect(first?.id).toBe(same?.id);
   });
 
-  it("checkout_partial_notice_never_says_paid", () => {
-    const h = harness();
+  it("checkout_partial_notice_never_says_paid", async () => {
+    const h = await withTwo();
     const [partial] = derived(
       h,
-      base("checkout_partial", { booking_seq: 1, due: "2000000", received: "1000000", remaining: "1000000" }),
+      base("checkout_partial", {
+        booking_seq: 1,
+        due: "2000000",
+        received: "1000000",
+        remaining: "1000000",
+      }),
     );
     expect(partial?.type).toBe("checkout.partial");
     expect(partial?.data).toMatchObject({
@@ -547,14 +589,14 @@ describe("checkout API: events", () => {
     expect(JSON.stringify(partial).toLowerCase()).not.toContain("paid");
   });
 
-  it("checkout_paid_late_notice_says_late_and_not_paid_in_time", () => {
-    const h = harness();
+  it("checkout_paid_late_notice_says_late_and_not_paid_in_time", async () => {
+    const h = await withTwo();
     const [late] = derived(h, base("checkout_paid_late", { booking_seq: 1 }));
     expect(late?.data.status).toBe("late");
   });
 
-  it("checkout_refund_started_carries_the_recorded_refund_to", () => {
-    const h = harness();
+  it("checkout_refund_started_carries_the_recorded_refund_to", async () => {
+    const h = await withTwo();
     const [refund] = derived(
       h,
       base("checkout_refund_started", { refund_to: PAYER_REFUND_TO, amount_in: "1990000" }),
@@ -562,8 +604,8 @@ describe("checkout API: events", () => {
     expect(refund?.data).toMatchObject({ refund_to: PAYER_REFUND_TO, amount_in: "1990000" });
   });
 
-  it("checkout_events_ignore_malformed_events_without_throwing", () => {
-    const h = harness();
+  it("checkout_events_ignore_malformed_events_without_throwing", async () => {
+    const h = await withTwo();
     const events: IndexedEvent[] = [
       { id: "x", type: "checkout_paid", created: 1, data: {}, indexed: true },
       { id: "y", type: "checkout_paid", created: 1, data: { token_id: 5 }, indexed: true },
@@ -572,16 +614,18 @@ describe("checkout API: events", () => {
     for (const event of events) expect(derived(h, event)).toEqual([]);
   });
 
-  it("checkout_notification_from_booked_event_only", () => {
+  it("checkout_notification_from_booked_event_only", async () => {
     // A `booked` event of a checkout claim is core's; the module must not turn it into a notice.
-    const h = harness();
+    const h = await withTwo();
     expect(derived(h, base("booked", { payment: "2000000" }))).toEqual([]);
   });
 });
 
 describe("checkout API: late payments never sign for the merchant", () => {
+  let lateSeq = 0;
   async function lateCheckout(h: H, state: Partial<ChainCheckoutState> = {}) {
-    const id = (await createCheckout(h)).body.id as string;
+    lateSeq += 1;
+    const id = (await createCheckout(h, { order_ref: `LATE-${lateSeq}` })).body.id as string;
     const expiry = Number(h.chain.claims.get(id)?.due_date);
     h.chain.claims.set(id, {
       ...(h.chain.claims.get(id) ?? {}),
@@ -608,7 +652,9 @@ describe("checkout API: late payments never sign for the merchant", () => {
     return id;
   }
   const post = (h: H, id: string, action: string, body: unknown = {}, secret = h.keys.acme) =>
-    call(h, "POST", `/v1/checkouts/${id}/${action}`, body, secret, { "idempotency-key": `${action}-${++idem}` });
+    call(h, "POST", `/v1/checkouts/${id}/${action}`, body, secret, {
+      "idempotency-key": `${action}-${++idem}`,
+    });
 
   it("checkout_accept_late_returns_the_call_for_the_merchant_wallet", async () => {
     const h = harness();
@@ -634,9 +680,13 @@ describe("checkout API: late payments never sign for the merchant", () => {
     expect(refused.status).toBe(409);
     expect(refused.body.error.code).toBe("checkout_not_late");
     const accepted = await lateCheckout(h, { accepted: true });
-    expect((await post(h, accepted, "accept_late")).body.error.code).toBe("checkout_already_accepted");
+    expect((await post(h, accepted, "accept_late")).body.error.code).toBe(
+      "checkout_already_accepted",
+    );
     const refunded = await lateCheckout(h, { refunded: true });
-    expect((await post(h, refunded, "accept_late")).body.error.code).toBe("checkout_already_refunded");
+    expect((await post(h, refunded, "accept_late")).body.error.code).toBe(
+      "checkout_already_refunded",
+    );
   });
 
   it("checkout_late_actions_are_scoped_and_need_write_scope_and_a_key", async () => {
@@ -646,7 +696,9 @@ describe("checkout API: late payments never sign for the merchant", () => {
     expect((await post(h, id, "accept_late", {}, h.keys.acmeRead)).status).toBe(403);
     const noKey = await call(h, "POST", `/v1/checkouts/${id}/accept_late`, {}, h.keys.acme);
     expect(noKey.body.error.code).toBe("idempotency_key_required");
-    expect((await call(h, "POST", `/v1/checkouts/${id}/refund_quote`, {}, h.keys.acme)).status).toBe(400);
+    expect(
+      (await call(h, "POST", `/v1/checkouts/${id}/refund_quote`, {}, h.keys.acme)).status,
+    ).toBe(400);
   });
 
   it("late_checkout_refund_only_to_recorded_refund_to", async () => {
@@ -708,7 +760,9 @@ describe("checkout API: late payments never sign for the merchant", () => {
   it("late_checkout_refund_refused_after_accept_or_when_not_late", async () => {
     const h = harness();
     const accepted = await lateCheckout(h, { accepted: true });
-    expect((await post(h, accepted, "refund_quote")).body.error.code).toBe("checkout_already_accepted");
+    expect((await post(h, accepted, "refund_quote")).body.error.code).toBe(
+      "checkout_already_accepted",
+    );
     const onTime = (await createCheckout(h, { order_ref: "ON-TIME" })).body.id as string;
     expect((await post(h, onTime, "refund_quote")).body.error.code).toBe("checkout_not_late");
     expect(h.refundQuote).not.toHaveBeenCalled();
@@ -730,7 +784,13 @@ describe("checkout API: late payments never sign for the merchant", () => {
     const other = "0x2222222222222222222222222222222222222222";
     h.chain.log.set(id, [
       ...(h.chain.log.get(id) ?? []),
-      { quote_id: "q_two", deposit_address: "0xd2", deadline_requested: 1, refund_to: other, route_id: "arb-eth" },
+      {
+        quote_id: "q_two",
+        deposit_address: "0xd2",
+        deadline_requested: 1,
+        refund_to: other,
+        route_id: "arb-eth",
+      },
     ]);
     const ambiguous = await post(h, id, "refund_quote");
     expect(ambiguous.status).toBe(409);
