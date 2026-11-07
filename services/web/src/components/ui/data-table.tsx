@@ -63,6 +63,8 @@ export interface DataTableProps<T> {
   onDelete?: (ids: string[]) => void;
   onRowClick?: (row: T) => void;
   className?: string;
+  /** Columns keep the widths they are given, so sorting never moves them. */
+  fixed?: boolean;
 }
 
 const HIDE: Record<NonNullable<DataTableColumn<unknown>["hideBelow"]>, string> = {
@@ -101,6 +103,7 @@ export function DataTable<T>({
   onDelete,
   onRowClick,
   className,
+  fixed,
 }: DataTableProps<T>) {
   const t = copy.table;
   const [sort, setSort] = useState(defaultSort ?? null);
@@ -240,7 +243,12 @@ export function DataTable<T>({
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] border-collapse text-left text-[14px]">
+            <table
+              className={cn(
+                "w-full min-w-[480px] border-collapse text-left text-[14px]",
+                fixed && "table-fixed",
+              )}
+            >
               {caption ? <caption className="sr-only">{caption}</caption> : null}
               <thead>
                 <tr className="border-y border-border text-[12px] font-medium text-muted">

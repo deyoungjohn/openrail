@@ -624,6 +624,7 @@ function EventsPanel() {
       id: "type",
       header: t.cols.type,
       sortable: true,
+      width: "30%",
       value: (e) => e.type,
       cell: (e) => (
         <code className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono text-[12px]">
@@ -635,26 +636,34 @@ function EventsPanel() {
       id: "count",
       header: t.cols.count,
       sortable: true,
-      numeric: true,
+      align: "center",
+      width: "14%",
       value: (e) => perType.get(e.type) ?? 0,
+      className: "tabular",
     },
     {
       id: "id",
       header: t.cols.event,
       hideBelow: "sm",
-      value: (e) => e.id,
+      sortable: true,
+      align: "center",
+      width: "14%",
+      value: (e) => (/^\d+$/.test(e.id) ? Number(e.id) : e.id),
       cell: (e) => <code className="font-mono text-[13px]">{e.id}</code>,
     },
     {
       id: "token",
       header: t.cols.token,
       hideBelow: "md",
+      sortable: true,
+      width: "16%",
       value: (e) => String((e.data as { token_id?: unknown } | undefined)?.token_id ?? ""),
     },
     {
       id: "time",
       header: t.cols.time,
       sortable: true,
+      width: "26%",
       value: (e) => e.created,
       // A time before 2001 cannot be real: say so instead of showing 1 January 1970.
       cell: (e) =>
@@ -687,6 +696,7 @@ function EventsPanel() {
         rowLabel={(e) => `${e.type} ${e.id}`}
         caption={t.eventsTitle}
         variant="minimal"
+        fixed
         defaultSort={{ id: "time", dir: "desc" }}
         pageSize={10}
         searchable

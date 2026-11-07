@@ -4,10 +4,9 @@ import { useState } from "react";
 import { copy } from "@/copy";
 import { formatNear, storageCreditLow } from "@/lib/near-amount";
 import type { Async } from "@/lib/use-async";
-import { useActions } from "@/wallet/actions";
-import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Skeleton } from "../ui/state";
+import { DepositControl } from "./deposit-control";
 
 type Credit = { balance: string; amount: string; contract_id: string };
 
@@ -20,8 +19,7 @@ export function StorageCreditCard({
   reload: () => void;
 }) {
   const t = copy.setup;
-  const actions = useActions();
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  const [sent, setSent] = useState(false);
   const balance = credit.state === "ready" ? BigInt(credit.data.balance) : null;
   const low = balance !== null && storageCreditLow(balance);
 
@@ -40,36 +38,15 @@ export function StorageCreditCard({
               {t.creditLow}
             </p>
           ) : null}
-          {low || state === "sent" ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={state === "sending"}
-                onClick={async () => {
-                  setState("sending");
-                  try {
-                    await actions.depositStorageCredit(credit.data.contract_id, credit.data.amount);
-                    setState("sent");
-                    reload();
-                  } catch {
-                    setState("failed");
-                  }
-                }}
-              >
-                {t.creditDeposit}
-              </Button>
-              {state === "sent" ? (
-                <span role="status" className="text-[14px]">
-                  {t.creditSent}
-                </span>
-              ) : null}
-              {state === "failed" ? (
-                <span role="alert" className="text-danger-text text-[14px]">
-                  {t.creditFailed}
-                </span>
-              ) : null}
-            </div>
+          {low || sent ? (
+            <DepositControl
+              contractId={credit.data.contract_id}
+              suggestedYocto={credit.data.amount}
+              onSent={() => {
+                setSent(true);
+                reload();
+              }}
+            />
           ) : null}
         </>
       )}

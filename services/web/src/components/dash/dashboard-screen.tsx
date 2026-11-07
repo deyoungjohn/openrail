@@ -258,7 +258,7 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
       rowId={(r) => r.id}
       rowLabel={(r) => `${r.payer}, ${r.product}`}
       toolbar={
-        <div className="flex basis-full flex-wrap items-center justify-end gap-2">
+        <div className="flex basis-full flex-wrap items-center justify-start gap-2">
           <div
             role="group"
             aria-label={d.periodFilter}
@@ -287,6 +287,7 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
             value={range}
             onChange={setRange}
             placeholder={d.allTime}
+            triggerClassName="w-60 justify-start"
           />
         </div>
       }

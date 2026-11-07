@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatNear, STORAGE_PER_INVOICE_YOCTO, storageCreditLow } from "./near-amount";
+import {
+  formatNear,
+  MIN_DEPOSIT_YOCTO,
+  parseNear,
+  STORAGE_PER_INVOICE_YOCTO,
+  storageCreditLow,
+} from "./near-amount";
 
 const NEAR = 10n ** 24n;
 
@@ -25,5 +31,31 @@ describe("storageCreditLow (blueprint 2.2: about 0.02 NEAR per invoice)", () => 
   it("is fine from one invoice's worth up", () => {
     expect(storageCreditLow(NEAR / 50n)).toBe(false);
     expect(storageCreditLow(5n * NEAR)).toBe(false);
+  });
+});
+
+describe("parseNear", () => {
+  it("reads plain decimals exactly", () => {
+    expect(parseNear("1")).toBe(NEAR);
+    expect(parseNear("0.02")).toBe(NEAR / 50n);
+    expect(parseNear(".5")).toBe(NEAR / 2n);
+    expect(parseNear(" 1,234.5 ")).toBe(1_234n * NEAR + NEAR / 2n);
+    expect(parseNear("0.000000000000000000000001")).toBe(1n);
+  });
+  it("refuses anything else", () => {
+    for (const bad of [
+      "",
+      ".",
+      "abc",
+      "-1",
+      "1e3",
+      "1.2.3",
+      "0.0000000000000000000000001",
+      "1 NEAR",
+    ])
+      expect(parseNear(bad)).toBeNull();
+  });
+  it("the minimum deposit is 0.02 NEAR", () => {
+    expect(MIN_DEPOSIT_YOCTO).toBe(parseNear("0.02"));
   });
 });

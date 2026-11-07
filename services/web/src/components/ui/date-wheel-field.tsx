@@ -66,66 +66,70 @@ export function DateWheelField({
     : "Pick a date";
 
   return (
-    <div className="space-y-1.5">
-      <p className="text-[14px] leading-5 font-medium">{label}</p>
-      <MorphPopover open={open} onOpenChange={setOpen}>
-        <MorphPopoverTrigger>
-          <button
-            type="button"
-            aria-label={`${label}: ${shown}`}
-            aria-invalid={error ? true : undefined}
-            className={cn(
-              "inline-flex h-11 w-full items-center gap-2 rounded-[10px] border bg-transparent px-3 text-[15px] transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none",
-              error ? "border-danger" : "border-border",
-              !chosen && "text-muted",
-            )}
-          >
-            <CalendarDays aria-hidden size={16} className="shrink-0 text-muted" />
-            <span className="tabular truncate">{shown}</span>
-          </button>
-        </MorphPopoverTrigger>
-        <MorphPopoverContent
-          align="start"
-          radius={16}
-          shadow={false}
-          className="w-[19rem] max-w-[calc(100vw-1.5rem)]"
-        >
-          <div className="space-y-3 p-3">
-            <div className="grid grid-cols-[1.6fr_1fr_1.1fr] gap-2">
-              <WheelPicker
-                aria-label="Month"
-                options={MONTHS}
-                value={String(m)}
-                onValueChange={(v) => set({ m: Number(v) })}
-              />
-              <WheelPicker
-                aria-label="Day"
-                options={dayOptions}
-                value={String(d)}
-                onValueChange={(v) => set({ d: Number(v) })}
-              />
-              <WheelPicker
-                aria-label="Year"
-                options={yearOptions}
-                value={String(y)}
-                onValueChange={(v) => set({ y: Number(v) })}
-              />
-            </div>
+    <div className="w-full">
+      <div className="relative">
+        <span className="pointer-events-none absolute top-0 left-3 z-10 -translate-y-1/2 bg-surface px-1 text-[12px] leading-5 font-medium text-muted dark:bg-surface-2">
+          {label}
+        </span>
+        <MorphPopover open={open} onOpenChange={setOpen}>
+          <MorphPopoverTrigger>
             <button
               type="button"
-              onClick={() => {
-                if (!chosen) set({});
-                setOpen(false);
-              }}
-              className="h-10 w-full rounded-[10px] bg-accent text-[14px] font-medium text-on-accent hover:bg-accent-hover"
+              aria-label={`${label}: ${shown}`}
+              aria-invalid={error ? true : undefined}
+              className={cn(
+                "inline-flex h-11 w-full items-center gap-2 rounded-[10px] border bg-surface px-3 text-[15px] transition-colors hover:border-muted focus-visible:border-accent focus-visible:outline-none dark:bg-surface-2",
+                error ? "border-danger" : "border-border",
+                !chosen && "text-muted",
+              )}
             >
-              Done
+              <CalendarDays aria-hidden size={16} className="shrink-0 text-muted" />
+              <span className="tabular truncate">{shown}</span>
             </button>
-          </div>
-        </MorphPopoverContent>
-      </MorphPopover>
+          </MorphPopoverTrigger>
+          <MorphPopoverContent
+            align="start"
+            radius={16}
+            shadow={false}
+            className="w-[19rem] max-w-[calc(100vw-1.5rem)]"
+          >
+            <div className="space-y-3 p-3">
+              <div className="grid grid-cols-[1.6fr_1fr_1.1fr] gap-2">
+                <WheelPicker
+                  aria-label="Month"
+                  options={MONTHS}
+                  value={String(m)}
+                  onValueChange={(v) => set({ m: Number(v) })}
+                />
+                <WheelPicker
+                  aria-label="Day"
+                  options={dayOptions}
+                  value={String(d)}
+                  onValueChange={(v) => set({ d: Number(v) })}
+                />
+                <WheelPicker
+                  aria-label="Year"
+                  options={yearOptions}
+                  value={String(y)}
+                  onValueChange={(v) => set({ y: Number(v) })}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!chosen) set({});
+                  setOpen(false);
+                }}
+                className="h-10 w-full rounded-[10px] bg-accent text-[14px] font-medium text-on-accent hover:bg-accent-hover"
+              >
+                Done
+              </button>
+            </div>
+          </MorphPopoverContent>
+        </MorphPopover>
+      </div>
       {error ? (
-        <p role="alert" className="text-danger-text text-[14px]">
+        <p role="alert" className="text-danger-text mt-1.5 px-1 text-[13px] leading-[18px]">
           {error}
         </p>
       ) : null}
