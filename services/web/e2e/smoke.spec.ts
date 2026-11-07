@@ -1,3 +1,4 @@
+import { pickDate } from "./helpers";
 import { expect, test } from "@playwright/test";
 
 // The signed-in journey against the real mock API (`MOCK=1`, started by playwright.config.ts),
@@ -25,9 +26,11 @@ test.describe("signed-in journey on the mock API", () => {
     await page.getByLabel("Client name").fill("Northwind Studio");
     await page.getByLabel("Client account", { exact: true }).fill("northwind.near");
     await page.getByLabel("Invoice number").fill("INV-0900");
-    await page
-      .getByLabel("Due date")
-      .fill(new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
+    await pickDate(
+      page,
+      "Due date",
+      new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+    );
     await page.getByLabel("Description").fill("Design");
     await page.getByLabel("Price").fill("125.00");
     await page.getByRole("button", { name: "Create invoice" }).click();

@@ -15,6 +15,7 @@ import { invoiceTotalCents, lineCents, validateIssue, type IssueForm } from "@/l
 import { useAsync } from "@/lib/use-async";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
+import { DateWheelField } from "../ui/date-wheel-field";
 import { Card } from "../ui/card";
 import { Skeleton } from "../ui/state";
 import { Input, Select } from "../ui/input";
@@ -301,11 +302,10 @@ export function IssueScreen() {
               onChange={(e) => set("invoiceNumber", e.target.value)}
               error={err("invoiceNumber")}
             />
-            <Input
+            <DateWheelField
               label={t.dueDate}
-              type="date"
               value={form.dueDate}
-              onChange={(e) => set("dueDate", e.target.value)}
+              onChange={(iso) => set("dueDate", iso)}
               error={err("dueDate")}
             />
           </div>

@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
+import { CenterMorphModal, CenterMorphModalContent } from "./center-morph-modal";
 import { Tooltip } from "./tooltip";
 
 const FOCUSABLE =
@@ -65,6 +66,24 @@ export function Modal({
       first.focus();
     }
   };
+
+  // A dialog that opens in the middle of the page unfolds from its centre (the drawer stays a side sheet).
+  if (variant === "modal") {
+    return (
+      <CenterMorphModal open={open} onOpenChange={(next) => !next && onClose()}>
+        <CenterMorphModalContent
+          ariaLabel={title}
+          closeButtonLabel={copy.modal.close}
+          className="glass w-full max-w-lg !p-0"
+        >
+          <header className="border-b border-border px-6 py-4 pr-14">
+            <h2 className="text-[18px] leading-[26px] font-semibold">{title}</h2>
+          </header>
+          <div className="max-h-[75dvh] overflow-y-auto p-6">{children}</div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
+    );
+  }
 
   return (
     <dialog

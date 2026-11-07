@@ -1,8 +1,28 @@
-import type { BrowserContext } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 
 /** Fixture mode keeps its stand-in session in this cookie (see src/lib/auth.ts). */
 export async function signIn(context: BrowserContext, account = "acme.openrail.near") {
   await context.addCookies([
     { name: "or_sess_mock", value: account, url: "http://127.0.0.1:3100" },
   ]);
+}
+
+/**
+ * Choose a day on the three wheels of a date wheel field (year, then month, then day). The wheels start on the
+ * earliest day offered, which is tomorrow (UTC), so the year index counts from tomorrow's year.
+ */
+export async function pickDate(page: Page, label: string, iso: string): Promise<void> {
+  const [y = 0, m = 1, d = 1] = iso.split("-").map(Number);
+  const firstYear = new Date(Date.now() + 86_400_000).getUTCFullYear();
+  await page.getByRole("button", { name: new RegExp(`^${label}`) }).click();
+  const wheel = async (name: string, index: number) => {
+    await page.getByRole("listbox", { name }).focus();
+    await page.keyboard.press("Home");
+    for (let i = 0; i < index; i += 1) await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(400);
+  };
+  await wheel("Year", y - firstYear);
+  await wheel("Month", m - 1);
+  await wheel("Day", d - 1);
+  await page.getByRole("button", { name: "Done" }).click();
 }

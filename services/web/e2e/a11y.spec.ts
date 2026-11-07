@@ -126,7 +126,7 @@ test.describe("tab order follows the visual order", () => {
       "Client pays with",
       "Client account",
       "Invoice number",
-      "Due date",
+      /^Due date/,
       "Description",
       "Qty",
       "Price",

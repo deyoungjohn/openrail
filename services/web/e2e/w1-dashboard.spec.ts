@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { fixture, mockApi } from "./api-mock";
-import { signIn } from "./helpers";
+import { pickDate, signIn } from "./helpers";
 
 test.beforeEach(async ({ context }) => {
   await signIn(context);
@@ -468,9 +468,11 @@ test.describe("issue form", () => {
     await page.getByLabel("Client name").fill("Northwind Studio");
     await page.getByLabel("Client account", { exact: true }).fill("northwind.near");
     await page.getByLabel("Invoice number").fill("INV-0009");
-    await page
-      .getByLabel("Due date")
-      .fill(new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
+    await pickDate(
+      page,
+      "Due date",
+      new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+    );
     await page.getByLabel("Description").fill("Design");
     await page.getByLabel("Qty").fill("2");
     await page.getByLabel("Price").fill("125.00");
@@ -505,9 +507,11 @@ test.describe("issue form", () => {
     await page.getByLabel("Client name").fill("Northwind Studio");
     await page.getByLabel("Client account", { exact: true }).fill("northwind.near");
     await page.getByLabel("Invoice number").fill("INV-0009");
-    await page
-      .getByLabel("Due date")
-      .fill(new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
+    await pickDate(
+      page,
+      "Due date",
+      new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+    );
     await page.getByLabel("Description").fill("Design");
     await page.getByLabel("Price").fill("10.00");
     await page.getByRole("button", { name: "Create invoice" }).click();
