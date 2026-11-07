@@ -320,7 +320,7 @@ function checkoutFixture(
 
 describe("checkout refund payout worker", () => {
   // REL2-checkout-refund: ag4 implements against these tests
-  it.skip("checkout_refund_quote_recipient_checked_before_send", async () => {
+  it("checkout_refund_quote_recipient_checked_before_send", async () => {
     const alert = vi.fn();
     const { chain, worker } = checkoutFixture("0x" + "f".repeat(40), alert);
     const summary = await worker.tick();
@@ -333,7 +333,7 @@ describe("checkout refund payout worker", () => {
   });
 
   // REL2-checkout-refund: ag4 implements against these tests
-  it.skip("checkout_refund_amount_never_exceeds_booked_net", async () => {
+  it("checkout_refund_amount_never_exceeds_booked_net", async () => {
     const alert = vi.fn();
     const { chain, worker } = checkoutFixture(undefined, alert, "3000000", "2000000");
     const summary = await worker.tick();
@@ -346,7 +346,7 @@ describe("checkout refund payout worker", () => {
   });
 
   // REL2-checkout-refund: ag4 implements against these tests
-  it.skip("checkout_refund_resumes_after_restart_without_resending", async () => {
+  it("checkout_refund_resumes_after_restart_without_resending", async () => {
     const { chain, worker } = checkoutFixture();
     const first = await worker.tick();
     expect(first.sent).toHaveLength(1);
@@ -373,7 +373,7 @@ describe("checkout refund payout worker", () => {
   });
 
   // REL2-checkout-refund: ag4 implements against these tests
-  it.skip("checkout_refund_ambiguous_send_not_retried", async () => {
+  it("checkout_refund_ambiguous_send_not_retried", async () => {
     const { chain, worker } = checkoutFixture();
     chain.failCheckoutSend = true;
     await worker.tick();

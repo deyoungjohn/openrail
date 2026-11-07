@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     numberEnv("PAYOUT_RPC_DAILY_BUDGET", 380),
     numberEnv("PAYOUT_RPC_MIN_SPACING_MS", 7_000),
   );
-  const chain = new PayoutChain({ rootAccount, budget });
+  const chain = new PayoutChain({ rootAccount, budget, indexerUrl });
   let lastAlert: string | null = null;
   const worker = new PayoutWorker({
     discovery: new IndexerHeldDiscovery(indexerUrl),

@@ -1,6 +1,7 @@
 /** Settle payout worker: quote -> check recipient -> settle_payout -> status -> report_payout. */
 import type {
   ChainPort,
+  CheckoutRefundEvent,
   HeldDiscovery,
   HeldEntry,
   QuotePort,
@@ -97,9 +98,105 @@ export class PayoutWorker {
     return summary;
   }
 
-  /** Stub for REL-2 checkout refunds: ag4 implements against REL2-checkout-refund tests. */
-  private async processCheckoutRefunds(_tokenId: string, _summary: WorkerSummary): Promise<void> {
-    // stub: does nothing
+  private async processCheckoutRefunds(tokenId: string, summary: WorkerSummary): Promise<void> {
+    if (this.deps.chain.checkoutRefundEvents === undefined) return;
+    let refunds: CheckoutRefundEvent[];
+    try {
+      refunds = await this.deps.chain.checkoutRefundEvents(tokenId);
+    } catch (error) {
+      summary.errors.push(`${tokenId}: checkout_refund: ${String(error)}`);
+      return;
+    }
+    for (let index = 0; index < refunds.length; index += 1) {
+      const refund = refunds[index];
+      if (refund === undefined) continue;
+      const key = `checkout:${tokenId}#${index}`;
+      const status = refund.status;
+      if (typeof status === "object" && status !== null && "InFlight" in status) {
+        await this.finishInFlight(tokenId, index, status.InFlight.payout_id, summary);
+        continue;
+      }
+      if (typeof status === "object" && status !== null && "Settled" in status) continue;
+      if (this.uncertain.has(key)) {
+        summary.skipped.push(`${key}: send state uncertain`);
+        continue;
+      }
+      await this.startCheckoutRefund(refund, index, key, summary);
+    }
+  }
+
+  private async startCheckoutRefund(
+    refund: CheckoutRefundEvent,
+    index: number,
+    key: string,
+    summary: WorkerSummary,
+  ): Promise<void> {
+    try {
+      if (this.deps.chain.bookedNet !== undefined) {
+        const net = await this.deps.chain.bookedNet(refund.tokenId);
+        if (BigInt(refund.amount) > BigInt(net)) {
+          const message = `${key}: refund amount ${refund.amount} exceeds booked net ${net}`;
+          summary.errors.push(message);
+          this.deps.logger.error(message);
+          this.deps.alert?.(message, {
+            token_id: refund.tokenId,
+            amount: refund.amount,
+            booked_net: net,
+          });
+          return;
+        }
+      }
+      const refundTo = await this.deps.chain.claimAccount(refund.tokenId);
+      const destination = { chain: "auto", address: refund.refundTo, min_amount: "0" };
+      const quote = await this.deps.quote.quote({
+        asset: refund.asset,
+        amount: refund.amount,
+        destination,
+        refundTo,
+        deadline: new Date(this.clock() + 60 * 60 * 1000).toISOString(),
+      });
+      await this.sleep(this.recheckMs);
+      const fresh = await this.deps.chain.checkoutRefundEvents?.(refund.tokenId);
+      const current = fresh?.[index];
+      if (
+        current?.status !== undefined &&
+        typeof current.status === "object" &&
+        current.status !== null &&
+        "InFlight" in current.status
+      ) {
+        summary.skipped.push(`${key}: became InFlight before send`);
+        return;
+      }
+      if (quote.recipient !== refund.refundTo) {
+        const message = `${key}: quote recipient mismatch (expected ${refund.refundTo}, got ${quote.recipient})`;
+        summary.errors.push(message);
+        this.deps.logger.error("quote recipient mismatch", key, quote.recipient, refund.refundTo);
+        this.deps.alert?.(message, {
+          token_id: refund.tokenId,
+          quote_recipient: quote.recipient,
+          refund_to: refund.refundTo,
+        });
+        return;
+      }
+      try {
+        const result =
+          this.deps.chain.refundLate !== undefined
+            ? await this.deps.chain.refundLate(refund.tokenId, quote.depositAddress, quote.amountIn)
+            : await this.deps.chain.settlePayout(
+                refund.tokenId,
+                index,
+                quote.depositAddress,
+                quote.amountIn,
+              );
+        summary.sent.push(`${key}:${result.payoutId}`);
+        this.deps.logger.info("checkout refund sent", key, result.payoutId, result.txHash);
+      } catch (error) {
+        this.uncertain.add(key);
+        summary.errors.push(`${key}: refund_late: ${String(error)}`);
+      }
+    } catch (error) {
+      summary.errors.push(`${key}: ${String(error)}`);
+    }
   }
 
   private async startPayout(
@@ -192,6 +289,10 @@ export class PayoutWorker {
           summary.errors.push(`${key}: SUCCESS without destination tx`);
           return;
         }
+        if (payout.module_id === "checkout") {
+          summary.settled.push(`${key}:${hash}`);
+          return;
+        }
         await this.deps.chain.reportPayout(tokenId, index, payoutId, {
           Settled: { destination_tx: hash },
         });
@@ -199,6 +300,10 @@ export class PayoutWorker {
         return;
       }
       if (status === "REFUNDED" || status === "FAILED") {
+        if (payout.module_id === "checkout") {
+          summary.refunded.push(`${key}:${status}`);
+          return;
+        }
         if (current.refundedAmount === undefined || current.refundedAmount === "") {
           const message = `refund amount missing for ${key} (payout ${payoutId})`;
           this.deps.logger.error(message);

@@ -14,6 +14,15 @@ For each `settle_held` entry on a claim it:
 
 A restart is safe: entries already `InFlight` are read from `settle_held` and only polled/reported; they are never sent again. Before every send the worker re-reads `settle_held` after a short wait and skips an entry that became `InFlight`, so a delayed send from before a restart is not sent twice.
 
+## Checkout refunds
+
+The same worker also reads `checkout_refund_started` events. A merchant refund creates the payout on
+the contract, so the worker only polls the provider status and records the outcome; it never calls
+`refund_late` again. For an event without a payout id it takes the prepared quote path: it checks the
+quote recipient equals the recorded `refund_to` before any value-moving call, refuses an amount above
+the booked net, and keeps an ambiguous send uncertain rather than retrying. A restart resumes from the
+on-chain `InFlight` payout.
+
 ## Run
 
 ```bash
@@ -33,4 +42,5 @@ Environment: `NEAR_ROOT_ACCOUNT`, `NEAR_RPC_URL`, `INDEXER_URL`,
 
 `pnpm --filter @openrail/payout test` covers the recipient check before send, success/refund
 reporting, restart-resume of an in-flight payout, and the ambiguous-send no-retry rule with a
-fake 1Click and fake chain.
+fake 1Click and fake chain. It also covers checkout refund recipient mismatch, booked-net cap,
+restart resume and ambiguous sends.

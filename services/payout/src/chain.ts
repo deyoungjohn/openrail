@@ -1,7 +1,14 @@
 /** NEAR adapter for the settle/payout views and calls. */
 import { getEnv, nearClientFromEnv, requireEnv, type NearClient } from "@openrail/shared";
 import type { CallBudget } from "./budget.js";
-import type { ChainPort, Destination, HeldEntry, PayoutOutcome, PayoutRecord } from "./types.js";
+import type {
+  ChainPort,
+  CheckoutRefundEvent,
+  Destination,
+  HeldEntry,
+  PayoutOutcome,
+  PayoutRecord,
+} from "./types.js";
 
 function successValue(result: unknown): unknown {
   const status = (result as { status?: Record<string, unknown> } | null)?.status;
@@ -27,16 +34,33 @@ export interface PayoutChainOptions {
   rootAccount: string;
   near?: NearClient;
   budget?: CallBudget;
+  /** Indexer `/events` endpoint, used to read the checkout refund event payload. */
+  indexerUrl?: string;
+}
+
+function u128(value: unknown): string {
+  if (typeof value === "string" && /^\d+$/.test(value)) return value;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
+  if (value !== null && typeof value === "object" && "0" in value) {
+    const inner = (value as { 0?: unknown })["0"];
+    if (typeof inner === "string" && /^\d+$/.test(inner)) return inner;
+    if (typeof inner === "number" && Number.isSafeInteger(inner) && inner >= 0)
+      return String(inner);
+  }
+  return "0";
 }
 
 export class PayoutChain implements ChainPort {
   private readonly near: NearClient;
   private readonly rootAccount: string;
   private readonly budget: CallBudget | undefined;
+  private readonly indexerUrl: string | undefined;
 
   constructor(options: PayoutChainOptions) {
     this.rootAccount = options.rootAccount;
     this.budget = options.budget;
+    this.indexerUrl =
+      options.indexerUrl === undefined ? undefined : options.indexerUrl.replace(/\/+$/, "");
     this.near =
       options.near ??
       nearClientFromEnv({
@@ -131,6 +155,95 @@ export class PayoutChain implements ChainPort {
       throw new Error("PAYOUT_ID_MISSING");
     }
     return { payoutId, txHash: txHash(result) };
+  }
+
+  async refundLate(
+    tokenId: string,
+    depositAddress: string,
+    amountIn: string,
+  ): Promise<{ payoutId: number; txHash: string }> {
+    const result = await this.guarded(() =>
+      this.near.sendFunctionCall({
+        receiverId: this.rootAccount,
+        methodName: "refund_late",
+        args: {
+          token_id: tokenId,
+          deposit_address: depositAddress,
+          amount_in: amountIn,
+        },
+        gas: 300_000_000_000_000n,
+        deposit: 0n,
+        feature: "payout.refund_late",
+      }),
+    );
+    const value = successValue(result);
+    const payoutId = typeof value === "number" ? value : Number(value);
+    if (!Number.isSafeInteger(payoutId) || payoutId <= 0) {
+      throw new Error("PAYOUT_ID_MISSING");
+    }
+    return { payoutId, txHash: txHash(result) };
+  }
+
+  async bookedNet(tokenId: string): Promise<string> {
+    const claim = await this.guarded(() =>
+      this.near.view<{ booked_total?: unknown; fee_total?: unknown } | null>({
+        contractId: this.rootAccount,
+        methodName: "claim",
+        args: { token_id: tokenId },
+        feature: "payout.claim",
+      }),
+    );
+    if (claim === null) return "0";
+    const booked = BigInt(u128(claim.booked_total));
+    const fee = BigInt(u128(claim.fee_total));
+    return (booked > fee ? booked - fee : 0n).toString();
+  }
+
+  async checkoutRefundEvents(tokenId: string): Promise<CheckoutRefundEvent[]> {
+    if (this.indexerUrl === undefined) return [];
+    const response = await fetch(
+      `${this.indexerUrl}/events?token_id=${encodeURIComponent(tokenId)}&limit=200`,
+      { signal: AbortSignal.timeout(15_000) },
+    );
+    if (!response.ok) throw new Error(`INDEXER_HTTP_${response.status}`);
+    const body = (await response.json()) as {
+      data?: { event?: unknown; data?: Record<string, unknown> }[];
+    };
+    const rows = (body.data ?? []).filter((row) => row.event === "checkout_refund_started");
+    if (rows.length === 0) return [];
+    const claim = await this.guarded(() =>
+      this.near.view<{ settlement_assets?: unknown } | null>({
+        contractId: this.rootAccount,
+        methodName: "claim",
+        args: { token_id: tokenId },
+        feature: "payout.claim",
+      }),
+    );
+    const assets = claim?.settlement_assets;
+    const asset =
+      Array.isArray(assets) && typeof assets[0] === "string"
+        ? assets[0]
+        : typeof assets === "string"
+          ? assets
+          : "";
+    const events: CheckoutRefundEvent[] = [];
+    for (const row of rows) {
+      const data = row.data ?? {};
+      const refundTo = typeof data.refund_to === "string" ? data.refund_to : "";
+      const amount = u128(data.amount_in ?? data.amount);
+      const payoutId = Number(data.payout_id);
+      if (refundTo === "" || amount === "0") continue;
+      events.push({
+        tokenId,
+        refundTo,
+        amount,
+        asset: typeof data.asset === "string" ? data.asset : asset,
+        ...(Number.isSafeInteger(payoutId) && payoutId > 0
+          ? { status: { InFlight: { payout_id: payoutId } } }
+          : {}),
+      });
+    }
+    return events;
   }
 
   async reportPayout(

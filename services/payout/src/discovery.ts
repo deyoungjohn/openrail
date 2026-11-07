@@ -24,7 +24,7 @@ export class IndexerHeldDiscovery implements HeldDiscovery {
       };
       for (const row of body.data ?? []) {
         if (
-          row.event === "settle_held" &&
+          (row.event === "settle_held" || row.event === "checkout_refund_started") &&
           typeof row.token_id === "string" &&
           row.token_id !== ""
         ) {

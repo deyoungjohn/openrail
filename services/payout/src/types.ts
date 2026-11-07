@@ -42,7 +42,8 @@ export interface CheckoutRefundEvent {
   refundTo: string;
   amount: string;
   asset: string;
-  status?: "Pending" | { InFlight: { payout_id: number } } | { Settled: { destination_tx: string } };
+  status?:
+    "Pending" | { InFlight: { payout_id: number } } | { Settled: { destination_tx: string } };
 }
 
 export interface ChainPort {
