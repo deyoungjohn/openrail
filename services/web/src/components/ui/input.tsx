@@ -1,8 +1,22 @@
 "use client";
 
 import { AlertCircle } from "lucide-react";
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import {
+  Children,
+  isValidElement,
+  useId,
+  type InputHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { cn } from "@/lib/cn";
+import {
+  Select as MotionSelect,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./motion-select";
 
 interface FrameProps {
   label: string;
@@ -114,6 +128,10 @@ export function Input({
   );
 }
 
+/**
+ * A choice from a short list, on the motion select (beui). Give it `<option value>` children, like a native select;
+ * the chosen value comes back through `onValueChange`. The label is always up, as on a native select.
+ */
 export function Select({
   label,
   helper,
@@ -122,20 +140,47 @@ export function Select({
   loading,
   className,
   children,
-  ...rest
-}: FrameProps & SelectHTMLAttributes<HTMLSelectElement>) {
+  value,
+  defaultValue,
+  onValueChange,
+  disabled,
+}: FrameProps & {
+  className?: string;
+  children: ReactNode;
+  value?: string;
+  defaultValue?: string;
+  onValueChange?: (value: string) => void;
+  disabled?: boolean;
+}) {
   const id = useId();
+  const options = Children.toArray(children).filter(isValidElement) as ReactElement<{
+    value?: string;
+    children?: ReactNode;
+  }>[];
   return (
     <Frame id={id} floated {...{ label, helper, error, icon, loading }}>
-      <select
-        id={id}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error || helper ? `${id}-note` : undefined}
-        className={cn(field, error ? "border-danger" : "border-border", icon && "pl-10", className)}
-        {...rest}
+      <MotionSelect
+        {...(value !== undefined ? { value } : {})}
+        {...(defaultValue !== undefined ? { defaultValue } : {})}
+        {...(onValueChange ? { onValueChange } : {})}
+        {...(disabled !== undefined ? { disabled } : {})}
       >
-        {children}
-      </select>
+        <SelectTrigger
+          aria-label={label}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || helper ? `${id}-note` : undefined}
+          className={cn(error ? "border-danger" : "border-border", icon && "pl-10", className)}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.props.value ?? ""} value={o.props.value ?? ""}>
+              {o.props.children as string}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </MotionSelect>
     </Frame>
   );
 }

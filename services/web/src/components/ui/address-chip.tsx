@@ -47,10 +47,7 @@ export function AddressChip({
         {middleTruncate(value, head, tail)}
       </code>
       {/* On paper there is no hover and no copy button, so the whole value is written out. */}
-      <Tooltip
-        label={copied ? copy.address.copied : `${copy.address.copy} ${middleTruncate(value)}`}
-        side="top"
-      >
+      <Tooltip label={copied ? copy.address.copied : copy.address.copy} side="top">
         <button
           type="button"
           onClick={onCopy}
@@ -67,7 +64,7 @@ export function AddressChip({
         </button>
       </Tooltip>
       {href ? (
-        <Tooltip label={`${copy.address.view}: ${middleTruncate(value)}`} side="top">
+        <Tooltip label={copy.address.view} side="top">
           <a
             href={href}
             target="_blank"

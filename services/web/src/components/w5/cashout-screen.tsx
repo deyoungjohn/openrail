@@ -142,8 +142,8 @@ export function CashoutScreen() {
           <Select
             label={t.sendTo}
             value={chain}
-            onChange={(e) => {
-              setChain(e.target.value as Destination);
+            onValueChange={(v) => {
+              setChain(v as Destination);
               setPhase("form");
               setQuote(null);
             }}

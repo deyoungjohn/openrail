@@ -30,7 +30,7 @@ export function AccountId({
         {d.text}
       </code>
       {d.truncated ? (
-        <Tooltip label={copied ? copy.address.copied : `${copy.address.copy} ${d.text}`} side="top">
+        <Tooltip label={copied ? copy.address.copied : copy.address.copy} side="top">
           <button
             type="button"
             aria-label={copied ? copy.address.copied : `${copy.address.copy} ${d.text}`}

@@ -108,7 +108,7 @@ export function InvoiceTable({
         error={state === "error" ? { body: d.loadError, onRetry } : null}
         emptyState={{ title: d.emptyTitle, body: d.emptyBody, action: emptyAction }}
         rowActions={(r) => (
-          <Tooltip label={`${d.downloadPdf} ${r.invoice_number}`} side="left">
+          <Tooltip label={d.downloadPdfShort} side="left">
             <button
               type="button"
               aria-label={`${d.downloadPdf} ${r.invoice_number}`}

@@ -24,7 +24,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { CHAINS } from "../ui/chain-badge";
 import { DataTable, type DataTableColumn } from "../ui/data-table";
-import { DateRangeField, type DateRange } from "../ui/date-range-field";
+import { DateRangeField, rangePresets, type DateRange } from "../ui/date-range-field";
 import {
   MonthlyRevenueCard,
   OverviewCard,
@@ -201,6 +201,10 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
   const d = copy.dash;
   const [range, setRange] = useState<DateRange | null>(null);
   const shown = useMemo(() => earnings.filter((e) => inDayRange(e.time, range)), [earnings, range]);
+  const quick = useMemo(
+    () => rangePresets().map((p, i) => ({ short: d.periodShort[i] as string, value: p.value })),
+    [d],
+  );
   const columns: DataTableColumn<Earning>[] = [
     { id: "payer", header: d.payer, sortable: true, value: (r) => r.payer },
     {
@@ -254,12 +258,37 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
       rowId={(r) => r.id}
       rowLabel={(r) => `${r.payer}, ${r.product}`}
       toolbar={
-        <DateRangeField
-          label={d.timeFilter}
-          value={range}
-          onChange={setRange}
-          placeholder={d.allTime}
-        />
+        <div className="flex basis-full flex-wrap items-center justify-end gap-2">
+          <div
+            role="group"
+            aria-label={d.periodFilter}
+            className="flex flex-wrap items-center gap-1"
+          >
+            {quick.map((q) => {
+              const on = range?.from === q.value.from && range?.to === q.value.to;
+              return (
+                <button
+                  key={q.short}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setRange(on ? null : q.value)}
+                  className={cn(
+                    "h-8 rounded-full px-3 text-[13px] font-medium transition-colors",
+                    on ? "bg-accent text-on-accent" : "bg-surface-2 text-muted hover:text-text",
+                  )}
+                >
+                  {q.short}
+                </button>
+              );
+            })}
+          </div>
+          <DateRangeField
+            label={d.timeFilter}
+            value={range}
+            onChange={setRange}
+            placeholder={d.allTime}
+          />
+        </div>
       }
       title={d.activity}
       caption={d.activity}
@@ -276,7 +305,7 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
       ]}
       emptyState={{ title: d.activityEmpty, body: d.activityEmptyBody }}
       rowActions={(r) => (
-        <Tooltip label={`Receipt for ${r.product}`} side="left">
+        <Tooltip label="Receipt" side="left">
           <Link
             href={`/r/${encodeURIComponent(r.txHash)}`}
             aria-label={`Receipt for ${r.product}`}

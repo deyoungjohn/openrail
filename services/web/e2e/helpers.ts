@@ -26,3 +26,9 @@ export async function pickDate(page: Page, label: string, iso: string): Promise<
   await wheel("Day", d - 1);
   await page.getByRole("button", { name: "Done" }).click();
 }
+
+/** Choose an option on a select (the motion select): open it by its label, then click the option. */
+export async function choose(page: Page, label: string, option: string): Promise<void> {
+  await page.getByLabel(label, { exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}

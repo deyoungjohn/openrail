@@ -163,7 +163,7 @@ export function StatementsScreen() {
           <Select
             label={t.format}
             value={format}
-            onChange={(e) => setFormat(e.target.value as "csv" | "pdf")}
+            onValueChange={(v) => setFormat(v as "csv" | "pdf")}
           >
             <option value="csv">{t.csv}</option>
             <option value="pdf">{t.pdf}</option>

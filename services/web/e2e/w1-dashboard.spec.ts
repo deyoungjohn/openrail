@@ -101,7 +101,7 @@ test.describe("dashboard", () => {
     await expect(main.getByRole("region", { name: "Monthly revenue" })).toBeVisible();
     await expect(main.getByRole("region", { name: "Weekly activity" })).toBeVisible();
     await expect(main.getByRole("region", { name: "Overview" })).toBeVisible();
-    const activity = main.getByRole("region", { name: "Recent activity" });
+    const activity = main.getByRole("region", { name: "Inflow" });
     await expect(activity.getByRole("cell", { name: "Northwind Studio" }).first()).toBeVisible();
     await expect(activity.getByText("Invoice INV-1").first()).toBeVisible();
     // Streams: every receipt here is an invoice payment (250.50 in all).
@@ -158,9 +158,7 @@ test.describe("dashboard", () => {
       "GET /v1/invoices/{id}/receipts": { body: { data: [] } },
     });
     await page.goto("/app");
-    await expect(page.getByRole("region", { name: "Recent activity" })).toContainText(
-      "No payments yet",
-    );
+    await expect(page.getByRole("region", { name: "Inflow" })).toContainText("No payments yet");
     await expect(page.getByRole("region", { name: "Where clients paid from" })).toContainText(
       "No payments yet",
     );
@@ -196,7 +194,7 @@ test.describe("dashboard", () => {
     await expect(page.locator("main [role=alert]").first()).toBeVisible();
     fail = false;
     await page.getByRole("button", { name: "Try again" }).first().click();
-    await expect(page.getByRole("region", { name: "Recent activity" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Inflow" })).toBeVisible();
   });
 
   for (const scheme of ["light", "dark"] as const) {
@@ -207,7 +205,7 @@ test.describe("dashboard", () => {
         "GET /v1/invoices/{id}/receipts": { body: RECEIPTS },
       });
       await page.goto("/app");
-      await expect(page.getByRole("region", { name: "Recent activity" })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Inflow" })).toBeVisible();
       await axeClean(page);
     });
   }

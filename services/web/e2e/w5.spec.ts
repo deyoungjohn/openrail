@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { fixture, mockApi } from "./api-mock";
-import { signIn } from "./helpers";
+import { choose, signIn } from "./helpers";
 
 async function axeClean(page: Page) {
   await page.waitForTimeout(500);
@@ -181,7 +181,7 @@ test.describe("statements", () => {
       },
     });
     await page.goto("/app/statements");
-    await page.getByLabel("Format").selectOption("pdf");
+    await choose(page, "Format", "PDF");
     await request(page);
     await expect(page.getByText("PDF statements have no preview")).toBeVisible();
     await expect(page.getByRole("link", { name: /Download s\.pdf/ })).toBeVisible();
@@ -238,7 +238,7 @@ test.describe("cash out", () => {
 
   async function ask(page: Page, amount = "2", chain = "Base", address = ADDR) {
     await page.getByLabel("Amount").fill(amount);
-    await page.getByLabel("Send to").selectOption({ label: chain });
+    await choose(page, "Send to", chain);
     await page.getByLabel("Address").fill(address);
     await page.getByRole("button", { name: "Get quote" }).click();
   }

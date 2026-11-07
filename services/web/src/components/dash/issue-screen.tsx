@@ -279,7 +279,7 @@ export function IssueScreen() {
             <Select
               label={t.clientAccountType}
               value={form.debtorType}
-              onChange={(e) => set("debtorType", e.target.value as IssueForm["debtorType"])}
+              onValueChange={(v) => set("debtorType", v as IssueForm["debtorType"])}
             >
               <option value="near">{t.near}</option>
               <option value="evm">{t.evm}</option>
@@ -309,13 +309,7 @@ export function IssueScreen() {
               error={err("dueDate")}
             />
           </div>
-          <Select
-            label={t.currency}
-            helper={t.currencyHelp}
-            value="usd"
-            disabled
-            onChange={() => {}}
-          >
+          <Select label={t.currency} helper={t.currencyHelp} value="usd" disabled>
             <option value="usd">USD</option>
           </Select>
 
@@ -348,7 +342,7 @@ export function IssueScreen() {
                   onChange={(e) => setLine(i, { unit: e.target.value })}
                   error={err(`line.${i}.amount`)}
                 />
-                <Tooltip label={t.removeLine(i + 1)} side="top">
+                <Tooltip label={t.removeLineShort} side="top">
                   <button
                     type="button"
                     aria-label={t.removeLine(i + 1)}

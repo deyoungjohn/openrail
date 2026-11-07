@@ -172,8 +172,7 @@ function ApiKeysPanel() {
       header: t.cols.lastUsed,
       hideBelow: "md",
       value: (k) => (k.revoked_at ? t.revoked : (k.last_used_at ?? t.neverUsed)),
-      cell: (k) =>
-        k.revoked_at ? t.revoked : k.last_used_at ? t.lastUsed(when(k.last_used_at)) : t.neverUsed,
+      cell: (k) => (k.revoked_at ? t.revoked : k.last_used_at ? when(k.last_used_at) : t.neverUsed),
     },
   ];
 
@@ -215,7 +214,7 @@ function ApiKeysPanel() {
           rowActions={(k) =>
             k.revoked_at ? null : (
               <span className="flex justify-end gap-1">
-                <Tooltip label={t.rotate(k.name)} side="left">
+                <Tooltip label={t.rotateShort} side="left">
                   <button
                     type="button"
                     aria-label={t.rotate(k.name)}
@@ -228,7 +227,7 @@ function ApiKeysPanel() {
                     <RotateCw aria-hidden size={16} />
                   </button>
                 </Tooltip>
-                <Tooltip label={t.revoke(k.name)} side="left">
+                <Tooltip label={t.revokeShort} side="left">
                   <button
                     type="button"
                     aria-label={t.revoke(k.name)}
@@ -617,6 +616,9 @@ function EventsPanel() {
     [type],
   );
   const rows = events.state === "ready" ? events.data.data : [];
+  // How many of the loaded events are of the same type: the column people sort to find the busiest type.
+  const perType = new Map<string, number>();
+  for (const e of rows) perType.set(e.type, (perType.get(e.type) ?? 0) + 1);
   const columns: DataTableColumn<(typeof rows)[number]>[] = [
     {
       id: "type",
@@ -628,6 +630,13 @@ function EventsPanel() {
           {e.type}
         </code>
       ),
+    },
+    {
+      id: "count",
+      header: t.cols.count,
+      sortable: true,
+      numeric: true,
+      value: (e) => perType.get(e.type) ?? 0,
     },
     {
       id: "id",
@@ -662,7 +671,7 @@ function EventsPanel() {
       onRetry={reload}
     >
       <div className="mb-4 max-w-xs">
-        <Select label={t.eventType} value={type} onChange={(e) => setType(e.target.value)}>
+        <Select label={t.eventType} value={type} onValueChange={setType}>
           <option value="">{t.allEvents}</option>
           {EVENT_TYPES.map((ev) => (
             <option key={ev} value={ev}>
