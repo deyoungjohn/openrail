@@ -185,7 +185,7 @@ describe("late payments", () => {
   it("books a payment on a fresh quote of a finished claim within a minute, not on the slow cadence", async () => {
     const state = {
       config: CONFIG_VIEW,
-      claims: [makeClaim("c-1", { status: "Paid" })],
+      claims: [makeClaim("c-1", { status: "Paid", issuer_id: "business.near" })],
       quotes: openQuote(),
       balances: {} as Record<string, string[]>,
     };
