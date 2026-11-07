@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertCircle } from "lucide-react";
 import {
   Children,
   isValidElement,
@@ -10,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/cn";
+import { ErrorNote } from "./error-note";
 import {
   Select as MotionSelect,
   SelectContent,
@@ -43,7 +43,6 @@ function Frame({
   floated,
   children,
 }: FrameProps & { id: string; floated?: boolean; children: ReactNode }) {
-  const note = error ?? helper;
   return (
     <div className="w-full">
       <div className="relative">
@@ -73,14 +72,10 @@ function Frame({
           {label}
         </label>
       </div>
-      {note ? (
-        <p
-          id={`${id}-note`}
-          className={cn("mt-1.5 flex items-center gap-1 px-1", error ? "text-danger" : "caption")}
-          style={error ? { fontSize: 13, lineHeight: "18px", fontWeight: 400 } : undefined}
-        >
-          {error ? <AlertCircle size={14} strokeWidth={1.5} aria-hidden /> : null}
-          {note}
+      <ErrorNote id={`${id}-note`}>{error ? error : null}</ErrorNote>
+      {!error && helper ? (
+        <p id={`${id}-note`} className="caption mt-1.5 px-1">
+          {helper}
         </p>
       ) : null}
     </div>

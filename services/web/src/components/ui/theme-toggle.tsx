@@ -36,7 +36,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   };
 
   return (
-    <Tooltip label={dark ? copy.theme.toLight : copy.theme.toDark} side="bottom">
+    <Tooltip label={dark ? copy.theme.toLight : copy.theme.toDark} side="left">
       <button
         type="button"
         onClick={toggle}

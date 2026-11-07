@@ -279,7 +279,8 @@ test.describe("cash out", () => {
   test("BNB Chain is not offered, and a bad address or amount sends nothing", async ({ page }) => {
     const calls = await mockApi(page, { "POST /v1/cashout/quote": { status: 201, body: quote() } });
     await page.goto("/app/cashout");
-    await expect(page.getByLabel("Send to").locator("option")).toHaveText([
+    await page.getByRole("button", { name: /^Send to/ }).click();
+    await expect(page.getByRole("option")).toHaveText([
       "Base",
       "Arbitrum",
       "Optimism",
@@ -288,6 +289,7 @@ test.describe("cash out", () => {
       "Ethereum",
       "NEAR",
     ]);
+    await page.keyboard.press("Escape");
     await ask(page, "0", "Base", "0x123");
     await expect(page.getByText("Enter an amount")).toBeVisible();
     await expect(page.getByText("starts with 0x")).toBeVisible();

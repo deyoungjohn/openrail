@@ -123,7 +123,7 @@ test.describe("tab order follows the visual order", () => {
     expectOrder(await mainTabOrder(page), [
       "From",
       "Client name",
-      "Client pays with",
+      /^Client pays with/,
       "Client account",
       "Invoice number",
       /^Due date/,

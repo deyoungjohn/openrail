@@ -12,6 +12,7 @@ import { DataTable, type DataTableColumn } from "../ui/data-table";
 import type { ViewState } from "../ui/card";
 import { StatusChip } from "../ui/status-chip";
 import { Tooltip } from "../ui/tooltip";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** Save the invoice's PDF (the API answers a base64 envelope). */
 async function savePdf(id: string, number: string): Promise<void> {
@@ -123,11 +124,7 @@ export function InvoiceTable({
           </Tooltip>
         )}
       />
-      {failed ? (
-        <p role="alert" className="text-danger-text mt-2 text-[14px]">
-          {d.pdfFailed(failed)}
-        </p>
-      ) : null}
+      <ErrorNote>{failed ? d.pdfFailed(failed) : null}</ErrorNote>
     </div>
   );
 }

@@ -4,11 +4,13 @@ import {
   claimRows,
   invoiceTotalCents,
   lineCents,
+  normalizePrice,
   outstandingUnits,
   parseCents,
   paymentsByChain,
   paymentsByMonth,
   summarize,
+  typedNumber,
   validateIssue,
   type IssueForm,
 } from "./invoice-model";
@@ -24,6 +26,29 @@ describe("parseCents", () => {
     expect(parseCents("12")).toBeNull();
     expect(parseCents("-1.00")).toBeNull();
     expect(parseCents("1e3")).toBeNull();
+  });
+});
+
+describe("prices typed in the form", () => {
+  it("accept whole numbers and one or two decimals", () => {
+    expect(lineCents("2", "10")).toBe(2000n);
+    expect(lineCents("1", "10.5")).toBe(1050n);
+    expect(lineCents("1", "10.50")).toBe(1050n);
+    expect(lineCents("3", "7")).toBe(2100n);
+  });
+  it("refuse zero, empty, signs, exponents and more than two decimals", () => {
+    for (const u of ["", "0", "0.00", "00", "-1", "1e3", "1.234", ".5", "1.", "1,5", "abc"])
+      expect(lineCents("1", u)).toBeNull();
+  });
+  it("normalise to two decimals for the API", () => {
+    expect(normalizePrice("10")).toBe("10.00");
+    expect(normalizePrice("10.5")).toBe("10.50");
+    expect(normalizePrice("10.50")).toBe("10.50");
+  });
+  it("keep only digits and one dot while typing", () => {
+    expect(typedNumber("1a0..5x", 2)).toBe("10.5");
+    expect(typedNumber("12.345", 2)).toBe("12.34");
+    expect(typedNumber("-5", 2)).toBe("5");
   });
 });
 
@@ -44,7 +69,6 @@ describe("lineCents: quantity times unit price, never rounded", () => {
       ["0", "1.00"],
       ["1", "0.00"],
       ["abc", "1.00"],
-      ["1", "1.0"],
       ["1.234", "1.00"],
     ] as const)
       expect(lineCents(q, u)).toBeNull();

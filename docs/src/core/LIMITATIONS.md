@@ -7,7 +7,16 @@ Status: **built** facts unless marked **exploring**.
 - No fiat on- or off-ramps. **built**
 - No credit decisions, lender pools, marketplace or borrowing against invoices.
   **built**
-- No custody: service accounts hold gas only; the API holds no NEAR key. **built**
+- No operator custody: service accounts hold gas only; the API holds no NEAR key. **built**
+- A payment sits in the invoice's claim account (a keyless vault under the Openrail
+  contract) and moves only as the contract's code allows, to the invoice's owner.
+  The claim account's name does not say who owns the invoice: the owner is
+  `owner_id` in the contract state, which is also the owner of the invoice's NFT.
+  The vault can only be moved by the account that created it, so claim accounts are
+  created by the contract and not under a business's own account. **built**
+- The contract can be upgraded by its root key. Until that key is removed or put
+  behind a time lock, Openrail is not trustless, and this page does not claim
+  it is. **built**
 - No legal filing or dunning; the legal layer is clause text plus document
   hashes. **built**
 - Bitcoin and Tron payments are not supported. **built**

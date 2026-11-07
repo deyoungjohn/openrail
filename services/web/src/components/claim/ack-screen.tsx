@@ -19,6 +19,7 @@ import { useNear } from "@/wallet/near";
 import { ClaimTerms } from "./claim-terms";
 import { ClaimStates } from "./claim-states";
 import { useClaim } from "./use-claim";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const CHAIN_NAMES: Record<number, string> = {
   1: "Ethereum",
@@ -117,11 +118,7 @@ function AckActions({ claim, onAcked }: { claim: Claim; onAcked: () => void }) {
           <EvmWalletView {...evm} />
         </div>
       )}
-      {error ? (
-        <p role="alert" className="text-danger-text text-[14px] leading-5">
-          {error}
-        </p>
-      ) : null}
+      <ErrorNote>{error ? error : null}</ErrorNote>
       <Button
         className="w-full sm:w-auto"
         onClick={() => void confirm()}

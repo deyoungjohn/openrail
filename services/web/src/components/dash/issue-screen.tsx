@@ -11,7 +11,14 @@ import { dashClient } from "@/lib/client";
 import { formatUsd } from "@/lib/format";
 import { formatNear, storageCreditLow } from "@/lib/near-amount";
 import { DepositControl } from "../setup/deposit-control";
-import { invoiceTotalCents, lineCents, validateIssue, type IssueForm } from "@/lib/invoice-model";
+import {
+  invoiceTotalCents,
+  lineCents,
+  normalizePrice,
+  typedNumber,
+  validateIssue,
+  type IssueForm,
+} from "@/lib/invoice-model";
 import { useStorageCredit } from "@/lib/use-storage-credit";
 import { useAsync } from "@/lib/use-async";
 import { AddressChip } from "../ui/address-chip";
@@ -22,6 +29,7 @@ import { Skeleton } from "../ui/state";
 import { Input, Select } from "../ui/input";
 import { Modal } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blankLine = { description: "", quantity: "1", unit: "" };
@@ -208,7 +216,7 @@ export function IssueScreen() {
           line_items: form.lines.map((l) => ({
             description: l.description.trim(),
             quantity: Number(l.quantity),
-            unit_amount_usd: l.unit,
+            unit_amount_usd: normalizePrice(l.unit),
           })),
         },
         { idempotencyKey: idem.current },
@@ -310,14 +318,14 @@ export function IssueScreen() {
                   label={t.quantity}
                   inputMode="decimal"
                   value={l.quantity}
-                  onChange={(e) => setLine(i, { quantity: e.target.value })}
+                  onChange={(e) => setLine(i, { quantity: typedNumber(e.target.value, 2) })}
                 />
                 <Input
                   label={t.price}
                   inputMode="decimal"
                   placeholder="0.00"
                   value={l.unit}
-                  onChange={(e) => setLine(i, { unit: e.target.value })}
+                  onChange={(e) => setLine(i, { unit: typedNumber(e.target.value, 2) })}
                   error={err(`line.${i}.amount`)}
                 />
                 <Tooltip label={t.removeLineShort} side="top">
@@ -353,16 +361,7 @@ export function IssueScreen() {
             </span>
           </p>
           <p className="caption">{t.cost}</p>
-          {shown && hasErrors ? (
-            <p role="alert" className="text-danger-text text-[14px]">
-              {t.fixErrors}
-            </p>
-          ) : null}
-          {failed ? (
-            <p role="alert" className="text-danger-text text-[14px]">
-              {t.createFailed}
-            </p>
-          ) : null}
+          <ErrorNote>{failed ? t.createFailed : shown && hasErrors ? t.fixErrors : null}</ErrorNote>
           <Button type="submit" loading={busy} className="w-full sm:w-auto">
             {busy ? t.creating : t.create}
           </Button>
@@ -374,12 +373,7 @@ export function IssueScreen() {
         </div>
       </div>
 
-      <Modal
-        open={created !== null}
-        onClose={() => setCreated(null)}
-        title={t.doneTitle}
-        variant="drawer"
-      >
+      <Modal open={created !== null} onClose={() => setCreated(null)} title={t.doneTitle}>
         {created ? <DoneSheet invoice={created} onClose={() => setCreated(null)} /> : null}
       </Modal>
     </div>

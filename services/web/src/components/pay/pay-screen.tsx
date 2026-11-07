@@ -36,6 +36,7 @@ import { EvmWalletView } from "../wallet-buttons";
 import { QrPanel } from "../ui/qr-panel";
 import { EmptyState, ErrorState } from "../ui/state";
 import { Timeline } from "../ui/timeline";
+import { ErrorNote } from "@/components/ui/error-note";
 
 type Session = PaySession;
 
@@ -174,11 +175,7 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
           {p.walletSent} {sent}
         </p>
       ) : null}
-      {problem ? (
-        <p className="text-danger-text text-[14px]" role="alert">
-          {problem}
-        </p>
-      ) : null}
+      <ErrorNote>{problem ? problem : null}</ErrorNote>
     </div>
   );
 }

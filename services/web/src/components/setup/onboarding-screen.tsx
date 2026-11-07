@@ -19,6 +19,7 @@ import { Input } from "../ui/input";
 import { ErrorState, Skeleton } from "../ui/state";
 import { AccountId } from "../ui/account-id";
 import { StorageCreditCard } from "./storage-credit-card";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -64,11 +65,7 @@ function ProfileForm({ business, onSaved }: { business: Business | null; onSaved
         onChange={(e) => setEmail(e.target.value)}
         error={shown && emailBad ? t.badEmail : undefined}
       />
-      {state === "failed" ? (
-        <p role="alert" className="text-danger-text text-[14px]">
-          {t.saveFailed}
-        </p>
-      ) : null}
+      <ErrorNote>{state === "failed" ? t.saveFailed : null}</ErrorNote>
       <Button type="submit" loading={state === "saving"}>
         {t.saveProfile}
       </Button>
@@ -109,11 +106,7 @@ function PayoutForm({ initial, onSaved }: { initial: string; onSaved: () => void
         onChange={(e) => setValue(e.target.value.trim())}
         error={shown && bad ? t.badAccount : undefined}
       />
-      {state === "failed" ? (
-        <p role="alert" className="text-danger-text text-[14px]">
-          {t.saveFailed}
-        </p>
-      ) : null}
+      <ErrorNote>{state === "failed" ? t.saveFailed : null}</ErrorNote>
       <Button type="submit" loading={state === "saving"}>
         {t.savePayout}
       </Button>

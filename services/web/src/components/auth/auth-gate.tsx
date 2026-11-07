@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { ErrorState } from "../ui/state";
 import { useAuth } from "./auth-provider";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** Dashboard content only renders for a signed-in business. */
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -25,14 +26,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <h1 className="text-[24px] leading-8 font-bold">{copy.auth.title}</h1>
         <p className="text-[15px]">{copy.auth.body}</p>
         {state.failed ? (
-          <p role="alert" className="text-danger-text text-[14px]">
+          <ErrorNote>
             {state.detail ? `${copy.auth.walletSaid}: ${state.detail}. ` : ""}
             {state.failed === "unsupported"
               ? copy.auth.unsupported
               : state.failed === "timeout"
                 ? copy.auth.timeout
                 : copy.auth.failed}
-          </p>
+          </ErrorNote>
         ) : null}
         {busy && hint ? <p className="caption">{hint}</p> : null}
         <div className="flex items-center gap-3">

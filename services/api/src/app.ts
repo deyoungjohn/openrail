@@ -34,6 +34,7 @@ import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
 import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
 import { UnsafeWebhookUrl, validateWebhookUrl } from "./webhook-url.js";
+import { ackLink, businessSlug, payLink, refOf } from "./links.js";
 
 export interface ApiConfig {
   rootAccount: string;
@@ -413,7 +414,8 @@ export class ApiApp {
   }
 
   private invoiceBy(idOrToken: string): InvoiceRecord {
-    const invoice = this.store.getInvoice(idOrToken);
+    // A public link carries the invoice id without its `inv_` prefix.
+    const invoice = this.store.getInvoice(idOrToken) ?? this.store.getInvoice(`inv_${idOrToken}`);
     if (invoice === undefined) throw new ApiError(404, "invoice_not_found");
     return invoice;
   }
@@ -1350,6 +1352,10 @@ export class ApiApp {
         throw new ApiError(400, "invalid_request", `${field} required`);
     }
     const business = this.business(accountId);
+    // The invoice's own random id is chosen first: its reference is in the pay link, which the terms hash binds.
+    const invoiceId = id("inv");
+    const slug = businessSlug(body.issuer_legal_name as string, accountId);
+    const ref = refOf(invoiceId);
     // The terms hash binds the claim account, which is only known from the id the issuer predicts. Concurrent
     // requests would predict the same id, so they go one at a time; a prediction that turns out wrong (an
     // earlier mint failed after taking its id) is retried once with the corrected count.
@@ -1388,7 +1394,7 @@ export class ApiApp {
           due_date: dateToUtc(body.due_date as string),
           line_items_sha256: body.line_items_sha256 ?? stableLineItems(body.line_items ?? []),
           claim_account: prepared.claimAccount,
-          pay_link: body.pay_link ?? `${this.deps.config.payBaseUrl}/c/${prepared.tokenId}`,
+          pay_link: body.pay_link ?? payLink(this.deps.config.payBaseUrl, slug, ref),
           assignment_agreement_sha256: body.assignment_agreement_sha256,
           clauses: [...CORE_CLAUSES, ...(body.clauses ?? [])],
         });
@@ -1419,7 +1425,7 @@ export class ApiApp {
     );
     const { prepared, hash, debtor, terms, amountDue } = await run;
     const invoice: InvoiceRecord = {
-      id: id("inv"),
+      id: invoiceId,
       token_id: prepared.tokenId,
       claim_account: prepared.claimAccount,
       status: "Issued",
@@ -1436,7 +1442,7 @@ export class ApiApp {
       issuer_legal_name: terms.issuer_legal_name,
       debtor_legal_name: terms.debtor_legal_name,
       pay_link: terms.pay_link,
-      ack_url: `${this.deps.config.payBaseUrl}/ack/${prepared.tokenId}`,
+      ack_url: ackLink(this.deps.config.payBaseUrl, slug, ref),
       created_at: nowIso(this.clock),
       created_block: 0,
       terms,
