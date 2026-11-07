@@ -463,6 +463,7 @@ export interface WebhookTestResult {
 
 export interface Business {
   account_id: string;
+  username: string | null;
   legal_name: string;
   payout_account: string;
   contact_email: string;
@@ -471,6 +472,7 @@ export interface Business {
 }
 
 export interface UpdateBusinessRequest {
+  username?: string;
   legal_name?: string;
   payout_account?: string;
   contact_email?: string;
@@ -701,6 +703,11 @@ export interface Analytics {
 
 export interface PaySessionList {
   data: PaySession[];
+}
+
+export interface UsernameAvailability {
+  available: boolean;
+  reason: string;
 }
 
 export interface operations {
@@ -1039,6 +1046,8 @@ export interface operations {
       "200": Business;
       "400": Error;
       "401": Error;
+      "409": Error;
+      "429": Error;
     };
   };
   getStorageCredit: {
@@ -1232,6 +1241,18 @@ export interface operations {
       "400": Error;
       "401": Error;
       "404": Error;
+    };
+  };
+  checkBusinessUsername: {
+    parameters: {
+      query: {
+        u: string;
+      };
+    };
+    responses: {
+      "200": UsernameAvailability;
+      "400": Error;
+      "401": Error;
     };
   };
 }

@@ -1972,6 +1972,7 @@
         "type": "object",
         "required": [
           "account_id",
+          "username",
           "legal_name",
           "payout_account",
           "contact_email",
@@ -1982,8 +1983,13 @@
           "account_id": {
             "type": "string"
           },
+          "username": {
+            "type": ["string", "null"],
+            "description": "Unique lowercase handle used in invoice links."
+          },
           "legal_name": {
-            "type": "string"
+            "type": "string",
+            "description": "Free-text display name."
           },
           "payout_account": {
             "type": "string"
@@ -2005,6 +2011,12 @@
       "UpdateBusinessRequest": {
         "type": "object",
         "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 32,
+            "description": "Unique lowercase handle. A dot is allowed only for the caller own NEAR account id."
+          },
           "legal_name": {
             "type": "string"
           },
@@ -2873,6 +2885,19 @@
             "items": {
               "$ref": "#/components/schemas/PaySession"
             }
+          }
+        }
+      },
+      "UsernameAvailability": {
+        "type": "object",
+        "required": ["available", "reason"],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "description": "available, invalid, reserved or taken."
           }
         }
       }
@@ -4575,7 +4600,7 @@
       },
       "put": {
         "operationId": "updateBusiness",
-        "summary": "Update legal name, payout account or contact",
+        "summary": "Update username, legal name, payout account or contact",
         "tags": ["Business"],
         "security": [
           {
@@ -4618,6 +4643,26 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The username is already taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The username was changed less than 30 days ago.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5644,6 +5689,64 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/business/username_available": {
+      "get": {
+        "operationId": "checkBusinessUsername",
+        "summary": "Check whether a business username is available",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "u",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Candidate username."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Availability and the reason. Your own current name is always available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsernameAvailability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
             "content": {
               "application/json": {
                 "schema": {

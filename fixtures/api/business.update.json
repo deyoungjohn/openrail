@@ -1,5 +1,6 @@
 {
   "account_id": "acme.openrail.near",
+  "username": "acme",
   "legal_name": "Acme Studios Ltd",
   "payout_account": "acme.payout.near",
   "contact_email": "billing@example.com",
