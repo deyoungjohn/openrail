@@ -13,7 +13,8 @@ test.describe("signed-in journey on the mock API", () => {
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
     await expect(page.getByText("acme.openrail.near").first()).toBeVisible();
 
-    // The fixture invoice is on the dashboard and opens its detail page.
+    // The fixture invoice is in the invoices list and opens its detail page.
+    await page.goto("/app/invoices");
     await page.getByRole("link", { name: "INV-2026-001" }).first().click();
     await expect(page.locator('[data-counter="amount_due"]')).toBeVisible();
     await expect(page.getByRole("heading", { name: "Money" })).toBeVisible();
