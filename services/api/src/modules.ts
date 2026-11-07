@@ -43,6 +43,16 @@ export interface ApiModule {
   route?(request: ApiRequest, context: ApiModuleContext): Promise<ApiResponse | undefined>;
   /** Extra events derived from an indexed event (for example a module-specific event type). */
   events?(event: IndexedEvent, context: ApiModuleContext): IndexedEvent[];
+  /**
+   * Asked before a pay quote is requested for a claim. A module that owns the claim may refuse it
+   * (throw `ApiError`) or cap the quote deadline: `notAfter` is a unix time in seconds, and the
+   * quote's deadline never goes past it. Returns undefined for claims it does not own.
+   */
+  quoteWindow?(tokenId: string, context: ApiModuleContext): Promise<QuoteWindow | undefined>;
+}
+
+export interface QuoteWindow {
+  notAfter: number;
 }
 
 /** Picks the `apiModule` export of each enabled module that has one. */
