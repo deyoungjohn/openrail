@@ -49,6 +49,8 @@ export interface DataTableProps<T> {
   variant?: "panel" | "minimal";
   density?: "compact" | "default" | "relaxed";
   toolbar?: ReactNode;
+  /** A control that sits on the first row, just before the search box (a select, for example). */
+  leading?: ReactNode;
   searchable?: boolean;
   searchText?: (row: T) => string;
   filters?: readonly DataTableFilter<T>[];
@@ -89,6 +91,7 @@ export function DataTable<T>({
   variant = "panel",
   density = "default",
   toolbar,
+  leading,
   searchable,
   searchText,
   filters = [],
@@ -158,7 +161,7 @@ export function DataTable<T>({
   const hasActions = Boolean(rowActions);
   const shell =
     variant === "panel" ? "surface-card overflow-hidden" : "overflow-hidden border-y border-border";
-  const showBar = Boolean(title) || searchable || filters.length > 0 || toolbar;
+  const showBar = Boolean(title) || searchable || filters.length > 0 || toolbar || leading;
 
   return (
     <section className={cn(shell, className)} aria-label={title}>
@@ -169,6 +172,7 @@ export function DataTable<T>({
               (time pills, date picker) on the second, every row pushed to the right edge. */}
           <div className="flex min-w-0 flex-1 basis-[28rem] flex-col items-end gap-2">
             <div className="flex flex-wrap items-center justify-end gap-3">
+              {leading}
               {filters.map((f) => (
                 <div
                   key={f.id}

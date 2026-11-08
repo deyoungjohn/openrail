@@ -3,7 +3,7 @@
 // reads the balance there, straight from the chain.
 
 const RPC_URLS = (
-  process.env.NEXT_PUBLIC_NEAR_RPC_URLS ??
+  process.env.NEXT_PUBLIC_NEAR_RPC_URL ??
   "https://free.rpc.fastnear.com,https://rpc.mainnet.near.org"
 )
   .split(",")

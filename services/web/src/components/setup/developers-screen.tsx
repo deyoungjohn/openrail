@@ -668,16 +668,6 @@ function EventsPanel() {
       errorBody={t.sectionError}
       onRetry={reload}
     >
-      <div className="mb-4 max-w-xs">
-        <Select label={t.eventType} value={type} onValueChange={setType}>
-          <option value="">{t.allEvents}</option>
-          {EVENT_TYPES.map((ev) => (
-            <option key={ev} value={ev}>
-              {ev}
-            </option>
-          ))}
-        </Select>
-      </div>
       <DataTable
         data={rows}
         columns={columns}
@@ -686,6 +676,18 @@ function EventsPanel() {
         caption={t.eventsTitle}
         variant="minimal"
         fixed
+        leading={
+          <div className="w-56">
+            <Select label={t.eventType} value={type} onValueChange={setType}>
+              <option value="">{t.allEvents}</option>
+              {EVENT_TYPES.map((ev) => (
+                <option key={ev} value={ev}>
+                  {ev}
+                </option>
+              ))}
+            </Select>
+          </div>
+        }
         defaultSort={{ id: "time", dir: "desc" }}
         pageSize={10}
         searchable
