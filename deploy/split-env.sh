@@ -13,6 +13,16 @@ cd "$(dirname "$0")/.."
 src="${1:?usage: split-env.sh <openrail.env> [out_dir]}"
 out="${2:-/etc/openrail}"
 services=(api issuer watcher indexer web)
+# Include module/service templates added by a private build without naming them in core code.
+for template in deploy/env/*.env.example; do
+  svc="$(basename "$template" .env.example)"
+  [[ "$svc" == "openrail" ]] && continue
+  skip=0
+  for existing in "${services[@]}"; do
+    [[ "$existing" == "$svc" ]] && skip=1
+  done
+  ((skip == 0)) && services+=("$svc")
+done
 
 [[ -f "$src" ]] || { echo "NOT_FOUND: $src" >&2; exit 1; }
 perm="$(stat -c %a "$src")"

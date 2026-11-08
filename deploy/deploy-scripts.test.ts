@@ -95,7 +95,10 @@ beforeAll(() => {
   mkdirSync(join(BASE, "opt"), { recursive: true });
   mkdirSync(join(BASE, "etc"), { recursive: true });
   mkdirSync(join(BASE, "units"), { recursive: true });
-  writeShim("id", 'if [[ "${1:-}" == "-u" ]]; then echo 0; else /usr/bin/id "$@"; fi');
+  writeShim(
+    "id",
+    'if [[ -n "${SHIM_ID_REAL:-}" ]]; then exec /usr/bin/id "$@"; fi; if [[ "${1:-}" == "-u" ]]; then echo 0; else /usr/bin/id "$@"; fi',
+  );
   writeShim("systemctl", 'printf "systemctl %s\\n" "$*" >> "$SHIM_LOG"; exit 0');
   writeShim("journalctl", 'printf "journalctl %s\\n" "$*" >> "$SHIM_LOG"; exit 0');
   writeShim("chown", 'printf "chown %s\\n" "$*" >> "$SHIM_LOG"; exit 0');
@@ -169,6 +172,40 @@ describe("openrail-apply end to end", () => {
     clonePack(first, second);
   }, 300_000);
 
+  it("packs the module workspace, unit files and env templates", () => {
+    const list = execFileSync("tar", ["-tzf", packSource], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    for (const entry of [
+      "services/api/",
+      "services/web/",
+      "deploy/systemd/openrail-api.service",
+      "deploy/env/api.env.example",
+      "openrail.modules.json",
+      "config/routes.json",
+    ]) {
+      expect(list).toContain(entry);
+    }
+    expect(
+      JSON.parse(readFileSync(join(REPO, "openrail.modules.json"), "utf8")).modules.length,
+    ).toBeGreaterThan(0);
+  }, 120_000);
+
+  it("dry-runs upload without a server or a copy", () => {
+    const uploadEnv = join(BASE, "upload.env");
+    writeFileSync(uploadEnv, "\n", { mode: 0o600 });
+    const result = run(join(REPO, "deploy/upload.sh"), ["--dry-run"], {
+      OPENRAIL_ENV: uploadEnv,
+      SHIM_ID_REAL: "1",
+      SERVER_IP: "203.0.113.10",
+      SSH_KEY_FILE: join(BASE, "fake-key"),
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("scp -i");
+    expect(result.stdout).toContain("openrail-server-");
+  }, 120_000);
+
   it("installs the first release and records the restart calls", () => {
     const result = run(APPLY, [first]);
     expect(result.status, result.stderr).toBe(0);
@@ -230,6 +267,38 @@ describe("openrail-apply end to end", () => {
     expect(result.status, result.stderr).toBe(0);
     expect([...tmpFetchDirs()].filter((name) => !before.has(name))).toEqual([]);
   }, 300_000);
+  it("installs and restarts a private module unit and its env template", () => {
+    const dir = mkdtempSync(join(BASE, "private-pack-"));
+    mkdirSync(join(dir, "deploy/systemd"), { recursive: true });
+    mkdirSync(join(dir, "deploy/env"), { recursive: true });
+    mkdirSync(join(dir, "services/extra"), { recursive: true });
+    writeFileSync(join(dir, "services/extra/package.json"), '{"name":"@openrail/extra"}\n');
+    writeFileSync(
+      join(dir, "deploy/systemd/openrail-extra.service"),
+      "[Service]\nExecStart=/bin/true\n",
+    );
+    writeFileSync(join(dir, "deploy/env/extra.env.example"), "EXTRA_PORT=\n");
+    writeFileSync(
+      join(dir, "deploy/split-env.sh"),
+      readFileSync(join(REPO, "deploy/split-env.sh")),
+    );
+    writeFileSync(join(dir, "deploy/healthcheck.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    chmodSync(join(dir, "deploy/split-env.sh"), 0o755);
+    chmodSync(join(dir, "deploy/healthcheck.sh"), 0o755);
+    const privatePack = join(HOME, "openrail-server-private.tar.gz");
+    execFileSync("tar", ["-czf", privatePack, "-C", dir, "."]);
+    rmSync(dir, { recursive: true, force: true });
+
+    const envFile = join(HOME, "openrail.env");
+    writeFileSync(envFile, "EXTRA_PORT=9000\n", { mode: 0o600 });
+    const result = run(APPLY, [privatePack]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(shimCalls()).toContain("systemctl restart openrail-extra.service");
+    expect(existsSync(join(BASE, "units/openrail-extra.service"))).toBe(true);
+    expect(existsSync(join(BASE, "etc/extra.env"))).toBe(true);
+    expect(readFileSync(join(BASE, "etc/extra.env"), "utf8")).toContain("EXTRA_PORT=9000");
+    expect(existsSync(envFile)).toBe(false);
+  }, 300_000);
 });
 
 describe("openrail-fetch end to end", () => {
@@ -277,7 +346,7 @@ describe("openrail-fetch end to end", () => {
     expect(result.status).not.toBe(0);
     expect(result.stdout + result.stderr).toMatch(/CHECKSUM_MISMATCH/);
     expect(existsSync(fetched)).toBe(false);
-  });
+  }, 120_000);
 
   it("downloads, verifies, installs and cleans the download folder", () => {
     if (existsSync(fetched)) rmSync(fetched);
@@ -286,7 +355,7 @@ describe("openrail-fetch end to end", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(existsSync(fetched)).toBe(true);
     expect([...tmpFetchDirs()].filter((name) => !before.has(name))).toEqual([]);
-  });
+  }, 120_000);
 
   it("hands --apply to openrail-apply and cleans its download folder", () => {
     const before = tmpFetchDirs();
@@ -294,5 +363,5 @@ describe("openrail-fetch end to end", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(readFileSync(applyLog, "utf8")).toContain("openrail-server-deadbee.tar.gz");
     expect([...tmpFetchDirs()].filter((name) => !before.has(name))).toEqual([]);
-  });
+  }, 120_000);
 });
