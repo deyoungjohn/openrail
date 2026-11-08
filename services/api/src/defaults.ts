@@ -168,6 +168,14 @@ export function createContractPort(rootAccount: string): ContractPort {
         args: args as Record<string, unknown>,
         feature: "api.module_view",
       });
+    async settleHeld(tokenId) {
+      const held = await near.view<Record<string, unknown>[]>({
+        contractId: rootAccount,
+        methodName: "settle_held",
+        args: { token_id: tokenId },
+        feature: "api.settle_held",
+      });
+      return Array.isArray(held) ? held : [];
     },
     async sponsorStatus(accountId) {
       const status = await near.view<{ pool?: unknown; cap?: unknown; used?: unknown }>({

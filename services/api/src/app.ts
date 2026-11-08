@@ -67,6 +67,8 @@ export interface ApiConfig {
 }
 
 export interface ContractPort {
+  /** Module support: held settle entries for one token. */
+  settleHeld?(tokenId: string): Promise<Record<string, unknown>[]>;
   claim(tokenId: string): Promise<Record<string, unknown> & { kind: number }>;
   /** Generic read-only view for enabled modules; core never names their methods. */
   view?(methodName: string, args: object): Promise<unknown>;
@@ -1605,6 +1607,7 @@ export class ApiApp {
   get moduleContext(): ApiModuleContext {
     return {
       config: this.deps.config,
+      contract: this.deps.contract,
       store: this.store,
       docs: this.docs,
       issuer: this.deps.issuer,
