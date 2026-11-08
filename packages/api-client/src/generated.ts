@@ -776,6 +776,10 @@ export interface LineItemInput {
   unit_amount_usd: string;
 }
 
+export interface WebhookEventTypes {
+  types: string[];
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -1354,6 +1358,12 @@ export interface operations {
     responses: {
       "200": PayoutEstimate;
       "400": Error;
+      "401": Error;
+    };
+  };
+  listWebhookEventTypes: {
+    responses: {
+      "200": WebhookEventTypes;
       "401": Error;
     };
   };

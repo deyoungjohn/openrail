@@ -30,10 +30,14 @@ export interface ApiModuleContext {
   requireAuth(request: ApiRequest, allowPublishable?: boolean): AuthContext;
   requireScope(context: AuthContext, scope: string): void;
   withIdempotency(request: ApiRequest, run: () => Promise<ApiResponse>): Promise<ApiResponse>;
+  /** Read-only contract view; the module supplies its own method name and arguments. */
+  view(contractMethod: string, args: object): Promise<unknown>;
 }
 
 export interface ApiModule {
   readonly id: string;
+  /** Event types this module can deliver to a webhook. Core has none. */
+  readonly eventTypes?: string[];
   /** Returns a response for routes it owns, or undefined to pass. Throw `ApiError` for errors. */
   route?(request: ApiRequest, context: ApiModuleContext): Promise<ApiResponse | undefined>;
   /** Extra events derived from an indexed event (for example a module-specific event type). */

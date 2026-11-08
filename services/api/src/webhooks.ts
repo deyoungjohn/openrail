@@ -31,6 +31,18 @@ export class WebhookNotIndexed extends Error {
   }
 }
 
+/** Event types the core itself delivers; enabled modules add their own. */
+export const CORE_WEBHOOK_EVENT_TYPES = [
+  "invoice.created",
+  "invoice.accepted",
+  "invoice.partially_paid",
+  "invoice.paid",
+  "payment.late",
+  "payout.failed",
+  "invoice.closed",
+  "storage_sponsored",
+] as const;
+
 /** `Openrail-Signature: t=<unix>,v1=<hex hmac-sha256(secret, t + "." + body)>` */
 export function signWebhook(secret: string, timestamp: number, body: string): string {
   return `t=${timestamp},v1=${hmacSha256Hex(secret, `${timestamp}.${body}`)}`;

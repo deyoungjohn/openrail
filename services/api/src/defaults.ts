@@ -160,6 +160,14 @@ export function createContractPort(rootAccount: string): ContractPort {
       if (claim === null) throw new ApiError(404, "claim_not_found");
       return claim as Record<string, unknown> & { kind: number };
     },
+    async view(methodName, args) {
+      return near.view<unknown>({
+        contractId: rootAccount,
+        methodName,
+        args: args as Record<string, unknown>,
+        feature: "api.module_view",
+      });
+    },
     async sponsorStatus(accountId) {
       const status = await near.view<{ pool?: unknown; cap?: unknown; used?: unknown }>({
         contractId: rootAccount,

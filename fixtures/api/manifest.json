@@ -400,6 +400,14 @@
       "status": 200,
       "schema": "PayoutEstimate",
       "mock": true
+    },
+    {
+      "file": "webhook_event_types.json",
+      "method": "GET",
+      "path": "/v1/webhook_event_types",
+      "status": 200,
+      "schema": "WebhookEventTypes",
+      "mock": true
     }
   ]
 }

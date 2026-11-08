@@ -33,7 +33,11 @@ import {
 } from "./modules.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
-import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
+import {
+  CORE_WEBHOOK_EVENT_TYPES,
+  deliverTestWebhook,
+  type WebhookEndpointRecord,
+} from "./webhooks.js";
 import { UnsafeWebhookUrl, validateWebhookUrl } from "./webhook-url.js";
 import {
   feePreview,
@@ -64,6 +68,8 @@ export interface ApiConfig {
 
 export interface ContractPort {
   claim(tokenId: string): Promise<Record<string, unknown> & { kind: number }>;
+  /** Generic read-only view for enabled modules; core never names their methods. */
+  view?(methodName: string, args: object): Promise<unknown>;
   storageCredit(accountId: string): Promise<{ balance: string; amount: string }>;
   sponsorStatus?(accountId: string): Promise<{ pool: string; cap: number; used: number }>;
 }
@@ -911,6 +917,14 @@ export class ApiApp {
         body: usernameAvailability(candidate, context.accountId, taken),
       };
     }
+    if (path === "/v1/webhook_event_types" && method === "GET") {
+      this.requireAuth(request);
+      const types = [
+        ...CORE_WEBHOOK_EVENT_TYPES,
+        ...this.modules.flatMap((module) => module.eventTypes ?? []),
+      ];
+      return { status: 200, body: { types: [...new Set(types)].sort() } };
+    }
     if (path === "/v1/payout/estimate" && method === "GET") {
       this.requireAuth(request);
       if (this.deps.payoutEstimator === undefined)
@@ -1555,6 +1569,11 @@ export class ApiApp {
       requireAuth: (request, allowPublishable) => this.requireAuth(request, allowPublishable),
       requireScope: (context, scope) => this.requireScope(context, scope),
       withIdempotency: (request, run) => this.withIdempotency(request, run),
+      view: async (methodName, args) => {
+        if (this.deps.contract.view === undefined)
+          throw new ApiError(503, "contract_view_unavailable");
+        return this.deps.contract.view(methodName, args);
+      },
     };
   }
 
