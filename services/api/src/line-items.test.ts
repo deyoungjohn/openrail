@@ -34,6 +34,21 @@ describe("line items and fee mode", () => {
     }
   });
 
+  it("accepts fractional quantities that come to whole cents", () => {
+    const [item] = normalizeLineItems([
+      { description: "Hours", quantity: 1.5, unit_amount_usd: "100.00" },
+    ]);
+    expect(item).toEqual({
+      description: "Hours",
+      quantity: 1.5,
+      unit_amount_usd: "100.00",
+      amount_usd: "150.00",
+    });
+    expect(() =>
+      normalizeLineItems([{ description: "Odd", quantity: 1.5, unit_amount_usd: "0.01" }]),
+    ).toThrow("whole number of cents");
+  });
+
   it("appends a real fee line item only in pass_to_customer", () => {
     const base = normalizeLineItems([
       { description: "Work", quantity: 2, unit_amount_usd: "50.00" },

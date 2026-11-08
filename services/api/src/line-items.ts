@@ -29,16 +29,23 @@ export function normalizeLineItems(input: unknown): LineItem[] {
     const row = entry as { description?: unknown; quantity?: unknown; unit_amount_usd?: unknown };
     if (typeof row.description !== "string" || row.description.trim() === "")
       throw new Error("line item description required");
-    if (!Number.isSafeInteger(row.quantity) || (row.quantity as number) <= 0)
-      throw new Error("line item quantity must be a positive integer");
+    const quantity = row.quantity as number;
+    if (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0)
+      throw new Error("line item quantity must be a positive number");
+    const quantityHundredths = Math.round(quantity * 100);
+    if (Math.abs(quantity * 100 - quantityHundredths) > 1e-6)
+      throw new Error("line item quantity must have at most two decimals");
     if (typeof row.unit_amount_usd !== "string")
       throw new Error("line item unit_amount_usd required");
     const unitCents = centsOf(row.unit_amount_usd);
+    const totalHundredths = unitCents * BigInt(quantityHundredths);
+    if (totalHundredths % 100n !== 0n)
+      throw new Error("line item amount must be a whole number of cents");
     return {
       description: row.description,
-      quantity: row.quantity as number,
+      quantity,
       unit_amount_usd: usdOf(unitCents),
-      amount_usd: usdOf(unitCents * BigInt(row.quantity as number)),
+      amount_usd: usdOf(totalHundredths / 100n),
     };
   });
 }
