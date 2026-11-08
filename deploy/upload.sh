@@ -14,7 +14,7 @@ load_openrail_env SERVER_IP SSH_KEY_FILE
 env_file="${OPENRAIL_ENV:-$HOME/.openrail/openrail.env}"
 files=()
 if [[ "${1:-}" != "--env-only" ]]; then
-  pack="$(ls -t dist/openrail-server-*.tar.gz 2>/dev/null | head -1 || true)"
+  pack="$(find dist -maxdepth 1 -name 'openrail-server-*.tar.gz' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
   [[ -n "$pack" ]] || { echo "NO_PACK: run deploy/build.sh first" >&2; exit 1; }
   files+=("$pack")
 fi
