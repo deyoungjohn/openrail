@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { ApiApp, ApiError, type ApiDeps } from "../../app.js";
+import { ApiApp, ApiError, type ApiDeps, type BusinessRecord } from "../../app.js";
 import { AuthStore } from "../../auth.js";
 import { expandEvents } from "../../modules.js";
 import type { IndexedEvent } from "../../webhooks.js";
@@ -10,6 +10,7 @@ import type {
   LoggedQuote,
   RefundQuotePort,
 } from "./checkouts.js";
+import { computeFeeBreakdown } from "./checkouts.js";
 import type { CheckoutPort } from "./checkout-port.js";
 import { createCheckoutApiModule } from "./index.js";
 
@@ -1120,5 +1121,211 @@ describe("checkout API: late payments never sign for the merchant", () => {
     const refund2 = await post(h, c3, "refund_quote");
     expect(refund2.status).toBe(200);
     expect(refund2.body.action.args.amount_in).toBe("997500");
+  });
+
+  describe("fee mode", () => {
+    it("checkout_fee_mode_table_rounding_up", () => {
+      const cases = [
+        { subtotal: "12.00", fee: "0.03", total: "12.03" },
+        { subtotal: "0.01", fee: "0.01", total: "0.02" },
+        { subtotal: "1000.00", fee: "2.50", total: "1002.50" },
+        { subtotal: "33.33", fee: "0.09", total: "33.42" },
+        { subtotal: "4.00", fee: "0.01", total: "4.01" }, // exact landing on a cent
+      ];
+      for (const c of cases) {
+        const breakdown = computeFeeBreakdown(c.subtotal, "pass_to_customer");
+        expect(breakdown.feeUsd).toBe(c.fee);
+        expect(breakdown.totalUsd).toBe(c.total);
+
+        // Arithmetic in USDC units: contract takes payment * 25 / 10000 truncated.
+        // Merchant net must be within 1 cent (10,000 units of 1e6) of subtotal.
+        const paymentUnits = BigInt(Math.round(Number(c.total) * 1_000_000));
+        const contractFeeUnits = (paymentUnits * 25n) / 10000n;
+        const merchantNetUnits = paymentUnits - contractFeeUnits;
+        const subtotalUnits = BigInt(Math.round(Number(c.subtotal) * 1_000_000));
+        const diff = Number(merchantNetUnits - subtotalUnits);
+        expect(Math.abs(diff)).toBeLessThanOrEqual(10_000); // within 1 cent
+      }
+
+      // absorb mode returns 0.00 fee and unchanged total
+      const absorb = computeFeeBreakdown("12.00", "absorb");
+      expect(absorb.feeUsd).toBe("0.00");
+      expect(absorb.totalUsd).toBe("12.00");
+    });
+
+    it("checkout_creates_with_fee_mode_pass_to_customer", async () => {
+      const h = harness();
+      const res = await call(
+        h,
+        "POST",
+        "/v1/checkouts",
+        {
+          order_ref: "ORD-FEE-PASS",
+          amount_usd: "12.00",
+          fee_mode: "pass_to_customer",
+        },
+        h.keys.acme,
+        { "idempotency-key": "idem-fee-pass" },
+      );
+
+      expect(res.status).toBe(201);
+      expect(res.body.subtotal_usd).toBe("12.00");
+      expect(res.body.fee_usd).toBe("0.03");
+      expect(res.body.total_usd).toBe("12.03");
+      expect(res.body.amount_usd).toBe("12.03");
+      expect(res.body.fee_mode).toBe("pass_to_customer");
+      // On-chain claim amount is total_usd ($12.03)
+      expect(res.body.amount_due).toBe("12030000");
+
+      // GET /v1/checkouts/:id returns the breakdown
+      const get = await call(h, "GET", `/v1/checkouts/${res.body.id}`, undefined, h.keys.acme);
+      expect(get.status).toBe(200);
+      expect(get.body.subtotal_usd).toBe("12.00");
+      expect(get.body.fee_usd).toBe("0.03");
+      expect(get.body.total_usd).toBe("12.03");
+      expect(get.body.fee_mode).toBe("pass_to_customer");
+
+      // GET /v1/public/checkouts/:id returns the breakdown
+      const pub = await call(h, "GET", `/v1/public/checkouts/${res.body.id}`);
+      expect(pub.status).toBe(200);
+      expect(pub.body.subtotal_usd).toBe("12.00");
+      expect(pub.body.fee_usd).toBe("0.03");
+      expect(pub.body.total_usd).toBe("12.03");
+      expect(pub.body.fee_mode).toBe("pass_to_customer");
+    });
+
+    it("checkout_creates_with_fee_mode_absorb", async () => {
+      const h = harness();
+      const res = await call(
+        h,
+        "POST",
+        "/v1/checkouts",
+        {
+          order_ref: "ORD-FEE-ABSORB",
+          amount_usd: "12.00",
+          fee_mode: "absorb",
+        },
+        h.keys.acme,
+        { "idempotency-key": "idem-fee-absorb" },
+      );
+
+      expect(res.status).toBe(201);
+      expect(res.body.subtotal_usd).toBe("12.00");
+      expect(res.body.fee_usd).toBe("0.00");
+      expect(res.body.total_usd).toBe("12.00");
+      expect(res.body.amount_usd).toBe("12.00");
+      expect(res.body.fee_mode).toBe("absorb");
+      expect(res.body.amount_due).toBe("12000000");
+    });
+
+    it("checkout_fee_mode_defaults_to_business_setting", async () => {
+      const h = harness();
+      // Set business setting to pass_to_customer
+      h.context().store.saveBusiness({
+        account_id: ACME,
+        legal_name: "Acme",
+        payout_account: ACME,
+        contact_email: "a@example.com",
+        created_at: NOW.toISOString(),
+        updated_at: NOW.toISOString(),
+        fee_mode: "pass_to_customer",
+      } as unknown as BusinessRecord);
+
+      const res = await call(
+        h,
+        "POST",
+        "/v1/checkouts",
+        {
+          order_ref: "ORD-FEE-BIZ",
+          amount_usd: "12.00",
+        },
+        h.keys.acme,
+        { "idempotency-key": "idem-fee-biz" },
+      );
+
+      expect(res.status).toBe(201);
+      expect(res.body.fee_mode).toBe("pass_to_customer");
+      expect(res.body.total_usd).toBe("12.03");
+    });
+
+    it("checkout_invalid_fee_mode_rejected", async () => {
+      const h = harness();
+      const res = await call(
+        h,
+        "POST",
+        "/v1/checkouts",
+        {
+          order_ref: "ORD-FEE-ERR",
+          amount_usd: "12.00",
+          fee_mode: "invalid_mode",
+        },
+        h.keys.acme,
+        { "idempotency-key": "idem-fee-err" },
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("invalid_fee_mode");
+    });
+
+    it("checkout_idempotency_different_fee_mode_conflicts", async () => {
+      const h = harness();
+      const key = "idem-fee-conflict-1";
+      const res1 = await call(
+        h,
+        "POST",
+        "/v1/checkouts",
+        { order_ref: "ORD-IDEM-FEE", amount_usd: "12.00", fee_mode: "absorb" },
+        h.keys.acme,
+        { "idempotency-key": key },
+      );
+      expect(res1.status).toBe(201);
+
+      // Reusing key with different fee_mode produces 409 idempotency conflict
+      const res2 = await call(
+        h,
+        "POST",
+        "/v1/checkouts",
+        { order_ref: "ORD-IDEM-FEE", amount_usd: "12.00", fee_mode: "pass_to_customer" },
+        h.keys.acme,
+        { "idempotency-key": key },
+      );
+      expect(res2.status).toBe(409);
+    });
+
+    it("checkout_events_carry_fee_breakdown", async () => {
+      const h = harness();
+      const res = await call(
+        h,
+        "POST",
+        "/v1/checkouts",
+        {
+          order_ref: "ORD-FEE-EVT",
+          amount_usd: "12.00",
+          fee_mode: "pass_to_customer",
+        },
+        h.keys.acme,
+        { "idempotency-key": "idem-fee-evt" },
+      );
+
+      const tokenId = res.body.id;
+      const rawEvent: IndexedEvent = {
+        id: "evt-fee-1",
+        type: "checkout_paid",
+        created: Math.floor(NOW.getTime() / 1000),
+        indexed: true,
+        data: {
+          token_id: tokenId,
+          order_ref: "ORD-FEE-EVT",
+          booking_seq: 1,
+        },
+      };
+      const notices = h.module.events!(rawEvent, h.context());
+      expect(notices).toHaveLength(1);
+      const data = notices[0]!.data as Record<string, unknown>;
+      expect(data.subtotal_usd).toBe("12.00");
+      expect(data.fee_usd).toBe("0.03");
+      expect(data.total_usd).toBe("12.03");
+      expect(data.fee_mode).toBe("pass_to_customer");
+    });
   });
 });

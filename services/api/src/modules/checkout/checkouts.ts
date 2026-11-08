@@ -25,9 +25,11 @@ import {
   paidTotalOf,
   type ApiRequest,
   type ApiResponse,
+  type BusinessRecord,
 } from "../../app.js";
 import type { ApiModuleContext, QuoteWindow } from "../../modules.js";
 import type { IndexedEvent } from "../../webhooks.js";
+import { feePreview, resolveFee, type FeeMode } from "../../line-items.js";
 import { issuerCheckoutPort, type CheckoutPort } from "./checkout-port.js";
 
 const NS_CHECKOUTS = "checkout.checkouts";
@@ -40,10 +42,30 @@ const EMPTY_ITEMS_SHA256 = createHash("sha256").update("[]").digest("hex");
 export type CheckoutStatus =
   "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired" | "needs_attention";
 
+export type { FeeMode };
+
 export interface CheckoutItem {
   name: string;
   quantity: number;
   unit_price_usd?: string;
+}
+
+export function computeFeeBreakdown(
+  subtotalUsd: string,
+  mode: FeeMode,
+): {
+  feeMode: FeeMode;
+  subtotalUsd: string;
+  feeUsd: string;
+  totalUsd: string;
+} {
+  const preview = feePreview(subtotalUsd, mode);
+  return {
+    feeMode: preview.fee_mode,
+    subtotalUsd: preview.subtotal_usd,
+    feeUsd: preview.fee_usd,
+    totalUsd: preview.total_usd,
+  };
 }
 
 export interface StoredCheckout {
@@ -60,6 +82,10 @@ export interface StoredCheckout {
   return_url: string | null;
   items_sha256: string;
   created_at: string;
+  fee_mode?: FeeMode;
+  subtotal_usd?: string;
+  fee_usd?: string;
+  total_usd?: string;
 }
 
 export interface CheckoutView {
@@ -77,6 +103,10 @@ export interface CheckoutView {
   return_url: string | null;
   expires_at: string;
   created_at: string;
+  fee_mode: FeeMode;
+  subtotal_usd: string;
+  fee_usd: string;
+  total_usd: string;
 }
 
 export interface ChainCheckoutState {
@@ -493,12 +523,21 @@ export class Checkouts {
       typeof raw.order_ref === "string" && raw.order_ref !== "" && raw.order_ref !== tokenId
         ? raw.order_ref
         : stored.order_ref;
+    const feeMode = stored.fee_mode ?? "absorb";
+    const subtotalUsd = stored.subtotal_usd ?? stored.amount_usd;
+    const feeUsd = stored.fee_usd ?? "0.00";
+    const totalUsd = stored.total_usd ?? stored.amount_usd;
     const id = noticeId(event, tokenId, raw);
     if (mapped === "checkout.partial") {
       // A partial notice must never contain the word "paid".
       const clean: Record<string, unknown> = {
         token_id: tokenId,
         order_ref: orderRef,
+        amount_usd: totalUsd,
+        subtotal_usd: subtotalUsd,
+        fee_usd: feeUsd,
+        total_usd: totalUsd,
+        fee_mode: feeMode,
         ...(raw.due === undefined ? {} : { due: String(unwrapU128(raw.due) ?? raw.due) }),
         ...(raw.received === undefined
           ? {}
@@ -529,7 +568,17 @@ export class Checkouts {
         id,
         type: mapped,
         created: event.created,
-        data: { ...raw, token_id: tokenId, order_ref: orderRef, status },
+        data: {
+          ...raw,
+          token_id: tokenId,
+          order_ref: orderRef,
+          amount_usd: totalUsd,
+          subtotal_usd: subtotalUsd,
+          fee_usd: feeUsd,
+          total_usd: totalUsd,
+          fee_mode: feeMode,
+          status,
+        },
         indexed: true,
       },
     ];
@@ -562,6 +611,25 @@ export class Checkouts {
       bad("order_ref is required (1..64 ASCII letters, digits, ., _, :, -)");
     }
     const amount = parseUsd(body.amount_usd, "amount_usd");
+    const rawFeeMode = body.fee_mode;
+    let feeMode: FeeMode;
+    if (rawFeeMode === undefined || rawFeeMode === null) {
+      const biz = context.store.getBusiness(accountId) as
+        (BusinessRecord & { fee_mode?: FeeMode }) | undefined;
+      feeMode = biz?.fee_mode === "pass_to_customer" ? "pass_to_customer" : "absorb";
+    } else if (rawFeeMode === "absorb" || rawFeeMode === "pass_to_customer") {
+      feeMode = rawFeeMode;
+    } else {
+      throw new ApiError(
+        400,
+        "invalid_fee_mode",
+        "fee_mode must be 'absorb' or 'pass_to_customer'",
+      );
+    }
+
+    const feeBreakdown = computeFeeBreakdown(amount.text, feeMode);
+    const effectiveAmount = parseUsd(feeBreakdown.totalUsd, "amount_usd");
+
     const expiryMinutes = body.expires_in_minutes === undefined ? 15 : body.expires_in_minutes;
     if (
       typeof expiryMinutes !== "number" ||
@@ -572,7 +640,21 @@ export class Checkouts {
       bad("expires_in_minutes must be an integer between 1 and 60");
     }
     const returnUrl = parseReturnUrl(body.return_url);
-    const itemsSha256 = hashItems(body.items);
+    const rawItems = body.items;
+    const feeResolved = resolveFee(amount.text, [], feeMode);
+    const feeItem = feeResolved.items[0];
+    const effectiveItems =
+      feeMode === "pass_to_customer" && feeItem !== undefined
+        ? [
+            ...(Array.isArray(rawItems) ? (rawItems as CheckoutItem[]) : []),
+            {
+              name: feeItem.description,
+              quantity: feeItem.quantity,
+              unit_price_usd: feeItem.unit_amount_usd,
+            },
+          ]
+        : rawItems;
+    const itemsSha256 = hashItems(effectiveItems);
 
     const refKey = `${accountId}/${orderRef}`;
     if (!context.docs.insert(NS_REFS, refKey, { order_ref: orderRef }, accountId)) {
@@ -586,7 +668,7 @@ export class Checkouts {
     try {
       created = await this.port(context).create({
         accountId,
-        amountUsd: amount.text,
+        amountUsd: effectiveAmount.text,
         orderRef,
         expiryMinutes,
         ...(returnUrl === undefined ? {} : { returnUrl }),
@@ -607,14 +689,18 @@ export class Checkouts {
       claim_account: claimAccount,
       account_id: accountId,
       order_ref: orderRef,
-      amount_usd: amount.text,
-      amount_due: amount.baseUnits,
+      amount_usd: effectiveAmount.text,
+      amount_due: effectiveAmount.baseUnits,
       expires_at: created.expires_at,
       expiry,
       pay_url: created.pay_url,
       return_url: returnUrl ?? null,
       items_sha256: itemsSha256,
       created_at: nowIso,
+      fee_mode: feeMode,
+      subtotal_usd: feeBreakdown.subtotalUsd,
+      fee_usd: feeBreakdown.feeUsd,
+      total_usd: feeBreakdown.totalUsd,
     };
     context.docs.put(NS_CHECKOUTS, tokenId, stored, accountId);
     context.docs.put(NS_REFS, refKey, { token_id: tokenId }, accountId);
@@ -624,9 +710,9 @@ export class Checkouts {
       token_id: tokenId,
       claim_account: claimAccount,
       order_ref: orderRef,
-      amount_usd: amount.text,
-      amount_due: amount.baseUnits,
-      outstanding: amount.baseUnits,
+      amount_usd: effectiveAmount.text,
+      amount_due: effectiveAmount.baseUnits,
+      outstanding: effectiveAmount.baseUnits,
       paid_total: "0",
       surplus: "0",
       status: "pending",
@@ -634,6 +720,10 @@ export class Checkouts {
       return_url: stored.return_url,
       expires_at: created.expires_at,
       created_at: nowIso,
+      fee_mode: feeMode,
+      subtotal_usd: feeBreakdown.subtotalUsd,
+      fee_usd: feeBreakdown.feeUsd,
+      total_usd: feeBreakdown.totalUsd,
     };
     return { status: 201, body: view };
   }
@@ -649,6 +739,10 @@ export class Checkouts {
     const status = statusOf(claim, state, stored, nowSec);
     const expiry =
       state?.expiry ?? (typeof claim.due_date === "number" ? claim.due_date : stored.expiry);
+    const feeMode: FeeMode = stored.fee_mode ?? "absorb";
+    const subtotalUsd = stored.subtotal_usd ?? stored.amount_usd;
+    const feeUsd = stored.fee_usd ?? "0.00";
+    const totalUsd = stored.total_usd ?? stored.amount_usd;
     return {
       id: stored.id,
       token_id: stored.token_id,
@@ -667,6 +761,10 @@ export class Checkouts {
       return_url: stored.return_url,
       expires_at: new Date(expiry * 1000).toISOString(),
       created_at: stored.created_at,
+      fee_mode: feeMode,
+      subtotal_usd: subtotalUsd,
+      fee_usd: feeUsd,
+      total_usd: totalUsd,
     };
   }
 
@@ -709,6 +807,10 @@ export class Checkouts {
         order_ref: view.order_ref,
         amount_usd: view.amount_usd,
         amount_due: view.amount_due,
+        subtotal_usd: view.subtotal_usd,
+        fee_usd: view.fee_usd,
+        total_usd: view.total_usd,
+        fee_mode: view.fee_mode,
         outstanding: view.outstanding,
         paid_total: view.paid_total,
         surplus: view.surplus,
