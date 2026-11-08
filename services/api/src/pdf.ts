@@ -226,30 +226,86 @@ function drawTop(builder: PageBuilder, terms: Terms, issuedAt?: string): void {
   builder.y = Math.min(builder.y, detailY) - 8;
 }
 
-function drawTable(builder: PageBuilder, terms: Terms, lineItems?: readonly LineItem[]): void {
-  builder.y = builder.y - 40;
+function usdCents(value: string): bigint | null {
+  const match = /^(\d+)\.(\d{2})$/.exec(value);
+  if (match === null) return null;
+  return BigInt(match[1] ?? "0") * 100n + BigInt(match[2] ?? "0");
+}
+
+function lineItemsTotal(items: readonly LineItem[]): string | null {
+  let cents = 0n;
+  for (const item of items) {
+    const amount = usdCents(item.amount_usd);
+    if (amount === null) return null;
+    cents += amount;
+  }
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
+}
+
+const QTY_RIGHT = 388;
+const UNIT_RIGHT = 468;
+
+function drawTableHeader(builder: PageBuilder): void {
   const top = builder.y;
   label(builder, "DESCRIPTION", MARGIN, top);
+  text(builder, QTY_RIGHT, top, 7, "/F2", ACCENT, "QUANTITY", "right");
+  text(builder, UNIT_RIGHT, top, 7, "/F2", ACCENT, "UNIT PRICE", "right");
   text(builder, RIGHT, top, 7, "/F2", ACCENT, "AMOUNT", "right");
   builder.y = top - 8;
   line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.5, ACCENT);
   builder.y -= 18;
+}
 
-  const rows: Array<[string, string]> =
-    lineItems !== undefined && lineItems.length > 0
-      ? lineItems.map((item) => [item.description, `$${item.amount_usd}`])
-      : [[terms.invoice_number, `$${terms.amount_usd}`]];
+function drawTable(builder: PageBuilder, terms: Terms, lineItems?: readonly LineItem[]): void {
+  builder.y = builder.y - 40;
+  drawTableHeader(builder);
+
+  const items =
+    lineItems !== undefined &&
+    lineItems.length > 0 &&
+    lineItemsTotal(lineItems) === terms.amount_usd
+      ? lineItems
+      : [];
+  const rows: Array<{ description: string; quantity: string; unit: string; amount: string }> =
+    items.length > 0
+      ? items.map((item) => ({
+          description: item.description,
+          quantity: String(item.quantity),
+          unit: `$${item.unit_amount_usd}`,
+          amount: `$${item.amount_usd}`,
+        }))
+      : [
+          {
+            description: terms.invoice_number,
+            quantity: "1",
+            unit: "—",
+            amount: `$${terms.amount_usd}`,
+          },
+        ];
   if (terms.assignment_agreement_sha256 !== undefined) {
-    rows.push(["Assignment agreement", "—"]);
+    rows.push({ description: "Assignment agreement", quantity: "—", unit: "—", amount: "—" });
   }
-  for (const [description, amount] of rows) {
-    text(builder, MARGIN, builder.y, 9, "/F1", INK, description);
-    text(builder, RIGHT, builder.y, 9, "/F1", INK, amount, "right");
-    builder.y -= 8;
+
+  for (const row of rows) {
+    const descriptionWidth = QTY_RIGHT - MARGIN - 16;
+    const lines = wrapText(row.description, descriptionWidth, 9, "/F1");
+    const rowHeight = Math.max(14, lines.length * 11 + 4);
+    if (builder.y - rowHeight - 8 < MARGIN + 20) {
+      beginPage(builder, `Invoice ${terms.invoice_number} (continued)`);
+      drawTableHeader(builder);
+    }
+    const top = builder.y;
+    lines.forEach((line, index) => {
+      text(builder, MARGIN, top - index * 11, 9, "/F1", INK, line);
+    });
+    text(builder, QTY_RIGHT, top, 9, "/F1", INK, row.quantity, "right");
+    text(builder, UNIT_RIGHT, top, 9, "/F1", INK, row.unit, "right");
+    text(builder, RIGHT, top, 9, "/F1", INK, row.amount, "right");
+    builder.y = top - rowHeight;
     line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.35, "0.82 0.82 0.82");
-    builder.y -= 14;
+    builder.y -= 6;
   }
-  builder.y -= 6;
+  builder.y -= 4;
 }
 
 function drawTotals(builder: PageBuilder, terms: Terms): void {
