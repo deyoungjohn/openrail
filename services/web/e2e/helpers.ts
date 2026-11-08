@@ -33,7 +33,10 @@ export async function pickDate(page: Page, label: string, iso: string): Promise<
 /** Choose an option on a select (the motion select): open it by its label, then click the option. */
 export async function choose(page: Page, label: string, option: string): Promise<void> {
   // While a tab morphs, the old panel is still in the page: the new one is the last.
-  await page.getByRole("button", { name: new RegExp(`^${label}`) }).last().click();
+  await page
+    .getByRole("button", { name: new RegExp(`^${label}`) })
+    .last()
+    .click();
   await page.getByRole("option", { name: option, exact: true }).click();
 }
 
