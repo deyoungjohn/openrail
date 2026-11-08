@@ -23,7 +23,7 @@ SELF_COPY="${OPENRAIL_SELF_COPY:-/usr/local/bin/openrail-apply}"
 HEALTH_WAIT_SECONDS="${OPENRAIL_HEALTH_WAIT:-150}"
 KEEP_RELEASES=1 # only the live release stays unpacked (about 1.2 GB); the previous one is reinstalled from its pack
 KEEP_PACKS=2    # the packs of the live and the previous release (about 260 MB each)
-SERVICES=(indexer issuer watcher api web) # start order: the api needs the indexer and issuer
+CORE_SERVICES=(indexer issuer watcher api web) # start order: the api needs the indexer and issuer
 TEST_MODE="${OPENRAIL_TEST:-0}"           # tests run in a temp folder: no systemd, no chown
 
 dry=0
@@ -66,7 +66,7 @@ install_unit_files() { # install_unit_files <release dir>: copy changed service 
     fi
   done
   # Hand-made overrides from the first server setup; the unit files now carry the same settings.
-  for svc in "${SERVICES[@]}"; do
+  for svc in "${CORE_SERVICES[@]}"; do
     for stale in exec.conf corepack.conf; do
       if [[ -f "$UNIT_DIR/openrail-$svc.service.d/$stale" ]]; then
         run rm -f "$UNIT_DIR/openrail-$svc.service.d/$stale"
@@ -85,11 +85,32 @@ install_unit_files() { # install_unit_files <release dir>: copy changed service 
   fi
 }
 
-restart_all() {
-  say "restarting: ${SERVICES[*]}"
-  for svc in "${SERVICES[@]}"; do
-    sysctl_run enable "openrail-$svc.service" >/dev/null 2>&1 || true # start at boot (harmless when already on)
-    sysctl_run restart "openrail-$svc.service"
+service_units() { # service_units <release dir>: core order first, then any extra module units in the pack
+  local rel="$1" svc unit skip
+  for svc in "${CORE_SERVICES[@]}"; do
+    [[ -f "$rel/deploy/systemd/openrail-$svc.service" ]] && printf '%s\n' "openrail-$svc.service"
+  done
+  for unit in "$rel"/deploy/systemd/openrail-*.service; do
+    [[ -f "$unit" ]] || continue
+    unit="$(basename "$unit")"
+    case "$unit" in
+      openrail-backup.service) continue ;;
+    esac
+    skip=0
+    for svc in "${CORE_SERVICES[@]}"; do
+      [[ "$unit" == "openrail-$svc.service" ]] && skip=1
+    done
+    ((skip == 0)) && printf '%s\n' "$unit"
+  done
+}
+
+restart_all() { # restart_all <release dir>
+  local rel="$1" unit
+  mapfile -t units < <(service_units "$rel")
+  say "restarting: ${units[*]}"
+  for unit in "${units[@]}"; do
+    sysctl_run enable "$unit" >/dev/null 2>&1 || true # start at boot (harmless when already on)
+    sysctl_run restart "$unit"
   done
 }
 
@@ -118,12 +139,13 @@ show_failures() {
   [[ "$TEST_MODE" == 1 ]] && { echo "---- (test mode: no logs)" >&2; return 0; }
   echo "---- health check output" >&2
   "$1/deploy/healthcheck.sh" 2>&1 | grep -E 'FAIL|failed' >&2 || true
-  for svc in "${SERVICES[@]}"; do
-    if ! systemctl is-active --quiet "openrail-$svc.service" 2>/dev/null; then
-      echo "---- last log lines of openrail-$svc (no keys are logged)" >&2
-      journalctl -u "openrail-$svc.service" -n 15 --no-pager 2>&1 | cut -c1-220 >&2 || true
+  local unit
+  while IFS= read -r unit; do
+    if ! systemctl is-active --quiet "$unit" 2>/dev/null; then
+      echo "---- last log lines of $unit (no keys are logged)" >&2
+      journalctl -u "$unit" -n 15 --no-pager 2>&1 | cut -c1-220 >&2 || true
     fi
-  done
+  done < <(service_units "$1")
 }
 
 switch_to() { # switch_to <release dir>: move the current link atomically
@@ -190,7 +212,7 @@ case "$mode" in
     switch_to "$prev"
     printf '%s\n' "$old" >"$ROOT/previous"
     install_unit_files "$prev"
-    restart_all
+    restart_all "$prev"
     wait_healthy "$prev" || { show_failures "$prev"; echo "ROLLBACK_UNHEALTHY" >&2; exit 1; }
     say "rolled back; running $(basename "$prev")"
     exit 0
@@ -199,7 +221,7 @@ case "$mode" in
     [[ -n "$old" && -d "$old" ]] || { echo "NO_CURRENT_RELEASE" >&2; exit 1; }
     say "restart only, release $(basename "$old")"
     install_unit_files "$old"
-    restart_all
+    restart_all "$old"
     wait_healthy "$old" || { show_failures "$old"; echo "UNHEALTHY" >&2; exit 1; }
     say "healthy"
     exit 0
@@ -257,7 +279,7 @@ if [[ -f "$new/deploy/apply.sh" ]] && ! cmp -s "$new/deploy/apply.sh" "$SELF_COP
 fi
 
 install_unit_files "$new"
-restart_all
+restart_all "$new"
 if wait_healthy "$new"; then
   say "healthy; running release $version (previous: $(basename "${old:-none}"))"
   prune_releases
@@ -270,7 +292,7 @@ if [[ -n "$old" && -d "$old" && "$old" != "$new" ]]; then
   echo "== UNHEALTHY: rolling back to $(basename "$old")" >&2
   switch_to "$old"
   install_unit_files "$old"
-  restart_all
+  restart_all "$old"
   if wait_healthy "$old"; then
     echo "== rolled back to $(basename "$old"); release $version is NOT live" >&2
   else
