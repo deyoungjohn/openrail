@@ -3,6 +3,8 @@ import { formatToken, type PayStage } from "../../lib/pay";
 export type CheckoutStatus =
   "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired" | "needs_attention";
 
+export type FeeMode = "absorb" | "pass_to_customer";
+
 export interface PublicCheckout {
   id: string;
   token_id: string;
@@ -18,11 +20,17 @@ export interface PublicCheckout {
   expires_at: string;
   return_url: string | null;
   server_time?: string;
+  fee_mode?: FeeMode;
+  subtotal_usd?: string;
+  fee_usd?: string;
+  total_usd?: string;
 }
 
 export const checkoutCopy = {
   order: (ref: string) => `Order ${ref}`,
   title: (merchant: string) => `Pay ${merchant}`,
+  feeBreakdown: (subtotal: string, fee: string, total: string) =>
+    `Order $${subtotal} + Processing fee (0.25%) $${fee} = $${total}`,
   expiresIn: "Order expires in",
   expiredTitle: "This checkout has expired",
   expiredBody:

@@ -97,3 +97,35 @@ Each break was applied to `services/api/src/modules/checkout/checkouts.ts` or
 | `accept_late` or `refund_quote` permitted after `accepted` | `checkout_accept_late_refused_unless_late_and_open`, `late_checkout_refund_refused_after_accept_or_when_not_late` |
 | Countdown uses provider 3-day `deadline` instead of on-chain `deadline_requested` | `checkout_countdown_uses_requested_deadline` |
 | Origin transaction seen (`processing`) not shown as "received, settling" | `pos_shows_settling_on_origin_seen` |
+| `pass_to_customer` fee not rounded up to whole cents | `checkout_fee_mode_table_rounding_up` |
+| `pass_to_customer` does not add fee to `amount_due` or response breakdown | `checkout_creates_with_fee_mode_pass_to_customer` |
+| `fee_mode` does not fall back to business setting | `checkout_fee_mode_defaults_to_business_setting` |
+| Idempotency key replay with different `fee_mode` allowed | `checkout_idempotency_different_fee_mode_conflicts` |
+| Webhook events omit fee breakdown | `checkout_events_carry_fee_breakdown` |
+
+## Fee mode
+
+A merchant chooses who pays the platform fee via `fee_mode`:
+- **`absorb`** (default): the customer pays the order subtotal; the merchant receives the subtotal minus the contract platform fee (25 bps / 0.25%).
+- **`pass_to_customer`**: the customer pays the subtotal plus a visible line item **"Processing fee (0.25%)"** in whole cents, rounded **up** (`ceil(subtotal * 0.0025)`).
+
+### Exact rounding arithmetic (USDC base units)
+
+The on-chain contract fee is truncated integer arithmetic: `payment * 25 / 10000`.
+For a \$12.00 order subtotal under `pass_to_customer`:
+- Order subtotal: \$12.00 (12,000,000 USDC units).
+- Fee (0.25% rounded up): \$0.03 (30,000 USDC units).
+- Total paid by customer: \$12.03 (12,030,000 USDC units).
+- Contract fee deducted: `12,030,000 * 25 / 10,000 = 30,075` USDC units (\$0.030075).
+- Net received by merchant: `12,030,000 - 30,075 = 11,999,925` USDC units (\$11.999925).
+- Difference from subtotal: -75 USDC units (-\$0.000075), which is within one cent (\$0.01). The merchant is told "you receive about \$12.00".
+
+Subtotal table:
+| Subtotal | Fee (0.25% rounded up) | Customer pays (total) | Contract fee (USDC units) | Merchant receives (net) | Net difference from subtotal |
+|---|---|---|---|---|---|
+| \$12.00 | \$0.03 | \$12.03 | 30,075 | \$11.999925 | -\$0.000075 (< 1¢) |
+| \$0.01 | \$0.01 | \$0.02 | 50 | \$0.019950 | +\$0.009950 (< 1¢) |
+| \$1,000.00 | \$2.50 | \$1,002.50 | 2,506,250 | \$999.993750 | -\$0.006250 (< 1¢) |
+| \$33.33 | \$0.09 | \$33.42 | 83,550 | \$33.336450 | +\$0.006450 (< 1¢) |
+| \$4.00 (exact cent) | \$0.01 | \$4.01 | 10,025 | \$3.999975 | -\$0.000025 (< 1¢) |
+

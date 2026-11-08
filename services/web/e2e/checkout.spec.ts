@@ -132,6 +132,37 @@ test("checkout page shows order ref, amount, route picker, quote, QR, countdown 
   await expect(page.getByRole("button", { name: "Copy address" })).toBeVisible();
 });
 
+test("checkout page shows fee breakdown when fee_mode is pass_to_customer", async ({ page }) => {
+  await mockCheckout(page, {
+    checkout: {
+      id: "c-fee-1",
+      token_id: "c-fee-1",
+      claim_account: "c-fee-1.claims.openrail.near",
+      merchant: "acme.openrail.near",
+      order_ref: "ORD-FEE-42",
+      amount_usd: "12.03",
+      amount_due: "12030000",
+      outstanding: "12030000",
+      paid_total: "0",
+      surplus: "0",
+      status: "pending",
+      expires_at: inMinutes(15),
+      return_url: null,
+      fee_mode: "pass_to_customer",
+      subtotal_usd: "12.00",
+      fee_usd: "0.03",
+      total_usd: "12.03",
+      routes: fixture("pay.claims.get").routes,
+      sessions: [],
+    },
+  });
+  await page.goto("/c/c-fee-1");
+  await expect(
+    page.getByText("Order $12.00 + Processing fee (0.25%) $0.03 = $12.03"),
+  ).toBeVisible();
+  await expect(page.getByText("$12.03").first()).toBeVisible();
+});
+
 test("checkout_no_quote_after_expiry: expired checkout shows plain notice and no quote form", async ({
   page,
 }) => {

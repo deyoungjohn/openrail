@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canQuoteCheckout,
+  checkoutCopy,
   checkoutLiveBanner,
   checkoutStatusLabel,
   countdownTargetMs,
@@ -105,5 +106,11 @@ describe("checkout hosted page rules", () => {
     expect(safeReturnUrl("javascript:alert(1)")).toBeNull();
     expect(safeReturnUrl(null)).toBeNull();
     expect(safeReturnUrl(undefined)).toBeNull();
+  });
+
+  it("checkout_fee_mode_breakdown_label", () => {
+    expect(checkoutCopy.feeBreakdown("12.00", "0.03", "12.03")).toBe(
+      "Order $12.00 + Processing fee (0.25%) $0.03 = $12.03",
+    );
   });
 });

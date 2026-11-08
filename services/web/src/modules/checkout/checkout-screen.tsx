@@ -423,6 +423,11 @@ function CheckoutCard({
         <p className="tabular text-[40px] leading-[1.1] font-bold">
           {paid ? `$${c.amount_usd}` : `$${c.amount_usd}`}
         </p>
+        {c.fee_mode === "pass_to_customer" && c.subtotal_usd && c.fee_usd ? (
+          <p className="caption mt-1">
+            {checkoutCopy.feeBreakdown(c.subtotal_usd, c.fee_usd, c.total_usd ?? c.amount_usd)}
+          </p>
+        ) : null}
         {partial ? (
           <p className="caption mt-1">
             {p.ofInvoice(`$${c.amount_usd}`, `$${formatToken(String(settled), 6)}`)}
