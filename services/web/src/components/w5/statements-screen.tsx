@@ -13,6 +13,7 @@ import { DateRangeField } from "../ui/date-range-field";
 import { Select } from "../ui/input";
 import { EmptyState } from "../ui/state";
 import { Table, type Column } from "../ui/table";
+import { ErrorNote } from "@/components/ui/error-note";
 
 type Statement = Awaited<ReturnType<typeof dashClient.statements.get>>;
 
@@ -56,11 +57,7 @@ function Result({ s, from, to }: { s: Statement; from: string; to: string }) {
             {t.matches}
           </p>
         ) : null}
-        {match === false ? (
-          <p role="alert" className="text-danger-text mt-3 text-[14px]">
-            {t.mismatch}
-          </p>
-        ) : null}
+        <ErrorNote>{match === false ? t.mismatch : null}</ErrorNote>
         <p className="mt-4">
           <a
             href={url}
@@ -177,21 +174,13 @@ export function StatementsScreen() {
             </Button>
           </p>
         ) : null}
-        {problem ? (
-          <p role="alert" className="text-danger-text text-[14px]">
-            {problem}
-          </p>
-        ) : null}
+        <ErrorNote>{problem ? problem : null}</ErrorNote>
         <Button type="submit" loading={state === "loading"}>
           {state === "loading" ? t.getting : t.get}
         </Button>
       </form>
 
-      {state === "failed" ? (
-        <p role="alert" className="text-danger-text text-[14px]">
-          {t.failed}
-        </p>
-      ) : null}
+      <ErrorNote>{state === "failed" ? t.failed : null}</ErrorNote>
       {result ? <Result s={result} from={from} to={to} /> : null}
     </div>
   );

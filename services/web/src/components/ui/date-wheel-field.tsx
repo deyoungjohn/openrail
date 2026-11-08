@@ -3,6 +3,7 @@
 import { CalendarDays } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
+import { ErrorNote } from "./error-note";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "./popover-morph";
 import { WheelPicker } from "./wheel-picker";
 
@@ -128,11 +129,7 @@ export function DateWheelField({
           </MorphPopoverContent>
         </MorphPopover>
       </div>
-      {error ? (
-        <p role="alert" className="text-danger-text mt-1.5 px-1 text-[13px] leading-[18px]">
-          {error}
-        </p>
-      ) : null}
+      <ErrorNote variant="field">{error ? error : null}</ErrorNote>
     </div>
   );
 }

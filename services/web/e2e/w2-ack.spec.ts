@@ -63,6 +63,11 @@ test("EVM debtor: the wallet is asked to sign exactly the fields on the page", a
   await page.goto("/ack/c-1");
   await page.getByRole("button", { name: "Confirm with wallet" }).click();
   await expect(page.getByText("Accepted by client").first()).toBeVisible();
+  // The way to pay is offered at once, not only a thank-you.
+  await expect(page.getByRole("link", { name: "Pay this invoice" })).toHaveAttribute(
+    "href",
+    "/pay/c-1",
+  );
   const signed = (await page.evaluate(
     () => (window as unknown as { __signed: unknown[] }).__signed,
   )) as {

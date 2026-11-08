@@ -9,7 +9,6 @@ import {
   amountPrefix,
   centsToApi,
   chainOfRoute,
-  formatDueDate,
   formatToken,
   payUnits,
   legAmountProblem,
@@ -28,7 +27,9 @@ import { useEvm } from "@/wallet/evm";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { CHAINS, ChainBadge } from "../ui/chain-badge";
+import { CHAINS } from "../ui/chain-badge";
+import { InvoiceCard } from "./invoice-card";
+import { RouteSelects } from "./route-selects";
 import { Countdown } from "../ui/countdown";
 import { Input } from "../ui/input";
 import { Tabs } from "../ui/tabs";
@@ -36,6 +37,7 @@ import { EvmWalletView } from "../wallet-buttons";
 import { QrPanel } from "../ui/qr-panel";
 import { EmptyState, ErrorState } from "../ui/state";
 import { Timeline } from "../ui/timeline";
+import { ErrorNote } from "@/components/ui/error-note";
 
 type Session = PaySession;
 
@@ -174,11 +176,7 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
           {p.walletSent} {sent}
         </p>
       ) : null}
-      {problem ? (
-        <p className="text-danger-text text-[14px]" role="alert">
-          {problem}
-        </p>
-      ) : null}
+      <ErrorNote>{problem ? problem : null}</ErrorNote>
     </div>
   );
 }
@@ -363,7 +361,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   const evm = useEvm();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [tick, setTick] = useState(0);
-  const [mode, setMode] = useState<Mode>("paste");
+  const [mode, setMode] = useState<Mode>("wallet");
   const [routeId, setRouteId] = useState<string | null>(null);
   const [legs, setLegs] = useState<Leg[]>([]);
   const [starting, setStarting] = useState(false);
@@ -475,7 +473,9 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     // The price on screen is for the whole amount: it stays in "earlier prices"; parts start fresh.
     if (!split) setLegs([]);
     setSplit(true);
-    setAmountText("");
+    // The first part starts with what is still to pay already filled in.
+    const left = remainingCents(outstanding, []);
+    setAmountText(left > 0n ? centsToApi(left) : "");
     setAmountShown(false);
   };
 
@@ -508,7 +508,9 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
               : [leg],
         );
         if (partial && !replace) {
-          setAmountText("");
+          // The next part starts with what is still to pay already filled in.
+          const left = remainingCents(outstanding, [...legs, leg]);
+          setAmountText(left > 0n ? centsToApi(left) : "");
           setAmountShown(false);
         }
       } catch (e) {
@@ -538,8 +540,6 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
 
   const c = load.claim;
   const open = c.status === "Issued" || c.status === "PartiallyPaid";
-  const usdc = routes.filter((r) => r.payer_asset === "USDC");
-  const volatile = routes.filter((r) => r.payer_asset !== "USDC");
   const covered = split && legs.length > 0 && remaining === 0n;
   const allPaid =
     covered &&
@@ -549,27 +549,6 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
         l.stage === "expired" ||
         l.stage === "refunded" ||
         l.stage === "failed",
-    );
-
-  const picker = (title: string, list: Route[]) =>
-    list.length === 0 ? null : (
-      <div>
-        <h3 className="mb-2 text-[14px] leading-5 font-medium text-muted">{title}</h3>
-        <div className="flex flex-wrap gap-2">
-          {list.map((r) => {
-            const chain = chainOfRoute(r);
-            return chain ? (
-              <ChainBadge
-                key={r.id}
-                chain={chain}
-                label={p.routeLabel(r.payer_asset, CHAINS[chain])}
-                selected={routeId === r.id}
-                onSelect={() => pickRoute(r.id)}
-              />
-            ) : null;
-          })}
-        </div>
-      </div>
     );
 
   const submit = () => {
@@ -596,10 +575,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           <EvmWalletView {...evm} />
         </div>
       )}
-      <div className="space-y-4">
-        {picker(p.pickUsdc, usdc)}
-        {picker(p.pickVolatile, volatile)}
-      </div>
+      <RouteSelects routes={routes} routeId={routeId} onPick={pickRoute} />
       {!split ? (
         <Button type="button" variant="secondary" onClick={turnSplitOn}>
           {p.mixSplit}
@@ -709,20 +685,9 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     : null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
+    <div className="mx-auto w-full max-w-[640px] space-y-6">
+      <InvoiceCard claim={c} />
       <div className="min-w-0 space-y-6">
-        <header className="space-y-1">
-          <p className="caption">{p.invoice(c.invoice_number)}</p>
-          <h1 className="text-[28px] leading-9 font-bold">{p.title(c.issuer_legal_name)}</h1>
-          <p className="tabular text-[36px] leading-[1.1] font-bold">${c.amount_usd}</p>
-          <p className="caption">{p.due(formatDueDate(c.due_date))}</p>
-          {c.status === "PartiallyPaid" ? (
-            <p className="text-[14px] font-medium">
-              {p.partial(`$${formatToken(c.outstanding, 6)}`)}
-            </p>
-          ) : null}
-        </header>
-
         {!open ? (
           <div role="status" className="surface-card p-6 text-[15px]">
             {c.status === "Paid" ? p.alreadyPaid : p.closed}
@@ -740,15 +705,13 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
               value={mode}
               onValueChange={(id) => setMode(id as Mode)}
               items={[
-                { id: "paste", label: p.tabPaste, panel: form("paste") },
                 { id: "wallet", label: p.tabWallet, panel: form("wallet") },
+                { id: "paste", label: p.tabPaste, panel: form("paste") },
               ]}
             />
             {split || legs.length === 0 ? <p className="caption mt-4">{p.mixSplitHelp}</p> : null}
           </Card>
         )}
-      </div>
-      <div className="min-w-0 space-y-6">
         {allPaid && legs.some((l) => l.stage === "paid") ? (
           <div
             role="status"

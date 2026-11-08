@@ -19,6 +19,7 @@ import { useNear } from "@/wallet/near";
 import { ClaimStates } from "./claim-states";
 import { ClaimTerms } from "./claim-terms";
 import { useClaim } from "./use-claim";
+import { ErrorNote } from "@/components/ui/error-note";
 
 // Core kind: sellable, and a sale needs an acknowledgement. `kind_rules` is not in the claim view
 // yet (see handoff), so these are the core defaults from blueprint 2.4.
@@ -212,13 +213,17 @@ function SaleForm({ claim }: { claim: Claim }) {
           ) : null}
         </div>
 
-        {visible.length > 0 ? (
-          <ul role="alert" className="text-danger-text space-y-1 text-[14px] leading-5">
-            {visible.map((r) => (
-              <li key={`${r.rule}-${r.message}`}>{r.message}</li>
-            ))}
-          </ul>
-        ) : null}
+        <ErrorNote>
+          {visible.length > 0 ? (
+            <span className="block space-y-1">
+              {visible.map((r) => (
+                <span key={`${r.rule}-${r.message}`} className="block">
+                  {r.message}
+                </span>
+              ))}
+            </span>
+          ) : null}
+        </ErrorNote>
         {!owner ? (
           <div className="space-y-2">
             <p className="text-[14px]">
@@ -233,11 +238,7 @@ function SaleForm({ claim }: { claim: Claim }) {
             <NearWalletView {...near} />
           </div>
         ) : null}
-        {error ? (
-          <p role="alert" className="text-danger-text text-[14px] leading-5">
-            {error}
-          </p>
-        ) : null}
+        <ErrorNote>{error ? error : null}</ErrorNote>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">

@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertCircle } from "lucide-react";
 import {
   Children,
   isValidElement,
@@ -10,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/cn";
+import { ErrorNote } from "./error-note";
 import {
   Select as MotionSelect,
   SelectContent,
@@ -43,7 +43,6 @@ function Frame({
   floated,
   children,
 }: FrameProps & { id: string; floated?: boolean; children: ReactNode }) {
-  const note = error ?? helper;
   return (
     <div className="w-full">
       <div className="relative">
@@ -73,16 +72,26 @@ function Frame({
           {label}
         </label>
       </div>
-      {note ? (
-        <p
-          id={`${id}-note`}
-          className={cn("mt-1.5 flex items-center gap-1 px-1", error ? "text-danger" : "caption")}
-          style={error ? { fontSize: 13, lineHeight: "18px", fontWeight: 400 } : undefined}
+      {/* One cell holds both the helper line and the error: the cell is as tall as the taller of the two, so
+          swapping one for the other moves nothing. */}
+      <div className="grid">
+        {helper ? (
+          <p
+            id={error ? undefined : `${id}-note`}
+            aria-hidden={error ? true : undefined}
+            className={cn("caption col-start-1 row-start-1 mt-1.5 px-1", error && "invisible")}
+          >
+            {helper}
+          </p>
+        ) : null}
+        <ErrorNote
+          variant="field"
+          id={error ? `${id}-note` : undefined}
+          className="col-start-1 row-start-1 mt-1.5 px-1"
         >
-          {error ? <AlertCircle size={14} strokeWidth={1.5} aria-hidden /> : null}
-          {note}
-        </p>
-      ) : null}
+          {error ? error : null}
+        </ErrorNote>
+      </div>
     </div>
   );
 }

@@ -11,11 +11,35 @@ export function parseCents(s: string): bigint | null {
   return CENTS.test(s) ? BigInt(s.replace(".", "")) : null;
 }
 
+const PRICE = /^\d+(\.\d{1,2})?$/;
+
+/** A price typed in the form (`10`, `10.5`, `10.50`) as cents, or null when it is not a plain amount above zero. */
+export function priceCents(s: string): bigint | null {
+  if (!PRICE.test(s)) return null;
+  const [w = "0", f = ""] = s.split(".");
+  const cents = BigInt(w) * 100n + BigInt(f.padEnd(2, "0"));
+  return cents === 0n ? null : cents;
+}
+
+/** The two-decimal form the API takes: `10` becomes `10.00`. Empty when the price is not valid. */
+export function normalizePrice(s: string): string {
+  const c = priceCents(s);
+  if (c === null) return "";
+  const t = c.toString().padStart(3, "0");
+  return `${t.slice(0, -2)}.${t.slice(-2)}`;
+}
+
+/** What a number box keeps while typing: digits and at most one dot, with at most `decimals` places. */
+export function typedNumber(s: string, decimals: number): string {
+  const [whole = "", ...rest] = s.replace(/[^\d.]/g, "").split(".");
+  return rest.length === 0 ? whole : `${whole}.${rest.join("").slice(0, decimals)}`;
+}
+
 /** Quantity (up to 2 decimals) times a unit price, or null when it is invalid or not a whole cent. */
 export function lineCents(quantity: string, unit: string): bigint | null {
   if (!QTY.test(quantity)) return null;
-  const unitCents = parseCents(unit);
-  if (unitCents === null || unitCents === 0n) return null;
+  const unitCents = priceCents(unit);
+  if (unitCents === null) return null;
   const [w = "0", f = ""] = quantity.split(".");
   const hundredths = BigInt(w) * 100n + BigInt(f.padEnd(2, "0"));
   if (hundredths === 0n) return null;

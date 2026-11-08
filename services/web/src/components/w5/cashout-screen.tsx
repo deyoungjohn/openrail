@@ -16,6 +16,7 @@ import { CHAINS, type ChainId } from "../ui/chain-badge";
 import { Countdown } from "../ui/countdown";
 import { Input, Select } from "../ui/input";
 import { NearWalletView } from "../wallet-buttons";
+import { ErrorNote } from "@/components/ui/error-note";
 
 // Cash-out destinations (blueprint 2.9). Not BNB Chain: it cannot be quoted (K11).
 type Destination = Exclude<ChainId, "bnb">;
@@ -170,11 +171,7 @@ export function CashoutScreen() {
             error={(shown && addressProblem) || undefined}
             disabled={busy}
           />
-          {error && phase === "form" ? (
-            <p role="alert" className="text-danger-text text-[14px]">
-              {error}
-            </p>
-          ) : null}
+          <ErrorNote>{error && phase === "form" ? error : null}</ErrorNote>
           <Button type="submit" loading={phase === "asking"}>
             {phase === "asking" ? t.gettingQuote : t.getQuote}
           </Button>
@@ -242,11 +239,7 @@ export function CashoutScreen() {
                   <NearWalletView {...near} />
                 </div>
               ) : null}
-              {error ? (
-                <p role="alert" className="text-danger-text text-[14px]">
-                  {error}
-                </p>
-              ) : null}
+              <ErrorNote>{error ? error : null}</ErrorNote>
               <Button onClick={() => void sign()} loading={phase === "signing"} disabled={!canSign}>
                 {phase === "signing" ? t.signing : t.sign}
               </Button>

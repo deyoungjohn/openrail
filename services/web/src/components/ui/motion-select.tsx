@@ -268,6 +268,10 @@ export interface SelectTriggerProps {
 
 export function SelectTrigger({ className, children, ...aria }: SelectTriggerProps) {
   const ctx = useSelectContext("SelectTrigger");
+  // The name starts with the field's label and ends with the value shown on the button, so it always contains
+  // the visible text (WCAG 2.5.3).
+  const shown = ctx.labelFor(ctx.value);
+  const name = aria["aria-label"];
   const isTop = ctx.placement === "top";
   // The edge facing the panel flattens while the panel is attached to it and
   // rounds back as the panel pulls away — the two pinch apart — on the same
@@ -285,6 +289,7 @@ export function SelectTrigger({ className, children, ...aria }: SelectTriggerPro
       aria-expanded={ctx.open}
       aria-controls={ctx.listId}
       {...aria}
+      {...(name === undefined ? {} : { "aria-label": shown ? `${name}: ${shown}` : name })}
       onClick={() => ctx.setOpen(!ctx.open)}
       onKeyDown={(event) => {
         if (!ctx.open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
@@ -307,7 +312,7 @@ export function SelectTrigger({ className, children, ...aria }: SelectTriggerPro
     >
       {children}
       <motion.span aria-hidden style={{ rotate }} className="text-muted">
-        <ChevronDown className="h-4 w-4" />
+        <ChevronDown aria-hidden className="h-4 w-4" />
       </motion.span>
     </motion.button>
   );
@@ -498,7 +503,7 @@ export function SelectItem({ value, disabled = false, className, children }: Sel
         )}
       >
         {children}
-        {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
+        {selected ? <Check aria-hidden className="h-3.5 w-3.5 shrink-0" /> : null}
       </button>
     </motion.div>
   );

@@ -7,6 +7,7 @@ import { formatNear, MIN_DEPOSIT_YOCTO, parseNear } from "@/lib/near-amount";
 import { useActions } from "@/wallet/actions";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** Quick amounts, in NEAR. The smallest is the minimum deposit: about one invoice's storage. */
 const PRESETS = ["0.02", "0.1", "0.5", "1"] as const;
@@ -101,11 +102,7 @@ export function DepositControl({
           {t.creditSent}
         </p>
       ) : null}
-      {state === "failed" ? (
-        <p role="alert" className="text-danger-text text-[14px]">
-          {t.creditFailed}
-        </p>
-      ) : null}
+      <ErrorNote>{state === "failed" ? t.creditFailed : null}</ErrorNote>
     </div>
   );
 }

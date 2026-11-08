@@ -14,6 +14,7 @@ import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { ErrorState } from "../ui/state";
 import { StorageCreditCard } from "./storage-credit-card";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -86,11 +87,7 @@ function ProfileCard({
           onChange={(e) => setEmail(e.target.value)}
           error={shown && emailBad ? t.badEmail : undefined}
         />
-        {state === "failed" ? (
-          <p role="alert" className="text-danger-text text-[14px]">
-            {s.saveFailed}
-          </p>
-        ) : null}
+        <ErrorNote>{state === "failed" ? s.saveFailed : null}</ErrorNote>
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={!dirty} loading={state === "saving"}>
             {state === "saving" ? s.saving : s.save}

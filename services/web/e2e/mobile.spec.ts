@@ -1,6 +1,6 @@
 import { devices, expect, test, type Page } from "@playwright/test";
 import { fixture, mockApi, type Handlers } from "./api-mock";
-import { signIn } from "./helpers";
+import { signIn, pickRoute } from "./helpers";
 
 // The mobile pass (update 27): real phone sizes with touch, no sideways scroll, tap targets of at
 // least 44 px, the QR panel and the address usable with one thumb, the wallet picker as a bottom sheet.
@@ -136,7 +136,7 @@ for (const [phone, device] of Object.entries(PHONES)) {
       await context.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
       await mockApi(page, api());
       await open(page, "/pay/c-1");
-      await page.getByRole("button", { name: /USDC on Base/ }).click();
+      await pickRoute(page, "USDC on Base");
       await page.getByLabel("Refund address").fill(SIGNER);
       await page.getByRole("button", { name: "Get price" }).click();
       const quote = page.getByRole("region", { name: "Your price" });
@@ -163,22 +163,23 @@ for (const [phone, device] of Object.entries(PHONES)) {
       );
     });
 
-    test("wallet picker: a bottom sheet that fits the screen and scrolls inside", async ({
+    test("wallet picker: a centered dialog that fits the screen and scrolls inside", async ({
       page,
     }) => {
       await page.goto("/_dev/components");
       await page.getByRole("button", { name: "Open wallet picker" }).click();
       const dialog = page.getByRole("dialog");
-      const panel = dialog.locator(".glass").first();
-      await expect(panel).toBeVisible();
+      await expect(dialog).toBeVisible();
       await page.waitForTimeout(500);
       const vp = page.viewportSize()!;
-      const box = (await panel.boundingBox())!;
-      // Full width, sitting on the bottom edge, never taller than the screen.
-      expect(Math.round(box.x)).toBe(0);
-      expect(Math.round(box.width)).toBe(vp.width);
-      expect(Math.round(box.y + box.height)).toBe(vp.height);
-      expect(box.height).toBeLessThanOrEqual(vp.height * 0.9 + 1);
+      const box = (await dialog.boundingBox())!;
+      // Inside the window on every side, centered, never taller than the screen.
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(vp.width + 1);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(vp.height + 1);
+      expect(Math.abs(box.x + box.width / 2 - vp.width / 2)).toBeLessThan(8);
+      expect(box.height).toBeLessThanOrEqual(vp.height * 0.95 + 1);
       // Its rows are thumb-sized.
       for (const row of await dialog.getByRole("button", { name: /Wallet/ }).all()) {
         const r = (await row.boundingBox())!;

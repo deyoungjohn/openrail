@@ -277,16 +277,6 @@ function drawTerms(builder: PageBuilder, terms: Terms, termsHash: string): void 
   builder.y -= 12;
   text(builder, MARGIN, builder.y, 7, "/F1", GRAY, termsHash);
   builder.y -= 12;
-  text(
-    builder,
-    MARGIN,
-    builder.y,
-    7,
-    "/F1",
-    GRAY,
-    `Line items SHA-256: ${terms.line_items_sha256}`,
-  );
-  builder.y -= 16;
   label(builder, "CLAUSES", MARGIN, builder.y);
   builder.y -= 12;
   drawClauses(builder, terms, invoice);

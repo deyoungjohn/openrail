@@ -29,6 +29,17 @@ export async function pickDate(page: Page, label: string, iso: string): Promise<
 
 /** Choose an option on a select (the motion select): open it by its label, then click the option. */
 export async function choose(page: Page, label: string, option: string): Promise<void> {
-  await page.getByLabel(label, { exact: true }).click();
+  await page.getByRole("button", { name: new RegExp(`^${label}`) }).click();
   await page.getByRole("option", { name: option, exact: true }).click();
+}
+
+/** Choose a route on the pay page through its two selects: the token, then (if it has several) the network. */
+export async function pickRoute(page: Page, route: string): Promise<void> {
+  const [asset, chain] = route.split(" on ");
+  await choose(page, "Pay with", asset as string);
+  if (!chain) return;
+  // A token with one network (SOL) has no second select: the route is picked by the first.
+  const network = page.getByRole("button", { name: /^Network/ });
+  if (await network.isVisible({ timeout: 1500 }).catch(() => false))
+    await choose(page, "Network", chain);
 }

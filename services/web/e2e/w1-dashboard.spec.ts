@@ -103,7 +103,8 @@ test.describe("dashboard", () => {
     await expect(main.getByRole("region", { name: "Overview" })).toBeVisible();
     const activity = main.getByRole("region", { name: "Inflow" });
     await expect(activity.getByRole("cell", { name: "Northwind Studio" }).first()).toBeVisible();
-    await expect(activity.getByText("Invoice INV-1").first()).toBeVisible();
+    // The product column is hidden at 360 px; the row still carries who paid for what.
+    await expect(activity.getByRole("row", { name: /Invoice INV-1/ }).first()).toBeVisible();
     // Streams: every receipt here is an invoice payment (250.50 in all).
     await expect(
       main.getByRole("img", { name: /Invoice: \$250\.50, Checkout: \$0\.00, Pay link: \$0\.00/ }),
@@ -131,7 +132,14 @@ test.describe("dashboard", () => {
     await expect(from).toContainText("$50.50");
     await expect(from).not.toContainText("Ethereum");
     const months = page.getByRole("region", { name: "Collections by month" });
-    await expect(months.getByRole("cell").filter({ hasText: "$250.50" })).toHaveCount(0);
+    // Two months, so no month row holds the whole $250.50 (the Total row does).
+    await expect(
+      months
+        .getByRole("row")
+        .filter({ hasNotText: "Total" })
+        .getByRole("cell")
+        .filter({ hasText: "$250.50" }),
+    ).toHaveCount(0);
 
     // The last 7 days leave out the receipt from 40 days ago.
     await page
@@ -444,6 +452,53 @@ test.describe("issue form", () => {
     await expect(page.getByText("Enter your client's name.")).toBeVisible();
     await expect(page.getByText("Pick a due date.")).toBeVisible();
     expect(calls.filter((c) => c.key === "POST /v1/invoices")).toHaveLength(0);
+  });
+
+  test("error text moves nothing on the page (hard rule)", async ({ page }) => {
+    await mockApi(page, handlers);
+    await page.goto("/app/invoices/new");
+    const watched = [
+      page.getByRole("button", { name: "Create invoice" }),
+      page.getByLabel("Description"),
+      page.getByLabel("Qty"),
+      page.getByLabel("Price"),
+      page.getByLabel("Invoice number"),
+      page.getByLabel("Client name"),
+    ];
+    // Positions in the page, not the window: submitting scrolls the window.
+    // Everything on the page has loaded (the storage credit card above the form changes height while it loads).
+    await expect(page.locator("main .skeleton")).toHaveCount(0);
+    const boxes = async () =>
+      Promise.all(
+        watched.map((l) =>
+          l.evaluate((e) => {
+            const r = e.getBoundingClientRect();
+            return {
+              x: Math.round(r.x + window.scrollX),
+              y: Math.round(r.y + window.scrollY),
+              w: Math.round(r.width),
+              h: Math.round(r.height),
+            };
+          }),
+        ),
+      );
+    const before = await boxes();
+    await page.getByLabel("Price").fill("0");
+    await page.getByRole("button", { name: "Create invoice" }).click();
+    await expect(
+      page.getByText("Use a quantity and a price that make a whole number of cents."),
+    ).toBeVisible();
+    expect(await boxes()).toEqual(before);
+  });
+
+  test("whole-number prices are accepted and typing keeps digits only", async ({ page }) => {
+    await mockApi(page, handlers);
+    await page.goto("/app/invoices/new");
+    await page.getByLabel("Description").fill("Design");
+    await page.getByLabel("Qty").fill("2");
+    await page.getByLabel("Price").fill("1a0b");
+    await expect(page.getByLabel("Price")).toHaveValue("10");
+    await expect(page.getByText("$20.00").first()).toBeVisible();
   });
 
   test("the total is exact and a fraction of a cent is refused, not rounded", async ({ page }) => {

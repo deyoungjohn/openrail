@@ -98,6 +98,7 @@ function Spinner({ size, speed, reduce }: PartProps) {
   const r = (size - stroke) / 2;
   return (
     <motion.svg
+      aria-hidden
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
@@ -211,6 +212,7 @@ const MORPH_SCALE = [1, 1, 0.88, 0.88, 1, 1, 0.88, 0.88, 1, 1, 1];
 function Morph({ size, speed, reduce }: PartProps) {
   return (
     <motion.svg
+      aria-hidden
       width={size}
       height={size}
       viewBox="0 0 100 100"
@@ -318,7 +320,7 @@ function Scramble({ size, speed, reduce }: PartProps) {
 function Metaballs({ size, speed, reduce }: PartProps) {
   const id = useId().replace(/:/g, "");
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" role="img">
+    <svg aria-hidden width={size} height={size} viewBox="0 0 100 100">
       <title>Loading</title>
       <defs>
         <filter id={id}>

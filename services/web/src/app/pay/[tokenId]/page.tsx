@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Pay invoice", robots: { index: false
 export default async function Page({ params }: { params: Promise<{ tokenId: string }> }) {
   const { tokenId } = await params;
   return (
-    <PublicShell wide>
+    <PublicShell>
       <PayScreen tokenId={tokenId} />
     </PublicShell>
   );

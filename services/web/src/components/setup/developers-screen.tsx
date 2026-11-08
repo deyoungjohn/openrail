@@ -15,6 +15,7 @@ import { Modal } from "../ui/modal";
 import { DataTable, type DataTableColumn } from "../ui/data-table";
 import { Tabs } from "../ui/tabs";
 import { Tooltip } from "../ui/tooltip";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const WHEN = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -85,11 +86,7 @@ function Confirm({
     <Modal open={open} onClose={onClose} title={title}>
       <div className="space-y-4">
         <p className="text-[15px]">{body}</p>
-        {error ? (
-          <p role="alert" className="text-danger-text text-[14px]">
-            {t.actionFailed}
-          </p>
-        ) : null}
+        <ErrorNote>{error ? t.actionFailed : null}</ErrorNote>
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
             {t.cancel}
@@ -298,11 +295,7 @@ function ApiKeysPanel() {
               <p className="text-danger-text text-[14px]">{scopesProblem(scopes)}</p>
             ) : null}
           </fieldset>
-          {failed ? (
-            <p role="alert" className="text-danger-text text-[14px]">
-              {t.actionFailed}
-            </p>
-          ) : null}
+          <ErrorNote>{failed ? t.actionFailed : null}</ErrorNote>
           <Button type="submit" loading={busy}>
             {t.createKey}
           </Button>
@@ -564,11 +557,7 @@ function HooksPanel() {
               <p className="text-danger-text text-[14px]">{t.pickEvents}</p>
             ) : null}
           </fieldset>
-          {failed ? (
-            <p role="alert" className="text-danger-text text-[14px]">
-              {t.actionFailed}
-            </p>
-          ) : null}
+          <ErrorNote>{failed ? t.actionFailed : null}</ErrorNote>
           <Button type="submit" loading={busy}>
             {t.addEndpoint}
           </Button>

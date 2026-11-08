@@ -5,6 +5,7 @@ import { copy } from "@/copy";
 import { groupWallets, type PickerPurpose } from "@/wallet/groups";
 import type { NearWalletInfo } from "@/wallet/near";
 import { Modal } from "./ui/modal";
+import { ErrorNote } from "@/components/ui/error-note";
 
 function Row({
   w,
@@ -97,11 +98,7 @@ export function WalletPicker({
             ))}
           </Group>
         ) : null}
-        {refused ? (
-          <p role="alert" className="text-danger-text text-[14px]">
-            {t.cannotSign}
-          </p>
-        ) : null}
+        <ErrorNote>{refused ? t.cannotSign : null}</ErrorNote>
         {g.unavailable.length > 0 ? (
           <Group title={t.unavailable}>
             {g.unavailable.map((w) => (
