@@ -200,12 +200,12 @@ describe("invoice PDF line items", () => {
   });
 
   it("falls back to the one-row table when the items do not sum to the terms amount", () => {
-    const mismatched = [{ ...items[0], amount_usd: "1.00" }];
+    const mismatched = [{ ...items[0]!, amount_usd: "1.00" }];
     const pdf = Buffer.from(renderInvoicePdf(terms, hash, undefined, mismatched)).toString(
       "latin1",
     );
     expect(pdf).toContain(terms.invoice_number);
-    expect(pdf).not.toContain(mismatched[0].description);
+    expect(pdf).not.toContain(mismatched[0]!.description);
   });
 
   it("wraps long descriptions and paginates many rows", () => {
