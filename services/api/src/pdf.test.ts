@@ -161,3 +161,73 @@ describe("invoice PDF layout contract", () => {
     expect(pdf).toContain("?".repeat(2));
   });
 });
+
+describe("invoice PDF line items", () => {
+  const hash = termsHash(terms);
+  const items = [
+    {
+      description: "Design and build the payment flow",
+      quantity: 2,
+      unit_amount_usd: "3.00",
+      amount_usd: "6.00",
+    },
+    {
+      description: "Review the invoice terms with the client",
+      quantity: 1,
+      unit_amount_usd: "6.50",
+      amount_usd: "6.50",
+    },
+  ] as const;
+
+  it("prints description, quantity, unit price and amount for every item", () => {
+    const pdf = Buffer.from(renderInvoicePdf(terms, hash, undefined, items)).toString("latin1");
+    expect(pdf).toContain("DESCRIPTION");
+    expect(pdf).toContain("QUANTITY");
+    expect(pdf).toContain("UNIT PRICE");
+    expect(pdf).toContain("AMOUNT");
+    for (const item of items) {
+      expect(pdf).toContain(item.description);
+      expect(pdf).toContain(`$${item.unit_amount_usd}`);
+      expect(pdf).toContain(`$${item.amount_usd}`);
+    }
+  });
+
+  it("uses the sum of the rows and leaves the line-items hash out", () => {
+    const pdf = Buffer.from(renderInvoicePdf(terms, hash, undefined, items)).toString("latin1");
+    expect(pdf).toContain("$12.50");
+    expect(pdf).not.toContain(terms.line_items_sha256);
+    expect(pdf).not.toContain("Line items SHA-256");
+  });
+
+  it("falls back to the one-row table when the items do not sum to the terms amount", () => {
+    const mismatched = [{ ...items[0], amount_usd: "1.00" }];
+    const pdf = Buffer.from(renderInvoicePdf(terms, hash, undefined, mismatched)).toString(
+      "latin1",
+    );
+    expect(pdf).toContain(terms.invoice_number);
+    expect(pdf).not.toContain(mismatched[0].description);
+  });
+
+  it("wraps long descriptions and paginates many rows", () => {
+    const many = Array.from({ length: 45 }, (_, index) => ({
+      description: `Row ${index + 1}: ${"A long description that must wrap inside the description column. ".repeat(3)}`,
+      quantity: 1,
+      unit_amount_usd: "0.01",
+      amount_usd: "0.01",
+    }));
+    const manyTerms = { ...terms, amount_usd: "0.45" };
+    const pdf = Buffer.from(
+      renderInvoicePdf(manyTerms, termsHash(manyTerms), undefined, many),
+    ).toString("latin1");
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
+    expect((pdf.match(/\/Type \/Page(?!s)/g) ?? []).length).toBeGreaterThan(1);
+    expect(pdf).toContain("Row 45");
+  });
+
+  it("is deterministic with line items", () => {
+    expect(Buffer.from(renderInvoicePdf(terms, hash, undefined, items))).toEqual(
+      Buffer.from(renderInvoicePdf(terms, hash, undefined, items)),
+    );
+  });
+});
