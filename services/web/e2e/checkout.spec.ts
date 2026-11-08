@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { pickRoute } from "./helpers";
 import { expect, test, type Page, type Route as PwRoute } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
@@ -109,7 +110,7 @@ async function mockCheckout(page: Page, s: Setup = {}) {
 }
 
 async function pick(page: Page, name = "USDC on Base", refund = REFUND) {
-  await page.getByRole("button", { name }).click();
+  await pickRoute(page, name);
   await page.getByLabel("Refund address").fill(refund);
   await page.getByRole("button", { name: "Get price" }).click();
 }
@@ -156,7 +157,7 @@ test("checkout_no_quote_after_expiry: expired checkout shows plain notice and no
   await page.goto("/c/c-101");
   await expect(page.getByText("This checkout has expired")).toBeVisible();
   await expect(page.getByText("No new price can be created for an expired checkout")).toBeVisible();
-  await expect(page.getByRole("button", { name: /USDC on Base/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Pay with/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
   expect(calls.posts).toHaveLength(0);
 });
@@ -214,7 +215,7 @@ test("partial, late, not found and error states", async ({ page }) => {
   });
   await page.goto("/c/c-101");
   await expect(page.getByText("Partially paid · $1.00 still due")).toBeVisible();
-  await expect(page.getByRole("button", { name: "USDC on Base" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Pay with/ })).toBeVisible();
 
   const latePage = await page.context().newPage();
   await mockCheckout(latePage, {
@@ -237,7 +238,7 @@ test("partial, late, not found and error states", async ({ page }) => {
     },
   });
   await latePage.goto("/c/c-102");
-  await expect(latePage.getByText("Paid after expiry")).toBeVisible();
+  await expect(latePage.getByText("Paid after expiry").first()).toBeVisible();
   await expect(latePage.getByRole("button", { name: "Get price" })).toHaveCount(0);
 
   const missing = await page.context().newPage();
@@ -294,7 +295,7 @@ test("late-then-refunded-again lifecycle: transitions across late, refunded, sec
 
   await page.goto("/c/c-103");
   // 1. Initial late state: banner shows "Paid after expiry" and quote form is omitted
-  await expect(page.getByText("Paid after expiry")).toBeVisible();
+  await expect(page.getByText("Paid after expiry").first()).toBeVisible();
   await expect(page.getByText("Your payment arrived after the order expired")).toBeVisible();
   await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
 
@@ -308,7 +309,7 @@ test("late-then-refunded-again lifecycle: transitions across late, refunded, sec
 
   // 3. Second late arrival lands on chain and is held -> live poll updates status back to "late"
   state = "late_again";
-  await expect(page.getByText("Paid after expiry")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Paid after expiry").first()).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
 
   // 4. Merchant refunds second late payment -> live poll updates status back to "refunded"
@@ -349,7 +350,7 @@ test("checkout page supports opaque token ids (<username>-<hash>.openrail.near)"
   await page.goto(`/c/${encodeURIComponent(opaqueId)}`);
   await expect(page.getByRole("heading", { name: "Pay alice.openrail.near" })).toBeVisible();
   await expect(page.getByText("$5.00").first()).toBeVisible();
-  await expect(page.getByText("ORD-OPAQUE-1")).toBeVisible();
+  await expect(page.getByText("ORD-OPAQUE-1", { exact: true })).toBeVisible();
 });
 
 for (const scheme of ["light", "dark"] as const) {
