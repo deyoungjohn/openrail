@@ -17,6 +17,7 @@ import {
   type CashoutPort,
   type ContractPort,
   type IssuerPort,
+  type PayoutEstimatorPort,
 } from "./app.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -345,6 +346,73 @@ export function createCashoutPort(): CashoutPort {
   };
 }
 
+const USDC_NEAR = "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+const PAYOUT_DESTINATIONS: Record<string, { asset: string; address: string }> = {
+  base: {
+    asset: "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+    address: "0x1111222233334444555566667777888899990000",
+  },
+  arbitrum: {
+    asset: "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+    address: "0x1111222233334444555566667777888899990000",
+  },
+  ethereum: {
+    asset: "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    address: "0x1111222233334444555566667777888899990000",
+  },
+  solana: {
+    asset: "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+    address: "11111111111111111111111111111111",
+  },
+};
+
+function usdMicro(value: bigint): string {
+  const whole = value / 1_000_000n;
+  const fraction = String(value % 1_000_000n).padStart(6, "0");
+  return `${whole}.${fraction}`;
+}
+
+function createPayoutEstimator(): PayoutEstimatorPort {
+  const client = createOneClickClientFromEnv();
+  return {
+    async estimate(destination) {
+      const [chainRaw, addressRaw] = destination.split(":", 2);
+      const chain = (chainRaw ?? "").toLowerCase();
+      const target = PAYOUT_DESTINATIONS[chain];
+      if (target === undefined) throw new ApiError(400, "unsupported_chain");
+      const address = addressRaw === undefined || addressRaw === "" ? target.address : addressRaw;
+      const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const sizes = [];
+      for (const usd of [5, 50, 500]) {
+        const amount = String(BigInt(usd) * 1_000_000n);
+        const response = await client.quote({
+          originAsset: USDC_NEAR,
+          destinationAsset: target.asset,
+          amount,
+          swapType: "EXACT_INPUT",
+          depositType: "INTENTS",
+          refundTo: address,
+          recipient: address,
+          recipientType: "DESTINATION_CHAIN",
+          refundType: "ORIGIN_CHAIN",
+          dry: false,
+          slippageTolerance: 100,
+          deadline,
+        });
+        const out =
+          typeof response.quote.amountOut === "string" ? BigInt(response.quote.amountOut) : 0n;
+        sizes.push({
+          amount_usd: `${usd}.00`,
+          paid_usd: usdMicro(BigInt(amount)),
+          received_usd: usdMicro(out),
+          cost_usd: usdMicro(BigInt(amount) - out),
+        });
+      }
+      return { destination, chain, sizes, measured_at: new Date().toISOString() };
+    },
+  };
+}
+
 export async function createApiAppFromEnv(): Promise<ApiApp> {
   const rootAccount = requireEnv("NEAR_ROOT_ACCOUNT");
   const issuerUrl = requireEnv("ISSUER_URL");
@@ -373,6 +441,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
       [rpcUrl as string, getEnv("NEAR_RPC_URL_FALLBACK")].filter((u): u is string => !!u),
     ),
     cashout: createCashoutPort(),
+    payoutEstimator: createPayoutEstimator(),
     indexer,
     pokeIndexer: async () => {
       await fetch(`${indexerUrl.replace(/\/+$/, "")}/poke`, { method: "POST" });

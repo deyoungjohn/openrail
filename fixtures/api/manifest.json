@@ -376,6 +376,30 @@
       "status": 200,
       "schema": "Analytics",
       "mock": true
+    },
+    {
+      "file": "fee.preview.json",
+      "method": "GET",
+      "path": "/v1/fee_preview",
+      "status": 200,
+      "schema": "FeePreview",
+      "mock": true
+    },
+    {
+      "file": "receipts.machine.json",
+      "method": "GET",
+      "path": "/v1/receipts/{id}.json",
+      "status": 200,
+      "schema": "MachineReceipt",
+      "mock": true
+    },
+    {
+      "file": "payout.estimate.json",
+      "method": "GET",
+      "path": "/v1/payout/estimate",
+      "status": 200,
+      "schema": "PayoutEstimate",
+      "mock": true
     }
   ]
 }

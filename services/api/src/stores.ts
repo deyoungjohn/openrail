@@ -333,7 +333,7 @@ export function createSqliteStores(path: string): Stores {
   const db = new DatabaseSync(path);
   db.exec(`
     PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, token_id TEXT UNIQUE, account_id TEXT NOT NULL, body TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, token_id TEXT UNIQUE, account_id TEXT NOT NULL, line_items TEXT, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, token_id TEXT NOT NULL, booking_hash TEXT UNIQUE, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS webhook_endpoints (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, body TEXT NOT NULL);
@@ -353,6 +353,12 @@ export function createSqliteStores(path: string): Stores {
     INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, datetime('now'));
   `);
 
+  const invoiceColumns = db.prepare("PRAGMA table_info(invoices)").all() as {
+    name?: unknown;
+  }[];
+  if (!invoiceColumns.some((column) => column.name === "line_items")) {
+    db.exec("ALTER TABLE invoices ADD COLUMN line_items TEXT");
+  }
   const businessColumns = db.prepare("PRAGMA table_info(business_profiles)").all() as {
     name?: unknown;
   }[];
@@ -403,8 +409,14 @@ export function createSqliteStores(path: string): Stores {
     },
     saveInvoice(record) {
       db.prepare(
-        "INSERT INTO invoices (id, token_id, account_id, body) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET body = excluded.body",
-      ).run(record.id, record.token_id, record.issuer_id, JSON.stringify(record));
+        "INSERT INTO invoices (id, token_id, account_id, line_items, body) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET line_items = excluded.line_items, body = excluded.body",
+      ).run(
+        record.id,
+        record.token_id,
+        record.issuer_id,
+        record.line_items === undefined ? null : JSON.stringify(record.line_items),
+        JSON.stringify(record),
+      );
     },
     listPayments() {
       return db

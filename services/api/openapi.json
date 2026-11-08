@@ -618,16 +618,20 @@
       },
       "LineItem": {
         "type": "object",
-        "required": ["description", "quantity", "unit_amount_usd"],
+        "required": ["description", "quantity", "unit_amount_usd", "amount_usd"],
         "properties": {
           "description": {
             "type": "string"
           },
           "quantity": {
-            "type": "number",
-            "minimum": 0
+            "type": "integer",
+            "minimum": 1
           },
           "unit_amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
+          },
+          "amount_usd": {
             "type": "string",
             "pattern": "^[0-9]+\\.[0-9]{2}$"
           }
@@ -881,6 +885,12 @@
           "recurring_id": {
             "type": "string",
             "description": "Set when the invoice was issued by a recurring template."
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineItem"
+            }
           }
         }
       },
@@ -958,7 +968,7 @@
             "type": "array",
             "minItems": 1,
             "items": {
-              "$ref": "#/components/schemas/LineItem"
+              "$ref": "#/components/schemas/LineItemInput"
             }
           },
           "line_items_sha256": {
@@ -1530,7 +1540,8 @@
           "status",
           "pay_link",
           "terms",
-          "routes"
+          "routes",
+          "line_items"
         ],
         "properties": {
           "token_id": {
@@ -1579,6 +1590,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Route"
+            }
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineItem"
             }
           }
         }
@@ -1644,7 +1661,8 @@
           "terms",
           "domain",
           "primary_type",
-          "message"
+          "message",
+          "line_items"
         ],
         "properties": {
           "token_id": {
@@ -1687,6 +1705,12 @@
           },
           "message": {
             "$ref": "#/components/schemas/AckMessage"
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineItem"
+            }
           }
         }
       },
@@ -1977,7 +2001,8 @@
           "payout_account",
           "contact_email",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "fee_mode"
         ],
         "properties": {
           "account_id": {
@@ -2005,6 +2030,12 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "fee_mode": {
+            "$ref": "#/components/schemas/FeeMode"
+          },
+          "payout": {
+            "$ref": "#/components/schemas/PayoutSettings"
           }
         }
       },
@@ -2026,6 +2057,20 @@
           "contact_email": {
             "type": "string",
             "format": "email"
+          },
+          "fee_mode": {
+            "$ref": "#/components/schemas/FeeMode"
+          },
+          "payout": {
+            "type": "object",
+            "properties": {
+              "schedule": {
+                "$ref": "#/components/schemas/PayoutSchedule"
+              },
+              "destination": {
+                "type": ["string", "null"]
+              }
+            }
           }
         }
       },
@@ -2467,7 +2512,7 @@
           "line_items": {
             "type": "array",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/LineItemInput"
             }
           }
         }
@@ -2898,6 +2943,176 @@
           "reason": {
             "type": "string",
             "description": "available, invalid, reserved or taken."
+          }
+        }
+      },
+      "FeeMode": {
+        "type": "string",
+        "enum": ["absorb", "pass_to_customer"]
+      },
+      "FeePreview": {
+        "type": "object",
+        "required": ["subtotal_usd", "fee_usd", "total_usd", "merchant_receives_usd", "fee_mode"],
+        "properties": {
+          "subtotal_usd": {
+            "type": "string"
+          },
+          "fee_usd": {
+            "type": "string"
+          },
+          "total_usd": {
+            "type": "string"
+          },
+          "merchant_receives_usd": {
+            "type": "string"
+          },
+          "fee_mode": {
+            "$ref": "#/components/schemas/FeeMode"
+          }
+        }
+      },
+      "MachineReceipt": {
+        "type": "object",
+        "required": [
+          "receipt_id",
+          "paid_at",
+          "invoice_number",
+          "order_ref",
+          "business_name",
+          "business_username",
+          "buyer_name",
+          "amount_usd",
+          "paid_amount",
+          "paid_asset",
+          "network",
+          "fee_usd",
+          "payer_tx",
+          "near_tx",
+          "claim_account",
+          "terms_fingerprint",
+          "verify_command"
+        ],
+        "properties": {
+          "receipt_id": {
+            "type": "string"
+          },
+          "paid_at": {
+            "type": "string"
+          },
+          "invoice_number": {
+            "type": "string"
+          },
+          "order_ref": {
+            "type": "string"
+          },
+          "business_name": {
+            "type": ["string", "null"]
+          },
+          "business_username": {
+            "type": ["string", "null"]
+          },
+          "buyer_name": {
+            "type": ["string", "null"]
+          },
+          "amount_usd": {
+            "type": ["string", "null"]
+          },
+          "paid_amount": {
+            "type": "string"
+          },
+          "paid_asset": {
+            "type": "string"
+          },
+          "network": {
+            "type": ["object", "null"]
+          },
+          "fee_usd": {
+            "type": "string"
+          },
+          "payer_tx": {
+            "type": ["object", "null"]
+          },
+          "near_tx": {
+            "type": "string"
+          },
+          "claim_account": {
+            "type": "string"
+          },
+          "terms_fingerprint": {
+            "type": "string"
+          },
+          "verify_command": {
+            "type": "string"
+          }
+        }
+      },
+      "PayoutSchedule": {
+        "type": "string",
+        "enum": ["manual", "each_payment", "daily", "weekly", "monthly"]
+      },
+      "PayoutSettings": {
+        "type": "object",
+        "required": ["schedule", "destination"],
+        "properties": {
+          "schedule": {
+            "$ref": "#/components/schemas/PayoutSchedule"
+          },
+          "destination": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "PayoutEstimate": {
+        "type": "object",
+        "required": ["destination", "chain", "sizes", "measured_at"],
+        "properties": {
+          "destination": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "measured_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sizes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["amount_usd", "paid_usd", "received_usd", "cost_usd"],
+              "properties": {
+                "amount_usd": {
+                  "type": "string"
+                },
+                "paid_usd": {
+                  "type": "string"
+                },
+                "received_usd": {
+                  "type": "string"
+                },
+                "cost_usd": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "LineItemInput": {
+        "type": "object",
+        "required": ["description", "quantity", "unit_amount_usd"],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unit_amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$"
           }
         }
       }
@@ -5737,6 +5952,168 @@
           },
           "400": {
             "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/fee_preview": {
+      "get": {
+        "operationId": "feePreview",
+        "summary": "Preview the platform fee and customer total",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "subtotal_usd",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fee_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FeeMode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fee and total.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad subtotal or fee mode.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/receipts/{id}.json": {
+      "get": {
+        "operationId": "getMachineReceipt",
+        "summary": "Canonical machine-readable receipt",
+        "tags": ["Statements"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical JSON receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineReceipt"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Receipt not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/payout/estimate": {
+      "get": {
+        "operationId": "payoutEstimate",
+        "summary": "What one payout to a destination costs now",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "destination",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "base, arbitrum, ethereum or solana; optional :address"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dry 1Click quotes for $5, $50 and $500.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutEstimate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad destination.",
             "content": {
               "application/json": {
                 "schema": {

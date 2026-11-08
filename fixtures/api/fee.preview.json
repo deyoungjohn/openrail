@@ -1,0 +1,7 @@
+{
+  "subtotal_usd": "12.00",
+  "fee_usd": "0.03",
+  "total_usd": "12.03",
+  "merchant_receives_usd": "12.00",
+  "fee_mode": "pass_to_customer"
+}

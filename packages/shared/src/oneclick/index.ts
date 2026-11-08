@@ -13,7 +13,7 @@ export type AuthMode = "bearer" | "x-api-key";
 
 export interface OneClickQuoteRequest {
   amount?: string;
-  swapType?: "FLEX_INPUT" | "EXACT_OUTPUT";
+  swapType?: "FLEX_INPUT" | "EXACT_OUTPUT" | "EXACT_INPUT";
   slippageTolerance?: number;
   originAsset?: string;
   destinationAsset?: string;

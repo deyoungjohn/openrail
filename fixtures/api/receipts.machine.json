@@ -1,0 +1,23 @@
+{
+  "receipt_id": "rcpt_0xbooking",
+  "paid_at": "2026-11-02T10:05:00Z",
+  "invoice_number": "INV-2026-001",
+  "order_ref": "inv_1",
+  "business_name": "Acme Ltd",
+  "business_username": "acme",
+  "buyer_name": "Debtor Co",
+  "amount_usd": "12.50",
+  "paid_amount": "12500000",
+  "paid_asset": "nep141:usdc",
+  "network": {
+    "chain": "base"
+  },
+  "fee_usd": "0.00",
+  "payer_tx": {
+    "hash": "0xpayer"
+  },
+  "near_tx": "0xnear",
+  "claim_account": "acme-9f3c2a7d41b8.openrail.near",
+  "terms_fingerprint": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "verify_command": "openrail-verify claim acme-9f3c2a7d41b8.openrail.near --terms-hash 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}
