@@ -445,6 +445,7 @@ describe("invoice route", () => {
     const { app, secret } = harness();
     app.store.savePayment("pay_1", {
       id: "pay_1",
+      issuer_id: "acme.openrail.near",
       invoice_id: "inv_1",
       amount: "12500000",
       origin_chain: "base",

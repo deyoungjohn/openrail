@@ -437,6 +437,13 @@ export class ApiApp {
     };
   }
 
+  /** An invoice of this merchant. Another merchant's invoice answers like one that does not exist. */
+  private ownInvoice(accountId: string, idOrToken: string): InvoiceRecord {
+    const invoice = this.invoiceBy(idOrToken);
+    if (invoice.issuer_id !== accountId) throw new ApiError(404, "invoice_not_found");
+    return invoice;
+  }
+
   private invoiceBy(idOrToken: string): InvoiceRecord {
     // A public link carries the invoice id without its `inv_` prefix.
     const invoice = this.store.getInvoice(idOrToken) ?? this.store.getInvoice(`inv_${idOrToken}`);
@@ -900,8 +907,9 @@ export class ApiApp {
       const action = invoiceMatch[2];
       if (invoiceId === undefined) throw new ApiError(404, "invoice_not_found");
       if (action === undefined && method === "GET") {
-        this.requireScope(this.requireAuth(request), "invoices:read");
-        const invoice = this.invoiceBy(invoiceId);
+        const context = this.requireAuth(request);
+        this.requireScope(context, "invoices:read");
+        const invoice = this.ownInvoice(context.accountId, invoiceId);
         const claim = await this.deps.contract.claim(invoice.token_id);
         return {
           status: 200,
@@ -919,8 +927,9 @@ export class ApiApp {
       }
       if (action === "send" && method === "POST") {
         // Nothing sends email yet. Say so: never answer "sent" for a message that was not sent.
-        this.requireScope(this.requireAuth(request), "invoices:write");
-        this.invoiceBy(invoiceId);
+        const context = this.requireAuth(request);
+        this.requireScope(context, "invoices:write");
+        this.ownInvoice(context.accountId, invoiceId);
         throw new ApiError(
           501,
           "email_not_available",
@@ -930,7 +939,7 @@ export class ApiApp {
       if (action === "receipts" && method === "GET") {
         const context = this.requireAuth(request);
         this.requireScope(context, "receipts:read");
-        const invoice = this.invoiceBy(invoiceId);
+        const invoice = this.ownInvoice(context.accountId, invoiceId);
         const receipts =
           this.deps.indexer === undefined
             ? this.store.listReceipts(invoice.token_id)
@@ -938,8 +947,9 @@ export class ApiApp {
         return { status: 200, body: { data: receipts } };
       }
       if (action === "pdf" && method === "GET") {
-        this.requireScope(this.requireAuth(request), "invoices:read");
-        const invoice = this.invoiceBy(invoiceId);
+        const context = this.requireAuth(request);
+        this.requireScope(context, "invoices:read");
+        const invoice = this.ownInvoice(context.accountId, invoiceId);
         return {
           status: 200,
           body: {
@@ -958,8 +968,9 @@ export class ApiApp {
         };
       }
       if (action === "open_quotes" && method === "GET") {
-        this.requireScope(this.requireAuth(request), "invoices:read");
-        const invoice = this.invoiceBy(invoiceId);
+        const context = this.requireAuth(request);
+        this.requireScope(context, "invoices:read");
+        const invoice = this.ownInvoice(context.accountId, invoiceId);
         return { status: 200, body: { data: this.store.getOpenQuotes(invoice.token_id) } };
       }
     }
@@ -1356,23 +1367,46 @@ export class ApiApp {
     }
 
     if (path === "/v1/events" && method === "GET") {
-      this.requireAuth(request);
+      const context = this.requireAuth(request);
+      // The event stream is shared by every merchant: keep only the events of this merchant's own claims.
+      const own = new Set(this.store.listInvoices(context.accountId).map((i) => i.token_id));
+      const tokenOf = (e: Record<string, unknown>): string | undefined => {
+        const data = e.data as { token_id?: unknown } | undefined;
+        return typeof data?.token_id === "string" ? data.token_id : undefined;
+      };
       if (this.deps.indexer !== undefined) {
         const limit = Number(request.query.get("limit") ?? "50");
-        return {
-          status: 200,
-          body: await this.deps.indexer.listEvents({
-            ...(request.query.get("cursor") === null
-              ? {}
-              : { after: request.query.get("cursor") ?? undefined }),
-            ...(request.query.get("type") === null
-              ? {}
-              : { type: request.query.get("type") ?? undefined }),
-            limit: Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50,
-          }),
-        };
+        const want = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50;
+        const type = request.query.get("type");
+        let after = request.query.get("cursor") ?? undefined;
+        const found: Record<string, unknown>[] = [];
+        let next: string | null = null;
+        // Read the shared stream page by page until there are enough of this merchant's events (bounded).
+        for (let page = 0; page < 10 && found.length < want; page += 1) {
+          const batch = await this.deps.indexer.listEvents({
+            ...(after === undefined ? {} : { after }),
+            ...(type === null ? {} : { type: type ?? undefined }),
+            limit: 200,
+          });
+          for (const e of batch.data as Record<string, unknown>[]) {
+            const token = tokenOf(e);
+            if (token !== undefined && own.has(token)) found.push(e);
+          }
+          next = batch.next_cursor ?? null;
+          if (next === null) break;
+          after = next;
+        }
+        return { status: 200, body: { data: found.slice(0, want), next_cursor: next } };
       }
-      return { status: 200, body: { data: this.store.listEvents() } };
+      return {
+        status: 200,
+        body: {
+          data: this.store.listEvents().filter((e) => {
+            const token = tokenOf(e);
+            return token !== undefined && own.has(token);
+          }),
+        },
+      };
     }
 
     const receiptMatch = /^\/v1\/receipts\/([^/]+)$/.exec(path);
@@ -1396,14 +1430,23 @@ export class ApiApp {
     if (path === "/v1/payments" && method === "GET") {
       const context = this.requireAuth(request);
       this.requireScope(context, "payments:read");
-      return { status: 200, body: { data: this.store.listPayments(context.accountId) } };
+      return {
+        status: 200,
+        body: {
+          data: this.store
+            .listPayments(context.accountId)
+            .filter((payment) => payment.issuer_id === context.accountId),
+        },
+      };
     }
 
     const paymentMatch = /^\/v1\/payments\/([^/]+)$/.exec(path);
     if (paymentMatch !== null && method === "GET") {
-      this.requireScope(this.requireAuth(request), "payments:read");
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
       const payment = this.store.getPayment(paymentMatch[1] ?? "");
-      if (payment === undefined) throw new ApiError(404, "payment_not_found");
+      if (payment === undefined || payment.issuer_id !== context.accountId)
+        throw new ApiError(404, "payment_not_found");
       return { status: 200, body: payment };
     }
 

@@ -171,7 +171,12 @@ export function DataTable<T>({
           {/* The controls sit in one block next to the title: filters and search on the first row, the toolbar
               (time pills, date picker) on the second, every row pushed to the right edge. */}
           <div className="flex min-w-0 flex-1 basis-[28rem] flex-col items-end gap-2">
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-3",
+                leading ? "w-full justify-between" : "justify-end",
+              )}
+            >
               {leading}
               {filters.map((f) => (
                 <div
@@ -213,7 +218,10 @@ export function DataTable<T>({
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={t.search}
-                    className="h-9 w-44 rounded-full border border-border bg-transparent pr-3 pl-9 text-[14px] outline-none focus-visible:border-accent"
+                    className={cn(
+                      "w-44 rounded-full border border-border bg-transparent pr-3 pl-9 text-[14px] outline-none focus-visible:border-accent",
+                      leading ? "h-11" : "h-9",
+                    )}
                   />
                 </label>
               ) : null}

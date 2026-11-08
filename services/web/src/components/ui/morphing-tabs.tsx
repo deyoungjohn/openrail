@@ -750,7 +750,7 @@ export function MorphingTabs({
                     }}
                     onKeyDown={(event) => handleTabKeyDown(item.id, event)}
                     className={cn(
-                      "group relative z-10 flex h-full w-full min-w-0 items-center gap-2 overflow-hidden rounded-t-[1.5rem] px-3 text-left outline-none transition-colors",
+                      "group relative z-10 flex h-full w-full min-w-0 items-center gap-2 overflow-hidden rounded-t-[1.5rem] px-3 text-center justify-center outline-none transition-colors",
                       isActive ? "text-text" : "pb-2 text-muted hover:text-text",
                       classNames?.tab,
                     )}

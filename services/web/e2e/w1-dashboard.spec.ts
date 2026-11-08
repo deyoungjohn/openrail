@@ -179,10 +179,18 @@ test.describe("dashboard", () => {
     await expect(p2.getByRole("button", { name: "Try again" }).first()).toBeVisible();
   });
 
-  test("empty: invites the first invoice", async ({ page }) => {
+  test("empty: every card and chart is still there, and the first invoice is one click away", async ({
+    page,
+  }) => {
     await mockApi(page, { "GET /v1/invoices": { body: { data: [], next_cursor: null } } });
     await page.goto("/app");
-    await expect(page.getByText("No invoices yet")).toBeVisible();
+    const main = page.getByRole("main");
+    await expect(main.getByRole("region", { name: "Monthly revenue" })).toBeVisible();
+    await expect(main.getByRole("region", { name: "Weekly activity" })).toBeVisible();
+    await expect(main.getByRole("region", { name: "Overview" })).toBeVisible();
+    await expect(main.getByRole("region", { name: "Top clients" })).toBeVisible();
+    await expect(main.getByRole("region", { name: "Inflow" })).toBeVisible();
+    await expect(main.getByText("No payments yet").first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Create invoice" }).first()).toHaveAttribute(
       "href",
       "/app/invoices/new",

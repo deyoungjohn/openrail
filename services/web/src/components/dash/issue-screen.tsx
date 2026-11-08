@@ -193,6 +193,7 @@ export function IssueScreen() {
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<false | "credit" | "other">(false);
+  const [reason, setReason] = useState("");
   const [created, setCreated] = useState<Invoice | null>(null);
   const idem = useRef(crypto.randomUUID());
 
@@ -240,6 +241,7 @@ export function IssueScreen() {
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       } else {
         setFailed("other");
+        setReason(e instanceof ApiError ? e.code : "network");
       }
     } finally {
       setBusy(false);
@@ -380,7 +382,7 @@ export function IssueScreen() {
             {failed === "credit"
               ? t.createNeedsCredit
               : failed
-                ? t.createFailed
+                ? `${t.createFailed} (${reason})`
                 : shown && hasErrors
                   ? t.fixErrors
                   : null}

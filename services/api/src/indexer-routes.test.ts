@@ -102,14 +102,19 @@ describe("receipt and statement routes use the indexer port", () => {
     expect(indexer.analytics).toHaveBeenCalled();
   });
 
-  it("lists events from the indexer cursor", async () => {
+  it("lists events from the indexer cursor, only those of the merchant's own claims", async () => {
     const { app, indexer, secret } = appWithIndexer();
+    app.store.saveInvoice({
+      id: "inv_1",
+      token_id: "c-1",
+      issuer_id: "acme.openrail.near",
+    } as never);
     const response = await app.handle(
       request("GET", "/v1/events", secret, "cursor=3&type=booked&limit=10"),
     );
     expect(response.status).toBe(200);
     expect((response.body as { data: { id: string }[] }).data[0]?.id).toBe("7");
-    expect(indexer.listEvents).toHaveBeenCalledWith({ after: "3", type: "booked", limit: 10 });
+    expect(indexer.listEvents).toHaveBeenCalledWith({ after: "3", type: "booked", limit: 200 });
   });
 
   it("returns the indexer statement envelope with the query", async () => {

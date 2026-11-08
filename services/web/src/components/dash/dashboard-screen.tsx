@@ -377,7 +377,6 @@ export function DashboardScreen() {
   const [load, retry] = useEarnings();
   const nowMs = useMemo(() => Date.now(), [load.state]);
   const earnings = load.state === "ready" ? load.data.earnings : [];
-  const noInvoices = load.state === "ready" && load.data.invoices.length === 0;
   const loading = load.state === "loading";
   const rev = useMemo(() => revenueSummary(earnings, nowMs), [earnings, nowMs]);
   const week = useMemo(() => lastSevenDays(earnings, nowMs), [earnings, nowMs]);
@@ -391,15 +390,7 @@ export function DashboardScreen() {
         {CREATE}
       </header>
 
-      {noInvoices ? (
-        <div className="surface-card">
-          <div className="px-4 py-12 text-center">
-            <h2 className="text-[18px] leading-[26px] font-semibold">{d.emptyTitle}</h2>
-            <p className="caption mx-auto mt-2 max-w-sm">{d.emptyBody}</p>
-            <div className="mt-4 flex justify-center">{CREATE}</div>
-          </div>
-        </div>
-      ) : load.state === "error" ? (
+      {load.state === "error" ? (
         <Card state="error" errorBody={d.loadError} onRetry={retry} />
       ) : (
         <>
