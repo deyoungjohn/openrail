@@ -17,7 +17,10 @@ export async function resolveClaimKind(id: string): Promise<number | null> {
     try {
       const root = process.env.NEXT_PUBLIC_ROOT_CONTRACT ?? "openrail.near";
       const rpcUrls = [
-        process.env.NEXT_PUBLIC_NEAR_RPC_URL,
+        ...(process.env.NEXT_PUBLIC_NEAR_RPC_URL ?? "")
+          .split(",")
+          .map((u) => u.trim())
+          .filter(Boolean),
         "https://rpc.mainnet.fastnear.com",
         "https://free.rpc.fastnear.com",
       ].filter((x): x is string => Boolean(x));

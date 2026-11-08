@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { ApiApp, ApiError, type ApiDeps, type BusinessRecord } from "../../app.js";
 import { AuthStore } from "../../auth.js";
+import { sha256Hex0x } from "../../crypto.js";
 import { expandEvents } from "../../modules.js";
 import type { IndexedEvent } from "../../webhooks.js";
 import type {
@@ -12,7 +13,10 @@ import type {
 } from "./checkouts.js";
 import { computeFeeBreakdown } from "./checkouts.js";
 import type { CheckoutPort } from "./checkout-port.js";
+import { checkoutTermsHash, EMPTY_ITEMS_SHA256 } from "./checkout-port.js";
 import { createCheckoutApiModule } from "./index.js";
+import { createIssuerApp } from "../../../../issuer/src/http.js";
+import type { IssuerService } from "../../../../issuer/src/service.js";
 
 const ACME = "acme.openrail.near";
 const OTHER = "other.openrail.near";
@@ -40,7 +44,13 @@ function claimView(overrides: Record<string, unknown> = {}): Record<string, unkn
   };
 }
 
-function harness() {
+function harness(
+  options: {
+    config?: Partial<ApiDeps["config"]>;
+    useRealPort?: boolean;
+    issuer?: ApiDeps["issuer"];
+  } = {},
+) {
   let now = new Date(NOW);
   const clock = () => now;
   const auth = new AuthStore(() => clock().getTime());
@@ -92,19 +102,35 @@ function harness() {
     recipient: input.refundTo,
   }));
   const module = createCheckoutApiModule({
-    checkouts: () => ({ create }),
+    ...(options.useRealPort ? {} : { checkouts: () => ({ create }) }),
     chain: () => fakeChain,
     refunds: () => ({ quote: refundQuote }),
   });
-  const issueFor = vi.fn();
+  const issueFor = vi.fn(async () => ({
+    txHash: "0xissue",
+    tokenId: "c-1",
+    claimAccount: "c-1.openrail.near",
+  }));
   const deps: ApiDeps = {
     config: {
       rootAccount: "openrail.near",
       recipient: "api.openrail.near",
       payBaseUrl: "https://pay.example",
+      ...options.config,
     },
     auth,
-    issuer: { prepareIssue: vi.fn(), issueFor, logQuote: vi.fn(), acknowledgeEvm: vi.fn() },
+    issuer: options.issuer ?? {
+      prepareIssue: vi.fn(async () => ({
+        account: "openrail.near",
+        amount: "1",
+        storageCredit: "1000",
+        tokenId: "c-1",
+        claimAccount: "c-1.openrail.near",
+      })),
+      issueFor,
+      logQuote: vi.fn(),
+      acknowledgeEvm: vi.fn(),
+    },
     contract: { claim: vi.fn(), storageCredit: vi.fn() },
     accessKey: { has: async () => true },
     verifier: () => true,
@@ -277,14 +303,10 @@ describe("checkout API: create", () => {
     await createCheckout(h, { items });
     const first = h.create.mock.calls[0]?.[0];
     expect(first?.itemsSha256).toBe(
-      createHash("sha256")
-        .update(JSON.stringify([{ name: "Coffee", quantity: 2, unit_price_usd: "1.00" }]))
-        .digest("hex"),
+      sha256Hex0x(JSON.stringify([{ name: "Coffee", quantity: 2, unit_price_usd: "1.00" }])),
     );
     await createCheckout(h, { order_ref: "ORD-2" });
-    expect(h.create.mock.calls[1]?.[0].itemsSha256).toBe(
-      createHash("sha256").update("[]").digest("hex"),
-    );
+    expect(h.create.mock.calls[1]?.[0].itemsSha256).toBe(EMPTY_ITEMS_SHA256);
   });
 
   it("checkout_create_needs_a_secret_key_with_write_scope", async () => {
@@ -1326,6 +1348,224 @@ describe("checkout API: late payments never sign for the merchant", () => {
       expect(data.fee_usd).toBe("0.03");
       expect(data.total_usd).toBe("12.03");
       expect(data.fee_mode).toBe("pass_to_customer");
+    });
+
+    it("checkout_creates_through_real_issuer_http_handler", async () => {
+      let issuedPayload: Record<string, unknown> | undefined;
+      const fakeChainService = {
+        prepareIssue: vi.fn(async () => ({
+          account: "openrail.near",
+          amount: "1",
+          storageCredit: "1000",
+          tokenId: "c-42",
+          claimAccount: "c-42.openrail.near",
+        })),
+        issueFor: vi.fn(async (request) => {
+          issuedPayload = request as Record<string, unknown>;
+          return {
+            txHash: "0xissue42",
+            tokenId: "c-42",
+            claimAccount: "c-42.openrail.near",
+          };
+        }),
+        logQuote: vi.fn(async () => ({ txHash: "0xquote" })),
+        acknowledgeEvm: vi.fn(async () => ({ txHash: "0xack", ack: null })),
+      } as unknown as IssuerService;
+
+      const issuerApp = createIssuerApp({
+        service: fakeChainService,
+        serviceKey: "test-secret-key",
+        logger: { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} } as never,
+      });
+
+      const realIssuerClient: ApiDeps["issuer"] = {
+        async prepareIssue(accountId: string) {
+          const res = await issuerApp.handle(
+            "POST",
+            "/issue/prepare",
+            { authorization: "Bearer test-secret-key" },
+            JSON.stringify({ account_id: accountId }),
+          );
+          if (res.status !== 200)
+            throw new ApiError(res.status, "prepare_failed", "prepare failed");
+          return res.body as never;
+        },
+        async issueFor(request) {
+          const res = await issuerApp.handle(
+            "POST",
+            "/issue",
+            { authorization: "Bearer test-secret-key" },
+            JSON.stringify(request),
+          );
+          if (res.status !== 200) {
+            const err = res.body as { error?: { message?: string; code?: string } };
+            throw new ApiError(
+              res.status,
+              err?.error?.code ?? "issuer_rejected",
+              err?.error?.message ?? "issue failed",
+            );
+          }
+          return res.body as never;
+        },
+        logQuote: vi.fn(),
+        acknowledgeEvm: vi.fn(),
+      };
+
+      const h = harness({ useRealPort: true, issuer: realIssuerClient });
+
+      const res = await call(
+        h,
+        "POST",
+        "/v1/checkouts",
+        {
+          order_ref: "ORD-REAL-ISSUER-1",
+          amount_usd: "12.00",
+          expires_in_minutes: 15,
+        },
+        h.keys.acme,
+        { "idempotency-key": "idem-real-issuer-1" },
+      );
+
+      expect(res.status).toBe(201);
+      expect(res.body.id).toBe("c-42");
+      expect(issuedPayload).toBeDefined();
+      // Verify termsHash begins with 0x and is 66 chars (0x + 64 hex)
+      expect(issuedPayload!.termsHash).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(issuedPayload!.kind).toBe(1);
+      expect(issuedPayload!.debtor).toBeNull();
+      expect(issuedPayload!.amountDue).toBe("12000000");
+
+      // Verify canonical checkout terms schema has exactly the 5 fields
+      const termsObj = {
+        amount_usd: "12.00",
+        expiry: Math.floor(NOW.getTime() / 1000) + 15 * 60,
+        items_sha256: EMPTY_ITEMS_SHA256,
+        merchant: ACME,
+        order_ref: "ORD-REAL-ISSUER-1",
+      };
+      expect(issuedPayload!.termsHash).toBe(checkoutTermsHash(termsObj));
+
+      // Negative check: verify that the real issuer HTTP handler refuses a termsHash without 0x
+      const badHashRes = await issuerApp.handle(
+        "POST",
+        "/issue",
+        { authorization: "Bearer test-secret-key" },
+        JSON.stringify({
+          business: ACME,
+          kind: 1,
+          debtor: null,
+          termsHash: (issuedPayload!.termsHash as string).replace(/^0x/, ""),
+          amountDue: "12000000",
+          dueDate: Math.floor(NOW.getTime() / 1000) + 15 * 60,
+          expectedTokenId: "c-42",
+        }),
+      );
+      expect(badHashRes.status).toBe(400);
+      expect((badHashRes.body as { error: { message: string } }).error.message).toContain(
+        "termsHash must be 0x + 64 hex",
+      );
+    });
+
+    it("checkout_claim_labels_flag_on_and_off", async () => {
+      // 1. When claimLabels is ON
+      let issueRequestLabels: Record<string, unknown> | undefined;
+      const issuerLabels: ApiDeps["issuer"] = {
+        prepareIssue: vi.fn(async () => ({
+          account: "openrail.near",
+          amount: "1",
+          storageCredit: "1000",
+          tokenId: "c-1",
+          claimAccount: "c-1.openrail.near",
+        })),
+        issueFor: vi.fn(async (req) => {
+          issueRequestLabels = req as Record<string, unknown>;
+          return {
+            txHash: "0xlabels",
+            tokenId: req.claimLabel,
+            claimAccount: `${req.claimLabel}.openrail.near`,
+          };
+        }),
+        logQuote: vi.fn(),
+        acknowledgeEvm: vi.fn(),
+      };
+      const hLabels = harness({
+        useRealPort: true,
+        config: { claimLabels: true },
+        issuer: issuerLabels,
+      });
+      hLabels.context().store.saveBusiness({
+        account_id: ACME,
+        username: "acmestore",
+        legal_name: "Acme Store",
+        payout_account: ACME,
+        contact_email: "acme@example.com",
+        created_at: NOW.toISOString(),
+        updated_at: NOW.toISOString(),
+      });
+
+      const resLabels = await call(
+        hLabels,
+        "POST",
+        "/v1/checkouts",
+        {
+          order_ref: "ORD-LABELS-1",
+          amount_usd: "25.00",
+        },
+        hLabels.keys.acme,
+        { "idempotency-key": "idem-labels-1" },
+      );
+
+      expect(resLabels.status).toBe(201);
+      expect(issueRequestLabels).toBeDefined();
+      expect(issueRequestLabels!.claimLabel).toMatch(/^acmestore-[0-9a-f]{12}$/);
+      expect(issueRequestLabels).not.toHaveProperty("expectedTokenId");
+      expect(resLabels.body.id).toBe(issueRequestLabels!.claimLabel);
+      expect(resLabels.body.claim_account).toBe(`${issueRequestLabels!.claimLabel}.openrail.near`);
+
+      // 2. When claimLabels is OFF
+      let issueRequestNoLabels: Record<string, unknown> | undefined;
+      const issuerNoLabels: ApiDeps["issuer"] = {
+        prepareIssue: vi.fn(async () => ({
+          account: "openrail.near",
+          amount: "1",
+          storageCredit: "1000",
+          tokenId: "c-1",
+          claimAccount: "c-1.openrail.near",
+        })),
+        issueFor: vi.fn(async (req) => {
+          issueRequestNoLabels = req as Record<string, unknown>;
+          return {
+            txHash: "0xnolabels",
+            tokenId: "c-99",
+            claimAccount: "c-99.openrail.near",
+          };
+        }),
+        logQuote: vi.fn(),
+        acknowledgeEvm: vi.fn(),
+      };
+      const hNoLabels = harness({
+        useRealPort: true,
+        config: { claimLabels: false },
+        issuer: issuerNoLabels,
+      });
+
+      const resNoLabels = await call(
+        hNoLabels,
+        "POST",
+        "/v1/checkouts",
+        {
+          order_ref: "ORD-NOLABELS-1",
+          amount_usd: "25.00",
+        },
+        hNoLabels.keys.acme,
+        { "idempotency-key": "idem-nolabels-1" },
+      );
+
+      expect(resNoLabels.status).toBe(201);
+      expect(issueRequestNoLabels).toBeDefined();
+      expect(issueRequestNoLabels!.expectedTokenId).toBe("c-1");
+      expect(issueRequestNoLabels).not.toHaveProperty("claimLabel");
+      expect(resNoLabels.body.id).toBe("c-99");
     });
   });
 });

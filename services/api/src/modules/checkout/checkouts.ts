@@ -29,15 +29,15 @@ import {
 } from "../../app.js";
 import type { ApiModuleContext, QuoteWindow } from "../../modules.js";
 import type { IndexedEvent } from "../../webhooks.js";
+import { sha256Hex0x } from "../../crypto.js";
 import { feePreview, resolveFee, type FeeMode } from "../../line-items.js";
-import { issuerCheckoutPort, type CheckoutPort } from "./checkout-port.js";
+import { EMPTY_ITEMS_SHA256, issuerCheckoutPort, type CheckoutPort } from "./checkout-port.js";
 
 const NS_CHECKOUTS = "checkout.checkouts";
 const NS_REFS = "checkout.order_refs";
 
 const ORDER_REF_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const USD_RE = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?$/;
-const EMPTY_ITEMS_SHA256 = createHash("sha256").update("[]").digest("hex");
 
 export type CheckoutStatus =
   "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired" | "needs_attention";
@@ -217,7 +217,7 @@ function hashItems(value: unknown): string {
     }
     return out;
   });
-  return createHash("sha256").update(JSON.stringify(clean)).digest("hex");
+  return sha256Hex0x(JSON.stringify(clean));
 }
 
 function toBig(value: unknown): bigint {
