@@ -250,6 +250,14 @@
       "mock": true
     },
     {
+      "file": "business.username_available.json",
+      "method": "GET",
+      "path": "/v1/business/username_available",
+      "status": 200,
+      "schema": "UsernameAvailability",
+      "mock": true
+    },
+    {
       "file": "statements.get.json",
       "method": "GET",
       "path": "/v1/statements",

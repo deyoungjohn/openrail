@@ -42,6 +42,7 @@ describe("SQLite stores", () => {
     first.api.saveInvoice(invoice as never);
     first.api.saveBusiness({
       account_id: "acme.openrail.near",
+      username: "acme",
       legal_name: "Acme Ltd",
       payout_account: "acme.payout.near",
       contact_email: "billing@example.com",

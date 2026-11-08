@@ -141,7 +141,7 @@ describe("invoice route", () => {
     );
   });
 
-  it("builds the pay and acceptance links from the business name and the invoice's own reference", async () => {
+  it("builds the pay and acceptance links from the business username and the invoice's own reference", async () => {
     const { app, secret } = harness();
     const response = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
     const body = response.body as {
@@ -152,8 +152,8 @@ describe("invoice route", () => {
     };
     const ref = body.id.replace(/^inv_/, "");
     expect(ref).toMatch(/^[0-9a-f]{18}$/);
-    expect(body.pay_link).toBe(`https://pay.openrail.near/acme-ltd/inv/${ref}`);
-    expect(body.ack_url).toBe(`https://pay.openrail.near/acme-ltd/inv/ack/${ref}`);
+    expect(body.pay_link).toBe(`https://pay.openrail.near/acme.openrail.near/inv/${ref}`);
+    expect(body.ack_url).toBe(`https://pay.openrail.near/acme.openrail.near/inv/ack/${ref}`);
     // The terms the debtor accepts carry the same link.
     expect(body.terms.pay_link).toBe(body.pay_link);
     // The link finds the invoice by its reference alone, with or without the id prefix.

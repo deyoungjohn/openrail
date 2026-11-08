@@ -561,7 +561,11 @@ export class RecurringScheduler {
       invoice = await this.deps.issue(template.account_id, body, template.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const final = attempts >= MAX_ATTEMPTS;
+      const usernameMissing =
+        typeof error === "object" &&
+        error !== null &&
+        (error as { code?: unknown }).code === "username_required";
+      const final = usernameMissing || attempts >= MAX_ATTEMPTS;
       this.deps.store.updateRun({
         template_id: template.id,
         run_date: date,
