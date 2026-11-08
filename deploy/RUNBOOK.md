@@ -149,7 +149,7 @@ Then the users and folders:
 
 ```bash
 sudo groupadd --system openrail
-for name in web api watcher issuer indexer; do
+for name in web api watcher issuer indexer payout; do
   sudo useradd --system --gid openrail --home-dir /nonexistent --shell /usr/sbin/nologin "openrail-$name"
 done
 sudo install -d -m 0755 /opt/openrail/releases
@@ -215,7 +215,7 @@ Check: five files (`api.env issuer.env watcher.env indexer.env web.env`), each `
 ```bash
 sudo install -m 0644 /opt/openrail/current/deploy/systemd/*.service /opt/openrail/current/deploy/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now openrail-indexer.service openrail-issuer.service openrail-watcher.service openrail-api.service openrail-web.service openrail-backup.timer
+sudo systemctl enable --now openrail-indexer.service openrail-issuer.service openrail-watcher.service openrail-api.service openrail-web.service openrail-payout.service openrail-backup.timer
 sudo install -m 0644 /opt/openrail/current/deploy/Caddyfile /etc/caddy/Caddyfile
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy

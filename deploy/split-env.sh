@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 
 src="${1:?usage: split-env.sh <openrail.env> [out_dir]}"
 out="${2:-/etc/openrail}"
-services=(api issuer watcher indexer web)
+services=(api issuer watcher indexer web payout)
 
 [[ -f "$src" ]] || { echo "NOT_FOUND: $src" >&2; exit 1; }
 perm="$(stat -c %a "$src")"

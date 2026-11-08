@@ -37,6 +37,10 @@ fi
 if systemctl is-enabled --quiet openrail-backup.timer 2>/dev/null; then
   check_unit openrail-backup.timer
 fi
+if [[ -f /opt/openrail/current/services/payout/src/server.ts ]] && systemctl is-enabled --quiet openrail-payout.service 2>/dev/null; then
+  check_unit openrail-payout.service
+  check_http payout http://127.0.0.1:8081/health
+fi
 
 check_http web http://127.0.0.1:3000/
 check_http api http://127.0.0.1:3001/v1/health

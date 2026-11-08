@@ -23,7 +23,7 @@ SELF_COPY="${OPENRAIL_SELF_COPY:-/usr/local/bin/openrail-apply}"
 HEALTH_WAIT_SECONDS="${OPENRAIL_HEALTH_WAIT:-150}"
 KEEP_RELEASES=1 # only the live release stays unpacked (about 1.2 GB); the previous one is reinstalled from its pack
 KEEP_PACKS=2    # the packs of the live and the previous release (about 260 MB each)
-SERVICES=(indexer issuer watcher api web) # start order: the api needs the indexer and issuer
+SERVICES=(indexer issuer watcher api web payout) # start order: the api needs the indexer and issuer
 TEST_MODE="${OPENRAIL_TEST:-0}"           # tests run in a temp folder: no systemd, no chown
 
 dry=0
