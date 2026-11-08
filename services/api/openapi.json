@@ -2195,6 +2195,38 @@
           }
         }
       },
+      "ReceiptPdfDocument": {
+        "type": "object",
+        "required": [
+          "receipt_id",
+          "filename",
+          "content_type",
+          "content_base64",
+          "sha256",
+          "generated_at"
+        ],
+        "properties": {
+          "receipt_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "content_type": {
+            "const": "application/pdf"
+          },
+          "content_base64": {
+            "type": "string"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Hex32"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "OpenQuote": {
         "type": "object",
         "required": [
@@ -6039,6 +6071,45 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/receipts/{id}.pdf": {
+      "get": {
+        "operationId": "getReceiptPdf",
+        "summary": "Receipt PDF as a base64 envelope",
+        "tags": ["Statements"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptPdfDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Receipt not found.",
             "content": {
               "application/json": {
                 "schema": {

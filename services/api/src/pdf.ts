@@ -461,3 +461,149 @@ export function renderInvoicePdfBase64(
     "base64",
   );
 }
+
+export interface ReceiptDocument {
+  receipt_id: string;
+  paid_at: string;
+  invoice_number: string;
+  order_ref?: string | null;
+  business_name?: string | null;
+  business_username?: string | null;
+  buyer_name?: string | null;
+  amount_usd?: string | null;
+  paid_amount: string;
+  paid_asset: string;
+  network?: { chain?: string; hash?: string } | null;
+  fee_usd?: string | null;
+  payer_tx?: { hash?: string; chain?: string; sender?: string } | null;
+  near_tx: string;
+  claim_account: string;
+  terms_fingerprint: string;
+  verify_command: string;
+}
+
+function drawReceiptTop(builder: PageBuilder, receipt: ReceiptDocument): void {
+  const top = builder.y;
+  text(builder, RIGHT, top + 4, 30, "/F3", INK, "Receipt", "right");
+  text(builder, RIGHT, top - 16, 9, "/F1", GRAY, receipt.receipt_id, "right");
+  text(builder, RIGHT, top - 40, 14, "/F2", ACCENT, "PAID", "right");
+
+  label(builder, "FROM", MARGIN, top);
+  builder.y = top - 16;
+  wrapped(builder, receipt.business_name ?? "Openrail business", MARGIN, 260, 12, "/F2", INK);
+  if (receipt.business_username !== null && receipt.business_username !== undefined) {
+    wrapped(builder, `@${receipt.business_username}`, MARGIN, 260, 9, "/F1", GRAY);
+  }
+
+  builder.y = Math.min(builder.y, top - 70);
+  line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.8, ACCENT);
+  line(builder, MARGIN, builder.y - 3, RIGHT, builder.y - 3, 0.8, ACCENT);
+  builder.y -= 24;
+
+  const blockTop = builder.y;
+  label(builder, "BILLED TO", MARGIN, blockTop);
+  builder.y = blockTop - 16;
+  wrapped(builder, receipt.buyer_name ?? "—", MARGIN, 240, 11, "/F2", INK);
+  const detailX = 360;
+  label(builder, "PAID AT", detailX, blockTop);
+  text(builder, RIGHT, blockTop, 9, "/F1", INK, formatDate(receipt.paid_at), "right");
+  label(builder, "CLAIM ACCOUNT", detailX, blockTop - 16);
+  text(builder, detailX, blockTop - 28, 8, "/F1", INK, receipt.claim_account);
+  builder.y = Math.min(builder.y, blockTop - 40) - 8;
+}
+
+export function renderReceiptPdf(receipt: ReceiptDocument): Uint8Array {
+  const builder: PageBuilder = { pages: [], content: "", y: PAGE_HEIGHT - MARGIN };
+  beginPage(builder, null);
+  drawReceiptTop(builder, receipt);
+
+  builder.y -= 40;
+  const tableTop = builder.y;
+  label(builder, "DESCRIPTION", MARGIN, tableTop);
+  text(builder, RIGHT, tableTop, 7, "/F2", ACCENT, "AMOUNT", "right");
+  builder.y = tableTop - 8;
+  line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.5, ACCENT);
+  builder.y -= 18;
+  const reference = `Payment for ${receipt.invoice_number}${receipt.order_ref ? ` (${receipt.order_ref})` : ""}`;
+  wrapped(builder, reference, MARGIN, 300, 9, "/F1", INK);
+  text(builder, RIGHT, tableTop - 18, 9, "/F1", INK, `$${receipt.amount_usd ?? "0.00"}`, "right");
+  builder.y -= 8;
+  line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.35, "0.82 0.82 0.82");
+  builder.y -= 8;
+
+  builder.y -= 12;
+  line(builder, 360, builder.y, RIGHT, builder.y, 1.2, ACCENT);
+  builder.y -= 18;
+  text(builder, 360, builder.y, 10, "/F2", INK, "AMOUNT PAID");
+  text(builder, RIGHT, builder.y, 12, "/F2", ACCENT, `$${receipt.amount_usd ?? "0.00"}`, "right");
+  builder.y -= 14;
+  text(
+    builder,
+    360,
+    builder.y,
+    8,
+    "/F1",
+    GRAY,
+    `Paid in ${receipt.paid_amount} ${receipt.paid_asset}`,
+  );
+  builder.y -= 14;
+  text(builder, 360, builder.y, 8, "/F1", GRAY, `Fee $${receipt.fee_usd ?? "0.00"}`);
+  builder.y -= 30;
+
+  const network = receipt.network?.chain ?? receipt.payer_tx?.chain ?? "—";
+  for (const [caption, value] of [
+    ["PAYER'S TRANSACTION", receipt.payer_tx?.hash ?? "—"],
+    ["NEAR BOOKING TRANSACTION", receipt.near_tx],
+    ["NETWORK", network],
+  ] as const) {
+    label(builder, caption, MARGIN, builder.y);
+    builder.y -= 12;
+    wrapped(builder, value, MARGIN, WIDTH, 8, "/F1", INK);
+    builder.y -= 4;
+  }
+
+  builder.y = Math.min(builder.y, 180);
+  label(builder, "TERMS FINGERPRINT", MARGIN, builder.y);
+  builder.y -= 12;
+  wrapped(builder, receipt.terms_fingerprint, MARGIN, WIDTH, 7, "/F1", GRAY);
+  builder.y -= 8;
+  label(builder, "VERIFY", MARGIN, builder.y);
+  builder.y -= 12;
+  wrapped(builder, receipt.verify_command, MARGIN, WIDTH, 7, "/F1", GRAY);
+  finishPages(builder);
+
+  const pageIds = builder.pages.map((_, index) => 7 + index * 2);
+  const objects: string[] = [];
+  objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objects.push(
+    `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${builder.pages.length} >>`,
+  );
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>");
+  builder.pages.forEach((content, index) => {
+    const contentId = 8 + index * 2;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents ${contentId} 0 R >>`,
+    );
+    objects.push(
+      `<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}endstream`,
+    );
+  });
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf, "latin1"));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return new Uint8Array(Buffer.from(pdf, "latin1"));
+}
+
+export function renderReceiptPdfBase64(receipt: ReceiptDocument): string {
+  return Buffer.from(renderReceiptPdf(receipt)).toString("base64");
+}

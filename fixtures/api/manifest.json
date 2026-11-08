@@ -394,6 +394,14 @@
       "mock": true
     },
     {
+      "file": "receipts.pdf.json",
+      "method": "GET",
+      "path": "/v1/receipts/{id}.pdf",
+      "status": 200,
+      "schema": "ReceiptPdfDocument",
+      "mock": true
+    },
+    {
       "file": "payout.estimate.json",
       "method": "GET",
       "path": "/v1/payout/estimate",

@@ -751,6 +751,15 @@ export interface MachineReceipt {
   verify_command: string;
 }
 
+export interface ReceiptPdfDocument {
+  receipt_id: string;
+  filename: string;
+  content_type: "application/pdf";
+  content_base64: string;
+  sha256: Hex32;
+  generated_at: string;
+}
+
 export type PayoutSchedule = "manual" | "each_payment" | "daily" | "weekly" | "monthly";
 
 export interface PayoutSettings {
@@ -1346,6 +1355,17 @@ export interface operations {
     };
     responses: {
       "200": MachineReceipt;
+      "404": Error;
+    };
+  };
+  getReceiptPdf: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": ReceiptPdfDocument;
       "404": Error;
     };
   };
