@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddressChip } from "@/components/ui/address-chip";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { CHAINS, ChainBadge } from "@/components/ui/chain-badge";
+import { CHAINS } from "@/components/ui/chain-badge";
 import { Countdown } from "@/components/ui/countdown";
 import { Input } from "@/components/ui/input";
 import { QrPanel } from "@/components/ui/qr-panel";
@@ -15,6 +15,8 @@ import { ErrorNote } from "@/components/ui/error-note";
 import { Tabs } from "@/components/ui/tabs";
 import { Timeline } from "@/components/ui/timeline";
 import { EvmWalletView } from "@/components/wallet-buttons";
+import { RouteSelects } from "@/components/pay/route-selects";
+import { StatusChip, type Status } from "@/components/ui/status-chip";
 import { copy } from "@/copy";
 import { client } from "@/lib/client";
 import { formatUsd } from "@/lib/format";
@@ -42,6 +44,7 @@ import {
   checkoutLiveBanner,
   countdownTargetMs,
   safeReturnUrl,
+  type LiveBanner,
   type PublicCheckout,
 } from "./checkout";
 
@@ -59,7 +62,7 @@ type Load =
   | { state: "notfound" }
   | { state: "ready"; checkout: PublicCheckoutPayload };
 
-type Mode = "paste" | "wallet";
+type Mode = "wallet" | "paste";
 
 interface Leg {
   session: PaySession;
@@ -377,13 +380,126 @@ function usdcToUsd(units: string): string {
   return `$${formatToken(units, 6)}`;
 }
 
+/** An invoice-style card on top of the checkout: merchant, order reference, amount, expiry countdown, and live status. */
+function CheckoutCard({
+  checkout: c,
+  effectiveCheckout,
+  expiryMs,
+  banner,
+  returnHref,
+}: {
+  checkout: PublicCheckoutPayload;
+  effectiveCheckout: PublicCheckout;
+  expiryMs: number;
+  banner: LiveBanner;
+  returnHref: string | null;
+}) {
+  const p = copy.pay;
+  const paid = effectiveCheckout.status === "paid" || effectiveCheckout.status === "accepted";
+  const partial = effectiveCheckout.status === "partial";
+  const chip: Status | null = paid
+    ? { kind: "paid" }
+    : partial
+      ? { kind: "partial", due: `$${formatToken(effectiveCheckout.outstanding, 6)}` }
+      : effectiveCheckout.status === "late" || effectiveCheckout.status === "needs_attention"
+        ? { kind: "late" }
+        : effectiveCheckout.status === "expired"
+          ? { kind: "closed" }
+          : { kind: "sent" };
+  const settled = BigInt(c.amount_due || "0") - BigInt(c.outstanding || "0");
+
+  return (
+    <section aria-label="Checkout" className="surface-card overflow-hidden">
+      <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
+        <div>
+          <p className="caption uppercase tracking-wide">{checkoutCopy.order(c.order_ref)}</p>
+          <h1 className="text-[22px] leading-8 font-bold">{checkoutCopy.title(c.merchant)}</h1>
+        </div>
+        {chip ? <StatusChip status={chip} /> : null}
+      </div>
+
+      <div className="border-b border-border bg-surface-2/40 px-5 py-5 sm:px-6">
+        <p className="caption">{partial ? p.stillDue : "Amount"}</p>
+        <p className="tabular text-[40px] leading-[1.1] font-bold">
+          {paid ? `$${c.amount_usd}` : `$${c.amount_usd}`}
+        </p>
+        {partial ? (
+          <p className="caption mt-1">
+            {p.ofInvoice(`$${c.amount_usd}`, `$${formatToken(String(settled), 6)}`)}
+          </p>
+        ) : null}
+        {effectiveCheckout.status === "pending" || effectiveCheckout.status === "partial" ? (
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <span className="caption">{checkoutCopy.expiresIn}</span>
+            <Countdown
+              target={expiryMs}
+              units={["minutes", "seconds"]}
+              variant="compact"
+              label={checkoutCopy.expiresIn}
+              completeLabel={copy.countdown.expired}
+            />
+          </div>
+        ) : null}
+        {BigInt(c.surplus || "0") > 0n ? (
+          <p className="caption mt-1">
+            {checkoutCopy.overpaidNote(`$${formatToken(c.surplus, 6)}`)}
+          </p>
+        ) : null}
+      </div>
+
+      <dl className="grid gap-x-6 gap-y-4 px-5 py-4 text-[14px] sm:grid-cols-2 sm:px-6">
+        <div className="space-y-1">
+          <dt className="caption">{p.claimAccountLabel}</dt>
+          <dd>
+            <AddressChip value={c.claim_account} />
+          </dd>
+        </div>
+        <div className="space-y-1">
+          <dt className="caption">Order reference</dt>
+          <dd className="tabular font-medium">{c.order_ref}</dd>
+        </div>
+      </dl>
+
+      <div
+        role="status"
+        aria-live="polite"
+        className="border-t border-border px-5 py-4 sm:px-6 space-y-2"
+        data-checkout-status={banner.kind}
+      >
+        <p className="flex items-center gap-2 text-[16px] leading-6 font-semibold">
+          {banner.kind === "paid" ? (
+            <CheckCircle2 size={18} strokeWidth={1.5} className="text-success-text" aria-hidden />
+          ) : banner.kind === "late" || banner.kind === "expired" ? (
+            <AlertTriangle size={18} strokeWidth={1.5} className="text-warning-text" aria-hidden />
+          ) : banner.kind === "settling" ? (
+            <Clock size={18} strokeWidth={1.5} aria-hidden />
+          ) : null}
+          <span>{banner.title}</span>
+        </p>
+        <p className="text-[14px] leading-5 text-muted">{banner.body}</p>
+        {returnHref ? (
+          <div className="pt-2">
+            <a
+              href={returnHref}
+              className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-border bg-surface px-3 text-[13px] font-medium transition-colors hover:bg-surface-2"
+            >
+              <ArrowLeft size={14} strokeWidth={1.5} aria-hidden />
+              {checkoutCopy.returnToMerchant}
+            </a>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 export function CheckoutScreen({ id }: { id: string }) {
   const p = copy.pay;
   const evm = useEvm();
   const now = useNow();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [tick, setTick] = useState(0);
-  const [mode, setMode] = useState<Mode>("paste");
+  const [mode, setMode] = useState<Mode>("wallet");
   const [routeId, setRouteId] = useState<string | null>(null);
   const [legs, setLegs] = useState<Leg[]>([]);
   const [starting, setStarting] = useState(false);
@@ -499,7 +615,7 @@ export function CheckoutScreen({ id }: { id: string }) {
   const turnSplitOn = () => {
     if (!split) setLegs([]);
     setSplit(true);
-    setAmountText("");
+    setAmountText(centsToApi(remaining));
     setAmountShown(false);
   };
 
@@ -588,30 +704,7 @@ export function CheckoutScreen({ id }: { id: string }) {
     null;
   const banner = checkoutLiveBanner(effectiveCheckout, topStage);
   const returnHref = safeReturnUrl(c.return_url);
-  const usdc = routes.filter((r) => r.payer_asset === "USDC");
-  const volatile = routes.filter((r) => r.payer_asset !== "USDC");
   const covered = split && legs.length > 0 && remaining === 0n;
-
-  const picker = (title: string, list: Route[]) =>
-    list.length === 0 ? null : (
-      <div>
-        <h3 className="mb-2 text-[14px] leading-5 font-medium text-muted">{title}</h3>
-        <div className="flex flex-wrap gap-2">
-          {list.map((r) => {
-            const chain = chainOfRoute(r);
-            return chain ? (
-              <ChainBadge
-                key={r.id}
-                chain={chain}
-                label={p.routeLabel(r.payer_asset, CHAINS[chain])}
-                selected={routeId === r.id}
-                onSelect={() => pickRoute(r.id)}
-              />
-            ) : null;
-          })}
-        </div>
-      </div>
-    );
 
   const submit = () => {
     setRefundShown(true);
@@ -636,10 +729,7 @@ export function CheckoutScreen({ id }: { id: string }) {
           <EvmWalletView {...evm} />
         </div>
       )}
-      <div className="space-y-4">
-        {picker(p.pickUsdc, usdc)}
-        {picker(p.pickVolatile, volatile)}
-      </div>
+      <RouteSelects routes={routes} routeId={routeId} onPick={pickRoute} />
       {!split ? (
         <Button type="button" variant="secondary" onClick={turnSplitOn}>
           {p.mixSplit}
@@ -689,64 +779,16 @@ export function CheckoutScreen({ id }: { id: string }) {
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
+    <div className="mx-auto w-full max-w-[640px] space-y-6">
+      <CheckoutCard
+        checkout={c}
+        effectiveCheckout={effectiveCheckout}
+        expiryMs={expiryMs}
+        banner={banner}
+        returnHref={returnHref}
+      />
+
       <div className="min-w-0 space-y-6">
-        <header className="space-y-2">
-          <p className="caption">{checkoutCopy.order(c.order_ref)}</p>
-          <h1 className="text-[28px] leading-9 font-bold">{checkoutCopy.title(c.merchant)}</h1>
-          <p className="tabular text-[36px] leading-[1.1] font-bold">${c.amount_usd}</p>
-          {effectiveCheckout.status === "pending" || effectiveCheckout.status === "partial" ? (
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="caption">{checkoutCopy.expiresIn}</span>
-              <Countdown
-                target={expiryMs}
-                units={["minutes", "seconds"]}
-                variant="compact"
-                label={checkoutCopy.expiresIn}
-                completeLabel={copy.countdown.expired}
-              />
-            </div>
-          ) : null}
-          {BigInt(c.surplus || "0") > 0n ? (
-            <p className="caption">{checkoutCopy.overpaidNote(`$${formatToken(c.surplus, 6)}`)}</p>
-          ) : null}
-        </header>
-
-        <section
-          role="status"
-          aria-live="polite"
-          className="surface-card space-y-2 p-5"
-          data-checkout-status={banner.kind}
-        >
-          <p className="flex items-center gap-2 text-[18px] leading-[26px] font-semibold">
-            {banner.kind === "paid" ? (
-              <CheckCircle2 size={20} strokeWidth={1.5} className="text-success-text" aria-hidden />
-            ) : banner.kind === "late" || banner.kind === "expired" ? (
-              <AlertTriangle
-                size={20}
-                strokeWidth={1.5}
-                className="text-warning-text"
-                aria-hidden
-              />
-            ) : banner.kind === "settling" ? (
-              <Clock size={20} strokeWidth={1.5} aria-hidden />
-            ) : null}
-            <span>{banner.title}</span>
-          </p>
-          <p className="text-[15px] leading-6">{banner.body}</p>
-          {returnHref ? (
-            <div className="pt-2">
-              <a
-                href={returnHref}
-                className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-border bg-surface px-4 text-[14px] font-medium transition-colors hover:bg-surface-2"
-              >
-                <ArrowLeft size={16} strokeWidth={1.5} aria-hidden />
-                {checkoutCopy.returnToMerchant}
-              </a>
-            </div>
-          ) : null}
-        </section>
-
         {!quotable ? null : routes.length === 0 ? (
           <div className="surface-card">
             <EmptyState title={p.noRoutes} />
@@ -760,16 +802,14 @@ export function CheckoutScreen({ id }: { id: string }) {
               value={mode}
               onValueChange={(next) => setMode(next as Mode)}
               items={[
-                { id: "paste", label: p.tabPaste, panel: form("paste") },
                 { id: "wallet", label: p.tabWallet, panel: form("wallet") },
+                { id: "paste", label: p.tabPaste, panel: form("paste") },
               ]}
             />
             {split || legs.length === 0 ? <p className="caption mt-4">{p.mixSplitHelp}</p> : null}
           </Card>
         )}
-      </div>
 
-      <div className="min-w-0 space-y-6">
         {legs.map((l, i) => (
           <SessionView
             key={l.session.id}
@@ -782,12 +822,15 @@ export function CheckoutScreen({ id }: { id: string }) {
             starting={starting}
           />
         ))}
+
         {quotable && starting ? <Card title={p.getting} state="loading" /> : null}
+
         {sessionError === "expired" ? (
           <div role="alert" className="surface-card p-6 text-[15px]">
             {checkoutCopy.expiredQuoteRefused}
           </div>
         ) : null}
+
         {quotable && sessionError === "failed" ? (
           <div className="surface-card">
             <ErrorState

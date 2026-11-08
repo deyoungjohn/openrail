@@ -43,7 +43,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   // Case 3: when it is a checkout (kind 1), show the checkout
   return (
-    <PublicShell wide>
+    <PublicShell>
       <PageComponent id={id} />
     </PublicShell>
   );
