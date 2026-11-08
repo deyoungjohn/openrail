@@ -89,33 +89,40 @@ function StorageCredit() {
   const low = balance !== null && storageCreditLow(balance);
 
   return (
-    <Card title={t.creditTitle} className="space-y-3">
-      {credit.state === "loading" ? (
-        <Skeleton className="h-6 w-32" />
-      ) : credit.state === "error" ? (
-        <p className="caption">{t.creditUnknown}</p>
-      ) : (
-        <>
-          <p className="tabular text-[20px] leading-7 font-bold">{formatNear(balance!)} NEAR</p>
-          <p className="caption">{t.creditHelp}</p>
-          {low ? (
-            <p role="status" className="text-warning text-[14px]">
-              {t.creditLow}
-            </p>
-          ) : null}
-          {low || sent ? (
-            <DepositControl
-              contractId={credit.data.contract_id}
-              suggestedYocto={credit.data.amount}
-              onSent={() => {
-                setSent(true);
-                watchDeposit();
-              }}
-            />
-          ) : null}
-        </>
-      )}
-    </Card>
+    <div id="storage-credit">
+      <Card title={t.creditTitle} className="space-y-3">
+        {credit.state === "loading" ? (
+          <Skeleton className="h-6 w-32" />
+        ) : credit.state === "error" ? (
+          <p className="caption">{t.creditUnknown}</p>
+        ) : (
+          <>
+            <p className="tabular text-[20px] leading-7 font-bold">{formatNear(balance!)} NEAR</p>
+            <p className="caption">{t.creditHelp}</p>
+            {credit.data.sponsor && credit.data.sponsor.remaining > 0 ? (
+              <p role="status" className="text-[14px]">
+                {t.sponsored(credit.data.sponsor.remaining)}
+              </p>
+            ) : null}
+            {low ? (
+              <p role="status" className="text-warning text-[14px]">
+                {t.creditLow}
+              </p>
+            ) : null}
+            {low || sent ? (
+              <DepositControl
+                contractId={credit.data.contract_id}
+                suggestedYocto={credit.data.amount}
+                onSent={() => {
+                  setSent(true);
+                  watchDeposit();
+                }}
+              />
+            ) : null}
+          </>
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -185,7 +192,7 @@ export function IssueScreen() {
   });
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<false | "credit" | "other">(false);
   const [created, setCreated] = useState<Invoice | null>(null);
   const idem = useRef(crypto.randomUUID());
 
@@ -225,7 +232,15 @@ export function IssueScreen() {
     } catch (e) {
       // 409 means the same key was used for a different body: start a fresh attempt.
       if (e instanceof ApiError && e.status === 409) idem.current = crypto.randomUUID();
-      setFailed(true);
+      // 402: no free invoices left and no storage credit. Say so, and bring the deposit into view.
+      if (e instanceof ApiError && e.status === 402) {
+        setFailed("credit");
+        document
+          .getElementById("storage-credit")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        setFailed("other");
+      }
     } finally {
       setBusy(false);
     }
@@ -361,7 +376,15 @@ export function IssueScreen() {
             </span>
           </p>
           <p className="caption">{t.cost}</p>
-          <ErrorNote>{failed ? t.createFailed : shown && hasErrors ? t.fixErrors : null}</ErrorNote>
+          <ErrorNote>
+            {failed === "credit"
+              ? t.createNeedsCredit
+              : failed
+                ? t.createFailed
+                : shown && hasErrors
+                  ? t.fixErrors
+                  : null}
+          </ErrorNote>
           <Button type="submit" loading={busy} className="w-full sm:w-auto">
             {busy ? t.creating : t.create}
           </Button>

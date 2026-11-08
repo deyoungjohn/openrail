@@ -92,23 +92,26 @@ export function DateWheelField({
             align="start"
             radius={16}
             shadow={false}
-            className="w-[19rem] max-w-[calc(100vw-1.5rem)]"
+            className="w-[24rem] max-w-[calc(100vw-1.5rem)]"
           >
             <div className="space-y-3 p-3">
-              <div className="grid grid-cols-[1.6fr_1fr_1.1fr] gap-2">
+              <div className="grid grid-cols-[1.6fr_1fr_1.1fr] gap-2 text-[20px]">
                 <WheelPicker
+                  itemHeight={56}
                   aria-label="Month"
                   options={MONTHS}
                   value={String(m)}
                   onValueChange={(v) => set({ m: Number(v) })}
                 />
                 <WheelPicker
+                  itemHeight={56}
                   aria-label="Day"
                   options={dayOptions}
                   value={String(d)}
                   onValueChange={(v) => set({ d: Number(v) })}
                 />
                 <WheelPicker
+                  itemHeight={56}
                   aria-label="Year"
                   options={yearOptions}
                   value={String(y)}
@@ -121,7 +124,7 @@ export function DateWheelField({
                   if (!chosen) set({});
                   setOpen(false);
                 }}
-                className="h-10 w-full rounded-[10px] bg-accent text-[14px] font-medium text-on-accent hover:bg-accent-hover"
+                className="h-12 w-full rounded-[10px] bg-accent text-[16px] font-medium text-on-accent hover:bg-accent-hover"
               >
                 Done
               </button>

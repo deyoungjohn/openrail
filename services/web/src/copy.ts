@@ -661,6 +661,10 @@ export const copy = {
     creating: "Creating your invoice",
     fixErrors: "Fix the fields marked below, then try again.",
     createFailed: "We couldn't create the invoice. Nothing was sent to your client. Try again.",
+    createNeedsCredit:
+      "Your free invoices are used up and there is no storage credit left. Deposit some below, then create the invoice again.",
+    sponsored: (n: number) =>
+      n === 1 ? "1 invoice is free (sponsored)." : `${n} invoices are free (sponsored).`,
     cost: "Creating an invoice uses a small amount of your storage credit.",
     creditTitle: "Storage credit",
     creditHelp:

@@ -573,6 +573,31 @@ test.describe("issue form", () => {
     );
   });
 
+  test("no free invoices and no storage credit left says so, and points at the deposit", async ({
+    page,
+  }) => {
+    await mockApi(page, {
+      ...handlers,
+      "POST /v1/invoices": {
+        status: 402,
+        body: { error: { code: "insufficient_storage_credit", message: "no credit" } },
+      },
+    });
+    await page.goto("/app/invoices/new");
+    await page.getByLabel("Client name").fill("Northwind Studio");
+    await page.getByLabel("Client account", { exact: true }).fill("northwind.near");
+    await page.getByLabel("Invoice number").fill("INV-0010");
+    await pickDate(
+      page,
+      "Due date",
+      new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+    );
+    await page.getByLabel("Description").fill("Design");
+    await page.getByLabel("Price").fill("10.00");
+    await page.getByRole("button", { name: "Create invoice" }).click();
+    await expect(page.locator("main [role=alert]")).toContainText("no storage credit left");
+  });
+
   for (const scheme of ["light", "dark"] as const) {
     test(`360px, ${scheme}: no scroll, no WCAG AA violations`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
