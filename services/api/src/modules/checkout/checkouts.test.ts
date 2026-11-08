@@ -14,7 +14,7 @@ import type {
 import { computeFeeBreakdown } from "./checkouts.js";
 import type { CheckoutPort } from "./checkout-port.js";
 import { checkoutTermsHash, EMPTY_ITEMS_SHA256 } from "./checkout-port.js";
-import { createCheckoutApiModule } from "./index.js";
+import { createCheckoutApiModule, CHECKOUT_EVENT_TYPES } from "./index.js";
 import { createIssuerApp } from "../../../../issuer/src/http.js";
 import type { IssuerService } from "../../../../issuer/src/service.js";
 
@@ -49,6 +49,7 @@ function harness(
     config?: Partial<ApiDeps["config"]>;
     useRealPort?: boolean;
     issuer?: ApiDeps["issuer"];
+    modules?: ApiDeps["modules"];
   } = {},
 ) {
   let now = new Date(NOW);
@@ -136,7 +137,7 @@ function harness(
     verifier: () => true,
     cashout: { quote: async () => ({}) },
     clock,
-    modules: [module],
+    modules: options.modules ?? [module],
   };
   const app = new ApiApp(deps);
   return {
@@ -1566,6 +1567,41 @@ describe("checkout API: late payments never sign for the merchant", () => {
       expect(issueRequestNoLabels!.expectedTokenId).toBe("c-1");
       expect(issueRequestNoLabels).not.toHaveProperty("claimLabel");
       expect(resNoLabels.body.id).toBe("c-99");
+    });
+
+    it("declares checkout webhook event types through ApiModule.eventTypes hook when enabled", async () => {
+      const module = createCheckoutApiModule();
+      expect(module.eventTypes).toEqual([...CHECKOUT_EVENT_TYPES]);
+
+      // When module is enabled:
+      const hWith = harness({ modules: [module] });
+      const resWith = await call(
+        hWith,
+        "GET",
+        "/v1/webhook_event_types",
+        undefined,
+        hWith.keys.acme,
+      );
+      expect(resWith.status).toBe(200);
+      const bodyWith = resWith.body as { types: string[] };
+      for (const t of CHECKOUT_EVENT_TYPES) {
+        expect(bodyWith.types).toContain(t);
+      }
+
+      // When module is disabled (core only):
+      const hWithout = harness({ modules: [] });
+      const resWithout = await call(
+        hWithout,
+        "GET",
+        "/v1/webhook_event_types",
+        undefined,
+        hWithout.keys.acme,
+      );
+      expect(resWithout.status).toBe(200);
+      const bodyWithout = resWithout.body as { types: string[] };
+      for (const t of CHECKOUT_EVENT_TYPES) {
+        expect(bodyWithout.types).not.toContain(t);
+      }
     });
   });
 });
