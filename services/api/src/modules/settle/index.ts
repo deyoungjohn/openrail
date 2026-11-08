@@ -38,13 +38,14 @@ export const apiModule: ApiModule = {
       const auth = context.requireAuth(request);
       context.requireScope(auth, "invoices:read");
       const rows: HeldRow[] = [];
-      const contract = (
+      const view = (
         context as unknown as {
-          contract?: { settleHeld?(tokenId: string): Promise<Record<string, unknown>[]> };
+          view(method: string, args: object): Promise<unknown>;
         }
-      ).contract;
+      ).view.bind(context);
       for (const invoice of context.store.listInvoices(auth.accountId)) {
-        const entries = (await contract?.settleHeld?.(invoice.token_id)) ?? [];
+        const held = await view("settle_held", { token_id: invoice.token_id });
+        const entries = Array.isArray(held) ? (held as Record<string, unknown>[]) : [];
         rows.push(...heldRows(invoice.token_id, entries));
       }
       const totals = new Map<string, bigint>();
