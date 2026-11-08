@@ -4,6 +4,7 @@ import { createLogger, getEnv, requireEnv } from "@openrail/shared";
 import { CallBudget } from "./budget.js";
 import { PayoutChain } from "./chain.js";
 import { IndexerHeldDiscovery } from "./discovery.js";
+import { HttpPayoutSettings } from "./settings.js";
 import { startPayoutHealthServer } from "./health.js";
 import { OneClickInPayout } from "./oneclick.js";
 import { PayoutWorker } from "./worker.js";
@@ -43,6 +44,9 @@ async function main(): Promise<void> {
   let lastAlert: string | null = null;
   const worker = new PayoutWorker({
     discovery: new IndexerHeldDiscovery(indexerUrl),
+    ...(getEnv("PAYOUT_API_URL") !== undefined && getEnv("PAYOUT_INTERNAL_KEY") !== undefined
+      ? { settings: HttpPayoutSettings.fromEnv() }
+      : {}),
     chain,
     quote: new OneClickInPayout(),
     status: new OneClickInPayout(),

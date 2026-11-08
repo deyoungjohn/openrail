@@ -1,8 +1,10 @@
 /** Settle payout worker: quote -> check recipient -> settle_payout -> status -> report_payout. */
+import { calculatePeriodEndUtc } from "./schedule.js";
 import type {
   ChainPort,
   CheckoutRefundEvent,
   HeldDiscovery,
+  PayoutSettings,
   HeldEntry,
   QuotePort,
   StatusPort,
@@ -25,6 +27,7 @@ export interface PayoutWorkerDeps {
   sleep?: (ms: number) => Promise<void>;
   settleRecheckMs?: number;
   alert?: (message: string, data?: Record<string, unknown>) => void;
+  settings?: { forToken(tokenId: string): Promise<PayoutSettings | null> };
 }
 
 function statusName(status: HeldEntry["status"]): string {
@@ -42,6 +45,7 @@ export class PayoutWorker {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly recheckMs: number;
   private readonly uncertain = new Set<string>();
+  private readonly firstSeen = new Map<string, number>();
 
   constructor(private readonly deps: PayoutWorkerDeps) {
     this.clock = deps.clock ?? Date.now;
@@ -67,6 +71,12 @@ export class PayoutWorker {
     summary.tokens = tokens.length;
 
     for (const tokenId of tokens) {
+      let settings: PayoutSettings | null = null;
+      try {
+        settings = (await this.deps.settings?.forToken(tokenId)) ?? null;
+      } catch (error) {
+        summary.errors.push(`${tokenId}: payout_settings: ${String(error)}`);
+      }
       let entries: HeldEntry[];
       try {
         entries = await this.deps.chain.settleHeld(tokenId);
@@ -91,7 +101,19 @@ export class PayoutWorker {
           summary.skipped.push(`${key}: send state uncertain`);
           continue;
         }
-        await this.startPayout(tokenId, index, entry, summary);
+        const schedule = settings?.schedule ?? "each_payment";
+        if (schedule === "manual") {
+          summary.skipped.push(`${key}: payout schedule manual`);
+          continue;
+        }
+        const bookedAt = this.firstSeen.get(key) ?? entry.bookedAtUtc ?? this.clock();
+        this.firstSeen.set(key, bookedAt);
+        const end = calculatePeriodEndUtc(bookedAt, schedule);
+        if (end !== null && this.clock() < end) {
+          summary.skipped.push(`${key}: not due for schedule ${schedule}`);
+          continue;
+        }
+        await this.startPayout(tokenId, index, entry, summary, settings?.destination ?? undefined);
       }
       await this.processCheckoutRefunds(tokenId, summary);
     }
@@ -204,12 +226,22 @@ export class PayoutWorker {
     index: number,
     entry: HeldEntry,
     summary: WorkerSummary,
+    expectedDestination?: string,
   ): Promise<void> {
     const key = this.key(tokenId, index);
     try {
       const destination = await this.deps.chain.settlementOf(entry.owner);
       if (destination === null) {
         summary.skipped.push(`${key}: no destination`);
+        return;
+      }
+      if (expectedDestination !== undefined && destination.address !== expectedDestination) {
+        summary.errors.push(`${key}: destination mismatch`);
+        this.deps.alert?.("payout destination mismatch", {
+          token_id: tokenId,
+          expected: expectedDestination,
+          on_chain: destination.address,
+        });
         return;
       }
       const refundTo = await this.deps.chain.claimAccount(tokenId);

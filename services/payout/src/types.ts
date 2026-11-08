@@ -20,6 +20,18 @@ export interface HeldEntry {
   status: HeldStatus;
   retries: number;
   destination: Destination | null;
+  bookedAtUtc?: number;
+}
+
+export type PayoutScheduleMode = "manual" | "each_payment" | "daily" | "weekly" | "monthly";
+
+export interface PayoutSettings {
+  schedule: PayoutScheduleMode;
+  destination: string | null;
+}
+
+export interface PayoutSettingsPort {
+  forToken(tokenId: string): Promise<PayoutSettings | null>;
 }
 
 export interface PayoutRecord {
