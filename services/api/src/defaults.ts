@@ -360,6 +360,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
       rootAccount,
       recipient: getEnv("API_RECIPIENT") ?? "api.openrail.near",
       payBaseUrl: getEnv("PAY_BASE_URL") ?? "https://pay.openrail.near",
+      claimLabels: getEnv("CLAIM_LABELS") === "1",
     },
     store: stores.api,
     recurring: stores.recurring,

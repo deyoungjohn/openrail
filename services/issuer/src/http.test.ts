@@ -37,6 +37,25 @@ const ISSUE_BODY = JSON.stringify({
   dueDate: 1_800_000_000,
 });
 
+describe("issuer HTTP claim labels", () => {
+  it("passes claimLabel through to the service", async () => {
+    const { app: issuer, service } = app();
+    const response = await issuer.handle(
+      "POST",
+      "/issue",
+      { authorization: `Bearer ${KEY}` },
+      JSON.stringify({
+        ...JSON.parse(ISSUE_BODY),
+        claimLabel: "belmonte-9f3c2a7d41b8",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(service.issueFor).toHaveBeenCalledWith(
+      expect.objectContaining({ claimLabel: "belmonte-9f3c2a7d41b8" }),
+    );
+  });
+});
+
 describe("issuer HTTP auth", () => {
   it("rejects a missing, wrong or non-bearer key", async () => {
     const { app: issuer } = app();

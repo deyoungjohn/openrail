@@ -126,6 +126,7 @@ async function main(): Promise<void> {
       requiredDepositYocto: REQUIRED_ISSUE_DEPOSIT_YOCTO,
       accountWaitMs: numberEnv("ISSUER_ACCOUNT_WAIT_MS", 15_000),
       accountPollMs: numberEnv("ISSUER_ACCOUNT_POLL_MS", 250),
+      claimLabels: getEnv("CLAIM_LABELS") === "1",
     },
   });
 

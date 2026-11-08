@@ -36,6 +36,7 @@ import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
 import { UnsafeWebhookUrl, validateWebhookUrl } from "./webhook-url.js";
 import {
   ackLink,
+  claimLabel as claimLabelFor,
   isImplicitAccountId,
   normalizeUsername,
   payLink,
@@ -48,6 +49,8 @@ export interface ApiConfig {
   rootAccount: string;
   recipient: string;
   payBaseUrl: string;
+  /** REL-2: new invoices get `<username>-<ref>` claim labels. Off until the contract supports them. */
+  claimLabels?: boolean;
 }
 
 export interface ContractPort {
@@ -58,8 +61,8 @@ export interface ContractPort {
 
 export interface IssuerPort {
   prepareIssue(accountId: string): Promise<{
-    tokenId: string;
-    claimAccount: string;
+    tokenId?: string;
+    claimAccount?: string;
     /** `storage_credit_of(business)` and the deposit one invoice needs, in yoctoNEAR (when the issuer reports them). */
     storageCredit?: string;
     amount?: string;
@@ -81,6 +84,8 @@ export interface IssuerPort {
     metadata?: Record<string, unknown>;
     /** The id `prepareIssue` predicted; the issuer refuses a mint that took another (409 token_id_mismatch). */
     expectedTokenId?: string;
+    /** REL-2: the label the contract should use; ignored while the issuer flag is off. */
+    claimLabel?: string;
   }): Promise<{ txHash: string; tokenId?: string; claimAccount?: string }>;
   logQuote(request: {
     tokenId: string;
@@ -1383,7 +1388,7 @@ export class ApiApp {
         body: {
           receipt,
           verify_url: `${this.deps.config.payBaseUrl}/r/${bookingTxHash}`,
-          claim_account: String(receipt.token_id ?? "") + ".openrail.near",
+          claim_account: `${String(receipt.token_id ?? "")}.${this.deps.config.rootAccount}`,
         },
       };
     }
@@ -1476,13 +1481,25 @@ export class ApiApp {
     const invoiceId = id("inv");
     const username = business.username;
     const ref = refOf(invoiceId);
+    const labels = this.deps.config.claimLabels === true;
+    const label = labels ? claimLabelFor(username, ref) : undefined;
+    const knownClaimAccount =
+      label === undefined ? undefined : `${label}.${this.deps.config.rootAccount}`;
     // The terms hash binds the claim account, which is only known from the id the issuer predicts. Concurrent
     // requests would predict the same id, so they go one at a time; a prediction that turns out wrong (an
     // earlier mint failed after taking its id) is retried once with the corrected count.
     const run = this.issueTail.then(async () => {
       for (let attempt = 1; ; attempt += 1) {
         const prepared = await this.deps.issuer.prepareIssue(accountId);
-        if (!prepared.tokenId || !prepared.claimAccount) {
+        const claimAccount = knownClaimAccount ?? prepared.claimAccount;
+        if (claimAccount === undefined) {
+          throw new ApiError(
+            502,
+            "issuer_outdated",
+            "the issuer service did not report the next claim account",
+          );
+        }
+        if (!labels && prepared.tokenId === undefined) {
           throw new ApiError(
             502,
             "issuer_outdated",
@@ -1513,7 +1530,7 @@ export class ApiApp {
           amount_usd: twoDecimals(Number(body.amount_usd)),
           due_date: dateToUtc(body.due_date as string),
           line_items_sha256: body.line_items_sha256 ?? stableLineItems(body.line_items ?? []),
-          claim_account: prepared.claimAccount,
+          claim_account: claimAccount,
           pay_link: body.pay_link ?? payLink(this.deps.config.payBaseUrl, username, ref),
           assignment_agreement_sha256: body.assignment_agreement_sha256,
           clauses: [...CORE_CLAUSES, ...(body.clauses ?? [])],
@@ -1529,25 +1546,39 @@ export class ApiApp {
             termsHash: hash,
             amountDue,
             dueDate: Math.floor(Date.parse(terms.due_date) / 1000),
-            expectedTokenId: prepared.tokenId,
+            ...(labels
+              ? { claimLabel: label as string }
+              : { expectedTokenId: prepared.tokenId as string }),
           });
         } catch (error) {
-          if (attempt < 2 && error instanceof ApiError && error.code === "token_id_mismatch")
+          if (
+            !labels &&
+            attempt < 2 &&
+            error instanceof ApiError &&
+            error.code === "token_id_mismatch"
+          )
             continue;
           throw error;
         }
-        return { prepared, hash, debtor, terms, amountDue };
+        return {
+          prepared,
+          hash,
+          debtor,
+          terms,
+          amountDue,
+          tokenId: label ?? (prepared.tokenId as string),
+        };
       }
     });
     this.issueTail = run.then(
       () => undefined,
       () => undefined,
     );
-    const { prepared, hash, debtor, terms, amountDue } = await run;
+    const { hash, debtor, terms, amountDue, tokenId } = await run;
     const invoice: InvoiceRecord = {
       id: invoiceId,
-      token_id: prepared.tokenId,
-      claim_account: prepared.claimAccount,
+      token_id: tokenId,
+      claim_account: knownClaimAccount ?? `${tokenId}.${this.deps.config.rootAccount}`,
       status: "Issued",
       issuer_id: business.account_id,
       owner_id: business.account_id,

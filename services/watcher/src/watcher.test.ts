@@ -179,6 +179,18 @@ describe("watcher discovery", () => {
     const summary = await fixture.watcher.tick();
     expect(summary.reconciled).toEqual(["c-1"]);
   });
+
+  it("finds a labelled claim issued for a business that is not in config.issuers", async () => {
+    const label = "belmonte-9f3c2a7d41b8";
+    const fixture = setup({
+      config: CONFIG_VIEW,
+      claims: [makeClaim(label, { issuer_id: "business.near" })],
+      quotes: {},
+      balances: { [`${label}.openrail.near`]: ["100", "0", "0", "0"] },
+    });
+    const summary = await fixture.watcher.tick();
+    expect(summary.reconciled).toEqual([label]);
+  });
 });
 
 describe("late payments", () => {
