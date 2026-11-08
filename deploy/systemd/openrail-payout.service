@@ -1,0 +1,52 @@
+[Unit]
+Description=Openrail payout worker
+After=network-online.target
+Wants=network-online.target
+# Present only in builds that include the module. A core-only pack installs this unit but skips it.
+ConditionPathExists=/opt/openrail/current/services/payout/src/server.ts
+
+[Service]
+Type=simple
+User=openrail-watcher
+Group=openrail
+WorkingDirectory=/opt/openrail/current/services/payout
+EnvironmentFile=/etc/openrail/payout.env
+Environment=NODE_OPTIONS=--max-old-space-size=200
+Environment=NODE_ENV=production
+ExecStart=/opt/openrail/current/node_modules/.bin/tsx src/server.ts
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+MemoryMax=300M
+TasksMax=256
+LimitNOFILE=65535
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openrail-payout
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/lib/openrail
+
+[Install]
+WantedBy=multi-user.target
