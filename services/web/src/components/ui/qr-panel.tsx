@@ -1,7 +1,7 @@
 "use client";
 
 import { QRCodeSVG } from "qrcode.react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { copy } from "@/copy";
 import type { ViewState } from "./card";
 import { AddressChip } from "./address-chip";
@@ -15,6 +15,7 @@ export function QrPanel({
   chain,
   qrValue,
   state = "ready",
+  children,
 }: {
   address: string;
   /** Display string, e.g. "25.00 USDC". */
@@ -23,6 +24,8 @@ export function QrPanel({
   /** What the QR encodes; defaults to the address. */
   qrValue?: string;
   state?: ViewState;
+  /** Extra actions at the foot of the card, e.g. paying from a connected wallet. */
+  children?: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
@@ -66,6 +69,7 @@ export function QrPanel({
           <Button variant="secondary" className="w-full" onClick={() => void onCopy()}>
             {copied ? copy.address.copied : copy.qr.copy}
           </Button>
+          {children}
         </>
       )}
     </div>

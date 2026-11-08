@@ -30,7 +30,7 @@ export function Tooltip({
         aria-hidden
         className={cn(
           "pointer-events-none absolute z-40 max-w-[240px] rounded-md bg-text px-2 py-1 text-[12px] leading-4 font-medium whitespace-nowrap text-bg opacity-0 shadow-md",
-          "transition-opacity duration-150 group-hover/tip:opacity-100 group-hover/tip:delay-300 group-focus-within/tip:opacity-100",
+          "transition-opacity duration-150 group-hover/tip:opacity-100 group-hover/tip:delay-300 group-has-[:focus-visible]/tip:opacity-100",
           "motion-reduce:transition-none print:hidden",
           POSITION[side],
         )}

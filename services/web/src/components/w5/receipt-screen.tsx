@@ -64,6 +64,15 @@ export function ReceiptScreen({ hash }: { hash: string }) {
           <Row label={t.fingerprint}>
             <AddressChip value={receipt.terms_hash} head={66} tail={0} />
           </Row>
+          <Row label={t.booking}>
+            <AddressChip
+              value={hash}
+              chain="near"
+              head={64}
+              tail={0}
+              href={explorerTxUrl("near", hash) ?? undefined}
+            />
+          </Row>
           <Row label={t.agreed}>{receipt.payment_instruction_v1}</Row>
         </dl>
       </Card>

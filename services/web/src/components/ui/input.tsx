@@ -44,7 +44,7 @@ function Frame({
   children,
 }: FrameProps & { id: string; floated?: boolean; children: ReactNode }) {
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       <div className="relative">
         {loading ? <div className="skeleton h-11 w-full" aria-hidden /> : children}
         {icon ? (

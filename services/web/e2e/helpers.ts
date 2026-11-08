@@ -14,7 +14,10 @@ export async function signIn(context: BrowserContext, account = "acme.openrail.n
 export async function pickDate(page: Page, label: string, iso: string): Promise<void> {
   const [y = 0, m = 1, d = 1] = iso.split("-").map(Number);
   const firstYear = new Date(Date.now() + 86_400_000).getUTCFullYear();
-  await page.getByRole("button", { name: new RegExp(`^${label}`) }).click();
+  await page
+    .getByRole("button", { name: new RegExp(`^${label}`) })
+    .last()
+    .click();
   const wheel = async (name: string, index: number) => {
     await page.getByRole("listbox", { name }).focus();
     await page.keyboard.press("Home");
@@ -29,7 +32,8 @@ export async function pickDate(page: Page, label: string, iso: string): Promise<
 
 /** Choose an option on a select (the motion select): open it by its label, then click the option. */
 export async function choose(page: Page, label: string, option: string): Promise<void> {
-  await page.getByRole("button", { name: new RegExp(`^${label}`) }).click();
+  // While a tab morphs, the old panel is still in the page: the new one is the last.
+  await page.getByRole("button", { name: new RegExp(`^${label}`) }).last().click();
   await page.getByRole("option", { name: option, exact: true }).click();
 }
 
@@ -39,7 +43,7 @@ export async function pickRoute(page: Page, route: string): Promise<void> {
   await choose(page, "Pay with", asset as string);
   if (!chain) return;
   // A token with one network (SOL) has no second select: the route is picked by the first.
-  const network = page.getByRole("button", { name: /^Network/ });
+  const network = page.getByRole("button", { name: /^Network/ }).last();
   if (await network.isVisible({ timeout: 1500 }).catch(() => false))
     await choose(page, "Network", chain);
 }

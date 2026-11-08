@@ -55,7 +55,7 @@ export function Timeline({
             {s.status === "done" ? (
               <Check size={16} strokeWidth={1.5} aria-hidden />
             ) : s.status === "current" ? (
-              <span aria-hidden>
+              <span aria-hidden className="grid place-items-center">
                 <Loader variant="spinner" size={16} label="" className="text-accent-text" />
               </span>
             ) : s.status === "failed" ? (

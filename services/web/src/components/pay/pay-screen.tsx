@@ -1,7 +1,7 @@
 "use client";
 
 import { ApiError, type PaySession, type PublicClaim, type Route } from "@openrail/api-client";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { copy } from "@/copy";
 import { client } from "@/lib/client";
@@ -32,6 +32,7 @@ import { InvoiceCard } from "./invoice-card";
 import { RouteSelects } from "./route-selects";
 import { Countdown } from "../ui/countdown";
 import { Input } from "../ui/input";
+import { Modal } from "../ui/modal";
 import { Tabs } from "../ui/tabs";
 import { EvmWalletView } from "../wallet-buttons";
 import { QrPanel } from "../ui/qr-panel";
@@ -161,7 +162,7 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
 
   const amount = `${amountOf(session, route)} ${route.payer_asset}`;
   return (
-    <div className="surface-card space-y-3 p-4 sm:p-6">
+    <div className="w-full space-y-3">
       {evm.address ? (
         <Button type="button" onClick={() => void send()} loading={busy} disabled={sent !== null}>
           {p.walletPay(amount)}
@@ -206,6 +207,7 @@ function SessionView({
   });
   const [pollFailed, setPollFailed] = useState(false);
   const [short, setShort] = useState(false);
+  const [notes, setNotes] = useState(false);
   const chain = chainOfRoute(route);
 
   const stage = payStage(status, session.deadline, now ?? 0);
@@ -309,16 +311,29 @@ function SessionView({
             address={session.deposit_address}
             amount={`${amountOf(session, route)} ${route.payer_asset}`}
             chain={chain ?? undefined}
-          />
-          <WalletPay session={session} route={route} />
-          <p className="caption px-1">
-            {p.sendOnly(route.payer_asset, chain ? CHAINS[chain] : route.origin_chain)}
-          </p>
-          <p className="caption px-1">
-            {short
-              ? p.shortSeen(amountOf(session, route), route.payer_asset)
-              : p.shortRule(amountOf(session, route), route.payer_asset)}
-          </p>
+          >
+            <WalletPay session={session} route={route} />
+          </QrPanel>
+          <div className="flex items-center justify-between gap-3 px-1">
+            <button
+              type="button"
+              onClick={() => setNotes(true)}
+              className="text-accent-text inline-flex items-center gap-1.5 text-[14px] font-medium hover:underline"
+            >
+              <Info aria-hidden size={16} strokeWidth={1.5} />
+              {p.notesLink}
+            </button>
+          </div>
+          <Modal open={notes} onClose={() => setNotes(false)} title={p.notesTitle}>
+            <div className="space-y-4 text-[15px] leading-6">
+              <p>{p.sendOnly(route.payer_asset, chain ? CHAINS[chain] : route.origin_chain)}</p>
+              <p>
+                {short
+                  ? p.shortSeen(amountOf(session, route), route.payer_asset)
+                  : p.shortRule(amountOf(session, route), route.payer_asset)}
+              </p>
+            </div>
+          </Modal>
           <div className="flex items-center justify-between px-1">
             <span className="caption">{p.timeLeft}</span>
             <Countdown
@@ -354,7 +369,7 @@ interface Leg {
   stage: PayStage;
 }
 
-type Mode = "paste" | "wallet";
+type Mode = "paste" | "wallet" | "split";
 
 export function PayScreen({ tokenId }: { tokenId: string }) {
   const p = copy.pay;
@@ -376,7 +391,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
 
   useEffect(() => {
     let off = false;
-    setLoad({ state: "loading" });
+    setLoad((prev) => (prev.state === "ready" ? prev : { state: "loading" }));
     client.pay
       .getClaim(tokenId)
       .then((claim) => !off && setLoad({ state: "ready", claim }))
@@ -446,12 +461,33 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     });
   }, [legs]);
 
+  // The status at the top follows the payment: when a part is paid, read the invoice again until it says so.
+  const anyPaid = legs.some((l) => l.stage === "paid");
+  const statusNow = claim?.status;
+  useEffect(() => {
+    if (!anyPaid || statusNow === "Paid") return;
+    let tries = 0;
+    const id = setInterval(() => {
+      tries += 1;
+      setTick((t) => t + 1);
+      if (tries >= 15) clearInterval(id);
+    }, 4000);
+    setTick((t) => t + 1);
+    return () => clearInterval(id);
+  }, [anyPaid, statusNow]);
+
   const route = routes.find((r) => r.id === routeId) ?? null;
   const outstanding = claim?.outstanding ?? "0";
   // What is left to pay once the parts so far are counted.
   const remaining = remainingCents(outstanding, legs);
 
-  const refundProblem = refundAddressProblem(route ? chainOfRoute(route) : null, refund);
+  // A connected wallet stands in for an empty refund address, so only a missing one is a problem.
+  const refundProblem = refundAddressProblem(
+    route ? chainOfRoute(route) : null,
+    refund.trim() === "" && route && route.evm_chain_id !== null && evm.address
+      ? evm.address
+      : refund,
+  );
   const amountProblem = split ? legAmountProblem(amountText, remaining) : null;
 
   // A connected wallet fills in the refund address, but only on the wallet tab: the paste tab
@@ -555,19 +591,21 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     setRefundShown(true);
     setAmountShown(true);
     if (!route || refundProblem !== null || amountProblem !== null) return;
+    // A forgotten refund address falls back to the connected wallet (the address the money comes from).
+    const refundTo = refund.trim() === "" ? (evm.address ?? "") : refund;
     const cents = split ? (legCents(amountText) ?? 0n) : remainingCents(outstanding, []);
-    void start(route, refund, cents, split);
+    void start(route, refundTo, cents, split);
   };
 
   // The form for one tab. Both tabs share the state; the wallet tab adds the connect button.
   const form = (tab: Mode) => (
     <div className="space-y-4">
-      {tab === "paste" ? (
+      {tab === "paste" || tab === "split" ? (
         <>
           <p role="note" className="rounded-[10px] bg-surface-2 p-3 text-[14px] leading-5">
             {p.exchangeWarn}
           </p>
-          <p className="caption">{p.refundRule}</p>
+          <p className="caption">{tab === "split" ? p.mixSplitHelp : p.refundRule}</p>
         </>
       ) : (
         <div className="space-y-2">
@@ -576,11 +614,6 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
         </div>
       )}
       <RouteSelects routes={routes} routeId={routeId} onPick={pickRoute} />
-      {!split ? (
-        <Button type="button" variant="secondary" onClick={turnSplitOn}>
-          {p.mixSplit}
-        </Button>
-      ) : null}
       {route && !covered ? (
         <form
           noValidate
@@ -685,9 +718,9 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     : null;
 
   return (
-    <div className="mx-auto w-full max-w-[640px] space-y-6">
-      <InvoiceCard claim={c} />
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
       <div className="min-w-0 space-y-6">
+        <InvoiceCard claim={c} />
         {!open ? (
           <div role="status" className="surface-card p-6 text-[15px]">
             {c.status === "Paid" ? p.alreadyPaid : p.closed}
@@ -703,15 +736,33 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
               fill
               label={p.tabsLabel}
               value={mode}
-              onValueChange={(id) => setMode(id as Mode)}
+              onValueChange={(id) => {
+                setMode(id as Mode);
+                if (id === "split") turnSplitOn();
+                else if (split && legs.length === 0) setSplit(false);
+              }}
               items={[
                 { id: "wallet", label: p.tabWallet, panel: form("wallet") },
                 { id: "paste", label: p.tabPaste, panel: form("paste") },
+                { id: "split", label: p.tabSplit, panel: form("split") },
               ]}
             />
-            {split || legs.length === 0 ? <p className="caption mt-4">{p.mixSplitHelp}</p> : null}
           </Card>
         )}
+      </div>
+      <div className="min-w-0 space-y-6">
+        {open && legs.length === 0 && !starting && sessionError === null ? (
+          <Card title={p.nextTitle}>
+            <p className="caption mb-4">{p.nextBody}</p>
+            <Timeline
+              steps={(["pick", "send", "received", "paidOut"] as const).map((id) => ({
+                id,
+                title: p.nextSteps[id],
+                status: "todo" as const,
+              }))}
+            />
+          </Card>
+        ) : null}
         {allPaid && legs.some((l) => l.stage === "paid") ? (
           <div
             role="status"

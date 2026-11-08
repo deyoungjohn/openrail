@@ -215,8 +215,20 @@ export const copy = {
     due: (d: string) => `Due ${d}`,
     routeLabel: (asset: string, chain: string) => `${asset} on ${chain}`,
     tabsLabel: "How you pay",
-    tabPaste: "Pay from any wallet or exchange",
-    tabWallet: "Pay with your wallet",
+    tabPaste: "Exchange",
+    tabWallet: "Wallet",
+    tabSplit: "Split",
+    notesLink: "Before you send",
+    notesTitle: "Before you send",
+    nextTitle: "What happens next",
+    nextBody:
+      "Choose a token and a network on the left. You see the exact amount before you send anything.",
+    nextSteps: {
+      pick: "Choose how you pay",
+      send: "You send",
+      received: "Payment received",
+      paidOut: "Paid out to the business",
+    },
     payWith: "Pay with",
     network: "Network",
     invoiceCardLabel: "Invoice",
@@ -686,6 +698,7 @@ export const copy = {
     chain: "Network",
     sender: "From",
     payout: "Payout transactions",
+    booking: "Booked on NEAR (transaction)",
     transaction: "Transaction",
     verifyTitle: "Verify it yourself",
     verifySteps: [
@@ -728,6 +741,16 @@ export const copy = {
     noPreview: "PDF statements have no preview. Download it to read it.",
     emptyTitle: "No payments in this period",
     emptyBody: "Pick another period.",
+  },
+  balance: {
+    title: "Your balance",
+    info: (account: string) =>
+      `Payments are paid out to ${account} as a balance on intents.near, not as a token in your NEAR wallet. That is why a wallet does not show them. Cash out moves them to any network.`,
+    none: "No payments received yet.",
+    on: (network: string) => `${network}`,
+    where: (account: string) => `Held for ${account} on intents.near.`,
+    cashOut: "Cash out",
+    unreadable: "We couldn't read your balance from the chain. Try again in a moment.",
   },
   cashout: {
     title: "Cash out",

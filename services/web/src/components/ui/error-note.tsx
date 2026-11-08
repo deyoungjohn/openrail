@@ -24,7 +24,11 @@ export function ErrorNote({
   return (
     <div
       id={id}
-      className={cn(variant === "field" ? "h-5" : "h-[3.75rem]", "w-full print:hidden", className)}
+      className={cn(
+        variant === "field" ? "h-5" : "h-[3.75rem]",
+        "w-full min-w-0 overflow-hidden print:hidden",
+        className,
+      )}
       {...(children ? { role: "alert" } : {})}
     >
       {children ? (

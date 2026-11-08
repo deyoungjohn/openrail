@@ -273,12 +273,12 @@ test("a connected wallet fills in the refund address", async ({ page }) => {
   await mockApi(page);
   await page.goto("/pay/c-1");
   // The wallet tab fills the address in; the first tab (pay from any wallet) never does.
-  await page.getByRole("tab", { name: "Pay with your wallet" }).click();
+  await page.getByRole("tab", { name: "Wallet" }).click();
   await pickRoute(page, "USDC on Base");
   await expect(page.getByLabel("Refund address")).toHaveValue(REFUND);
 });
 
-test("one centered column on a desktop: the price comes under the picker, not beside it", async ({
+test("two columns on a desktop: the invoice and the picker on the left, the price and progress on the right", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -290,10 +290,9 @@ test("one centered column on a desktop: the price comes under the picker, not be
   await expect(quote).toBeVisible();
   const a = (await picker.boundingBox())!;
   const b = (await quote.boundingBox())!;
-  expect(b.y).toBeGreaterThan(a.y + a.height - 1);
-  expect(Math.abs(b.x - a.x)).toBeLessThan(2);
-  // The column is centered in the window.
-  expect(Math.abs(a.x + a.width / 2 - 640)).toBeLessThan(8);
+  expect(b.x).toBeGreaterThan(a.x + a.width - 1);
+  // The price starts at the top of the right column, level with the invoice, above the picker.
+  expect(b.y).toBeLessThan(a.y);
 });
 
 test("one column on a phone, in reading order", async ({ page }) => {

@@ -163,9 +163,8 @@ test.describe("tab order follows the visual order", () => {
       /^Copy c-1/,
       /^Copy 0xaaaa/,
       "What this invoice says",
-      "Pay with your wallet",
+      "Wallet",
       /^Pay with/,
-      "Split this payment",
     ]);
 
     await pickRoute(page, "USDC on Base");

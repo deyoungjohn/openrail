@@ -32,6 +32,7 @@ import {
   WeeklyActivityCard,
 } from "../ui/stat-cards";
 import { Tooltip } from "../ui/tooltip";
+import { BalanceCard } from "./balance-card";
 
 const CREATE = (
   <Link href="/app/invoices/new">
@@ -402,6 +403,7 @@ export function DashboardScreen() {
         <Card state="error" errorBody={d.loadError} onRetry={retry} />
       ) : (
         <>
+          <BalanceCard />
           <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MonthlyRevenueCard
               cents={rev.currentCents}

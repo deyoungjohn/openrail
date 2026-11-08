@@ -270,7 +270,7 @@ test.describe("invoices list", () => {
     await expect(tabs.getByRole("tab", { name: /Paid\s*1/ })).toBeVisible();
     await expect(tabs.getByRole("tab", { name: /Overdue\s*1/ })).toBeVisible();
     await tabs.getByRole("tab", { name: /Overdue/ }).click();
-    await expect(page.getByRole("link", { name: "INV-3" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "INV-3" }).last()).toBeVisible();
     await expect(page.getByRole("link", { name: "INV-1" })).toHaveCount(0);
   });
 });
