@@ -20,6 +20,7 @@ import { sha256Hex0x } from "./crypto.js";
 import { createMemoryStores, type ApiStore } from "./stores.js";
 import { IdempotencyConflict, IdempotencyStore } from "./idempotency.js";
 import { renderInvoicePdfBase64 } from "./pdf.js";
+import { PROCESSING_FEE_DESCRIPTION } from "./line-items.js";
 import { handleRecurring, type RecurringStore } from "./recurring.js";
 import { createMemoryRecurringStore } from "./recurring-store.js";
 import { enabledModules } from "./enabled.js";
@@ -32,8 +33,20 @@ import {
 } from "./modules.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
-import { deliverTestWebhook, type WebhookEndpointRecord } from "./webhooks.js";
+import {
+  CORE_WEBHOOK_EVENT_TYPES,
+  deliverTestWebhook,
+  type WebhookEndpointRecord,
+} from "./webhooks.js";
 import { UnsafeWebhookUrl, validateWebhookUrl } from "./webhook-url.js";
+import {
+  feePreview,
+  lineItemsFingerprint,
+  normalizeLineItems,
+  resolveFee,
+  type FeeMode,
+  type LineItem,
+} from "./line-items.js";
 import {
   ackLink,
   claimLabel as claimLabelFor,
@@ -55,6 +68,8 @@ export interface ApiConfig {
 
 export interface ContractPort {
   claim(tokenId: string): Promise<Record<string, unknown> & { kind: number }>;
+  /** Generic read-only view for enabled modules; core never names their methods. */
+  view?(methodName: string, args: object): Promise<unknown>;
   storageCredit(accountId: string): Promise<{ balance: string; amount: string }>;
   sponsorStatus?(accountId: string): Promise<{ pool: string; cap: number; used: number }>;
 }
@@ -120,6 +135,12 @@ export interface IndexerPort {
   analytics(): Promise<Record<string, unknown>>;
 }
 
+export type PayoutSchedule = "manual" | "each_payment" | "daily" | "weekly" | "monthly";
+
+export interface PayoutEstimatorPort {
+  estimate(destination: string): Promise<Record<string, unknown>>;
+}
+
 export interface CashoutPort {
   quote(request: {
     amount: string;
@@ -136,6 +157,8 @@ export interface BusinessRecord {
   legal_name: string;
   payout_account: string;
   contact_email: string;
+  fee_mode?: FeeMode;
+  payout?: { schedule: PayoutSchedule; destination: string | null };
   created_at: string;
   updated_at: string;
   /** Internal: set when the business replaces a non-null username. Never returned. */
@@ -164,6 +187,8 @@ export interface InvoiceRecord {
   created_at: string;
   created_block: number;
   terms: Terms;
+  line_items?: LineItem[];
+  fee_mode?: FeeMode;
   /** Set when the invoice was issued by a recurring template. */
   recurring_id?: string;
 }
@@ -241,6 +266,7 @@ export interface ApiDeps {
   issuer: IssuerPort;
   accessKey: AccessKeyPort;
   cashout: CashoutPort;
+  payoutEstimator?: PayoutEstimatorPort;
   indexer?: IndexerPort;
   verifier?: Nep413Verifier;
   routes?: RouteFile;
@@ -288,12 +314,20 @@ function parseDebtor(input: unknown): { Near: string } | { Evm: string } | null 
   return input.startsWith("0x") ? { Evm: input } : { Near: input };
 }
 
-function dateToUtc(value: string): string {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z` : value;
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, entry]) => [key, canonicalize(entry)]),
+    );
+  }
+  return value;
 }
 
-function stableLineItems(lineItems: unknown): string {
-  return sha256Hex0x(JSON.stringify(lineItems));
+function dateToUtc(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z` : value;
 }
 
 function cookieToken(header: string | undefined): string | undefined {
@@ -458,6 +492,8 @@ export class ApiApp {
       legal_name: record.legal_name,
       payout_account: record.payout_account,
       contact_email: record.contact_email,
+      fee_mode: record.fee_mode ?? "absorb",
+      payout: record.payout ?? { schedule: "manual", destination: null },
       created_at: record.created_at,
       updated_at: record.updated_at,
     };
@@ -512,8 +548,10 @@ export class ApiApp {
   private business(accountId: string): BusinessRecord {
     const existing = this.store.getBusiness(accountId);
     if (existing !== undefined) {
-      if (existing.username === undefined) {
-        existing.username = isImplicitAccountId(accountId) ? null : accountId.toLowerCase();
+      if (existing.username === undefined || existing.fee_mode === undefined) {
+        if (existing.username === undefined)
+          existing.username = isImplicitAccountId(accountId) ? null : accountId.toLowerCase();
+        existing.fee_mode = existing.fee_mode ?? "absorb";
         this.store.saveBusiness(existing);
       }
       return existing;
@@ -524,6 +562,8 @@ export class ApiApp {
       legal_name: accountId,
       payout_account: accountId,
       contact_email: "billing@example.com",
+      fee_mode: "absorb",
+      payout: { schedule: "manual", destination: null },
       created_at: nowIso(this.clock),
       updated_at: nowIso(this.clock),
     };
@@ -772,6 +812,8 @@ export class ApiApp {
           legal_name?: unknown;
           payout_account?: unknown;
           contact_email?: unknown;
+          fee_mode?: unknown;
+          payout?: unknown;
         };
         if (body.username !== undefined) {
           if (typeof body.username !== "string") throw new ApiError(400, "invalid_username");
@@ -828,6 +870,36 @@ export class ApiApp {
           if (typeof body.contact_email !== "string") throw new ApiError(400, "invalid_request");
           current.contact_email = body.contact_email;
         }
+        if (body.fee_mode !== undefined) {
+          if (body.fee_mode !== "absorb" && body.fee_mode !== "pass_to_customer")
+            throw new ApiError(400, "invalid_fee_mode");
+          current.fee_mode = body.fee_mode;
+        }
+        if (body.payout !== undefined) {
+          const payout = body.payout as { schedule?: unknown; destination?: unknown };
+          const schedule = payout.schedule ?? current.payout?.schedule ?? "manual";
+          if (
+            schedule !== "manual" &&
+            schedule !== "each_payment" &&
+            schedule !== "daily" &&
+            schedule !== "weekly" &&
+            schedule !== "monthly"
+          )
+            throw new ApiError(400, "invalid_payout_schedule");
+          if (
+            payout.destination !== undefined &&
+            payout.destination !== null &&
+            typeof payout.destination !== "string"
+          )
+            throw new ApiError(400, "invalid_payout_destination");
+          current.payout = {
+            schedule,
+            destination:
+              payout.destination === undefined
+                ? (current.payout?.destination ?? null)
+                : (payout.destination as string | null),
+          };
+        }
         current.updated_at = nowIso(this.clock);
         try {
           this.store.saveBusiness(current);
@@ -851,6 +923,33 @@ export class ApiApp {
         status: 200,
         body: usernameAvailability(candidate, context.accountId, taken),
       };
+    }
+    if (path === "/v1/webhook_event_types" && method === "GET") {
+      this.requireAuth(request);
+      const types = [
+        ...CORE_WEBHOOK_EVENT_TYPES,
+        ...this.modules.flatMap((module) => module.eventTypes ?? []),
+      ];
+      return { status: 200, body: { types: [...new Set(types)].sort() } };
+    }
+    if (path === "/v1/payout/estimate" && method === "GET") {
+      this.requireAuth(request);
+      if (this.deps.payoutEstimator === undefined)
+        throw new ApiError(503, "payout_estimate_unavailable");
+      const destination = request.query.get("destination") ?? "";
+      if (destination === "") throw new ApiError(400, "invalid_request", "destination required");
+      return { status: 200, body: await this.deps.payoutEstimator.estimate(destination) };
+    }
+    if (path === "/v1/fee_preview" && method === "GET") {
+      const context = this.requireAuth(request);
+      const business = this.business(context.accountId);
+      const subtotal = request.query.get("subtotal_usd") ?? "";
+      if (!/^\d+(?:\.\d{1,2})?$/.test(subtotal))
+        throw new ApiError(400, "invalid_request", "subtotal_usd required");
+      const mode = (request.query.get("fee_mode") ?? business.fee_mode ?? "absorb") as FeeMode;
+      if (mode !== "absorb" && mode !== "pass_to_customer")
+        throw new ApiError(400, "invalid_fee_mode");
+      return { status: 200, body: feePreview(subtotal, mode) };
     }
     if (path === "/v1/business/storage_credit" && method === "GET") {
       const context = this.requireAuth(request);
@@ -961,6 +1060,7 @@ export class ApiApp {
               invoice.terms,
               invoice.terms_hash,
               invoice.created_at,
+              invoice.line_items,
             ),
             sha256: invoice.terms_hash,
             generated_at: nowIso(this.clock),
@@ -1090,6 +1190,7 @@ export class ApiApp {
           invoice_number: invoice.invoice_number,
           issuer_legal_name: invoice.issuer_legal_name,
           debtor_legal_name: invoice.debtor_legal_name,
+          line_items: invoice.line_items ?? [],
           claim_account: invoice.claim_account,
           terms_hash: invoice.terms_hash,
           amount_due: invoice.amount_due,
@@ -1133,6 +1234,7 @@ export class ApiApp {
             terms_hash: invoice.terms_hash,
             amount_due: invoice.amount_due,
             amount_usd: invoice.amount_usd,
+            line_items: invoice.line_items ?? [],
             due_date: Date.parse(invoice.terms.due_date) / 1000,
             status: invoice.status,
             terms: invoice.terms,
@@ -1409,6 +1511,47 @@ export class ApiApp {
       };
     }
 
+    const receiptJsonMatch = /^\/v1\/receipts\/([^/]+)\.json$/.exec(path);
+    if (receiptJsonMatch !== null && method === "GET") {
+      const bookingTxHash = receiptJsonMatch[1] ?? "";
+      const receipt =
+        this.deps.indexer === undefined
+          ? this.store.getReceipt(bookingTxHash)
+          : await this.deps.indexer.getReceipt(bookingTxHash);
+      if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
+      const tokenId = String(receipt.token_id ?? "");
+      const invoice = this.store.getInvoice(tokenId);
+      const business =
+        invoice === undefined ? undefined : this.store.getBusiness(invoice.issuer_id);
+      const feeLine = invoice?.line_items?.find(
+        (item) => item.description === PROCESSING_FEE_DESCRIPTION,
+      );
+      const claimAccount = `${tokenId}.${this.deps.config.rootAccount}`;
+      const nearHashes = Array.isArray(receipt.near_tx_hashes)
+        ? (receipt.near_tx_hashes as unknown[])
+        : [];
+      const body = canonicalize({
+        receipt_id: String(receipt.id ?? `rcpt_${bookingTxHash}`),
+        paid_at: String(receipt.time ?? ""),
+        invoice_number: invoice?.invoice_number ?? tokenId,
+        order_ref: invoice?.recurring_id ?? tokenId,
+        business_name: invoice?.issuer_legal_name ?? null,
+        business_username: business?.username ?? null,
+        buyer_name: invoice?.debtor_legal_name ?? null,
+        amount_usd: invoice?.amount_usd ?? null,
+        paid_amount: String(receipt.amount ?? ""),
+        paid_asset: String(receipt.asset ?? ""),
+        network: receipt.origin_tx ?? null,
+        fee_usd: feeLine?.amount_usd ?? "0.00",
+        payer_tx: receipt.origin_tx ?? null,
+        near_tx: nearHashes[0] ?? bookingTxHash,
+        claim_account: claimAccount,
+        terms_fingerprint: invoice?.terms_hash ?? String(receipt.terms_hash ?? ""),
+        verify_command: `openrail-verify claim ${claimAccount} --terms-hash ${invoice?.terms_hash ?? String(receipt.terms_hash ?? "")}`,
+      }) as Record<string, unknown>;
+      return { status: 200, body };
+    }
+
     const receiptMatch = /^\/v1\/receipts\/([^/]+)$/.exec(path);
     if (receiptMatch !== null && method === "GET") {
       const bookingTxHash = receiptMatch[1] ?? "";
@@ -1469,6 +1612,11 @@ export class ApiApp {
       requireAuth: (request, allowPublishable) => this.requireAuth(request, allowPublishable),
       requireScope: (context, scope) => this.requireScope(context, scope),
       withIdempotency: (request, run) => this.withIdempotency(request, run),
+      view: async (methodName, args) => {
+        if (this.deps.contract.view === undefined)
+          throw new ApiError(503, "contract_view_unavailable");
+        return this.deps.contract.view(methodName, args);
+      },
     };
   }
 
@@ -1498,6 +1646,7 @@ export class ApiApp {
       due_date?: string;
       line_items?: unknown;
       line_items_sha256?: string;
+      fee_mode?: unknown;
       pay_link?: string;
       assignment_agreement_sha256?: string;
       clauses?: string[];
@@ -1525,6 +1674,20 @@ export class ApiApp {
     const username = business.username;
     const ref = refOf(invoiceId);
     const labels = this.deps.config.claimLabels === true;
+    const feeMode = (body.fee_mode ?? business.fee_mode ?? "absorb") as FeeMode;
+    if (feeMode !== "absorb" && feeMode !== "pass_to_customer")
+      throw new ApiError(400, "invalid_fee_mode");
+    let feeResult: ReturnType<typeof resolveFee>;
+    try {
+      feeResult = resolveFee(
+        twoDecimals(Number(body.amount_usd)),
+        normalizeLineItems(body.line_items ?? []),
+        feeMode,
+      );
+    } catch {
+      throw new ApiError(400, "invalid_request", "line_items must be valid rows");
+    }
+    const itemsHash = lineItemsFingerprint(feeResult.items);
     const label = labels ? claimLabelFor(username, ref) : undefined;
     const knownClaimAccount =
       label === undefined ? undefined : `${label}.${this.deps.config.rootAccount}`;
@@ -1570,9 +1733,9 @@ export class ApiApp {
           issuer_account: business.account_id,
           debtor_legal_name: body.debtor_legal_name as string,
           debtor_key: body.debtor_key as string,
-          amount_usd: twoDecimals(Number(body.amount_usd)),
+          amount_usd: feeResult.amountUsd,
           due_date: dateToUtc(body.due_date as string),
-          line_items_sha256: body.line_items_sha256 ?? stableLineItems(body.line_items ?? []),
+          line_items_sha256: itemsHash,
           claim_account: claimAccount,
           pay_link: body.pay_link ?? payLink(this.deps.config.payBaseUrl, username, ref),
           assignment_agreement_sha256: body.assignment_agreement_sha256,
@@ -1640,6 +1803,8 @@ export class ApiApp {
       created_at: nowIso(this.clock),
       created_block: 0,
       terms,
+      line_items: feeResult.items,
+      fee_mode: feeMode,
       ...(options.recurringId === undefined ? {} : { recurring_id: options.recurringId }),
     };
     this.store.saveInvoice(invoice);

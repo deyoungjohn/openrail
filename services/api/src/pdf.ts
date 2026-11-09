@@ -7,6 +7,7 @@
  * embedding, and no clock or random value, so the same terms always produce the same bytes.
  */
 import type { Terms } from "./terms.js";
+import type { LineItem } from "./line-items.js";
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -225,7 +226,7 @@ function drawTop(builder: PageBuilder, terms: Terms, issuedAt?: string): void {
   builder.y = Math.min(builder.y, detailY) - 8;
 }
 
-function drawTable(builder: PageBuilder, terms: Terms): void {
+function drawTable(builder: PageBuilder, terms: Terms, lineItems?: readonly LineItem[]): void {
   builder.y = builder.y - 40;
   const top = builder.y;
   label(builder, "DESCRIPTION", MARGIN, top);
@@ -234,7 +235,10 @@ function drawTable(builder: PageBuilder, terms: Terms): void {
   line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.5, ACCENT);
   builder.y -= 18;
 
-  const rows: Array<[string, string]> = [[terms.invoice_number, `$${terms.amount_usd}`]];
+  const rows: Array<[string, string]> =
+    lineItems !== undefined && lineItems.length > 0
+      ? lineItems.map((item) => [item.description, `$${item.amount_usd}`])
+      : [[terms.invoice_number, `$${terms.amount_usd}`]];
   if (terms.assignment_agreement_sha256 !== undefined) {
     rows.push(["Assignment agreement", "—"]);
   }
@@ -282,11 +286,16 @@ function drawTerms(builder: PageBuilder, terms: Terms, termsHash: string): void 
   drawClauses(builder, terms, invoice);
 }
 
-export function renderInvoicePdf(terms: Terms, termsHash: string, issuedAt?: string): Uint8Array {
+export function renderInvoicePdf(
+  terms: Terms,
+  termsHash: string,
+  issuedAt?: string,
+  lineItems?: readonly LineItem[],
+): Uint8Array {
   const builder: PageBuilder = { pages: [], content: "", y: PAGE_HEIGHT - MARGIN };
   beginPage(builder, null);
   drawTop(builder, terms, issuedAt);
-  drawTable(builder, terms);
+  drawTable(builder, terms, lineItems);
   drawTotals(builder, terms);
   drawPayment(builder, terms);
   drawTerms(builder, terms, termsHash);
@@ -325,6 +334,11 @@ export function renderInvoicePdf(terms: Terms, termsHash: string, issuedAt?: str
   return new Uint8Array(Buffer.from(pdf, "latin1"));
 }
 
-export function renderInvoicePdfBase64(terms: Terms, termsHash: string, issuedAt?: string): string {
-  return Buffer.from(renderInvoicePdf(terms, termsHash, issuedAt)).toString("base64");
+export function renderInvoicePdfBase64(
+  terms: Terms,
+  termsHash: string,
+  issuedAt?: string,
+  lineItems?: readonly LineItem[],
+): string {
+  return Buffer.from(renderInvoicePdf(terms, termsHash, issuedAt, lineItems)).toString("base64");
 }

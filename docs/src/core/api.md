@@ -152,6 +152,7 @@ The server checks the signature and that the public key belongs to the account.
 | `GET`/`POST` | `/v1/api_keys`                                    | List keys, or create one (secret shown once).                                                                |
 | `POST`       | `/v1/api_keys/{id}/rotate`                        | Rotate; the old key stops working.                                                                           |
 | `DELETE`     | `/v1/api_keys/{id}`                               | Revoke a key.                                                                                                |
+| `GET`        | `/v1/webhook_event_types`                         | Core event types plus the types enabled modules declare; the dashboard subscribes from this list.            |
 | `GET`/`POST` | `/v1/webhook_endpoints`                           | List endpoints or create one (secret shown once).                                                            |
 | `DELETE`     | `/v1/webhook_endpoints/{id}`                      | Delete an endpoint.                                                                                          |
 | `POST`       | `/v1/webhook_endpoints/{id}/test`                 | Send a test event.                                                                                           |

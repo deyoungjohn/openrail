@@ -1,0 +1,25 @@
+{
+  "destination": "base",
+  "chain": "base",
+  "measured_at": "2026-11-08T17:20:00Z",
+  "sizes": [
+    {
+      "amount_usd": "5.00",
+      "paid_usd": "5.000000",
+      "received_usd": "4.996627",
+      "cost_usd": "0.003373"
+    },
+    {
+      "amount_usd": "50.00",
+      "paid_usd": "50.000000",
+      "received_usd": "49.988000",
+      "cost_usd": "0.012000"
+    },
+    {
+      "amount_usd": "500.00",
+      "paid_usd": "500.000000",
+      "received_usd": "499.901604",
+      "cost_usd": "0.098396"
+    }
+  ]
+}

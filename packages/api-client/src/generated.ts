@@ -100,6 +100,7 @@ export interface LineItem {
   description: string;
   quantity: number;
   unit_amount_usd: string;
+  amount_usd: string;
 }
 
 export interface ClaimView {
@@ -152,6 +153,7 @@ export interface Invoice {
   outstanding: U128;
   paid_total: U128;
   recurring_id?: string;
+  line_items?: LineItem[];
 }
 
 export interface InvoiceList {
@@ -172,7 +174,7 @@ export interface CreateInvoiceRequest {
   debtor_type?: "evm" | "near";
   amount_usd: string;
   due_date: string;
-  line_items: LineItem[];
+  line_items: LineItemInput[];
   line_items_sha256?: Hex32;
   pay_link?: string;
   assignment_agreement_sha256?: Hex32;
@@ -346,6 +348,7 @@ export interface PublicClaim {
   pay_link: string;
   terms: Terms;
   routes: Route[];
+  line_items: LineItem[];
 }
 
 export interface AckDomain {
@@ -378,6 +381,7 @@ export interface AckData {
   domain: AckDomain;
   primary_type: "Acknowledge";
   message: AckMessage;
+  line_items: LineItem[];
 }
 
 export interface AuthChallengeRequest {
@@ -469,6 +473,8 @@ export interface Business {
   contact_email: string;
   created_at: string;
   updated_at: string;
+  fee_mode: FeeMode;
+  payout?: PayoutSettings;
 }
 
 export interface UpdateBusinessRequest {
@@ -476,6 +482,11 @@ export interface UpdateBusinessRequest {
   legal_name?: string;
   payout_account?: string;
   contact_email?: string;
+  fee_mode?: FeeMode;
+  payout?: {
+    schedule?: PayoutSchedule;
+    destination?: string | null;
+  };
 }
 
 export interface StorageCredit {
@@ -614,7 +625,7 @@ export interface RecurringTemplateInvoice {
   debtor_legal_name: string;
   debtor_key: string;
   amount_usd: string;
-  line_items?: Record<string, unknown>[];
+  line_items?: LineItemInput[];
 }
 
 export interface CreateRecurringInvoiceRequest {
@@ -708,6 +719,65 @@ export interface PaySessionList {
 export interface UsernameAvailability {
   available: boolean;
   reason: string;
+}
+
+export type FeeMode = "absorb" | "pass_to_customer";
+
+export interface FeePreview {
+  subtotal_usd: string;
+  fee_usd: string;
+  total_usd: string;
+  merchant_receives_usd: string;
+  fee_mode: FeeMode;
+}
+
+export interface MachineReceipt {
+  receipt_id: string;
+  paid_at: string;
+  invoice_number: string;
+  order_ref: string;
+  business_name: string | null;
+  business_username: string | null;
+  buyer_name: string | null;
+  amount_usd: string | null;
+  paid_amount: string;
+  paid_asset: string;
+  network: Record<string, unknown> | null;
+  fee_usd: string;
+  payer_tx: Record<string, unknown> | null;
+  near_tx: string;
+  claim_account: string;
+  terms_fingerprint: string;
+  verify_command: string;
+}
+
+export type PayoutSchedule = "manual" | "each_payment" | "daily" | "weekly" | "monthly";
+
+export interface PayoutSettings {
+  schedule: PayoutSchedule;
+  destination: string | null;
+}
+
+export interface PayoutEstimate {
+  destination: string;
+  chain: string;
+  measured_at: string;
+  sizes: Array<{
+    amount_usd: string;
+    paid_usd: string;
+    received_usd: string;
+    cost_usd: string;
+  }>;
+}
+
+export interface LineItemInput {
+  description: string;
+  quantity: number;
+  unit_amount_usd: string;
+}
+
+export interface WebhookEventTypes {
+  types: string[];
 }
 
 export interface operations {
@@ -1252,6 +1322,48 @@ export interface operations {
     responses: {
       "200": UsernameAvailability;
       "400": Error;
+      "401": Error;
+    };
+  };
+  feePreview: {
+    parameters: {
+      query: {
+        subtotal_usd: string;
+        fee_mode?: FeeMode;
+      };
+    };
+    responses: {
+      "200": FeePreview;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  getMachineReceipt: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": MachineReceipt;
+      "404": Error;
+    };
+  };
+  payoutEstimate: {
+    parameters: {
+      query: {
+        destination: string;
+      };
+    };
+    responses: {
+      "200": PayoutEstimate;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  listWebhookEventTypes: {
+    responses: {
+      "200": WebhookEventTypes;
       "401": Error;
     };
   };

@@ -1,0 +1,12 @@
+{
+  "types": [
+    "invoice.accepted",
+    "invoice.closed",
+    "invoice.created",
+    "invoice.paid",
+    "invoice.partially_paid",
+    "payment.late",
+    "payout.failed",
+    "storage_sponsored"
+  ]
+}

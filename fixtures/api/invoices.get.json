@@ -38,7 +38,15 @@
       ]
     },
     "outstanding": "12500000",
-    "paid_total": "0"
+    "paid_total": "0",
+    "line_items": [
+      {
+        "description": "Design",
+        "quantity": 1,
+        "unit_amount_usd": "12.50",
+        "amount_usd": "12.50"
+      }
+    ]
   },
   "claim": {
     "token_id": "c-1",

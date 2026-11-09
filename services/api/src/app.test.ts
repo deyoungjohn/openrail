@@ -736,3 +736,58 @@ describe("invoice route: the issuer handshake", () => {
     expect((response.body as { error: { code: string } }).error.code).toBe("issuer_outdated");
   });
 });
+
+describe("fee mode and line items", () => {
+  it("passes the processing fee to the customer and serves the items", async () => {
+    const { app, secret } = harness();
+    await app.handle(request("PUT", "/v1/business", { fee_mode: "pass_to_customer" }, secret));
+    const created = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(created.status).toBe(201);
+    const invoice = created.body as {
+      id: string;
+      token_id: string;
+      amount_usd: string;
+      amount_due: string;
+      line_items: {
+        description: string;
+        quantity: number;
+        unit_amount_usd: string;
+        amount_usd: string;
+      }[];
+      terms: { line_items_sha256: string };
+    };
+    expect(invoice.amount_usd).toBe("12.54");
+    expect(invoice.amount_due).toBe("12540000");
+    expect(invoice.line_items).toEqual([
+      {
+        description: "Design",
+        quantity: 1,
+        unit_amount_usd: "12.50",
+        amount_usd: "12.50",
+      },
+      {
+        description: "Processing fee (0.25%)",
+        quantity: 1,
+        unit_amount_usd: "0.04",
+        amount_usd: "0.04",
+      },
+    ]);
+    const { lineItemsFingerprint } = await import("./line-items.js");
+    expect(invoice.terms.line_items_sha256).toBe(lineItemsFingerprint(invoice.line_items));
+
+    const ref = invoice.id.replace(/^inv_/, "");
+    for (const path of [`/v1/pay/claims/${ref}`, `/v1/ack/${ref}`]) {
+      const response = await app.handle(request("GET", path, undefined, secret));
+      expect(response.status).toBe(200);
+      expect((response.body as { line_items: unknown[] }).line_items).toEqual(invoice.line_items);
+    }
+  });
+
+  it("keeps absorb unchanged", async () => {
+    const { app, secret } = harness();
+    const created = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(created.status).toBe(201);
+    expect((created.body as { amount_usd: string }).amount_usd).toBe("12.50");
+    expect((created.body as { line_items: unknown[] }).line_items).toHaveLength(1);
+  });
+});

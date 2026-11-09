@@ -34,8 +34,13 @@ function pathMatches(template: string, actual: string): boolean {
   const received = actual.split("/");
   if (expected.length !== received.length) return false;
   return expected.every((segment, index) => {
-    if (segment.startsWith("{") && segment.endsWith("}")) return (received[index] ?? "") !== "";
-    return segment === received[index];
+    const actual = received[index] ?? "";
+    const placeholder = /^\{[^}]+\}(.*)$/.exec(segment);
+    if (placeholder !== null) {
+      const suffix = placeholder[1] ?? "";
+      return actual.length > suffix.length && actual.endsWith(suffix);
+    }
+    return segment === actual;
   });
 }
 
@@ -112,11 +117,16 @@ export function createMockServer(options: MockServerOptions = {}): Server {
       return;
     }
 
-    for (const { entry, body } of fixtures.values()) {
-      if (entry.method === method && pathMatches(entry.path, pathname)) {
-        sendJson(response, entry.status, body, entry.file, request.headers.origin);
-        return;
-      }
+    const match = [...fixtures.values()]
+      .filter(({ entry }) => entry.method === method && pathMatches(entry.path, pathname))
+      .sort(
+        (a, b) =>
+          b.entry.path.replace(/\{[^}]+\}/g, "").length -
+          a.entry.path.replace(/\{[^}]+\}/g, "").length,
+      )[0];
+    if (match !== undefined) {
+      sendJson(response, match.entry.status, match.body, match.entry.file, request.headers.origin);
+      return;
     }
     sendJson(response, 404, notFound, "error.404.json", request.headers.origin);
   });
