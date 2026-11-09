@@ -561,6 +561,29 @@ export interface OpenQuoteList {
   data: OpenQuote[];
 }
 
+export interface Cashout {
+  id: string;
+  amount: string;
+  amount_out: string;
+  source_asset: string;
+  destination_chain: string;
+  destination_address: string;
+  route_cost_usd: string;
+  created_at: string;
+  deadline: string;
+  tx_hash: string | null;
+  tx_state: "success" | "failed" | "pending" | "unknown" | null;
+  status:
+    "quoted" | "sent" | "processing" | "success" | "refunded" | "incomplete" | "failed" | "expired";
+  provider_status: string | null;
+  near_tx_hashes: string[];
+  destination_tx_hashes: string[];
+}
+
+export interface CashoutList {
+  data: Cashout[];
+}
+
 export interface CashoutQuoteRequest {
   amount: U128;
   destination_chain: "base" | "arbitrum" | "optimism" | "polygon" | "solana" | "ethereum" | "near";
@@ -569,6 +592,7 @@ export interface CashoutQuoteRequest {
 }
 
 export interface CashoutQuote {
+  id?: string;
   amount: U128;
   source_asset: string;
   destination_chain: string;
@@ -1188,6 +1212,43 @@ export interface operations {
     };
     responses: {
       "200": OpenQuoteList;
+      "400": Error;
+      "401": Error;
+      "403": Error;
+      "404": Error;
+    };
+  };
+  listCashouts: {
+    responses: {
+      "200": CashoutList;
+      "401": Error;
+      "403": Error;
+    };
+  };
+  getCashout: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": Cashout;
+      "401": Error;
+      "403": Error;
+      "404": Error;
+    };
+  };
+  markCashoutSent: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    requestBody: {
+      tx_hash: string;
+    };
+    responses: {
+      "200": Cashout;
       "400": Error;
       "401": Error;
       "403": Error;

@@ -281,6 +281,14 @@ export class OpenrailClient {
         body,
         idempotencyKey: options.idempotencyKey,
       }),
+    list: (): Promise<SuccessBody<"listCashouts">> => this.call("GET", "/v1/cashouts"),
+    get: (id: string): Promise<SuccessBody<"getCashout">> =>
+      this.call("GET", `/v1/cashouts/${encodeURIComponent(id)}`),
+    /** Attaches the transaction the merchant signed, so the money can be followed. */
+    sent: (id: string, txHash: string): Promise<SuccessBody<"markCashoutSent">> =>
+      this.call("POST", `/v1/cashouts/${encodeURIComponent(id)}/sent`, {
+        body: { tx_hash: txHash },
+      }),
   };
 
   health = (): Promise<SuccessBody<"getHealth">> => this.call("GET", "/v1/health");

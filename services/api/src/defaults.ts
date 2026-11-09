@@ -169,6 +169,9 @@ export function createContractPort(rootAccount: string): ContractPort {
         feature: "api.module_view",
       });
     },
+    async txStatus(txHash, senderId) {
+      return near.txStatus(txHash, senderId);
+    },
     async settleHeld(tokenId) {
       const held = await near.view<Record<string, unknown>[]>({
         contractId: rootAccount,

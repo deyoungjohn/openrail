@@ -288,6 +288,33 @@ export class NearClient {
     return JSON.parse(new TextDecoder().decode(bytes)) as T;
   }
 
+  /**
+   * What became of a transaction: `success`, `failed`, or `pending` (not executed yet, or not known to the node yet).
+   * An RPC that cannot answer throws, so a caller can tell "unknown" from "pending".
+   */
+  async txStatus(txHash: string, senderId: string): Promise<"success" | "failed" | "pending"> {
+    try {
+      const result = await this.rpc<{ status?: Record<string, unknown> | string }>(
+        "tx",
+        [txHash, senderId],
+        "tx_status",
+      );
+      const status = result.status;
+      if (typeof status === "object" && status !== null) {
+        if ("Failure" in status) return "failed";
+        if ("SuccessValue" in status || "SuccessReceiptId" in status) return "success";
+      }
+      return "pending";
+    } catch (error) {
+      if (
+        error instanceof NearRpcError &&
+        /UNKNOWN_TRANSACTION|doesn't exist|not found/i.test(error.message)
+      )
+        return "pending";
+      throw error;
+    }
+  }
+
   /** A read-only contract call (`query` + `call_function`, finality final). */
   async view<T>(request: ViewRequest): Promise<T> {
     return this.query<T>(

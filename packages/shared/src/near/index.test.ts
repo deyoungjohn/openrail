@@ -61,6 +61,43 @@ describe("near client views", () => {
   });
 });
 
+describe("near client transaction status", () => {
+  const status = (result: unknown) => vi.fn(async () => rpcResult(result));
+
+  it("reads a successful transaction", async () => {
+    const fetchImpl = status({ final_execution_status: "FINAL", status: { SuccessValue: "" } });
+    const client = new NearClient({ rpcUrls: ["https://rpc.primary"], fetchImpl });
+    await expect(client.txStatus("HASH", "acme.near")).resolves.toBe("success");
+    const body = JSON.parse(
+      String(
+        (fetchImpl.mock.calls[0] as unknown[])[1]
+          ? ((fetchImpl.mock.calls[0] as unknown[])[1] as { body: string }).body
+          : "{}",
+      ),
+    );
+    expect(body.method).toBe("tx");
+    expect(body.params).toEqual(["HASH", "acme.near"]);
+  });
+
+  it("reads a failed transaction", async () => {
+    const fetchImpl = status({ status: { Failure: { ActionError: {} } } });
+    const client = new NearClient({ rpcUrls: ["https://rpc.primary"], fetchImpl });
+    await expect(client.txStatus("HASH", "acme.near")).resolves.toBe("failed");
+  });
+
+  it("calls a transaction the node does not know yet pending", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        error: { cause: { name: "UNKNOWN_TRANSACTION" }, message: "Server error" },
+      }),
+    );
+    const client = new NearClient({ rpcUrls: ["https://rpc.primary"], fetchImpl });
+    await expect(client.txStatus("HASH", "acme.near")).resolves.toBe("pending");
+  });
+});
+
 describe("near client rate limits", () => {
   it("retries a rate-limited call on the same RPC before leaving it", async () => {
     // A per-second limit clears in a moment: the call is repeated after a pause, not sent to another provider.

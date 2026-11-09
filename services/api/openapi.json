@@ -2305,6 +2305,102 @@
           }
         }
       },
+      "Cashout": {
+        "type": "object",
+        "required": [
+          "id",
+          "amount",
+          "amount_out",
+          "source_asset",
+          "destination_chain",
+          "destination_address",
+          "route_cost_usd",
+          "created_at",
+          "deadline",
+          "tx_hash",
+          "tx_state",
+          "status",
+          "provider_status",
+          "near_tx_hashes",
+          "destination_tx_hashes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "amount_out": {
+            "type": "string"
+          },
+          "source_asset": {
+            "type": "string"
+          },
+          "destination_chain": {
+            "type": "string"
+          },
+          "destination_address": {
+            "type": "string"
+          },
+          "route_cost_usd": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "string"
+          },
+          "tx_hash": {
+            "type": ["string", "null"]
+          },
+          "tx_state": {
+            "type": ["string", "null"],
+            "enum": ["success", "failed", "pending", "unknown", null]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "quoted",
+              "sent",
+              "processing",
+              "success",
+              "refunded",
+              "incomplete",
+              "failed",
+              "expired"
+            ]
+          },
+          "provider_status": {
+            "type": ["string", "null"]
+          },
+          "near_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "destination_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CashoutList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Cashout"
+            }
+          }
+        }
+      },
       "CashoutQuoteRequest": {
         "type": "object",
         "required": ["amount", "destination_chain", "address"],
@@ -2341,6 +2437,9 @@
           "min_amount_in"
         ],
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "amount": {
             "$ref": "#/components/schemas/U128"
           },
@@ -5244,6 +5343,213 @@
           },
           "403": {
             "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cashouts": {
+      "get": {
+        "operationId": "listCashouts",
+        "summary": "List the cash-outs of the authenticated business, newest first, with where each one is now",
+        "tags": ["Pay"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cash-outs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashoutList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cashouts/{id}": {
+      "get": {
+        "operationId": "getCashout",
+        "summary": "One cash-out and where the money is now",
+        "tags": ["Pay"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cash-out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cashout"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cashouts/{id}/sent": {
+      "post": {
+        "operationId": "markCashoutSent",
+        "summary": "Attach the transaction the merchant signed for this cash-out",
+        "tags": ["Pay"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tx_hash"],
+                "properties": {
+                  "tx_hash": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The cash-out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cashout"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing required scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {

@@ -74,6 +74,8 @@ export interface ContractPort {
   view?(methodName: string, args: object): Promise<unknown>;
   storageCredit(accountId: string): Promise<{ balance: string; amount: string }>;
   sponsorStatus?(accountId: string): Promise<{ pool: string; cap: number; used: number }>;
+  /** What became of a transaction on chain (used to follow a cash-out). */
+  txStatus?(txHash: string, senderId: string): Promise<"success" | "failed" | "pending">;
 }
 
 export interface IssuerPort {
@@ -155,6 +157,22 @@ export interface CashoutPort {
     /** The token the business holds on intents.near and the money is taken from. */
     sourceAsset?: string;
   }): Promise<Record<string, unknown>>;
+}
+
+/** A cash-out as kept by the API: the quote, and the transaction the merchant signed once it exists. */
+export interface CashoutRecord {
+  id: string;
+  account_id: string;
+  amount: string;
+  amount_out: string;
+  source_asset: string;
+  destination_chain: string;
+  destination_address: string;
+  route_cost_usd: string;
+  deposit_address: string;
+  deadline: string;
+  created_at: string;
+  tx_hash?: string;
 }
 
 export interface BusinessRecord {
@@ -533,6 +551,63 @@ export class ApiApp {
       terms_fingerprint: invoice?.terms_hash ?? String(receipt.terms_hash ?? ""),
       verify_command: `openrail-verify claim ${claimAccount} --terms-hash ${invoice?.terms_hash ?? String(receipt.terms_hash ?? "")}`,
     }) as unknown as ReceiptDocument;
+  }
+
+  /**
+   * Where a cash-out is now: what the provider says about its deposit address and what the chain says about the
+   * transaction the merchant signed. Both are asked only while the cash-out can still change.
+   */
+  private async cashoutView(record: CashoutRecord): Promise<Record<string, unknown>> {
+    let provider: Record<string, unknown> | undefined;
+    const open = Date.now() - Date.parse(record.created_at) < 14 * 86_400_000;
+    if (open && this.deps.quoteProvider?.status !== undefined && record.deposit_address !== "") {
+      try {
+        provider = (await this.deps.quoteProvider.status(
+          record.deposit_address,
+        )) as unknown as Record<string, unknown>;
+      } catch {
+        // The provider could not be asked now: the page keeps what it has.
+      }
+    }
+    let txState: string | null = null;
+    if (record.tx_hash !== undefined && this.deps.contract.txStatus !== undefined) {
+      try {
+        txState = await this.deps.contract.txStatus(record.tx_hash, record.account_id);
+      } catch {
+        txState = "unknown";
+      }
+    }
+    const word = typeof provider?.status === "string" ? provider.status : null;
+    const strings = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((h): h is string => typeof h === "string") : [];
+    let status: string;
+    if (word === "SUCCESS") status = "success";
+    else if (word === "REFUNDED") status = "refunded";
+    else if (word === "FAILED") status = "failed";
+    else if (word === "INCOMPLETE_DEPOSIT") status = "incomplete";
+    else if (word === "PROCESSING" || word === "KNOWN_DEPOSIT_TX") status = "processing";
+    else if (record.tx_hash !== undefined || txState === "success") status = "sent";
+    else if (record.deadline !== "" && Date.parse(record.deadline) < this.clock().getTime())
+      status = "expired";
+    else status = "quoted";
+    if (txState === "failed" && status === "sent") status = "failed";
+    return {
+      id: record.id,
+      amount: record.amount,
+      amount_out: record.amount_out,
+      source_asset: record.source_asset,
+      destination_chain: record.destination_chain,
+      destination_address: record.destination_address,
+      route_cost_usd: record.route_cost_usd,
+      created_at: record.created_at,
+      deadline: record.deadline,
+      tx_hash: record.tx_hash ?? null,
+      tx_state: txState,
+      status,
+      provider_status: word,
+      near_tx_hashes: strings(provider?.nearTxHashes),
+      destination_tx_hashes: strings(provider?.destinationChainTxHashes),
+    };
   }
 
   /**
@@ -1440,8 +1515,63 @@ export class ApiApp {
           ...(body.source_asset === undefined ? {} : { sourceAsset: body.source_asset }),
         });
         await this.deps.pokeIndexer?.().catch(() => undefined);
-        return { status: 201, body: quote };
+        const record: CashoutRecord = {
+          id: id("co"),
+          account_id: context.accountId,
+          amount: String(quote.amount ?? body.amount),
+          amount_out: String(quote.amount_out ?? body.amount),
+          source_asset: String(quote.source_asset ?? ""),
+          destination_chain: body.destination_chain,
+          destination_address: body.address,
+          route_cost_usd: String(quote.route_cost_usd ?? "0.00"),
+          deposit_address: String(quote.deposit_address ?? ""),
+          deadline: String(quote.deadline ?? ""),
+          created_at: nowIso(this.clock),
+        };
+        this.docs.put("cashouts", record.id, record, context.accountId);
+        return { status: 201, body: { ...quote, id: record.id } };
       });
+    }
+
+    if (path === "/v1/cashouts" && method === "GET") {
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const records = this.docs
+        .list<CashoutRecord>("cashouts", context.accountId)
+        .sort((x, y) => y.created_at.localeCompare(x.created_at));
+      const data: unknown[] = new Array<unknown>(records.length);
+      let next = 0;
+      const worker = async (): Promise<void> => {
+        for (;;) {
+          const index = next++;
+          const record = records[index];
+          if (record === undefined) return;
+          data[index] = await this.cashoutView(record);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(6, records.length) }, worker));
+      return { status: 200, body: { data } };
+    }
+
+    const cashoutMatch = /^\/v1\/cashouts\/([^/]+)(?:\/(sent))?$/.exec(path);
+    if (cashoutMatch !== null) {
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const record = this.docs.get<CashoutRecord>("cashouts", cashoutMatch[1] ?? "");
+      if (record === undefined || record.account_id !== context.accountId)
+        throw new ApiError(404, "cashout_not_found");
+      if (cashoutMatch[2] === "sent" && method === "POST") {
+        const body = (request.body ?? {}) as { tx_hash?: string };
+        if (typeof body.tx_hash !== "string" || !/^[A-Za-z0-9]{20,64}$/.test(body.tx_hash)) {
+          throw new ApiError(400, "invalid_request", "tx_hash required");
+        }
+        record.tx_hash = body.tx_hash;
+        this.docs.put("cashouts", record.id, record, context.accountId);
+        return { status: 200, body: await this.cashoutView(record) };
+      }
+      if (cashoutMatch[2] === undefined && method === "GET") {
+        return { status: 200, body: await this.cashoutView(record) };
+      }
     }
 
     if (path === "/v1/statements" && method === "GET") {

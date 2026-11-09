@@ -416,6 +416,30 @@
       "status": 200,
       "schema": "WebhookEventTypes",
       "mock": true
+    },
+    {
+      "file": "cashouts.list.json",
+      "method": "GET",
+      "path": "/v1/cashouts",
+      "status": 200,
+      "schema": "CashoutList",
+      "mock": true
+    },
+    {
+      "file": "cashouts.get.json",
+      "method": "GET",
+      "path": "/v1/cashouts/{id}",
+      "status": 200,
+      "schema": "Cashout",
+      "mock": true
+    },
+    {
+      "file": "cashouts.sent.json",
+      "method": "POST",
+      "path": "/v1/cashouts/{id}/sent",
+      "status": 200,
+      "schema": "Cashout",
+      "mock": true
     }
   ]
 }
