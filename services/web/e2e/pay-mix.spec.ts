@@ -53,6 +53,9 @@ function payApi(w: World, outstanding = "12500000"): Handlers {
 const world = (over: Partial<World> = {}): World => ({ posts: [], status: {}, ...over });
 
 async function chooseAndGetPrice(page: Page, network: string, amount?: string) {
+  // The price of the part before is in a pop-over that opened by itself: close it to reach the form.
+  const details = page.getByRole("dialog", { name: "Your payment" });
+  if (await details.isVisible()) await details.getByRole("button", { name: "Close" }).click();
   await pickRoute(page, network);
   await page.getByLabel("Refund address").fill(REFUND);
   if (amount !== undefined) await page.getByLabel("Amount for this part").fill(amount);
@@ -252,6 +255,10 @@ test.describe("H9: split this payment", () => {
     // The first price was already out of date, so nothing is held back for it.
     await expect(parts).toContainText("$12.50");
     // A refunded part gives its amount back too.
+    await page
+      .getByRole("dialog", { name: "Your payment" })
+      .getByRole("button", { name: "Close" })
+      .click();
     await pickRoute(page, "USDC on Base");
     await page.getByLabel("Amount for this part").fill("5.00");
     await page.getByRole("button", { name: "Get price for this part" }).click();

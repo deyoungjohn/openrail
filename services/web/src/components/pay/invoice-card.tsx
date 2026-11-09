@@ -6,12 +6,19 @@ import { AddressChip } from "../ui/address-chip";
 import { StatusChip, type Status } from "../ui/status-chip";
 
 /** The invoice a payer is about to pay: who it is from, who it is for, what is owed and the terms it carries. */
-/** `line_items` is served once the API stores them; until then the card simply has no items section. */
-export function InvoiceCard({
-  claim: c,
-}: {
-  claim: PublicClaim & { line_items?: readonly ShownLineItem[] };
-}) {
+/**
+ * What the API adds for the page when it has it: the lines, the dates and the transactions. Until then the page simply
+ * has no such section.
+ */
+export type PayClaim = PublicClaim & {
+  line_items?: readonly ShownLineItem[];
+  issued_at?: string;
+  paid_at?: string | null;
+  issue_tx?: string | null;
+  payments?: readonly { tx_hash: string; near?: boolean }[];
+};
+
+export function InvoiceCard({ claim: c }: { claim: PayClaim }) {
   const p = copy.pay;
   const paid = c.status === "Paid";
   const partial = c.status === "PartiallyPaid";
@@ -53,7 +60,7 @@ export function InvoiceCard({
       ) : null}
 
       <div className="border-y border-border bg-surface-2/40 px-5 py-5 sm:px-6">
-        <p className="caption">{partial ? p.stillDue : p.amountDue}</p>
+        <p className="caption">{partial ? p.stillDue : paid ? p.amountPaid : p.amountDue}</p>
         <p className="tabular text-[40px] leading-[1.1] font-bold">
           {paid ? `$${c.amount_usd}` : `$${formatToken(c.outstanding, 6)}`}
         </p>

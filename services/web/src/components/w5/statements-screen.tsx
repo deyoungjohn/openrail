@@ -136,7 +136,7 @@ export function StatementsScreen() {
 
       <form
         noValidate
-        className="surface-card space-y-6 p-6"
+        className="surface-card space-y-2 p-6"
         onSubmit={(e) => {
           e.preventDefault();
           void submit();

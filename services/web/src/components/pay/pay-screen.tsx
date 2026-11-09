@@ -16,6 +16,7 @@ import {
   legCents,
   payStage,
   payTimeline,
+  type PayStep,
   refundAddressProblem,
   remainingCents,
   spreadLabel,
@@ -28,7 +29,9 @@ import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { CHAINS } from "../ui/chain-badge";
+import { HistoryCard } from "./history-card";
 import { InvoiceCard } from "./invoice-card";
+import { PaymentDialog } from "./payment-dialog";
 import { RouteSelects } from "./route-selects";
 import { Countdown } from "../ui/countdown";
 import { Input } from "../ui/input";
@@ -390,6 +393,13 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   const [amountShown, setAmountShown] = useState(false);
   const [earlier, setEarlier] = useState<{ address: string; route: string }[]>([]);
   const restored = useRef(false);
+  const [dialog, setDialog] = useState(false);
+  const priced = useRef(0);
+  useEffect(() => {
+    // A new price opens the pop-over by itself; closing it is the payer's choice and is kept.
+    if (legs.length > priced.current) setDialog(true);
+    priced.current = legs.length;
+  }, [legs.length]);
 
   useEffect(() => {
     let off = false;
@@ -719,94 +729,139 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
       ))
     : null;
 
-  const payCard =
-    open && routes.length > 0 ? (
-      <Card title={p.pickTitle}>
-        <p className="caption mb-4">{p.pickHelp}</p>
-        <Tabs
-          fill
-          label={p.tabsLabel}
-          value={mode}
-          onValueChange={(id) => {
-            setMode(id as Mode);
-            if (id === "split") turnSplitOn();
-            else if (split && legs.length === 0) setSplit(false);
-          }}
-          items={[
-            { id: "wallet", label: p.tabWallet, panel: form("wallet") },
-            { id: "paste", label: p.tabPaste, panel: form("paste") },
-            { id: "split", label: p.tabSplit, panel: form("split") },
-          ]}
-        />
-      </Card>
-    ) : null;
+  // The least advanced of the payments decides what the steps show: one slow part keeps the whole invoice waiting.
+  const order: PayStage[] = ["waiting", "expired", "processing", "failed", "refunded", "paid"];
+  const overall: PayStage | null =
+    legs.length === 0
+      ? null
+      : legs.every((l) => l.stage === "paid")
+        ? "paid"
+        : legs.reduce<PayStage>(
+            (low, l) => (order.indexOf(l.stage) < order.indexOf(low) ? l.stage : low),
+            "paid",
+          );
+  const stepStatus = (id: "pick" | "send" | "received" | "paidOut"): PayStep["status"] => {
+    if (overall === null) return id === "pick" ? "current" : "todo";
+    if (id === "pick") return "done";
+    const t = payTimeline(overall);
+    const key = id === "send" ? "sent" : id === "received" ? "received" : "paid";
+    return t.find((x) => x.id === key)?.status ?? "todo";
+  };
   const nextCard = (
     <Card title={p.nextTitle}>
-      <p className="caption mb-4">{p.nextBody}</p>
+      <p className="caption mb-4" role="status">
+        {overall === null
+          ? p.nextBody
+          : overall === "processing"
+            ? p.stepNote.processing
+            : overall === "paid"
+              ? p.stepNote.paid
+              : p.stepNote.waiting}
+      </p>
       <Timeline
         steps={(["pick", "send", "received", "paidOut"] as const).map((id) => ({
           id,
           title: p.nextSteps[id],
-          status: "todo" as const,
+          status: stepStatus(id),
         }))}
       />
     </Card>
   );
-  // Before a price is asked for: the invoice and the pay card side by side at one height, and what happens next
-  // across both of them underneath.
-  const before =
-    open && payCard !== null && legs.length === 0 && !starting && sessionError === null;
-  if (before) {
+
+  // Nothing left to pay (paid, cancelled, closed): one centered column, with the whole history of the invoice.
+  if (!open) {
     return (
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-8">
-        <div className="flex min-w-0 flex-col [&>*]:flex-1">
-          <InvoiceCard claim={c} />
+      <div className="mx-auto max-w-2xl space-y-6">
+        <InvoiceCard claim={c} />
+        <div role="status" className="surface-card p-6 text-[15px]">
+          {c.status === "Paid" ? p.alreadyPaid : p.closed}
         </div>
-        <div className="flex min-w-0 flex-col [&>*]:flex-1">{payCard}</div>
-        <div className="min-w-0 lg:col-span-2">{nextCard}</div>
+        <HistoryCard claim={c} />
+      </div>
+    );
+  }
+  if (routes.length === 0) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <InvoiceCard claim={c} />
+        <div className="surface-card">
+          <EmptyState title={p.noRoutes} />
+        </div>
       </div>
     );
   }
 
+  const unsettled = legs.some((l) => l.stage === "waiting" || l.stage === "processing");
+  const payCardWithStatus = (
+    <Card title={p.pickTitle}>
+      {unsettled ? (
+        <div className="bg-surface-2 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] p-3">
+          <span className="text-[14px] font-medium">{p.inProgress}</span>
+          <Button variant="secondary" size="sm" onClick={() => setDialog(true)}>
+            {p.showDetails}
+          </Button>
+        </div>
+      ) : null}
+      <p className="caption mb-4">{p.pickHelp}</p>
+      <Tabs
+        fill
+        label={p.tabsLabel}
+        value={mode}
+        onValueChange={(id) => {
+          setMode(id as Mode);
+          if (id === "split") turnSplitOn();
+          else if (split && legs.length === 0) setSplit(false);
+        }}
+        items={[
+          { id: "wallet", label: p.tabWallet, panel: form("wallet") },
+          { id: "paste", label: p.tabPaste, panel: form("paste") },
+          { id: "split", label: p.tabSplit, panel: form("split") },
+        ]}
+      />
+    </Card>
+  );
+
+  // The page keeps one shape from the first look to the last: the invoice and the pay card level with each other,
+  // and what happens next across both of them. The price, address and QR code open in a pop-over that can be closed
+  // and opened again; the steps behind it follow the same payment.
   return (
-    <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
-      <div className="min-w-0 space-y-6">
-        <InvoiceCard claim={c} />
-        {!open ? (
-          <div role="status" className="surface-card p-6 text-[15px]">
-            {c.status === "Paid" ? p.alreadyPaid : p.closed}
-          </div>
-        ) : routes.length === 0 ? (
-          <div className="surface-card">
-            <EmptyState title={p.noRoutes} />
-          </div>
-        ) : (
-          payCard
-        )}
+    <>
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-8">
+        <div className="flex min-w-0 flex-col [&>*]:flex-1">
+          <InvoiceCard claim={c} />
+        </div>
+        <div className="flex min-w-0 flex-col [&>*]:flex-1">{payCardWithStatus}</div>
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          {allPaid && legs.some((l) => l.stage === "paid") ? (
+            <div
+              role="status"
+              className="surface-card flex items-center gap-2 p-6 text-[20px] font-semibold"
+            >
+              <CheckCircle2 size={22} strokeWidth={1.5} className="text-success-text" aria-hidden />
+              {p.mixAllPaid}
+            </div>
+          ) : null}
+          {parts}
+          {pastNote}
+          {starting ? <Card title={p.getting} state="loading" /> : null}
+          {sessionError === "failed" ? (
+            <div className="surface-card">
+              <ErrorState
+                body={split && legs.length > 0 ? p.mixPartFailed : p.sessionError}
+                onRetry={route ? submit : undefined}
+              />
+            </div>
+          ) : null}
+          {nextCard}
+        </div>
       </div>
-      <div className="min-w-0 space-y-6">
-        {allPaid && legs.some((l) => l.stage === "paid") ? (
-          <div
-            role="status"
-            className="surface-card flex items-center gap-2 p-6 text-[20px] font-semibold"
-          >
-            <CheckCircle2 size={22} strokeWidth={1.5} className="text-success-text" aria-hidden />
-            {p.mixAllPaid}
-          </div>
-        ) : null}
-        {parts}
-        {pastNote}
+      <PaymentDialog
+        open={dialog && legs.length > 0}
+        onClose={() => setDialog(false)}
+        title={p.detailsTitle}
+      >
         {prices}
-        {open && starting ? <Card title={p.getting} state="loading" /> : null}
-        {open && sessionError === "failed" ? (
-          <div className="surface-card">
-            <ErrorState
-              body={split && legs.length > 0 ? p.mixPartFailed : p.sessionError}
-              onRetry={route ? submit : undefined}
-            />
-          </div>
-        ) : null}
-      </div>
-    </div>
+      </PaymentDialog>
+    </>
   );
 }

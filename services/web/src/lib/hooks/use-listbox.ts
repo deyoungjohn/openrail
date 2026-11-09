@@ -55,7 +55,16 @@ export function useListbox({
     const option = Array.from(
       list.current?.querySelectorAll<HTMLElement>("[data-listbox-id]") ?? [],
     ).find((element) => element.dataset.listboxId === activeId);
-    option?.focus({ preventScroll: false });
+    if (!option) return;
+    // Focus without scrolling the page (the list is drawn next to its trigger); only scroll the list itself.
+    option.focus({ preventScroll: true });
+    const box = list.current;
+    if (box && box.scrollHeight > box.clientHeight) {
+      const o = option.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      if (o.top < b.top) box.scrollTop -= b.top - o.top;
+      else if (o.bottom > b.bottom) box.scrollTop += o.bottom - b.bottom;
+    }
   }, [open, activeId, list]);
 
   const onKeyDown = (event: KeyboardEvent) => {

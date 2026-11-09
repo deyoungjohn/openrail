@@ -4,7 +4,7 @@ import { Landmark } from "lucide-react";
 import Link from "next/link";
 import { copy } from "@/copy";
 import { MOCK_MODE } from "@/lib/auth";
-import { formatUsdcExact } from "@/lib/format";
+import { formatUsd } from "@/lib/format";
 import { useBalance } from "@/lib/use-balance";
 import { useAuth } from "../auth/auth-provider";
 import { Button } from "../ui/button";
@@ -25,7 +25,7 @@ export function BalanceButton() {
         ? t.loading
         : balance.state === "error"
           ? t.unreadableShort
-          : `${t.label} $${formatUsdcExact(balance.data.total)}`;
+          : `${t.label} ${formatUsd(balance.data.total / 10_000n)}`;
   return (
     <Link href="/app/cashout" aria-label={t.openCashOut}>
       <Button icon={<Landmark size={18} strokeWidth={1.5} aria-hidden />}>

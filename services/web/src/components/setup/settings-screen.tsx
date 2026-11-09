@@ -51,7 +51,7 @@ function ProfileCard({
     <Card title={s.profileTitle}>
       <form
         noValidate
-        className="space-y-6"
+        className="space-y-2"
         onSubmit={async (e) => {
           e.preventDefault();
           setShown(true);

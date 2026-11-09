@@ -35,7 +35,7 @@ function ProfileForm({ business, onSaved }: { business: Business | null; onSaved
   return (
     <form
       noValidate
-      className="mt-4 space-y-4"
+      className="mt-4 space-y-2"
       onSubmit={async (e) => {
         e.preventDefault();
         setShown(true);
@@ -85,7 +85,7 @@ function PayoutForm({ initial, onSaved }: { initial: string; onSaved: () => void
   return (
     <form
       noValidate
-      className="mt-4 space-y-4"
+      className="mt-4 space-y-2"
       onSubmit={async (e) => {
         e.preventDefault();
         setShown(true);

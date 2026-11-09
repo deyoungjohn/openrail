@@ -160,7 +160,7 @@ test("follows the payment to Paid and shows the proof", async ({ page }) => {
   });
   await page.goto("/pay/c-1");
   await pick(page);
-  await expect(page.getByText("Your payment arrived")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Your payment arrived").first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Proof" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Paid", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Your transaction")).toBeVisible();
@@ -278,29 +278,53 @@ test("a connected wallet fills in the refund address", async ({ page }) => {
   await expect(page.getByLabel("Refund address")).toHaveValue(REFUND);
 });
 
-test("two columns on a desktop: the invoice and the picker on the left, the price and progress on the right", async ({
+test("desktop: the invoice and the pay card level with each other, what happens next across both, the price in a pop-over", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockApi(page);
   await page.goto("/pay/c-1");
-  await pick(page);
+  const invoice = page.getByRole("region", { name: "Invoice", exact: true });
   const picker = page.getByRole("region", { name: "Pay this invoice" });
-  const quote = page.getByRole("region", { name: "Your price" });
-  await expect(quote).toBeVisible();
-  const a = (await picker.boundingBox())!;
-  const b = (await quote.boundingBox())!;
-  expect(b.x).toBeGreaterThan(a.x + a.width - 1);
-  // The price starts at the top of the right column, level with the invoice, above the picker.
-  expect(b.y).toBeLessThan(a.y);
+  const next = page.getByRole("region", { name: "What happens next" });
+  // Positions in the page, not the window: choosing a price may scroll the window.
+  const box = async (l: typeof invoice) => {
+    const r = (await l.boundingBox())!;
+    const y = await page.evaluate(() => window.scrollY);
+    return { ...r, y: r.y + y };
+  };
+  const level = async () => {
+    const a = await box(invoice);
+    const b = await box(picker);
+    const c = await box(next);
+    expect(b.x).toBeGreaterThan(a.x + a.width - 1);
+    expect(Math.abs(b.y - a.y)).toBeLessThan(2);
+    expect(Math.abs(b.height - a.height)).toBeLessThan(2);
+    expect(c.y).toBeGreaterThan(a.y + a.height - 1);
+    expect(c.width).toBeGreaterThan(a.width + b.width);
+    return { a, b };
+  };
+  const before = await level();
+  await pick(page);
+  const dialog = page.getByRole("dialog", { name: "Your payment" });
+  await expect(dialog.getByRole("region", { name: "Your price" })).toBeVisible();
+  // The page behind did not move: the pay card is still where it was.
+  const during = await level();
+  expect({ x: during.b.x, y: during.b.y }).toEqual({ x: before.b.x, y: before.b.y });
+  // The pop-over closes and opens again while the payment is not settled.
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "Show payment details" }).click();
+  await expect(dialog.getByRole("region", { name: "Your price" })).toBeVisible();
 });
 
 test("one column on a phone, in reading order", async ({ page }) => {
   await mockApi(page);
   await page.goto("/pay/c-1");
-  await pick(page);
+  const invoice = (await page.getByRole("region", { name: "Invoice", exact: true }).boundingBox())!;
   const picker = (await page.getByRole("region", { name: "Pay this invoice" }).boundingBox())!;
-  const quote = (await page.getByRole("region", { name: "Your price" }).boundingBox())!;
-  expect(quote.y).toBeGreaterThan(picker.y + picker.height - 1);
-  expect(Math.abs(quote.x - picker.x)).toBeLessThan(2);
+  const next = (await page.getByRole("region", { name: "What happens next" }).boundingBox())!;
+  expect(picker.y).toBeGreaterThan(invoice.y + invoice.height - 1);
+  expect(next.y).toBeGreaterThan(picker.y + picker.height - 1);
+  expect(Math.abs(picker.x - invoice.x)).toBeLessThan(2);
 });

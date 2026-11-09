@@ -26,7 +26,7 @@ export function ErrorNote({
       id={id}
       className={cn(
         "h-5", // contain: inline-size, so a long message never widens the column it sits in
-        "w-full min-w-0 overflow-hidden [contain:inline-size] print:hidden",
+        "-mt-1 w-full min-w-0 overflow-hidden [contain:inline-size] print:hidden",
         className,
       )}
       {...(children ? { role: "alert" } : {})}

@@ -6,15 +6,19 @@ import { useMemo, useRef, useState } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { MOCK_MODE } from "@/lib/auth";
+import { formatUsd } from "@/lib/format";
 import { formatToken, refundAddressProblem } from "@/lib/pay";
+import { useBalance } from "@/lib/use-balance";
 import { costShare, parseUsdcInput } from "@/lib/w5";
 import { useActions } from "@/wallet/actions";
 import { useNear } from "@/wallet/near";
+import { useAuth } from "../auth/auth-provider";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
 import { CHAINS, type ChainId } from "../ui/chain-badge";
 import { Countdown } from "../ui/countdown";
 import { Input, Select } from "../ui/input";
+import { RangeSlider } from "../ui/range-slider";
 import { NearWalletView } from "../wallet-buttons";
 import { ErrorNote } from "@/components/ui/error-note";
 
@@ -55,7 +59,23 @@ export function CashoutScreen() {
   const [expired, setExpired] = useState(false);
   const idem = useRef(crypto.randomUUID());
 
+  const auth = useAuth();
+  const account = auth.state.status === "signedIn" ? auth.state.accountId : null;
+  const [balance] = useBalance(MOCK_MODE ? null : account);
+  // What can be cashed out now, in whole cents (cut, never rounded up).
+  const availableCents = balance.state === "ready" ? balance.data.total / 10_000n : null;
   const units = parseUsdcInput(amountText);
+  const percent =
+    availableCents !== null && availableCents > 0n && units !== null
+      ? Math.min(100, Number(((units / 10_000n) * 100n) / availableCents))
+      : 0;
+  const setPercent = (p: number) => {
+    if (availableCents === null) return;
+    const cents = p >= 100 ? availableCents : (availableCents * BigInt(Math.round(p))) / 100n;
+    setAmountText(`${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`);
+    setPhase("form");
+    setQuote(null);
+  };
   const addressProblem = refundAddressProblem(chain, address);
   const canSign = MOCK_MODE || near.accountId !== null;
   const share = useMemo(
@@ -121,12 +141,18 @@ export function CashoutScreen() {
       ) : (
         <form
           noValidate
-          className="surface-card space-y-6 p-6"
+          className="surface-card space-y-2 p-6"
           onSubmit={(e) => {
             e.preventDefault();
             void ask();
           }}
         >
+          {availableCents !== null ? (
+            <p className="text-[15px]" data-testid="cashout-available">
+              {t.available}{" "}
+              <span className="tabular font-semibold">{formatUsd(availableCents)}</span>
+            </p>
+          ) : null}
           <Input
             label={t.amount}
             helper={t.amountHelp}
@@ -140,6 +166,22 @@ export function CashoutScreen() {
             error={shown && units === null ? t.badAmount : undefined}
             disabled={busy}
           />
+          {availableCents !== null && availableCents > 0n ? (
+            <RangeSlider
+              aria-label={t.slider}
+              value={percent}
+              onChange={setPercent}
+              snapPoints={[0, 25, 50, 75, 100]}
+              marks={[
+                { value: 25, label: "25%" },
+                { value: 50, label: "50%" },
+                { value: 75, label: "75%" },
+                { value: 100, label: "100%" },
+              ]}
+              format={(p) => `${p}%`}
+              disabled={busy}
+            />
+          ) : null}
           <Select
             label={t.sendTo}
             value={chain}
