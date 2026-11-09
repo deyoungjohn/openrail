@@ -484,6 +484,8 @@ export class ApiApp {
     const invoice = this.invoiceBy(idOrToken);
     if (invoice.issuer_id !== accountId) throw new ApiError(404, "invoice_not_found");
     return invoice;
+  }
+
   private async receiptMachine(bookingTxHash: string): Promise<ReceiptDocument> {
     const receipt =
       this.deps.indexer === undefined
