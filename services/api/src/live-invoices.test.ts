@@ -10,7 +10,10 @@ const clockMs = { now: Date.parse("2026-11-09T12:00:00Z") };
 
 function world() {
   const auth = new AuthStore(() => Date.now());
-  const key = auth.createApiKey("alpha.near", "key", "secret", ["invoices:write", "invoices:read"]).secret;
+  const key = auth.createApiKey("alpha.near", "key", "secret", [
+    "invoices:write",
+    "invoices:read",
+  ]).secret;
   const stores = createMemoryStores();
   const issuer = {
     prepareIssue: vi.fn(async () => ({ tokenId: "c-1", claimAccount: "c-1.openrail.near" })),
