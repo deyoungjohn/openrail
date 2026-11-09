@@ -99,7 +99,10 @@ beforeAll(() => {
     "id",
     'if [[ -n "${SHIM_ID_REAL:-}" ]]; then exec /usr/bin/id "$@"; fi; if [[ "${1:-}" == "-u" ]]; then echo 0; else /usr/bin/id "$@"; fi',
   );
-  writeShim("systemctl", 'printf "systemctl %s\\n" "$*" >> "$SHIM_LOG"; exit 0');
+  writeShim(
+    "systemctl",
+    'if [[ "${1:-}" == "restart" ]]; then unit="${2:-}"; if [[ ! -f "$OPENRAIL_UNIT_DIR/$unit" ]]; then printf "systemctl missing %s\\n" "$unit" >> "$SHIM_LOG"; exit 1; fi; fi; printf "systemctl %s\\n" "$*" >> "$SHIM_LOG"; exit 0',
+  );
   writeShim("journalctl", 'printf "journalctl %s\\n" "$*" >> "$SHIM_LOG"; exit 0');
   writeShim("chown", 'printf "chown %s\\n" "$*" >> "$SHIM_LOG"; exit 0');
   writeShim(
@@ -204,6 +207,19 @@ describe("openrail-apply end to end", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("scp -i");
     expect(result.stdout).toContain("openrail-server-");
+  }, 120_000);
+
+  it("the fake systemctl refuses to restart a unit that is not installed", () => {
+    const result = spawnSync(
+      join(SHIM, "systemctl"),
+      ["restart", "openrail-not-installed.service"],
+      {
+        env: applyEnv(),
+        encoding: "utf8",
+      },
+    );
+    expect(result.status).not.toBe(0);
+    expect(shimCalls()).toContain("systemctl missing openrail-not-installed.service");
   }, 120_000);
 
   it("installs the first release and records the restart calls", () => {
