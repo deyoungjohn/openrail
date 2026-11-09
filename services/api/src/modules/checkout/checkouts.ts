@@ -510,6 +510,14 @@ export class Checkouts {
     return { notAfter: stored.expiry };
   }
 
+  /** Claims this merchant's checkouts own: core keeps a merchant's own events by these ids. */
+  ownedTokens(accountId: string, context: ApiModuleContext): string[] {
+    return context.docs
+      .list<StoredCheckout>(NS_CHECKOUTS, accountId)
+      .filter((row) => row.account_id === accountId)
+      .map((row) => row.id);
+  }
+
   events(event: IndexedEvent, context: ApiModuleContext): IndexedEvent[] {
     const mapped = EVENT_NAMES[event.type];
     if (mapped === undefined) return [];

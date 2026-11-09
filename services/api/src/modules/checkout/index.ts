@@ -24,6 +24,7 @@ export function createCheckoutApiModule(options: CheckoutModuleOptions = {}): Ap
     eventTypes: [...CHECKOUT_EVENT_TYPES],
     route: async (request, context) =>
       (await checkouts.route(request, context)) ?? (await links.route(request, context)),
+    ownedTokens: (accountId, context) => checkouts.ownedTokens(accountId, context),
     quoteWindow: (tokenId, context) => checkouts.quoteWindow(tokenId, context),
     events: (event, context) => [
       ...checkouts.events(event, context),

@@ -4,6 +4,9 @@ import { ApiApp, ApiError, type ApiDeps, type BusinessRecord } from "../../app.j
 import { AuthStore } from "../../auth.js";
 import { sha256Hex0x } from "../../crypto.js";
 import { expandEvents } from "../../modules.js";
+import { createMemoryStores } from "../../stores.js";
+import { WebhookWorker } from "../../webhook-worker.js";
+import { signWebhook } from "../../webhooks.js";
 import type { IndexedEvent } from "../../webhooks.js";
 import type {
   CheckoutChain,
@@ -50,6 +53,7 @@ function harness(
     useRealPort?: boolean;
     issuer?: ApiDeps["issuer"];
     modules?: ApiDeps["modules"];
+    indexer?: ApiDeps["indexer"];
   } = {},
 ) {
   let now = new Date(NOW);
@@ -138,6 +142,7 @@ function harness(
     cashout: { quote: async () => ({}) },
     clock,
     modules: options.modules ?? [module],
+    ...(options.indexer === undefined ? {} : { indexer: options.indexer }),
   };
   const app = new ApiApp(deps);
   return {
@@ -1640,4 +1645,97 @@ describe("checkout API: late payments never sign for the merchant", () => {
       }
     });
   });
+});
+
+describe("checkout events reach the merchant: GET /v1/events and a signed webhook", () => {
+  /** An indexer that serves one shared, oldest-first stream, as the real one does. */
+  function stream(rows: IndexedEvent[]): NonNullable<ApiDeps["indexer"]> {
+    return {
+      listEvents: async (query: { after?: string; limit?: number; type?: string }) => {
+        const after = Number(query.after ?? "0");
+        const page = rows
+          .filter(
+            (e) => Number(e.id) > after && (query.type === undefined || e.type === query.type),
+          )
+          .slice(0, query.limit ?? 50);
+        return { data: page, next_cursor: page.length > 0 ? (page.at(-1)?.id ?? null) : null };
+      },
+    } as unknown as NonNullable<ApiDeps["indexer"]>;
+  }
+  const event = (id: number, type: string, token: string, data = {}): IndexedEvent => ({
+    id: String(id),
+    type,
+    created: 1_762_768_800,
+    data: { token_id: token, ...data },
+    indexed: true,
+  });
+
+  it("checkout_events_visible_to_the_owner_and_not_to_another_merchant", async () => {
+    // 250 events of other tokens come first: the checkout's event is past the first page
+    const rows: IndexedEvent[] = Array.from({ length: 250 }, (_, i) =>
+      event(i + 1, "booked", "someone-else"),
+    );
+    rows.push(event(251, "checkout_paid", "c-101", { booking_seq: 1 }));
+    rows.push(event(252, "checkout_paid_late", "c-101", { booking_seq: 2 }));
+    const h = harness({ indexer: stream(rows) });
+    const made = await createCheckout(h);
+    expect(made.body.id).toBe("c-101");
+    const mine = await call(h, "GET", "/v1/events", undefined, h.keys.acme);
+    expect(mine.status).toBe(200);
+    expect((mine.body.data as IndexedEvent[]).map((e) => e.type)).toEqual([
+      "checkout_paid",
+      "checkout_paid_late",
+    ]);
+    const theirs = await call(h, "GET", "/v1/events", undefined, h.keys.other);
+    expect(theirs.body.data).toEqual([]);
+  });
+
+  it("checkout_events_visible_without_the_module_only_as_core_events", async () => {
+    const h = harness({
+      modules: [],
+      indexer: stream([event(1, "checkout_paid", "c-101")]),
+    });
+    const mine = await call(h, "GET", "/v1/events", undefined, h.keys.acme);
+    expect(mine.body.data).toEqual([]);
+  });
+
+  it("checkout_paid_creates_one_signed_webhook_delivery_with_the_order_reference", async () => {
+    const h = await withTwoForWebhook();
+    const store = createMemoryStores().api;
+    const endpoint = {
+      id: "whe_1",
+      url: "https://shop.example/hook",
+      secret: "whsec_shop",
+      events: ["checkout.paid"],
+    };
+    store.saveWebhookEndpoint(ACME, endpoint);
+    const rows = [event(1, "checkout_paid", "c-101", { booking_seq: 4, order_ref: "ORD-1" })];
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    const worker = new WebhookWorker({
+      events: stream(rows),
+      store,
+      fetchImpl,
+      validateUrl: async () => undefined,
+      clock: () => NOW,
+      expand: (e) => expandEvents(e, [h.module], h.context()),
+    });
+    await worker.runOnce();
+    await worker.runOnce();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const body = String(init.body);
+    const headers = init.headers as Record<string, string>;
+    const sig = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(headers["Openrail-Signature"] ?? "");
+    expect(sig).not.toBeNull();
+    expect(headers["Openrail-Signature"]).toBe(signWebhook("whsec_shop", Number(sig?.[1]), body));
+    const sent = JSON.parse(body) as { type: string; data: Record<string, unknown> };
+    expect(sent.type).toBe("checkout.paid");
+    expect(sent.data).toMatchObject({ token_id: "c-101", order_ref: "ORD-1", status: "paid" });
+  });
+
+  async function withTwoForWebhook() {
+    const h = harness();
+    await createCheckout(h, { order_ref: "ORD-1" });
+    return h;
+  }
 });
