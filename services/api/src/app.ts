@@ -123,6 +123,8 @@ export interface AccessKeyPort {
 }
 
 export interface IndexerPort {
+  /** The transaction that issued a claim, from its issue event (for invoices issued before it was stored). */
+  issueTx?(tokenId: string): Promise<string | undefined>;
   listReceipts(accountId: string, tokenId: string): Promise<Record<string, unknown>[]>;
   getReceipt(bookingTxHash: string): Promise<Record<string, unknown> | undefined>;
   getStatement(
@@ -561,11 +563,22 @@ export class ApiApp {
       if (Array.isArray(r.near_tx_hashes))
         for (const h of r.near_tx_hashes)
           if (typeof h === "string") payments.push({ tx_hash: h, near: true });
+      // The booking transaction on NEAR is always there, whatever the provider's evidence says.
+      if (typeof r.booking_tx === "string" && !payments.some((x) => x.tx_hash === r.booking_tx))
+        payments.push({ tx_hash: r.booking_tx, near: true });
       if (typeof r.time === "string" && (paidAt === null || r.time > paidAt)) paidAt = r.time;
+    }
+    let issueTx = invoice.issue_tx ?? null;
+    if (issueTx === null && this.deps.indexer?.issueTx !== undefined) {
+      try {
+        issueTx = (await this.deps.indexer.issueTx(invoice.token_id)) ?? null;
+      } catch {
+        // extra information only
+      }
     }
     return {
       issued_at: invoice.created_at,
-      issue_tx: invoice.issue_tx ?? null,
+      issue_tx: issueTx,
       paid_at: invoice.status === "Paid" || receipts.length > 0 ? paidAt : null,
       payments,
     };

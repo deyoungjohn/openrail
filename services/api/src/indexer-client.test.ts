@@ -53,11 +53,45 @@ describe("HTTP indexer client", () => {
     expect((receipt as { id: string }).id).toBe("rcpt_01J00000000000000000000000");
   });
 
+  it("finds the transaction that issued a claim from its issue event", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 1,
+                event: "issue",
+                time: "2026-11-08T22:39:00Z",
+                tx_hash: "ISSUETX",
+                token_id: "c-9",
+                data: {},
+              },
+              {
+                id: 2,
+                event: "booked",
+                time: "2026-11-09T01:11:00Z",
+                tx_hash: "BOOKTX",
+                token_id: "c-9",
+                data: {},
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const indexer = createHttpIndexer("http://indexer.test", fetchImpl);
+    expect(await indexer.issueTx?.("c-9")).toBe("ISSUETX");
+  });
+
   it("builds the receipt list from booked events and /r", async () => {
     const fetchImpl = fakeFetch();
     const indexer = createHttpIndexer("http://indexer.test", fetchImpl);
     const receipts = await indexer.listReceipts("acme.near", "c-1");
     expect(receipts).toHaveLength(1);
+    expect(receipts[0]?.booking_tx).toBe(
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    );
     expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual([
       "http://indexer.test/events?token_id=c-1&limit=200",
       "http://indexer.test/r/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",

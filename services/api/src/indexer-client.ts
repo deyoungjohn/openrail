@@ -16,6 +16,12 @@ export function createHttpIndexer(baseUrl: string, fetchImpl: FetchLike = fetch)
   const base = baseUrl.replace(/\/+$/, "");
   const get = async (path: string): Promise<Response> => fetchImpl(`${base}${path}`);
   return {
+    async issueTx(tokenId) {
+      const response = await get(`/events?token_id=${encodeURIComponent(tokenId)}&limit=200`);
+      if (!response.ok) return undefined;
+      const body = (await response.json()) as { data?: EventRow[] };
+      return (body.data ?? []).find((row) => row.event === "issue")?.tx_hash;
+    },
     async listReceipts(_accountId, tokenId) {
       const response = await get(`/events?token_id=${encodeURIComponent(tokenId)}&limit=200`);
       if (!response.ok) throw new Error(`INDEXER_HTTP_${response.status}`);
@@ -26,7 +32,9 @@ export function createHttpIndexer(baseUrl: string, fetchImpl: FetchLike = fetch)
         const receiptResponse = await get(`/r/${encodeURIComponent(row.tx_hash)}`);
         if (!receiptResponse.ok) continue;
         const receiptBody = (await receiptResponse.json()) as { receipt?: Record<string, unknown> };
-        if (receiptBody.receipt !== undefined) receipts.push(receiptBody.receipt);
+        // The booking transaction is always known, even when the provider's evidence is not (yet) verified.
+        if (receiptBody.receipt !== undefined)
+          receipts.push({ ...receiptBody.receipt, booking_tx: row.tx_hash });
       }
       return receipts;
     },

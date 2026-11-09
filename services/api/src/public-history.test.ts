@@ -120,4 +120,21 @@ describe("the public pay and ack answers", () => {
     expect(body.paid_at).toBeNull();
     expect(body.payments).toEqual([]);
   });
+
+  it("still shows the booking transaction when the provider's evidence is missing", async () => {
+    const w = world();
+    await w.create();
+    w.setStatus("Paid");
+    w.store.saveReceipt("rcpt_2", "c-1", "BOOKTX444", {
+      id: "rcpt_2",
+      token_id: "c-1",
+      time: "2026-11-09T13:00:00Z",
+      origin_tx: null,
+      near_tx_hashes: [],
+      booking_tx: "BOOKTX444",
+    });
+    const body = (await w.get("/v1/pay/claims/c-1")).body as Public;
+    expect(body.payments).toEqual([{ tx_hash: "BOOKTX444", near: true }]);
+    expect(body.paid_at).toBe("2026-11-09T13:00:00Z");
+  });
 });
