@@ -19,7 +19,7 @@ import {
 import { sha256Hex0x } from "./crypto.js";
 import { createMemoryStores, type ApiStore } from "./stores.js";
 import { IdempotencyConflict, IdempotencyStore } from "./idempotency.js";
-import { renderInvoicePdfBase64 } from "./pdf.js";
+import { renderInvoicePdfBase64, renderReceiptPdfBase64, type ReceiptDocument } from "./pdf.js";
 import { PROCESSING_FEE_DESCRIPTION } from "./line-items.js";
 import { handleRecurring, type RecurringStore } from "./recurring.js";
 import { createMemoryRecurringStore } from "./recurring-store.js";
@@ -484,6 +484,49 @@ export class ApiApp {
     const invoice = this.invoiceBy(idOrToken);
     if (invoice.issuer_id !== accountId) throw new ApiError(404, "invoice_not_found");
     return invoice;
+  }
+
+  private async receiptMachine(bookingTxHash: string): Promise<ReceiptDocument> {
+    const receipt =
+      this.deps.indexer === undefined
+        ? this.store.getReceipt(bookingTxHash)
+        : await this.deps.indexer.getReceipt(bookingTxHash);
+    if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
+    const tokenId = String(receipt.token_id ?? "");
+    const invoice = this.store.getInvoice(tokenId);
+    const business = invoice === undefined ? undefined : this.store.getBusiness(invoice.issuer_id);
+    const feeLine = invoice?.line_items?.find(
+      (item) => item.description === PROCESSING_FEE_DESCRIPTION,
+    );
+    const claimAccount = `${tokenId}.${this.deps.config.rootAccount}`;
+    const nearHashes = Array.isArray(receipt.near_tx_hashes)
+      ? (receipt.near_tx_hashes as unknown[])
+      : [];
+    return canonicalize({
+      receipt_id: String(receipt.id ?? `rcpt_${bookingTxHash}`),
+      paid_at: String(receipt.time ?? ""),
+      invoice_number: invoice?.invoice_number ?? tokenId,
+      order_ref: invoice?.recurring_id ?? tokenId,
+      business_name: invoice?.issuer_legal_name ?? null,
+      business_username: business?.username ?? null,
+      buyer_name: invoice?.debtor_legal_name ?? null,
+      amount_usd: invoice?.amount_usd ?? null,
+      paid_amount: String(receipt.amount ?? ""),
+      paid_asset: String(receipt.asset ?? ""),
+      network:
+        receipt.origin_tx !== null &&
+        receipt.origin_tx !== undefined &&
+        typeof receipt.origin_tx === "object" &&
+        typeof (receipt.origin_tx as { chain?: unknown }).chain === "string"
+          ? String((receipt.origin_tx as { chain: string }).chain)
+          : null,
+      fee_usd: feeLine?.amount_usd ?? "0.00",
+      payer_tx: receipt.origin_tx ?? null,
+      near_tx: nearHashes[0] ?? bookingTxHash,
+      claim_account: claimAccount,
+      terms_fingerprint: invoice?.terms_hash ?? String(receipt.terms_hash ?? ""),
+      verify_command: `openrail-verify claim ${claimAccount} --terms-hash ${invoice?.terms_hash ?? String(receipt.terms_hash ?? "")}`,
+    }) as unknown as ReceiptDocument;
   }
 
   private invoiceBy(idOrToken: string): InvoiceRecord {
@@ -1541,45 +1584,27 @@ export class ApiApp {
       };
     }
 
+    // Receipt links are public bearer links: the booking hash is not guessable. They never list anything.
+    const receiptPdfMatch = /^\/v1\/receipts\/([^/]+)\.pdf$/.exec(path);
+    if (receiptPdfMatch !== null && method === "GET") {
+      const receipt = await this.receiptMachine(receiptPdfMatch[1] ?? "");
+      const content = renderReceiptPdfBase64(receipt);
+      return {
+        status: 200,
+        body: {
+          receipt_id: receipt.receipt_id,
+          filename: `receipt-${receipt.invoice_number}.pdf`,
+          content_type: "application/pdf",
+          content_base64: content,
+          sha256: sha256Hex0x(Buffer.from(content, "base64")),
+          generated_at: nowIso(this.clock),
+        },
+      };
+    }
+
     const receiptJsonMatch = /^\/v1\/receipts\/([^/]+)\.json$/.exec(path);
     if (receiptJsonMatch !== null && method === "GET") {
-      const bookingTxHash = receiptJsonMatch[1] ?? "";
-      const receipt =
-        this.deps.indexer === undefined
-          ? this.store.getReceipt(bookingTxHash)
-          : await this.deps.indexer.getReceipt(bookingTxHash);
-      if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
-      const tokenId = String(receipt.token_id ?? "");
-      const invoice = this.store.getInvoice(tokenId);
-      const business =
-        invoice === undefined ? undefined : this.store.getBusiness(invoice.issuer_id);
-      const feeLine = invoice?.line_items?.find(
-        (item) => item.description === PROCESSING_FEE_DESCRIPTION,
-      );
-      const claimAccount = `${tokenId}.${this.deps.config.rootAccount}`;
-      const nearHashes = Array.isArray(receipt.near_tx_hashes)
-        ? (receipt.near_tx_hashes as unknown[])
-        : [];
-      const body = canonicalize({
-        receipt_id: String(receipt.id ?? `rcpt_${bookingTxHash}`),
-        paid_at: String(receipt.time ?? ""),
-        invoice_number: invoice?.invoice_number ?? tokenId,
-        order_ref: invoice?.recurring_id ?? tokenId,
-        business_name: invoice?.issuer_legal_name ?? null,
-        business_username: business?.username ?? null,
-        buyer_name: invoice?.debtor_legal_name ?? null,
-        amount_usd: invoice?.amount_usd ?? null,
-        paid_amount: String(receipt.amount ?? ""),
-        paid_asset: String(receipt.asset ?? ""),
-        network: receipt.origin_tx ?? null,
-        fee_usd: feeLine?.amount_usd ?? "0.00",
-        payer_tx: receipt.origin_tx ?? null,
-        near_tx: nearHashes[0] ?? bookingTxHash,
-        claim_account: claimAccount,
-        terms_fingerprint: invoice?.terms_hash ?? String(receipt.terms_hash ?? ""),
-        verify_command: `openrail-verify claim ${claimAccount} --terms-hash ${invoice?.terms_hash ?? String(receipt.terms_hash ?? "")}`,
-      }) as Record<string, unknown>;
-      return { status: 200, body };
+      return { status: 200, body: await this.receiptMachine(receiptJsonMatch[1] ?? "") };
     }
 
     const receiptMatch = /^\/v1\/receipts\/([^/]+)$/.exec(path);

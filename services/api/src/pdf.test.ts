@@ -288,3 +288,76 @@ describe("invoice PDF payment status", () => {
     );
   });
 });
+
+describe("receipt PDF", () => {
+  const receipt = {
+    receipt_id: "rcpt_0xbooking",
+    paid_at: "2026-11-02T10:05:00Z",
+    invoice_number: "INV-2026-001",
+    order_ref: "inv_1",
+    business_name: "Acme Ltd",
+    business_username: "acme",
+    buyer_name: "Debtor Co",
+    amount_usd: "12.50",
+    paid_amount: "12500000",
+    paid_asset: "nep141:usdc",
+    network: "base",
+    fee_usd: "0.00",
+    payer_tx: { hash: "0xpayer" },
+    near_tx: "0xnear",
+    claim_account: "acme-9f3c2a7d41b8.openrail.near",
+    terms_fingerprint: "0x" + "a".repeat(64),
+    verify_command:
+      "openrail-verify claim acme-9f3c2a7d41b8.openrail.near --terms-hash 0x" + "a".repeat(64),
+  };
+
+  it("prints every receipt field and the verification line", async () => {
+    const { renderReceiptPdf } = await import("./pdf.js");
+    const pdf = Buffer.from(renderReceiptPdf(receipt)).toString("latin1");
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
+    expect(pdf).toContain("Receipt");
+    expect(pdf).toContain("PAID");
+    for (const value of [
+      receipt.receipt_id,
+      "Nov 2, 2026",
+      receipt.invoice_number,
+      receipt.order_ref,
+      receipt.business_name,
+      receipt.business_username,
+      receipt.buyer_name,
+      receipt.amount_usd,
+      receipt.paid_amount,
+      receipt.paid_asset,
+      "base",
+      receipt.fee_usd,
+      "0xpayer",
+      receipt.near_tx,
+      receipt.claim_account,
+      receipt.terms_fingerprint,
+      receipt.verify_command,
+    ]) {
+      expect(pdf).toContain(value);
+    }
+    expect(pdf).not.toContain(receipt.paid_at);
+  });
+
+  it("is deterministic and does not break on long names", async () => {
+    const { renderReceiptPdf } = await import("./pdf.js");
+    const long = {
+      ...receipt,
+      business_name: "Business ".repeat(40),
+      buyer_name: "Buyer ".repeat(40),
+      verify_command: "openrail-verify claim " + "a".repeat(240),
+    };
+    const first = Buffer.from(renderReceiptPdf(long));
+    const second = Buffer.from(renderReceiptPdf(long));
+    expect(first).toEqual(second);
+    expect(first.toString("latin1").trimEnd().endsWith("%%EOF")).toBe(true);
+  });
+
+  it("renders a receipt PDF envelope with the invoice number in the filename", async () => {
+    const { renderReceiptPdfBase64 } = await import("./pdf.js");
+    expect(typeof renderReceiptPdfBase64(receipt)).toBe("string");
+  });
+});

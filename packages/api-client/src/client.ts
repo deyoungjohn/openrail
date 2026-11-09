@@ -147,6 +147,8 @@ export class OpenrailClient {
       this.call("GET", `/v1/invoices/${encodeURIComponent(invoiceId)}/receipts`),
     getPublic: (bookingTxHash: string): Promise<SuccessBody<"getPublicReceipt">> =>
       this.call("GET", `/v1/receipts/${encodeURIComponent(bookingTxHash)}`),
+    pdf: (bookingTxHash: string): Promise<SuccessBody<"getReceiptPdf">> =>
+      this.call("GET", `/v1/receipts/${encodeURIComponent(bookingTxHash)}.pdf`),
   };
 
   webhookEndpoints = {

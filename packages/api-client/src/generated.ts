@@ -742,13 +742,22 @@ export interface MachineReceipt {
   amount_usd: string | null;
   paid_amount: string;
   paid_asset: string;
-  network: Record<string, unknown> | null;
+  network: string | null;
   fee_usd: string;
   payer_tx: Record<string, unknown> | null;
   near_tx: string;
   claim_account: string;
   terms_fingerprint: string;
   verify_command: string;
+}
+
+export interface ReceiptPdfDocument {
+  receipt_id: string;
+  filename: string;
+  content_type: "application/pdf";
+  content_base64: string;
+  sha256: Hex32;
+  generated_at: string;
 }
 
 export type PayoutSchedule = "manual" | "each_payment" | "daily" | "weekly" | "monthly";
@@ -1346,6 +1355,17 @@ export interface operations {
     };
     responses: {
       "200": MachineReceipt;
+      "404": Error;
+    };
+  };
+  getReceiptPdf: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": ReceiptPdfDocument;
       "404": Error;
     };
   };
