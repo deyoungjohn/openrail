@@ -231,3 +231,59 @@ describe("invoice PDF line items", () => {
     );
   });
 });
+
+describe("invoice PDF payment status", () => {
+  const generatedAt = "2026-11-09T12:00:00Z";
+  const render = (statusInfo: {
+    status: string;
+    outstandingUsd?: string;
+    paidAt?: string;
+    receiptId?: string;
+    verifyCommand?: string;
+    generatedAt: string;
+  }) =>
+    Buffer.from(renderInvoicePdf(terms, hash, undefined, undefined, statusInfo)).toString("latin1");
+
+  it("marks an issued invoice UNPAID and nothing else", () => {
+    const pdf = render({ status: "Issued", generatedAt });
+    expect(pdf).toContain("UNPAID");
+    expect(pdf).not.toContain("PARTIALLY PAID");
+    expect(/\bPAID\b/.test(pdf)).toBe(false);
+    expect(pdf).toContain("Nov 9, 2026 12:00 UTC");
+  });
+
+  it("marks a partly paid invoice and the amount still due", () => {
+    const pdf = render({ status: "PartiallyPaid", outstandingUsd: "5.00", generatedAt });
+    expect(pdf).toContain("PARTIALLY PAID");
+    expect(pdf).toContain("Still due $5.00");
+    expect(pdf).not.toContain("UNPAID");
+  });
+
+  it("marks a paid invoice with its receipt and verification line", () => {
+    const pdf = render({
+      status: "Paid",
+      paidAt: "2026-11-02T10:05:00Z",
+      receiptId: "rcpt_0xbooking",
+      verifyCommand:
+        "openrail-verify claim c-1.openrail.near --terms-hash " + "0x" + "a".repeat(64),
+      generatedAt,
+    });
+    expect(/\bPAID\b/.test(pdf)).toBe(true);
+    expect(pdf).toContain("Nov 2, 2026");
+    expect(pdf).toContain("rcpt_0xbooking");
+    expect(pdf).toContain("openrail-verify claim c-1.openrail.near");
+    expect(pdf).not.toContain("UNPAID");
+    expect(pdf).not.toContain("PARTIALLY PAID");
+  });
+
+  it("stays deterministic for the same status input", () => {
+    const statusInfo = {
+      status: "PartiallyPaid",
+      outstandingUsd: "5.00",
+      generatedAt,
+    };
+    expect(Buffer.from(renderInvoicePdf(terms, hash, undefined, undefined, statusInfo))).toEqual(
+      Buffer.from(renderInvoicePdf(terms, hash, undefined, undefined, statusInfo)),
+    );
+  });
+});
