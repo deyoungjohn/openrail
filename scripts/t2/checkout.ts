@@ -11,6 +11,7 @@
  * human to send it, and checks the outcome on chain and in the API.
  */
 import { hasIndexedEvent } from "./checkout-events.js";
+import { waitForRefundArrival } from "./checkout-refund.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -343,11 +344,21 @@ const STEPS: StepDef[] = [
         const view = await publicCheckout(ctx, created.id);
         return view.status === "refunded";
       });
+      const arrival = await waitForRefundArrival(
+        {
+          oneClickUrl: getEnv("ONECLICK_API_URL") ?? "https://1click.defuse.org",
+          oneClickJwt: getEnv("ONECLICK_JWT"),
+          fetchImpl: ctx.fetchImpl,
+        },
+        depositAddress,
+      );
       state.evidence = {
         token_id: created.id,
         refund_to: refund.refund_to,
         refund_deposit_address: depositAddress,
         amount_in: amountIn,
+        oneclick_status: arrival.status,
+        destination_tx: arrival.destinationTx,
       };
     },
   },
