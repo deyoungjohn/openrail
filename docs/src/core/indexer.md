@@ -32,10 +32,10 @@ production default (about 10 calls/second / ~1M/day at mainnet block time).
 NearBlocks is account-scoped: one `txns` page per poll in a quiet period, plus one RPC
 `EXPERIMENTAL_tx_status` per **new** transaction (a few per payment, not per block).
 
-- **Default cadence** `INDEXER_POLL_INTERVAL_MS=15000`: 4 polls/min → **240 NearBlocks
-  requests in a quiet hour** (≈5,760/day, zero RPC calls if nothing new).
+- **Default cadence** `INDEXER_POLL_INTERVAL_MS=1800000` (30 minutes): **2 NearBlocks
+  requests in a quiet hour** (48/day, zero RPC calls if nothing new).
 - A burst that does not fit in 100 receipts follows older pages up to `INDEXER_MAX_PAGES`
-  (default 5), then continues on the next poll; each extra page is one request.
+  (default 2), then continues on the next poll; each extra page is one request.
 - On the NearBlocks free tier (333 calls/day) set `INDEXER_POLL_INTERVAL_MS=300000`
   (12 requests/hour, 288/day) and keep `INDEXER_MAX_PAGES` small.
 - `GET /health.calls` reports the counter per feature; the test suite asserts that a quiet

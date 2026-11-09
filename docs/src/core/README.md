@@ -63,6 +63,8 @@ Status tags used in these docs: **built** (code and tests in this repository),
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — system map and the per-invoice account.
 - [`api.md`](api.md) — REST contract, mock mode and typed client.
+- [`cashout.md`](cashout.md) — cash-out quote, statuses and storage.
+- [`limits.md`](limits.md) — RPC fallbacks, polling and NearBlocks budget.
 - [`cli.md`](cli.md) — CLI commands, JSON output and exit codes.
 - [`TRUST.md`](TRUST.md) — trust assumptions T1–T7 and their mitigations.
 - [`COSTS.md`](COSTS.md) — cost table skeleton and measurement method.

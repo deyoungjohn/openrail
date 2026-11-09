@@ -163,7 +163,10 @@ The server checks the signature and that the public key belongs to the account.
 | `GET`        | `/v1/statements?from&to&format=csv\|pdf&token_id` | Statement as a base64 envelope; `token_id` limits it to one claim; totals reconcile with `claim()`.          |
 | `GET`        | `/v1/invoices/{id}/pdf`                           | Invoice PDF as a base64 envelope.                                                                            |
 | `GET`        | `/v1/invoices/{id}/open_quotes`                   | Open quotes from the payment log; never reuse an expired one.                                                |
-| `POST`       | `/v1/cashout/quote`                               | Route cost and the 1Click deposit address for the holder's `mt_transfer`.                                    |
+| `POST`       | `/v1/cashout/quote`                               | Route cost and the 1Click deposit address; see [cash-out](cashout.md).                                       |
+| `GET`        | `/v1/cashouts`                                    | The business's cash-outs, newest first. See [statuses](cashout.md#statuses).                                 |
+| `GET`        | `/v1/cashouts/{id}`                               | One cash-out, its chain transaction and provider status.                                                     |
+| `POST`       | `/v1/cashouts/{id}/sent`                          | Attach the signed transaction hash (20–64 alphanumeric characters).                                          |
 | `GET`        | `/v1/receipts/{booking_tx_hash}`                  | Public receipt built from the `booked` event (no key).                                                       |
 
 A username is 3 to 32 lowercase letters, digits, `-` or `_`; it starts and ends with a letter or
