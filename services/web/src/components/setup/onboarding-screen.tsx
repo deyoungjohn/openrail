@@ -66,9 +66,11 @@ function ProfileForm({ business, onSaved }: { business: Business | null; onSaved
         error={shown && emailBad ? t.badEmail : undefined}
       />
       <ErrorNote>{state === "failed" ? t.saveFailed : null}</ErrorNote>
-      <Button type="submit" loading={state === "saving"}>
-        {t.saveProfile}
-      </Button>
+      <div className="flex justify-center">
+        <Button type="submit" loading={state === "saving"}>
+          {t.saveProfile}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -107,9 +109,11 @@ function PayoutForm({ initial, onSaved }: { initial: string; onSaved: () => void
         error={shown && bad ? t.badAccount : undefined}
       />
       <ErrorNote>{state === "failed" ? t.saveFailed : null}</ErrorNote>
-      <Button type="submit" loading={state === "saving"}>
-        {t.savePayout}
-      </Button>
+      <div className="flex justify-center">
+        <Button type="submit" loading={state === "saving"}>
+          {t.savePayout}
+        </Button>
+      </div>
     </form>
   );
 }

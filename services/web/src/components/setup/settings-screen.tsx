@@ -88,7 +88,7 @@ function ProfileCard({
           error={shown && emailBad ? t.badEmail : undefined}
         />
         <ErrorNote>{state === "failed" ? s.saveFailed : null}</ErrorNote>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center gap-3">
           <Button type="submit" disabled={!dirty} loading={state === "saving"}>
             {state === "saving" ? s.saving : s.save}
           </Button>

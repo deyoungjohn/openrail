@@ -40,15 +40,12 @@ test.describe("receipt (public)", () => {
   }) => {
     await mockApi(page, handlers);
     await page.goto(`/r/${HASH}`);
-    await expect(page.getByRole("link", { name: /View on explorer: 0xcccc…/ })).toHaveAttribute(
-      "href",
-      `https://basescan.org/tx/${HASH}`,
-    );
+    // The receipt id is the booking transaction on NEAR, and the payment came from another chain: both are linked.
+    await expect(page.locator(`a[href="https://basescan.org/tx/${HASH}"]`).first()).toBeVisible();
     const near = RECEIPT.receipt.near_tx_hashes[0] as string;
-    await expect(page.getByRole("link", { name: /View on explorer: 8cDysV/ })).toHaveAttribute(
-      "href",
-      `https://nearblocks.io/txns/${near}`,
-    );
+    await expect(
+      page.locator(`a[href="https://nearblocks.io/txns/${near}"]`).first(),
+    ).toBeVisible();
   });
 
   test("explains how to verify it yourself", async ({ page }) => {

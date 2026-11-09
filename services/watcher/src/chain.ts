@@ -3,17 +3,13 @@
  * the final block height (health + lock expiry) and the watcher account balance (alert).
  * Contract calls still go through `@openrail/shared`'s `NearClient`.
  */
-import { getEnv, requireEnv } from "@openrail/shared";
+import { nearRpcUrlsFromEnv } from "@openrail/shared";
 import type { ChainStatus } from "./types.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export function nearRpcUrls(): string[] {
-  const primary = requireEnv("NEAR_RPC_URL");
-  const fallback = getEnv("NEAR_RPC_URL_FALLBACK");
-  return [...primary.split(","), ...(fallback === undefined ? [] : [fallback])]
-    .map((url) => url.trim())
-    .filter((url) => url !== "");
+  return nearRpcUrlsFromEnv();
 }
 
 export class RpcChainStatus implements ChainStatus {

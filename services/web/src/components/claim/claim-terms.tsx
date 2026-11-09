@@ -2,6 +2,7 @@ import { copy } from "@/copy";
 import { formatDate, formatUsdcExact } from "@/lib/format";
 import { outstanding, type Claim } from "@/lib/claim";
 import { AddressChip } from "../ui/address-chip";
+import { LineItems } from "./line-items";
 import type { ReactNode } from "react";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -34,6 +35,11 @@ export function ClaimTerms({
         {claim.issuerName} <span className="caption">({claim.issuerId})</span>
       </Row>
       <Row label={f.to}>{claim.debtorName}</Row>
+      {claim.lineItems ? (
+        <Row label={f.items}>
+          <LineItems items={claim.lineItems} />
+        </Row>
+      ) : null}
       <Row label={f.amount}>
         <span className="tabular text-[20px] leading-7 font-bold">
           {formatUsdcExact(claim.amountDue)}

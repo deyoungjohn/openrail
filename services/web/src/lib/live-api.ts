@@ -72,7 +72,12 @@ function ackOf(ack: ClaimViewJson["ack"]): Ack | null {
 /** Pure: the contract's view plus the invoice's names become the screens' `Claim`. */
 export function claimFromView(
   v: ClaimViewJson,
-  names: { invoiceNumber?: string; issuerName?: string; debtorName?: string } = {},
+  names: {
+    invoiceNumber?: string;
+    issuerName?: string;
+    debtorName?: string;
+    lineItems?: Claim["lineItems"];
+  } = {},
   rootContract: string = ROOT,
 ): Claim {
   const debtor =
@@ -87,6 +92,7 @@ export function claimFromView(
     ownerId: v.owner_id,
     issuerId: v.issuer_id,
     claimAccount: v.claim_account,
+    ...(names.lineItems && names.lineItems.length > 0 ? { lineItems: names.lineItems } : {}),
     rootContract,
     debtor,
     debtorName: names.debtorName ?? "",
@@ -157,6 +163,7 @@ export const liveApi: OpenrailApi = {
       invoiceNumber: doc?.invoice_number,
       issuerName: terms?.issuer_legal_name,
       debtorName: terms?.debtor_legal_name,
+      lineItems: (doc as { line_items?: Claim["lineItems"] } | null)?.line_items,
     });
   },
   async getPaymentLog(tokenId) {

@@ -129,9 +129,12 @@
 
 html {
   background: var(--bg);
+  overflow-x: clip;
 }
 
 body {
+  /* a tooltip or list that sticks out past the edge never makes the page scroll sideways */
+  overflow-x: clip;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);

@@ -120,18 +120,20 @@ function AckActions({ claim, onAcked }: { claim: Claim; onAcked: () => void }) {
         </div>
       )}
       <ErrorNote>{error ? error : null}</ErrorNote>
-      <Button
-        className="w-full sm:w-auto"
-        onClick={() => void confirm()}
-        loading={busy}
-        disabled={!near_ok && !near.accountId}
-      >
-        {phase === "signing"
-          ? copy.ack.confirming
-          : phase === "sending"
-            ? copy.ack.sending
-            : copy.ack.confirm}
-      </Button>
+      <div className="flex justify-center">
+        <Button
+          className="w-full sm:w-auto"
+          onClick={() => void confirm()}
+          loading={busy}
+          disabled={!near_ok && !near.accountId}
+        >
+          {phase === "signing"
+            ? copy.ack.confirming
+            : phase === "sending"
+              ? copy.ack.sending
+              : copy.ack.confirm}
+        </Button>
+      </div>
     </div>
   );
 }

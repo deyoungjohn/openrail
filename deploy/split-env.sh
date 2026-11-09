@@ -35,7 +35,16 @@ bad="$(grep -vE '^\s*(#.*)?$|^[A-Z][A-Z0-9_]*=' "$src" | head -1 || true)"
 [[ -z "$bad" ]] || { echo "BAD_LINE: lines must be NAME=value (a line starts with: ${bad:0:12}...)" >&2; exit 1; }
 
 value_of() { grep -m1 -E "^$1=" "$src" | cut -d= -f2- || true; }
-names_of() { grep -E '^[A-Z][A-Z0-9_]*=' "deploy/env/$1.env.example" | cut -d= -f1; }
+names_of() {
+  local list
+  list="$(grep -E '^[A-Z][A-Z0-9_]*=' "deploy/env/$1.env.example" | cut -d= -f1)"
+  printf '%s\n' "$list"
+  # Every service that reads NEAR_RPC_URL also gets all the fallbacks (NEAR_RPC_URL_FALLBACK, _2, _3 ...),
+  # so you set them once in the combined file.
+  if grep -qx 'NEAR_RPC_URL' <<<"$list"; then
+    grep -oE '^NEAR_RPC_URL_FALLBACK(_[0-9]+)?' "$src" | sort -u | grep -vxF -f <(printf '%s\n' "$list") || true
+  fi
+}
 
 mkdir -p "$out"
 declare -A used=()

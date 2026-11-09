@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Cell, Pie, PieChart } from "recharts";
@@ -20,7 +20,6 @@ import {
 } from "@/lib/earnings";
 import { formatUsd } from "@/lib/format";
 import { useEarnings } from "@/lib/use-earnings";
-import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { CHAINS } from "../ui/chain-badge";
 import { DataTable, type DataTableColumn } from "../ui/data-table";
@@ -32,15 +31,7 @@ import {
   WeeklyActivityCard,
 } from "../ui/stat-cards";
 import { Tooltip } from "../ui/tooltip";
-import { BalanceCard } from "./balance-card";
-
-const CREATE = (
-  <Link href="/app/invoices/new">
-    <Button icon={<Plus size={18} strokeWidth={1.5} aria-hidden />}>
-      {copy.dash.createInvoice}
-    </Button>
-  </Link>
-);
+import { BalanceButton } from "./balance-card";
 
 const STREAM_COLOR: Record<Stream, string> = {
   invoice: "var(--accent)",
@@ -387,14 +378,13 @@ export function DashboardScreen() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[32px] leading-10 font-bold">{d.title}</h1>
-        {CREATE}
+        <BalanceButton />
       </header>
 
       {load.state === "error" ? (
         <Card state="error" errorBody={d.loadError} onRetry={retry} />
       ) : (
         <>
-          <BalanceCard />
           <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MonthlyRevenueCard
               cents={rev.currentCents}

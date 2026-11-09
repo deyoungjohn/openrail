@@ -112,6 +112,7 @@ export const copy = {
   },
   loadError: "We couldn't load this invoice. Check your connection and try again.",
   fields: {
+    items: "Items",
     invoice: "Invoice",
     from: "From",
     to: "To",
@@ -240,6 +241,7 @@ export const copy = {
     ofInvoice: (total: string, paid: string) => `${paid} of ${total} already paid`,
     claimAccountLabel: "This invoice's own account",
     fingerprintLabel: "Terms fingerprint",
+    itemsTitle: "What you are paying for",
     termsSummary: "What this invoice says",
     termsCheck:
       "The fingerprint above is a hash of these terms and every other detail. It is recorded on NEAR, so anyone can check that the invoice was not changed.",
@@ -401,7 +403,8 @@ export const copy = {
     depositBad: "Enter an amount in NEAR, like 0.5.",
     creditSent: "Deposit sent",
     creditFailed: "The deposit didn't go through. Nothing was charged. Try again.",
-    creditUnknown: "We couldn't check your storage credit. You can still create the invoice.",
+    creditUnknown:
+      "We couldn't check your storage credit just now. You can try to create the invoice: if you have no credit and no free invoices left, we will ask you to deposit some.",
     credit: "Storage credit",
     creditBody:
       "Each invoice uses a little storage on the blockchain. Prepay it once with one wallet signature.",
@@ -673,7 +676,8 @@ export const copy = {
     creditDeposit: "Deposit storage credit",
     creditSent: "Deposit sent",
     creditFailed: "The deposit didn't go through. Nothing was charged. Try again.",
-    creditUnknown: "We couldn't check your storage credit. You can still create the invoice.",
+    creditUnknown:
+      "We couldn't check your storage credit just now. You can try to create the invoice: if you have no credit and no free invoices left, we will ask you to deposit some.",
     doneTitle: "Invoice created",
     doneBody: "Send your client the pay link or the QR code.",
     payLink: "Pay link",
@@ -754,6 +758,10 @@ export const copy = {
     on: (network: string) => `${network}`,
     where: (account: string) => `Held for ${account} on intents.near.`,
     cashOut: "Cash out",
+    label: "Balance",
+    loading: "Balance …",
+    unreadableShort: "Balance unavailable",
+    openCashOut: "Open the cash out page",
     unreadable: "We couldn't read your balance from the chain. Try again in a moment.",
   },
   cashout: {

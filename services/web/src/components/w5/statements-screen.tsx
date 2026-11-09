@@ -175,9 +175,11 @@ export function StatementsScreen() {
           </p>
         ) : null}
         <ErrorNote>{problem ? problem : null}</ErrorNote>
-        <Button type="submit" loading={state === "loading"}>
-          {state === "loading" ? t.getting : t.get}
-        </Button>
+        <div className="flex justify-center">
+          <Button type="submit" loading={state === "loading"}>
+            {state === "loading" ? t.getting : t.get}
+          </Button>
+        </div>
       </form>
 
       <ErrorNote>{state === "failed" ? t.failed : null}</ErrorNote>

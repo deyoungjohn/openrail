@@ -9,6 +9,7 @@ import {
   nearClientFromEnv,
   OneClickRequestError,
   requireEnv,
+  nearRpcUrlsFromEnv,
 } from "@openrail/shared";
 import {
   ApiError,
@@ -369,9 +370,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     idempotency: new IdempotencyStore(stores.idempotency),
     contract: createContractPort(rootAccount),
     issuer: createHttpIssuer(issuerUrl),
-    accessKey: createAccessKeyPort(
-      [rpcUrl as string, getEnv("NEAR_RPC_URL_FALLBACK")].filter((u): u is string => !!u),
-    ),
+    accessKey: createAccessKeyPort(nearRpcUrlsFromEnv()),
     cashout: createCashoutPort(),
     indexer,
     pokeIndexer: async () => {

@@ -179,7 +179,7 @@ test.describe("dashboard", () => {
     await expect(p2.getByRole("button", { name: "Try again" }).first()).toBeVisible();
   });
 
-  test("empty: every card and chart is still there, and the first invoice is one click away", async ({
+  test("empty: every card and chart is still there, and the balance opens the cash-out page", async ({
     page,
   }) => {
     await mockApi(page, { "GET /v1/invoices": { body: { data: [], next_cursor: null } } });
@@ -191,9 +191,10 @@ test.describe("dashboard", () => {
     await expect(main.getByRole("region", { name: "Top clients" })).toBeVisible();
     await expect(main.getByRole("region", { name: "Inflow" })).toBeVisible();
     await expect(main.getByText("No payments yet").first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Create invoice" }).first()).toHaveAttribute(
+    // the balance button replaces "Create invoice" in the header and opens the cash-out page
+    await expect(page.getByRole("link", { name: "Open the cash out page" })).toHaveAttribute(
       "href",
-      "/app/invoices/new",
+      "/app/cashout",
     );
   });
 

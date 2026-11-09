@@ -165,7 +165,7 @@ function DoneSheet({ invoice, onClose }: { invoice: Invoice; onClose: () => void
           </dd>
         </div>
       </dl>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap justify-center gap-3">
         <Link href={`/app/invoices/${encodeURIComponent(invoice.id)}`}>
           <Button variant="secondary" onClick={onClose}>
             {t.openInvoice}
@@ -387,9 +387,11 @@ export function IssueScreen() {
                   ? t.fixErrors
                   : null}
           </ErrorNote>
-          <Button type="submit" loading={busy} className="w-full sm:w-auto">
-            {busy ? t.creating : t.create}
-          </Button>
+          <div className="flex justify-center">
+            <Button type="submit" loading={busy} className="w-full sm:w-auto">
+              {busy ? t.creating : t.create}
+            </Button>
+          </div>
         </form>
 
         <div className="space-y-6">

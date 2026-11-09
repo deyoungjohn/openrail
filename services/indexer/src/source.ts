@@ -3,7 +3,7 @@
  * Production uses the account-scoped NearBlocks source; scanning every final block is ~1M
  * calls/day at mainnet block time and is only for tests or an emergency fallback.
  */
-import { getEnv, requireEnv } from "@openrail/shared";
+import { nearRpcUrlsFromEnv } from "@openrail/shared";
 import type { EventSource, SourceBlock, SourcePage, SourceReceipt } from "./types.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -27,11 +27,7 @@ interface RpcTxStatus {
 const REQUEST_TIMEOUT_MS = 20_000;
 
 export function nearRpcUrls(): string[] {
-  const primary = requireEnv("NEAR_RPC_URL");
-  const fallback = getEnv("NEAR_RPC_URL_FALLBACK");
-  return [...primary.split(","), ...(fallback === undefined ? [] : [fallback])]
-    .map((url) => url.trim())
-    .filter((url) => url !== "");
+  return nearRpcUrlsFromEnv();
 }
 
 function cursorHeight(cursor: string | null): number {

@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { EASE_OUT } from "@/lib/ease";
 import { type ListboxRow, useListbox } from "@/lib/hooks/use-listbox";
 import { cn } from "@/lib/cn";
@@ -147,8 +148,10 @@ export function Select({
   // on the page body. Hand it back to the trigger before that happens.
   const close = useCallback(() => {
     const trigger = document.getElementById(`${baseId}-trigger`);
-    if (rootRef.current?.contains(document.activeElement) && document.activeElement !== trigger)
-      trigger?.focus();
+    const inside =
+      rootRef.current?.contains(document.activeElement) ||
+      document.getElementById(`${baseId}-list`)?.contains(document.activeElement);
+    if (inside && document.activeElement !== trigger) trigger?.focus();
     setOpen(false);
   }, [baseId, setOpen]);
 
@@ -192,7 +195,10 @@ export function Select({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     const onPointer = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (document.getElementById(`${baseId}-list`)?.contains(target)) return;
+      setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onPointer);
@@ -200,7 +206,7 @@ export function Select({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPointer);
     };
-  }, [open, setOpen, close]);
+  }, [open, setOpen, close, baseId]);
 
   const rows = useMemo(
     () =>
@@ -390,6 +396,51 @@ export function SelectContent({ className, children }: SelectContentProps) {
 
   const isTop = ctx.placement === "top";
 
+  // The list is drawn on the page itself (a portal), so no card, tab panel or table around the select can cut it.
+  // Inside a dialog it stays where it is: the dialog is its own layer and the page behind it is inert.
+  const [onPage, setOnPage] = useState(false);
+  const [box, setBox] = useState<{
+    left: number;
+    width: number;
+    top: number;
+    bottom: number;
+  } | null>(null);
+  useEffect(() => {
+    const trigger = document.getElementById(ctx.triggerId);
+    setOnPage(trigger !== null && trigger.closest('dialog, [aria-modal="true"]') === null);
+  }, [ctx.triggerId]);
+  useLayoutEffect(() => {
+    if (!onPage || !present) return;
+    const place = () => {
+      const trigger = document.getElementById(ctx.triggerId);
+      if (!trigger) return;
+      const r = trigger.getBoundingClientRect();
+      setBox((b) =>
+        b &&
+        b.left === r.left + window.scrollX &&
+        b.width === r.width &&
+        b.top === r.top + window.scrollY &&
+        b.bottom === r.bottom + window.scrollY
+          ? b
+          : {
+              left: r.left + window.scrollX,
+              width: r.width,
+              top: r.top + window.scrollY,
+              bottom: r.bottom + window.scrollY,
+            },
+      );
+    };
+    // Follow the trigger every frame while the list is shown: the page around it may still be moving (a tab
+    // that is settling, a card that grows) and a stale position would put the list off screen.
+    let frame = 0;
+    const follow = () => {
+      place();
+      frame = requestAnimationFrame(follow);
+    };
+    follow();
+    return () => cancelAnimationFrame(frame);
+  }, [onPage, present, ctx.triggerId]);
+
   // Reveal a full-size panel from its near edge. No ancestor scales the list,
   // so rows, borders and shadow keep their natural thickness. The clip and
   // corner writes can paint; only the gap uses a transform. All read one
@@ -421,7 +472,8 @@ export function SelectContent({ className, children }: SelectContentProps) {
   // a lip; with reduced motion the fade is the whole entrance.
   const opacity = useTransform(progress, reduce ? [0, 1] : [0, 0.12], [0, 1]);
 
-  return (
+  const floating = onPage && box !== null;
+  const panel = (
     <motion.div
       ref={panelRef}
       id={ctx.listId}
@@ -446,12 +498,20 @@ export function SelectContent({ className, children }: SelectContentProps) {
         pointerEvents: open ? "auto" : "none",
         marginTop: isTop ? 0 : GAP,
         marginBottom: isTop ? GAP : 0,
+        ...(floating
+          ? {
+              position: "absolute" as const,
+              left: box.left,
+              width: box.width,
+              ...(isTop ? { bottom: window.innerHeight - box.top } : { top: box.bottom }),
+            }
+          : {}),
       }}
       // flush against the trigger, then separates into its own rounded pill;
       // sits above or below depending on available space
       className={cn(
-        "absolute left-0 right-0 z-20 overflow-hidden border border-border bg-surface shadow-lg dark:bg-surface-2",
-        isTop ? "bottom-full" : "top-full",
+        "z-20 overflow-hidden border border-border bg-surface shadow-lg dark:bg-surface-2",
+        floating ? "z-[60]" : cn("absolute left-0 right-0", isTop ? "bottom-full" : "top-full"),
         className,
       )}
     >
@@ -462,6 +522,8 @@ export function SelectContent({ className, children }: SelectContentProps) {
       </ActiveOptionContext.Provider>
     </motion.div>
   );
+  // Before the position is known the list stays in place (hidden); options register either way.
+  return onPage && typeof document !== "undefined" ? createPortal(panel, document.body) : panel;
 }
 
 export interface SelectItemProps {

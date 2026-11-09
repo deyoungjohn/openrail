@@ -340,12 +340,28 @@ export class NearClient {
   }
 }
 
-/** Build a client from NEAR_RPC_URL and an optional NEAR_RPC_URL_FALLBACK. */
+/**
+ * Every RPC the services may use, in order: NEAR_RPC_URL, then NEAR_RPC_URL_FALLBACK, then
+ * NEAR_RPC_URL_FALLBACK_2 … _9. Each value may itself be a comma-separated list. Duplicates are dropped.
+ */
+export function nearRpcUrlsFromEnv(): string[] {
+  const names = [
+    "NEAR_RPC_URL",
+    "NEAR_RPC_URL_FALLBACK",
+    ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `NEAR_RPC_URL_FALLBACK_${n}`),
+  ];
+  const urls: string[] = [];
+  for (const name of names) {
+    const value = name === "NEAR_RPC_URL" ? requireEnv(name) : getEnv(name);
+    for (const part of (value ?? "").split(",")) {
+      const url = part.trim();
+      if (url !== "" && !urls.includes(url)) urls.push(url);
+    }
+  }
+  return urls;
+}
+
+/** Build a client from NEAR_RPC_URL and its fallbacks (see nearRpcUrlsFromEnv). */
 export function nearClientFromEnv(options: Omit<NearClientOptions, "rpcUrls"> = {}): NearClient {
-  const primary = requireEnv("NEAR_RPC_URL");
-  const fallback = getEnv("NEAR_RPC_URL_FALLBACK");
-  const urls = [...primary.split(","), ...(fallback === undefined ? [] : [fallback])]
-    .map((url) => url.trim())
-    .filter((url) => url !== "");
-  return new NearClient({ ...options, rpcUrls: urls });
+  return new NearClient({ ...options, rpcUrls: nearRpcUrlsFromEnv() });
 }

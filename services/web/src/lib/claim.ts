@@ -20,6 +20,8 @@ export interface Claim {
   ownerId: string;
   issuerId: string;
   claimAccount: string;
+  /** What the invoice is for, when the API has it. */
+  lineItems?: { description: string; quantity: number; unit_amount_usd: string }[];
   rootContract: string;
   debtor: Debtor | null;
   debtorName: string;

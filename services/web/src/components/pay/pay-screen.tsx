@@ -163,15 +163,17 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
   const amount = `${amountOf(session, route)} ${route.payer_asset}`;
   return (
     <div className="w-full space-y-3">
-      {evm.address ? (
-        <Button type="button" onClick={() => void send()} loading={busy} disabled={sent !== null}>
-          {p.walletPay(amount)}
-        </Button>
-      ) : (
-        <Button type="button" variant="secondary" onClick={() => void evm.connect()}>
-          {p.walletConnect}
-        </Button>
-      )}
+      <div className="flex justify-center">
+        {evm.address ? (
+          <Button type="button" onClick={() => void send()} loading={busy} disabled={sent !== null}>
+            {p.walletPay(amount)}
+          </Button>
+        ) : (
+          <Button type="button" variant="secondary" onClick={() => void evm.connect()}>
+            {p.walletConnect}
+          </Button>
+        )}
+      </div>
       {sent ? (
         <p className="caption break-all" role="status">
           {p.walletSent} {sent}
@@ -647,7 +649,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
               error={(amountShown && amountProblem) || undefined}
             />
           ) : null}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
             <Button type="submit" loading={starting}>
               {split ? p.mixGetPrice : p.getPrice}
             </Button>
@@ -717,6 +719,55 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
       ))
     : null;
 
+  const payCard =
+    open && routes.length > 0 ? (
+      <Card title={p.pickTitle}>
+        <p className="caption mb-4">{p.pickHelp}</p>
+        <Tabs
+          fill
+          label={p.tabsLabel}
+          value={mode}
+          onValueChange={(id) => {
+            setMode(id as Mode);
+            if (id === "split") turnSplitOn();
+            else if (split && legs.length === 0) setSplit(false);
+          }}
+          items={[
+            { id: "wallet", label: p.tabWallet, panel: form("wallet") },
+            { id: "paste", label: p.tabPaste, panel: form("paste") },
+            { id: "split", label: p.tabSplit, panel: form("split") },
+          ]}
+        />
+      </Card>
+    ) : null;
+  const nextCard = (
+    <Card title={p.nextTitle}>
+      <p className="caption mb-4">{p.nextBody}</p>
+      <Timeline
+        steps={(["pick", "send", "received", "paidOut"] as const).map((id) => ({
+          id,
+          title: p.nextSteps[id],
+          status: "todo" as const,
+        }))}
+      />
+    </Card>
+  );
+  // Before a price is asked for: the invoice and the pay card side by side at one height, and what happens next
+  // across both of them underneath.
+  const before =
+    open && payCard !== null && legs.length === 0 && !starting && sessionError === null;
+  if (before) {
+    return (
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-8">
+        <div className="flex min-w-0 flex-col [&>*]:flex-1">
+          <InvoiceCard claim={c} />
+        </div>
+        <div className="flex min-w-0 flex-col [&>*]:flex-1">{payCard}</div>
+        <div className="min-w-0 lg:col-span-2">{nextCard}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
       <div className="min-w-0 space-y-6">
@@ -730,39 +781,10 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
             <EmptyState title={p.noRoutes} />
           </div>
         ) : (
-          <Card title={p.pickTitle}>
-            <p className="caption mb-4">{p.pickHelp}</p>
-            <Tabs
-              fill
-              label={p.tabsLabel}
-              value={mode}
-              onValueChange={(id) => {
-                setMode(id as Mode);
-                if (id === "split") turnSplitOn();
-                else if (split && legs.length === 0) setSplit(false);
-              }}
-              items={[
-                { id: "wallet", label: p.tabWallet, panel: form("wallet") },
-                { id: "paste", label: p.tabPaste, panel: form("paste") },
-                { id: "split", label: p.tabSplit, panel: form("split") },
-              ]}
-            />
-          </Card>
+          payCard
         )}
       </div>
       <div className="min-w-0 space-y-6">
-        {open && legs.length === 0 && !starting && sessionError === null ? (
-          <Card title={p.nextTitle}>
-            <p className="caption mb-4">{p.nextBody}</p>
-            <Timeline
-              steps={(["pick", "send", "received", "paidOut"] as const).map((id) => ({
-                id,
-                title: p.nextSteps[id],
-                status: "todo" as const,
-              }))}
-            />
-          </Card>
-        ) : null}
         {allPaid && legs.some((l) => l.stage === "paid") ? (
           <div
             role="status"

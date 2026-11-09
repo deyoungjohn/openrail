@@ -1,11 +1,17 @@
 import type { PublicClaim } from "@openrail/api-client";
 import { copy } from "@/copy";
 import { formatDueDate, formatToken } from "@/lib/pay";
+import { LineItems, type ShownLineItem } from "../claim/line-items";
 import { AddressChip } from "../ui/address-chip";
 import { StatusChip, type Status } from "../ui/status-chip";
 
 /** The invoice a payer is about to pay: who it is from, who it is for, what is owed and the terms it carries. */
-export function InvoiceCard({ claim: c }: { claim: PublicClaim }) {
+/** `line_items` is served once the API stores them; until then the card simply has no items section. */
+export function InvoiceCard({
+  claim: c,
+}: {
+  claim: PublicClaim & { line_items?: readonly ShownLineItem[] };
+}) {
   const p = copy.pay;
   const paid = c.status === "Paid";
   const partial = c.status === "PartiallyPaid";
@@ -38,6 +44,13 @@ export function InvoiceCard({ claim: c }: { claim: PublicClaim }) {
           <p className="text-[16px] leading-6 font-semibold">{c.debtor_legal_name}</p>
         </div>
       </div>
+
+      {c.line_items && c.line_items.length > 0 ? (
+        <div className="border-t border-border px-5 py-4 sm:px-6">
+          <p className="caption mb-1">{p.itemsTitle}</p>
+          <LineItems items={c.line_items} />
+        </div>
+      ) : null}
 
       <div className="border-y border-border bg-surface-2/40 px-5 py-5 sm:px-6">
         <p className="caption">{partial ? p.stillDue : p.amountDue}</p>

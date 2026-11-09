@@ -4,7 +4,7 @@
  *  - claim-account existence (blueprint 1.5.4);
  *  - key permission/allowance for the startup self-check and `/health`.
  */
-import { getEnv, requireEnv } from "@openrail/shared";
+import { nearRpcUrlsFromEnv } from "@openrail/shared";
 import type {
   AccountChecker,
   KeyInfo,
@@ -21,11 +21,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 const KEY_QUERY_TIMEOUT_MS = 15_000;
 
 export function nearRpcUrls(): string[] {
-  const primary = requireEnv("NEAR_RPC_URL");
-  const fallback = getEnv("NEAR_RPC_URL_FALLBACK");
-  return [...primary.split(","), ...(fallback === undefined ? [] : [fallback])]
-    .map((url) => url.trim())
-    .filter((url) => url !== "");
+  return nearRpcUrlsFromEnv();
 }
 
 async function rpc<T>(
