@@ -85,4 +85,18 @@ describe("issuer key self-check", () => {
     expect(result.ok).toBe(false);
     expect(result.errors.join(" ")).toContain("UNKNOWN_KEY");
   });
+
+  it("does not refuse to start when the RPCs are only unreachable or rate limited", async () => {
+    // 9 Nov: the issuer would not start because every RPC answered 429 for a moment. That says nothing about the
+    // keys: report them as unverified and keep running; a definite wrong key still fails closed.
+    const result = await checkKeyPermissions(
+      new FakeInspector(new Error("RPC_HTTP_429"), new Error("RPC_NETWORK: fetch failed")),
+      "issuer.near",
+      "issuer-pk",
+      "relay-pk",
+    );
+    expect(result.ok).toBe(true);
+    expect(result.unverified.join(" ")).toContain("RPC_HTTP_429");
+    expect(result.unverified).toHaveLength(2);
+  });
 });

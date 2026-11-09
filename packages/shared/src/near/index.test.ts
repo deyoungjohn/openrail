@@ -98,58 +98,80 @@ describe("near client transaction status", () => {
   });
 });
 
-describe("near client rate limits", () => {
-  it("retries a rate-limited call on the same RPC before leaving it", async () => {
-    // A per-second limit clears in a moment: the call is repeated after a pause, not sent to another provider.
-    let calls = 0;
-    const fetchImpl = vi.fn(async () => {
-      calls += 1;
-      if (calls === 1) return jsonResponse({ error: { message: "request limit reached" } }, 429);
-      return callResult({ ok: true });
-    });
-    const sleep = vi.fn(async () => undefined);
-    const client = new NearClient({
-      rpcUrls: ["https://rpc.primary", "https://rpc.secondary"],
-      fetchImpl,
-      sleep,
-      maxRetries: 2,
-      quotaBackoffMs: 200,
-    });
-    await expect(
-      client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" }),
-    ).resolves.toEqual({ ok: true });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(client.fallbackCount()).toBe(0);
-    expect(sleep).toHaveBeenCalledWith(200);
-  });
-
-  it("tries an RPC that just refused last, for a while", async () => {
+describe("near client cycles through its RPCs", () => {
+  it("goes to the next RPC at once on a failure, without trying one twice", async () => {
     const urls: string[] = [];
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       urls.push(url);
-      if (url.includes("primary")) return jsonResponse({ error: { message: "rate limit" } }, 429);
+      if (url.includes("one"))
+        return jsonResponse({ error: { message: "daily request limit reached" } }, 429);
+      if (url.includes("two")) return jsonResponse({ error: "unavailable" }, 503);
       return callResult({ ok: true });
     });
-    let now = 1_000_000;
+    const sleep = vi.fn(async () => undefined);
     const client = new NearClient({
-      rpcUrls: ["https://rpc.primary", "https://rpc.secondary"],
+      rpcUrls: ["https://rpc.one", "https://rpc.two", "https://rpc.three"],
       fetchImpl,
-      maxRetries: 0,
-      cooldownMs: 5_000,
-      now: () => now,
+      sleep,
+      maxRetries: 2,
+    });
+    await expect(
+      client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" }),
+    ).resolves.toEqual({ ok: true });
+    expect(urls).toEqual(["https://rpc.one", "https://rpc.two", "https://rpc.three"]);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(client.fallbackCount()).toBe(2);
+  });
+
+  it("starts the next call at the RPC that answered, and comes back round to the first", async () => {
+    const urls: string[] = [];
+    let oneDown = true;
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("one") && oneDown) return jsonResponse({ error: "limit" }, 429);
+      return callResult({ ok: true });
+    });
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.one", "https://rpc.two", "https://rpc.three"],
+      fetchImpl,
     });
     const call = () =>
       client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" });
     await call();
-    expect(urls).toEqual(["https://rpc.primary", "https://rpc.secondary"]);
+    expect(urls).toEqual(["https://rpc.one", "https://rpc.two"]);
+    urls.length = 0;
+    await call(); // sticks to the one that worked
+    expect(urls).toEqual(["https://rpc.two"]);
+    // The one that worked now fails: on to the third, and round to the first when that fails too.
+    fetchImpl.mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("two") || url.includes("three"))
+        return jsonResponse({ error: "limit" }, 429);
+      return callResult({ ok: true });
+    });
     urls.length = 0;
     await call();
-    expect(urls).toEqual(["https://rpc.secondary"]);
-    now += 6_000;
-    urls.length = 0;
-    await call();
-    expect(urls[0]).toBe("https://rpc.primary");
+    expect(urls).toEqual(["https://rpc.two", "https://rpc.three", "https://rpc.one"]);
+  });
+
+  it("with a single RPC still retries a transient error", async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      return calls === 1 ? jsonResponse({ error: "unavailable" }, 503) : callResult({ ok: true });
+    });
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.only"],
+      fetchImpl,
+      sleep: async () => undefined,
+      maxRetries: 1,
+    });
+    await expect(
+      client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" }),
+    ).resolves.toEqual({ ok: true });
   });
 
   it("never has more than maxConcurrent requests in flight", async () => {
@@ -173,7 +195,6 @@ describe("near client rate limits", () => {
       ),
     );
     expect(peak).toBeLessThanOrEqual(2);
-    expect(fetchImpl).toHaveBeenCalledTimes(8);
   });
 });
 

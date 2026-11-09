@@ -10,6 +10,8 @@ import {
   OneClickRequestError,
   requireEnv,
   nearRpcUrlsFromEnv,
+  rpcOrder,
+  rpcWorked,
 } from "@openrail/shared";
 import {
   ApiError,
@@ -83,9 +85,11 @@ export function createAccessKeyPort(
   /** The chain's answer from the first RPC that gives one; an RPC that fails is skipped (and logged). */
   const ask = async <T>(params: unknown): Promise<T> => {
     let last: unknown;
-    for (const url of urls) {
+    for (const url of rpcOrder(urls)) {
       try {
-        return await rpc<T>(url, "query", params, fetchImpl);
+        const answer = await rpc<T>(url, "query", params, fetchImpl);
+        rpcWorked(urls, url);
+        return answer;
       } catch (error) {
         // A definite answer from the chain (the key or the account is not there) is not a failure.
         const name = (error as { causeName?: string }).causeName;

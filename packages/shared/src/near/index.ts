@@ -36,13 +36,8 @@ export interface NearClientOptions {
   signer?: SignerEnv;
   intentsContractId?: string;
   requestTimeoutMs?: number;
-  /** Pause before repeating a rate-limited call on the same RPC (doubles each time). */
-  quotaBackoffMs?: number;
-  /** How long an RPC that refused is tried last. */
-  cooldownMs?: number;
   /** The most requests in flight at once from this client (a provider's per-second limit is easy to burst past). */
   maxConcurrent?: number;
-  now?: () => number;
 }
 
 export interface ViewRequest {
@@ -121,11 +116,9 @@ export class NearClient {
   private readonly maxRetries: number;
   private readonly retryBackoffMs: number;
   private readonly requestTimeoutMs: number;
-  private readonly quotaBackoffMs: number;
-  private readonly cooldownMs: number;
   private readonly maxConcurrent: number;
-  private readonly now: () => number;
-  private readonly cooling = new Map<string, number>();
+  /** Where the next call starts: the RPC that answered last. */
+  private cursor = 0;
   private inFlight = 0;
   private readonly waiting: (() => void)[] = [];
   private readonly intentsContractId: string;
@@ -143,10 +136,7 @@ export class NearClient {
     this.maxRetries = options.maxRetries ?? 2;
     this.retryBackoffMs = options.retryBackoffMs ?? 100;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
-    this.quotaBackoffMs = options.quotaBackoffMs ?? 250;
-    this.cooldownMs = options.cooldownMs ?? 5_000;
     this.maxConcurrent = Math.max(1, options.maxConcurrent ?? 6);
-    this.now = options.now ?? (() => Date.now());
     this.intentsContractId = options.intentsContractId ?? "intents.near";
     this.signerEnv = options.signer;
   }
@@ -207,21 +197,25 @@ export class NearClient {
     else this.inFlight -= 1;
   }
 
-  /** The RPCs in the order to try them: those that refused a moment ago go last. */
-  private urlOrder(): string[] {
-    const now = this.now();
-    const ready = this.rpcUrls.filter((u) => (this.cooling.get(u) ?? 0) <= now);
-    const resting = this.rpcUrls.filter((u) => (this.cooling.get(u) ?? 0) > now);
-    return [...ready, ...resting];
+  /** The RPCs in the order to try them: from the one that answered last, round through the others. */
+  private urlOrder(): number[] {
+    const n = this.rpcUrls.length;
+    return Array.from({ length: n }, (_, k) => (this.cursor + k) % n);
   }
 
+  /**
+   * One call: each RPC is tried once, in turn (the next at once on any failure), starting from the one that answered
+   * last and coming back round to the first. Only with a single RPC is a transient failure repeated.
+   */
   private async rpc<T>(method: string, params: unknown, feature: string): Promise<T> {
     let lastError: NearRpcError | undefined;
     const order = this.urlOrder();
-    for (let urlIndex = 0; urlIndex < order.length; urlIndex += 1) {
-      const url = order[urlIndex];
+    const attempts = this.rpcUrls.length === 1 ? this.maxRetries + 1 : 1;
+    for (let k = 0; k < order.length; k += 1) {
+      const index = order[k] as number;
+      const url = this.rpcUrls[index];
       if (url === undefined) continue;
-      for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
         this.increment(feature);
         let outcome: Outcome;
         await this.acquire();
@@ -249,35 +243,19 @@ export class NearClient {
           this.release();
         }
 
-        if (outcome.kind === "ok") return outcome.value as T;
+        if (outcome.kind === "ok") {
+          this.cursor = index;
+          return outcome.value as T;
+        }
         lastError = outcome.error;
-
-        if (outcome.kind === "quota") {
-          // A per-second limit clears in a moment: repeat the call here after a pause before leaving this RPC.
-          if (attempt < this.maxRetries) {
-            await this.sleep(this.quotaBackoffMs * 2 ** attempt);
-            continue;
-          }
-          this.cooling.set(url, this.now() + this.cooldownMs);
-          if (urlIndex < order.length - 1) {
-            this.fallbacks += 1;
-            break;
-          }
-          throw outcome.error;
+        // A definite answer from the chain (a bad request, a missing account) is the same on every RPC.
+        if (outcome.kind === "fatal") throw outcome.error;
+        if (attempt < attempts - 1) {
+          await this.sleep(this.retryBackoffMs * 2 ** attempt);
+          continue;
         }
-        if (outcome.kind === "retryable") {
-          if (attempt < this.maxRetries) {
-            await this.sleep(this.retryBackoffMs * 2 ** attempt);
-            continue;
-          }
-          if (urlIndex < order.length - 1) {
-            this.fallbacks += 1;
-            break;
-          }
-          throw outcome.error;
-        }
-        throw outcome.error;
       }
+      if (k < order.length - 1) this.fallbacks += 1;
     }
     throw lastError ?? new NearRpcError("RPC_UNAVAILABLE");
   }
@@ -425,7 +403,11 @@ export function nearRpcUrlsFromEnv(): string[] {
   const names = [
     "NEAR_RPC_URL",
     "NEAR_RPC_URL_FALLBACK",
-    ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `NEAR_RPC_URL_FALLBACK_${n}`),
+    // Both spellings are read: FALLBACK_2 and FALLBACK2 (and FALLBACK1 for the first).
+    ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [
+      `NEAR_RPC_URL_FALLBACK_${n}`,
+      `NEAR_RPC_URL_FALLBACK${n}`,
+    ]),
   ];
   const urls: string[] = [];
   for (const name of names) {
@@ -436,6 +418,20 @@ export function nearRpcUrlsFromEnv(): string[] {
     }
   }
   return urls;
+}
+
+const cycles = new Map<string, number>();
+
+/** The RPCs in the order to try them: from the one that answered last, round through the rest. */
+export function rpcOrder(urls: readonly string[]): string[] {
+  const start = (cycles.get(urls.join(",")) ?? 0) % Math.max(1, urls.length);
+  return urls.map((_, k) => urls[(start + k) % urls.length] as string);
+}
+
+/** Remember which RPC answered, so the next call starts there. */
+export function rpcWorked(urls: readonly string[], url: string): void {
+  const index = urls.indexOf(url);
+  if (index >= 0) cycles.set(urls.join(","), index);
 }
 
 /** Build a client from NEAR_RPC_URL and its fallbacks (see nearRpcUrlsFromEnv). */

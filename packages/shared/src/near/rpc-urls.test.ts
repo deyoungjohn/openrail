@@ -29,4 +29,16 @@ describe("nearRpcUrlsFromEnv", () => {
     process.env.NEAR_RPC_URL = "https://only.example";
     expect(nearRpcUrlsFromEnv()).toEqual(["https://only.example"]);
   });
+
+  it("reads the names without the second underscore too (FALLBACK1, FALLBACK2)", () => {
+    // The human's env file used NEAR_RPC_URL_FALLBACK1/2 and the services read none of them (9 Nov).
+    process.env.NEAR_RPC_URL = "https://keyed.example/k";
+    process.env.NEAR_RPC_URL_FALLBACK1 = "https://fast.example";
+    process.env.NEAR_RPC_URL_FALLBACK2 = "https://public.example";
+    expect(nearRpcUrlsFromEnv()).toEqual([
+      "https://keyed.example/k",
+      "https://fast.example",
+      "https://public.example",
+    ]);
+  });
 });

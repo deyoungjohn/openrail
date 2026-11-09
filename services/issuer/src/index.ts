@@ -103,6 +103,23 @@ async function main(): Promise<void> {
     for (const error of permissions.errors) logger.error("key self-check failed", error);
     throw new Error("ISSUER_KEY_SELF_CHECK_FAILED");
   }
+  if (permissions.unverified.length > 0) {
+    // The RPCs could not answer (rate limit, outage): start anyway and check again in a minute.
+    for (const note of permissions.unverified) logger.warn("key self-check not verified", note);
+    const again = setInterval(() => {
+      void checkKeyPermissions(inspector, issuerAccount, issuerPublicKey, relayPublicKey).then(
+        (next) => {
+          if (!next.ok)
+            for (const error of next.errors) logger.error("key self-check failed", error);
+          if (next.ok && next.unverified.length === 0) {
+            logger.info("key self-check passed", { account: issuerAccount });
+            clearInterval(again);
+          }
+        },
+      );
+    }, 60_000);
+    again.unref();
+  }
   logger.info("key self-check passed", {
     account: issuerAccount,
     issuerMethods: permissions.issuer?.methods,

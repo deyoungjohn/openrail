@@ -3,7 +3,7 @@
  * Production uses the account-scoped NearBlocks source; scanning every final block is ~1M
  * calls/day at mainnet block time and is only for tests or an emergency fallback.
  */
-import { nearRpcUrlsFromEnv } from "@openrail/shared";
+import { nearRpcUrlsFromEnv, rpcOrder, rpcWorked } from "@openrail/shared";
 import type { EventSource, SourceBlock, SourcePage, SourceReceipt } from "./types.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -66,7 +66,7 @@ export class RpcEventSource implements EventSource {
 
   private async rpc<T>(method: string, params: unknown, feature: string): Promise<T> {
     let lastError: unknown;
-    for (const url of this.urls) {
+    for (const url of rpcOrder(this.urls)) {
       this.increment(feature);
       try {
         const response = await this.fetchImpl(url, {
@@ -88,6 +88,7 @@ export class RpcEventSource implements EventSource {
           lastError = new Error("RPC_RESULT_MISSING");
           continue;
         }
+        rpcWorked(this.urls, url);
         return body.result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));

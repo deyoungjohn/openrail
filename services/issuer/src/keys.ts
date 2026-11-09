@@ -7,9 +7,14 @@ export const RELAY_METHODS = ["acknowledge_evm"] as const;
 export interface KeyCheck {
   ok: boolean;
   errors: string[];
+  /** Checks that could not be made because the RPCs were unreachable or limiting: not a verdict on the key. */
+  unverified: string[];
   issuer: KeyInfo | null;
   relay: KeyInfo | null;
 }
+
+/** An RPC that cannot answer right now, as opposed to a definite answer about the key. */
+const RPC_TROUBLE = /^RPC_(HTTP_(429|5\d\d)|NETWORK|UNAVAILABLE)|timed? ?out|ECONN|fetch failed/i;
 
 function sameSet(actual: string[], expected: readonly string[]): boolean {
   if (actual.length !== expected.length) return false;
@@ -41,21 +46,22 @@ export async function checkKeyPermissions(
   let issuer: KeyInfo | null = null;
   let relay: KeyInfo | null = null;
   const errors: string[] = [];
+  const unverified: string[] = [];
+  const failed = (role: string, error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    (RPC_TROUBLE.test(message) ? unverified : errors).push(`${role} key check failed: ${message}`);
+  };
   try {
     issuer = await inspector.keyInfo(accountId, issuerPublicKey);
     errors.push(...checkOne("issuer", issuer, ISSUER_METHODS));
   } catch (error) {
-    errors.push(
-      `issuer key check failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    failed("issuer", error);
   }
   try {
     relay = await inspector.keyInfo(accountId, relayPublicKey);
     errors.push(...checkOne("relay", relay, RELAY_METHODS));
   } catch (error) {
-    errors.push(
-      `relay key check failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    failed("relay", error);
   }
-  return { ok: errors.length === 0, errors, issuer, relay };
+  return { ok: errors.length === 0, errors, unverified, issuer, relay };
 }

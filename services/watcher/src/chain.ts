@@ -3,7 +3,7 @@
  * the final block height (health + lock expiry) and the watcher account balance (alert).
  * Contract calls still go through `@openrail/shared`'s `NearClient`.
  */
-import { nearRpcUrlsFromEnv } from "@openrail/shared";
+import { nearRpcUrlsFromEnv, rpcOrder, rpcWorked } from "@openrail/shared";
 import type { ChainStatus } from "./types.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -30,7 +30,7 @@ export class RpcChainStatus implements ChainStatus {
 
   private async rpc<T>(method: string, params: unknown): Promise<T> {
     let lastError: Error | undefined;
-    for (const url of this.urls) {
+    for (const url of rpcOrder(this.urls)) {
       try {
         const response = await this.fetchImpl(url, {
           method: "POST",
@@ -51,6 +51,7 @@ export class RpcChainStatus implements ChainStatus {
           lastError = new Error("RPC_RESULT_MISSING");
           continue;
         }
+        rpcWorked(this.urls, url);
         return body.result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));

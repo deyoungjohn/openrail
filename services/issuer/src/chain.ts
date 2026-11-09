@@ -4,7 +4,7 @@
  *  - claim-account existence (blueprint 1.5.4);
  *  - key permission/allowance for the startup self-check and `/health`.
  */
-import { nearRpcUrlsFromEnv } from "@openrail/shared";
+import { nearRpcUrlsFromEnv, rpcOrder, rpcWorked } from "@openrail/shared";
 import type {
   AccountChecker,
   KeyInfo,
@@ -31,7 +31,7 @@ async function rpc<T>(
   params: unknown,
 ): Promise<T> {
   let lastError: unknown;
-  for (const url of urls) {
+  for (const url of rpcOrder(urls)) {
     try {
       const response = await fetchImpl(url, {
         method: "POST",
@@ -52,6 +52,7 @@ async function rpc<T>(
         lastError = new Error("RPC_RESULT_MISSING");
         continue;
       }
+      rpcWorked(urls, url);
       return body.result;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
