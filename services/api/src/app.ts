@@ -159,6 +159,22 @@ export interface CashoutPort {
   }): Promise<Record<string, unknown>>;
 }
 
+export interface PublicHistory {
+  issued_at: string;
+  issue_tx: string | null;
+  paid_at: string | null;
+  payments: { tx_hash: string; near: boolean }[];
+}
+
+/** What is kept for good about an invoice that can no longer change. */
+interface SettledDoc {
+  claim?: Record<string, unknown>;
+  history?: PublicHistory;
+}
+
+const isFinal = (status: unknown): boolean =>
+  status === "Paid" || status === "Cancelled" || status === "Closed";
+
 /** A cash-out as kept by the API: the quote, and the transaction the merchant signed once it exists. */
 export interface CashoutRecord {
   id: string;
@@ -558,12 +574,16 @@ export class ApiApp {
    * answers (a missing claim stays a 404); only a claim never read gives `undefined`.
    */
   private async claimOrStale(tokenId: string): Promise<Record<string, unknown> | undefined> {
+    // Paid, cancelled or closed never changes again: it was read once and is kept for good.
+    const kept = this.docs.get<SettledDoc>("settled", tokenId);
+    if (kept?.claim !== undefined) return kept.claim;
     const now = this.clock().getTime();
     const cached = this.claimCache.get(tokenId);
     if (cached !== undefined && now - cached.at < 10_000) return cached.claim;
     try {
       const claim = await this.deps.contract.claim(tokenId);
       this.claimCache.set(tokenId, { at: now, claim });
+      if (isFinal(claim.status)) this.docs.put("settled", tokenId, { ...kept, claim });
       return claim;
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) throw error;
@@ -633,12 +653,9 @@ export class ApiApp {
    * transaction that issued it and, once paid, the day and the transactions of each payment. A page reached by its
    * unguessable link already shows the invoice; the receipts are public by their own links.
    */
-  private async publicHistory(invoice: InvoiceRecord): Promise<{
-    issued_at: string;
-    issue_tx: string | null;
-    paid_at: string | null;
-    payments: { tx_hash: string; near: boolean }[];
-  }> {
+  private async publicHistory(invoice: InvoiceRecord): Promise<PublicHistory> {
+    const kept = this.docs.get<SettledDoc>("settled", invoice.token_id);
+    if (kept?.history !== undefined) return kept.history;
     let receipts: Record<string, unknown>[] = [];
     try {
       receipts =
@@ -669,12 +686,16 @@ export class ApiApp {
         // extra information only
       }
     }
-    return {
+    const history: PublicHistory = {
       issued_at: invoice.created_at,
       issue_tx: issueTx,
       paid_at: invoice.status === "Paid" || receipts.length > 0 ? paidAt : null,
       payments,
     };
+    // A paid invoice's history is fetched once and kept for good (its claim is settled: see claimOrStale).
+    if (kept?.claim !== undefined && kept.claim.status === "Paid" && payments.length > 0)
+      this.docs.put("settled", invoice.token_id, { ...kept, history });
+    return history;
   }
 
   private invoiceBy(idOrToken: string): InvoiceRecord {
@@ -715,12 +736,15 @@ export class ApiApp {
         const invoice = invoices[index];
         if (invoice === undefined) return;
         let claim: Record<string, unknown> | undefined;
+        const kept = this.docs.get<SettledDoc>("settled", invoice.token_id);
         const cached = this.claimCache.get(invoice.token_id);
-        if (cached !== undefined && now - cached.at < 10_000) claim = cached.claim;
+        if (kept?.claim !== undefined) claim = kept.claim;
+        else if (cached !== undefined && now - cached.at < 10_000) claim = cached.claim;
         else {
           try {
             claim = await this.deps.contract.claim(invoice.token_id);
             this.claimCache.set(invoice.token_id, { at: now, claim });
+            if (isFinal(claim.status)) this.docs.put("settled", invoice.token_id, { claim });
           } catch {
             // The chain cannot be read now: the last status seen is closer to the truth than the record written at
             // creation ("Issued"), which would show a paid invoice as outstanding.

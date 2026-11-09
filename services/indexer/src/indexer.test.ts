@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Indexer } from "./indexer.js";
+import { BOOST_POLL_INTERVAL_MS, DEFAULT_POLL_INTERVAL_MS, Indexer } from "./indexer.js";
 import {
   FakeEnricher,
   FakeSource,
@@ -29,7 +29,28 @@ function fixture(options: { enricher?: boolean } = {}) {
 }
 
 describe("boost", () => {
-  it("pokes into 20 s polling for five minutes and expires", () => {
+  it("a poke while already boosted does not extend the boost, and idle polling is slow", () => {
+    // 9 Nov: 376 NearBlocks calls in a day for one user: a tick every 5 minutes round the clock, and every poke
+    // (each price, each cash-out) started five more minutes of ticks every 20 seconds.
+    expect(DEFAULT_POLL_INTERVAL_MS).toBe(30 * 60 * 1000);
+    expect(BOOST_POLL_INTERVAL_MS).toBe(60_000);
+    let now = 1_000_000;
+    const indexer = new Indexer({
+      source: new FakeSource(loadBlocks()),
+      store: memoryStore(),
+      logger: silentLogger(),
+      now: () => now,
+    });
+    const first = indexer.poke();
+    now += 2 * 60 * 1000;
+    expect(indexer.poke()).toBe(first);
+    now += 3 * 60 * 1000 + 1;
+    expect(indexer.health().boost_active).toBe(false);
+    // Once it has ended, the next poke starts a new window.
+    expect(indexer.poke()).toBe(now + 5 * 60 * 1000);
+  });
+
+  it("pokes into one-minute polling for five minutes and expires", () => {
     let now = 1_000_000;
     const indexer = new Indexer({
       source: new FakeSource(loadBlocks()),

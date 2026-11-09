@@ -7,7 +7,7 @@
  *   INDEXER_DB_PATH (required), INDEXER_SOURCE (nearblocks|rpc; default nearblocks),
  *   NEARBLOCKS_API_URL / NEARBLOCKS_API_KEY (account-scoped source),
  *   NEARBLOCKS_DAILY_BUDGET (380), 7 s minimum spacing,
- *   INDEXER_POLL_INTERVAL_MS (300000), INDEXER_MAX_PAGES (2), INDEXER_RETENTION_DAYS (30),
+ *   INDEXER_POLL_INTERVAL_MS (1800000), INDEXER_MAX_PAGES (2), INDEXER_RETENTION_DAYS (30),
  *   INDEXER_PORT (8788), INDEXER_START_HEIGHT (0, RPC scanner only)
  *   INDEXER_WEBHOOK_URL / INDEXER_WEBHOOK_SECRET (optional; indexed events only)
  *   ONECLICK_API_URL / ONECLICK_JWT (optional; receipt origin/NEAR hashes)
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
     ...(sink === undefined ? {} : { sink }),
     ...(enricher === undefined ? {} : { enricher }),
     maxPagesPerSync: Math.floor(numberEnv("INDEXER_MAX_PAGES", 2)),
-    pollIntervalMs: Math.floor(numberEnv("INDEXER_POLL_INTERVAL_MS", 300_000)),
+    pollIntervalMs: Math.floor(numberEnv("INDEXER_POLL_INTERVAL_MS", 1_800_000)),
     retentionDays: Math.floor(numberEnv("INDEXER_RETENTION_DAYS", 30)),
     logger,
     budget,

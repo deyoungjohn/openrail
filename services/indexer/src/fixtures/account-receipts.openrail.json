@@ -1,1 +1,73 @@
-{"cursor":"24901697492","txns":[{"id":"24901697507","receipt_id":"BswawMqR25ozFPZBkbsdrvrW5VdqATmhbW1HKE36CoV6","predecessor_account_id":"system","receiver_account_id":"openrail.near","receipt_block":{"block_hash":"5RDKSkr5PX276xduTMM1SMa9fN47PWS5x6QCw8wQyohL","block_height":222710964,"block_timestamp":1793617823407793400},"receipt_outcome":{"gas_burnt":223182562500,"tokens_burnt":0,"executor_account_id":"openrail.near","status":true},"transaction_hash":"4Sj7EqnW6gpxhSXQU9jTdwAWMcJePGBLU7Eb42ow24hP","included_in_block_hash":"52LFKAYZFJEnaqY3FQ3Tp3vYDjw9uEJ7F1dUvDiQXYgS","block_timestamp":"1793617822802887093","block":{"block_height":222710963},"receipt_conversion_tokens_burnt":"34297573563900000000","actions":[{"action":"TRANSFER","method":null,"deposit":727285725000000000000,"fee":0,"args":null}],"actions_agg":{"deposit":0},"outcomes":{"status":true},"outcomes_agg":{"transaction_fee":7.362151070985639e+23}},{"id":"24901697492","receipt_id":"ApM8LwQR7prDnuhyy8PH9spNh8ouw8cjk9TN5dhAoWrQ","predecessor_account_id":"openrail.near","receiver_account_id":"openrail.near","receipt_block":{"block_hash":"52LFKAYZFJEnaqY3FQ3Tp3vYDjw9uEJ7F1dUvDiQXYgS","block_height":222710963,"block_timestamp":1793617822802887200},"receipt_outcome":{"gas_burnt":808095250000,"tokens_burnt":7.36180809525e+23,"executor_account_id":"openrail.near","status":true},"transaction_hash":"4Sj7EqnW6gpxhSXQU9jTdwAWMcJePGBLU7Eb42ow24hP","included_in_block_hash":"52LFKAYZFJEnaqY3FQ3Tp3vYDjw9uEJ7F1dUvDiQXYgS","block_timestamp":"1793617822802887093","block":{"block_height":222710963},"receipt_conversion_tokens_burnt":"34297573563900000000","actions":[{"action":"DEPLOY_GLOBAL_CONTRACT","method":null,"deposit":0,"fee":7.36180809525e+23,"args":null}],"actions_agg":{"deposit":0},"outcomes":{"status":true},"outcomes_agg":{"transaction_fee":7.362151070985639e+23}}]}
+{
+  "cursor": "24901697492",
+  "txns": [
+    {
+      "id": "24901697507",
+      "receipt_id": "BswawMqR25ozFPZBkbsdrvrW5VdqATmhbW1HKE36CoV6",
+      "predecessor_account_id": "system",
+      "receiver_account_id": "openrail.near",
+      "receipt_block": {
+        "block_hash": "5RDKSkr5PX276xduTMM1SMa9fN47PWS5x6QCw8wQyohL",
+        "block_height": 222710964,
+        "block_timestamp": 1793617823407793400
+      },
+      "receipt_outcome": {
+        "gas_burnt": 223182562500,
+        "tokens_burnt": 0,
+        "executor_account_id": "openrail.near",
+        "status": true
+      },
+      "transaction_hash": "4Sj7EqnW6gpxhSXQU9jTdwAWMcJePGBLU7Eb42ow24hP",
+      "included_in_block_hash": "52LFKAYZFJEnaqY3FQ3Tp3vYDjw9uEJ7F1dUvDiQXYgS",
+      "block_timestamp": "1793617822802887093",
+      "block": { "block_height": 222710963 },
+      "receipt_conversion_tokens_burnt": "34297573563900000000",
+      "actions": [
+        {
+          "action": "TRANSFER",
+          "method": null,
+          "deposit": 727285725000000000000,
+          "fee": 0,
+          "args": null
+        }
+      ],
+      "actions_agg": { "deposit": 0 },
+      "outcomes": { "status": true },
+      "outcomes_agg": { "transaction_fee": 7.362151070985639e23 }
+    },
+    {
+      "id": "24901697492",
+      "receipt_id": "ApM8LwQR7prDnuhyy8PH9spNh8ouw8cjk9TN5dhAoWrQ",
+      "predecessor_account_id": "openrail.near",
+      "receiver_account_id": "openrail.near",
+      "receipt_block": {
+        "block_hash": "52LFKAYZFJEnaqY3FQ3Tp3vYDjw9uEJ7F1dUvDiQXYgS",
+        "block_height": 222710963,
+        "block_timestamp": 1793617822802887200
+      },
+      "receipt_outcome": {
+        "gas_burnt": 808095250000,
+        "tokens_burnt": 7.36180809525e23,
+        "executor_account_id": "openrail.near",
+        "status": true
+      },
+      "transaction_hash": "4Sj7EqnW6gpxhSXQU9jTdwAWMcJePGBLU7Eb42ow24hP",
+      "included_in_block_hash": "52LFKAYZFJEnaqY3FQ3Tp3vYDjw9uEJ7F1dUvDiQXYgS",
+      "block_timestamp": "1793617822802887093",
+      "block": { "block_height": 222710963 },
+      "receipt_conversion_tokens_burnt": "34297573563900000000",
+      "actions": [
+        {
+          "action": "DEPLOY_GLOBAL_CONTRACT",
+          "method": null,
+          "deposit": 0,
+          "fee": 7.36180809525e23,
+          "args": null
+        }
+      ],
+      "actions_agg": { "deposit": 0 },
+      "outcomes": { "status": true },
+      "outcomes_agg": { "transaction_fee": 7.362151070985639e23 }
+    }
+  ]
+}

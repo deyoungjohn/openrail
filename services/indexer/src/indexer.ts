@@ -8,8 +8,8 @@ import type { IndexerStore } from "./store.js";
 import type { BudgetGovernor } from "./budget.js";
 import type { TxStatusReader } from "./tx-status.js";
 
-export const DEFAULT_POLL_INTERVAL_MS = 300_000;
-export const BOOST_POLL_INTERVAL_MS = 20_000;
+export const DEFAULT_POLL_INTERVAL_MS = 30 * 60 * 1000;
+export const BOOST_POLL_INTERVAL_MS = 60_000;
 export const BOOST_DURATION_MS = 5 * 60 * 1000;
 
 export interface IndexerOptions {
@@ -144,10 +144,12 @@ export class Indexer {
     return { latest_block: latestBlock, blocks, events, pages, calls };
   }
 
-  /** Raise the polling cadence for five minutes (bounded by the remaining budget). */
+  /** Raise the polling cadence to one minute for five minutes (bounded by the remaining budget). */
   poke(): number {
     if (this.budget !== undefined && this.budget.health().remaining <= 0) return 0;
-    this.boostUntil = Math.max(this.boostUntil, this.now() + BOOST_DURATION_MS);
+    // A poke while a boost is running does not extend it: every price and every cash-out pokes, and a chain of
+    // extensions meant a tick every few seconds all day.
+    if (this.now() >= this.boostUntil) this.boostUntil = this.now() + BOOST_DURATION_MS;
     return this.boostUntil;
   }
 

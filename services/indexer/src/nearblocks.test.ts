@@ -156,7 +156,7 @@ describe("NearBlocks account-scoped source", () => {
     expect(urls.filter((url) => url.includes("/v1/account/"))).toHaveLength(2);
   });
 
-  it("a quiet hour costs a few hundred NearBlocks calls and no RPC calls", async () => {
+  it("a quiet hour costs two NearBlocks calls and no RPC calls", async () => {
     let listCalls = 0;
     let rpcCalls = 0;
     const source = new NearBlocksEventSource(
@@ -175,7 +175,7 @@ describe("NearBlocks account-scoped source", () => {
     );
     const quietPolls = Math.ceil(3_600_000 / DEFAULT_POLL_INTERVAL_MS);
     for (let poll = 0; poll < quietPolls; poll += 1) await source.fetch(null);
-    expect(quietPolls).toBe(12);
+    expect(quietPolls).toBe(2);
     expect(quietPolls).toBeLessThanOrEqual(300);
     expect(listCalls).toBe(quietPolls);
     expect(rpcCalls).toBe(0);
