@@ -1794,6 +1794,14 @@ export class ApiApp {
       const context = this.requireAuth(request);
       // The event stream is shared by every merchant: keep only the events of this merchant's own claims.
       const own = new Set(this.store.listInvoices(context.accountId).map((i) => i.token_id));
+      for (const module of this.modules) {
+        try {
+          for (const id of module.ownedTokens?.(context.accountId, this.moduleContext) ?? [])
+            own.add(id);
+        } catch {
+          // a broken module never hides the merchant's core events
+        }
+      }
       const tokenOf = (e: Record<string, unknown>): string | undefined => {
         const data = e.data as { token_id?: unknown } | undefined;
         return typeof data?.token_id === "string" ? data.token_id : undefined;

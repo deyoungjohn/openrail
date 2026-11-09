@@ -250,3 +250,47 @@ describe("module quote window", () => {
     expect(quote).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("module hook ownedTokens", () => {
+  const auth = () => {
+    const store = new AuthStore(() => 0);
+    return {
+      store,
+      a: store.createApiKey("a.openrail.near", "k", "secret", ["invoices:read"]).secret,
+      b: store.createApiKey("b.openrail.near", "k", "secret", ["invoices:read"]).secret,
+    };
+  };
+  const list = (app: ApiApp, secret: string) =>
+    app.handle({
+      method: "GET",
+      path: "/v1/events",
+      query: new URLSearchParams(),
+      headers: { authorization: `Bearer ${secret}` },
+      body: undefined,
+    }) as Promise<{ status: number; body: { data: { id: string }[] } }>;
+
+  it("keeps the events of claims a module owns for the merchant, and only for that merchant", async () => {
+    const keys = auth();
+    const module: ApiModule = {
+      id: "demo",
+      ownedTokens: (accountId) => (accountId === "a.openrail.near" ? ["m-1"] : []),
+    };
+    const app = new ApiApp({ ...deps([module]), auth: keys.store });
+    app.store.appendEvent({ id: "1", type: "x", created: 1, data: { token_id: "m-1" } });
+    app.store.appendEvent({ id: "2", type: "x", created: 2, data: { token_id: "m-2" } });
+    expect((await list(app, keys.a)).body.data.map((e) => e.id)).toEqual(["1"]);
+    expect((await list(app, keys.b)).body.data).toEqual([]);
+  });
+
+  it("a module that throws never hides the merchant's other events", async () => {
+    const keys = auth();
+    const module: ApiModule = {
+      id: "broken",
+      ownedTokens: () => {
+        throw new Error("boom");
+      },
+    };
+    const app = new ApiApp({ ...deps([module]), auth: keys.store });
+    expect((await list(app, keys.a)).status).toBe(200);
+  });
+});

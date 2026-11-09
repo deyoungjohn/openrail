@@ -44,6 +44,11 @@ export interface ApiModule {
   /** Extra events derived from an indexed event (for example a module-specific event type). */
   events?(event: IndexedEvent, context: ApiModuleContext): IndexedEvent[];
   /**
+   * Token ids of the claims this module keeps for a merchant. Core keeps a merchant's own events in
+   * `GET /v1/events` by token, and claims a module issues are not in the invoice list.
+   */
+  ownedTokens?(accountId: string, context: ApiModuleContext): string[];
+  /**
    * Asked before a pay quote is requested for a claim. A module that owns the claim may refuse it
    * (throw `ApiError`) or cap the quote deadline: `notAfter` is a unix time in seconds, and the
    * quote's deadline never goes past it. Returns undefined for claims it does not own.
