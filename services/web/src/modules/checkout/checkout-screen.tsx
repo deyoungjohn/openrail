@@ -387,12 +387,14 @@ function CheckoutCard({
   expiryMs,
   banner,
   returnHref,
+  cancelHref,
 }: {
   checkout: PublicCheckoutPayload;
   effectiveCheckout: PublicCheckout;
   expiryMs: number;
   banner: LiveBanner;
   returnHref: string | null;
+  cancelHref?: string | null;
 }) {
   const p = copy.pay;
   const paid = effectiveCheckout.status === "paid" || effectiveCheckout.status === "accepted";
@@ -482,7 +484,7 @@ function CheckoutCard({
           <span>{banner.title}</span>
         </p>
         <p className="text-[14px] leading-5 text-muted">{banner.body}</p>
-        {returnHref ? (
+        {paid && returnHref ? (
           <div className="pt-2">
             <a
               href={returnHref}
@@ -490,6 +492,16 @@ function CheckoutCard({
             >
               <ArrowLeft size={14} strokeWidth={1.5} aria-hidden />
               {checkoutCopy.returnToMerchant}
+            </a>
+          </div>
+        ) : !paid && (cancelHref ?? returnHref) ? (
+          <div className="pt-2">
+            <a
+              href={(cancelHref ?? returnHref)!}
+              className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-border bg-surface px-3 text-[13px] font-medium transition-colors hover:bg-surface-2"
+            >
+              <ArrowLeft size={14} strokeWidth={1.5} aria-hidden />
+              {cancelHref ? checkoutCopy.backToShop : checkoutCopy.returnToMerchant}
             </a>
           </div>
         ) : null}
@@ -709,6 +721,7 @@ export function CheckoutScreen({ id }: { id: string }) {
     null;
   const banner = checkoutLiveBanner(effectiveCheckout, topStage);
   const returnHref = safeReturnUrl(c.return_url);
+  const cancelHref = safeReturnUrl(c.cancel_url);
   const covered = split && legs.length > 0 && remaining === 0n;
 
   const submit = () => {
@@ -791,6 +804,7 @@ export function CheckoutScreen({ id }: { id: string }) {
         expiryMs={expiryMs}
         banner={banner}
         returnHref={returnHref}
+        cancelHref={cancelHref}
       />
 
       <div className="min-w-0 space-y-6">

@@ -1930,6 +1930,7 @@ export class ApiApp {
           throw new ApiError(503, "contract_view_unavailable");
         return this.deps.contract.view(methodName, args);
       },
+      indexer: this.deps.indexer,
     };
   }
 

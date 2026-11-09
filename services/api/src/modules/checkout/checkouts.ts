@@ -15,7 +15,6 @@ import {
   allowedRoutes,
   createOneClickClientFromEnv,
   defaultSettlementAsset,
-  getEnv,
   loadRoutes,
   type RouteFile,
 } from "@openrail/shared";
@@ -34,13 +33,36 @@ import { feePreview, resolveFee, type FeeMode } from "../../line-items.js";
 import { EMPTY_ITEMS_SHA256, issuerCheckoutPort, type CheckoutPort } from "./checkout-port.js";
 
 const NS_CHECKOUTS = "checkout.checkouts";
+/** A checkout that can no longer change: its claim and checkout state, read once and kept for good. */
+const NS_SETTLED = "checkout.settled";
+/** The last claim and state read of a checkout still in flight, for when the chain cannot be read. */
+const NS_LAST = "checkout.last";
+/**
+ * Late money can still land after expiry (it is booked and held, see the module spec), so an expired,
+ * accepted or refunded checkout is kept as settled only this long after its expiry.
+ */
+const DEFAULT_SETTLE_GRACE_SECONDS = 3600;
+
+interface ChainSnapshot {
+  claim: Record<string, unknown>;
+  state: ChainCheckoutState | null;
+}
 const NS_REFS = "checkout.order_refs";
 
 const ORDER_REF_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const USD_RE = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?$/;
 
 export type CheckoutStatus =
-  "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired" | "needs_attention";
+  | "pending"
+  | "partial"
+  | "paid"
+  | "late"
+  | "accepted"
+  | "refunded"
+  | "expired"
+  | "needs_attention"
+  /** The chain could not be read just now; the answer is the last copy read (or none yet). */
+  | "checking";
 
 export type { FeeMode };
 
@@ -80,6 +102,9 @@ export interface StoredCheckout {
   expiry: number;
   pay_url: string;
   return_url: string | null;
+  cancel_url?: string | null;
+  currency?: string;
+  amount_cents?: number;
   items_sha256: string;
   created_at: string;
   fee_mode?: FeeMode;
@@ -95,12 +120,15 @@ export interface CheckoutView {
   order_ref: string;
   amount_usd: string;
   amount_due: string;
+  amount_cents: number;
+  currency: string;
   outstanding: string;
   paid_total: string;
   surplus: string;
   status: CheckoutStatus;
   pay_url: string;
   return_url: string | null;
+  cancel_url?: string | null;
   expires_at: string;
   created_at: string;
   fee_mode: FeeMode;
@@ -160,6 +188,8 @@ export interface CheckoutOptions {
   checkouts?: (context: ApiModuleContext) => CheckoutPort;
   chain?: (context: ApiModuleContext) => CheckoutChain;
   refunds?: (context: ApiModuleContext) => RefundQuotePort;
+  /** Seconds after expiry before an expired, accepted or refunded checkout is kept as settled. */
+  settleGraceSeconds?: number;
 }
 
 function bad(message: string): never {
@@ -183,16 +213,16 @@ function parseUsd(
   };
 }
 
-function parseReturnUrl(value: unknown): string | undefined {
+function parseHttpsUrl(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") bad("return_url must be an https URL");
+  if (typeof value !== "string") bad(`${field} must be an https URL`);
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    bad("return_url must be a valid URL");
+    bad(`${field} must be a valid URL`);
   }
-  if (url.protocol !== "https:") bad("return_url must use https");
+  if (url.protocol !== "https:") bad(`${field} must use https`);
   return url.toString();
 }
 
@@ -265,10 +295,10 @@ function statusOf(
   nowSec: number,
 ): CheckoutStatus {
   if (state?.flagged === true) return "needs_attention";
+  if (state?.accepted === true) return "accepted";
   const held = toBig(heldAmountOf(state));
   if (state?.late === true && held > 0n) return "late";
   if (state?.refunded === true) return "refunded";
-  if (state?.accepted === true) return "accepted";
   const due = toBig(claim.amount_due);
   const paid = toBig(claim.booked_total) - toBig(claim.surplus) + toBig(claim.credit_total);
   if (state?.late === true) {
@@ -285,44 +315,34 @@ function statusOf(
   return "pending";
 }
 
-async function nearView<T>(rootAccount: string, method: string, args: unknown): Promise<T | null> {
-  const url = getEnv("NEAR_RPC_URL");
-  if (url === undefined || url === "") return null;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "query",
-      params: {
-        request_type: "call_function",
-        finality: "optimistic",
-        account_id: rootAccount,
-        method_name: method,
-        args_base64: Buffer.from(JSON.stringify(args)).toString("base64"),
-      },
-    }),
-  });
-  if (!response.ok) return null;
-  const body = (await response.json()) as { result?: { result?: number[] } };
-  const bytes = body.result?.result;
-  if (!Array.isArray(bytes)) return null;
-  return JSON.parse(Buffer.from(bytes).toString("utf8")) as T;
+/** A contract that lacks the view answers "no such method": that is "nothing there", not "cannot read". */
+function isMissingView(error: unknown): boolean {
+  if (error instanceof ApiError && error.code === "contract_view_unavailable") return true;
+  const text = error instanceof Error ? error.message : String(error);
+  return /MethodNotFound|method .*not found|no such method|CodeDoesNotExist/i.test(text);
+}
+
+async function contractView<T>(
+  context: ApiModuleContext,
+  method: string,
+  args: object,
+): Promise<T | null> {
+  try {
+    return ((await context.view(method, args)) as T | null) ?? null;
+  } catch (error) {
+    if (isMissingView(error)) return null;
+    throw error;
+  }
 }
 
 export function defaultCheckoutChain(context: ApiModuleContext): CheckoutChain {
   return {
     claim: (tokenId) => context.contract.claim(tokenId),
     async checkoutState(tokenId) {
-      return (
-        (await nearView<ChainCheckoutState | null>(context.config.rootAccount, "checkout_state", {
-          token_id: tokenId,
-        }).catch(() => null)) ?? null
-      );
+      return contractView<ChainCheckoutState>(context, "checkout_state", { token_id: tokenId });
     },
     async paymentLog(tokenId) {
-      const fromChain = await nearView<LoggedQuote[]>(context.config.rootAccount, "payment_log", {
+      const fromChain = await contractView<LoggedQuote[]>(context, "payment_log", {
         token_id: tokenId,
       }).catch(() => null);
       if (Array.isArray(fromChain) && fromChain.length > 0) return fromChain;
@@ -436,8 +456,10 @@ export class Checkouts {
   private readonly chain: (context: ApiModuleContext) => CheckoutChain;
   private readonly refunds: (context: ApiModuleContext) => RefundQuotePort;
   private readonly routes: RouteFile;
+  private readonly settleGrace: number;
 
   constructor(options: CheckoutOptions = {}) {
+    this.settleGrace = options.settleGraceSeconds ?? DEFAULT_SETTLE_GRACE_SECONDS;
     this.port = options.checkouts ?? issuerCheckoutPort;
     this.chain = options.chain ?? defaultCheckoutChain;
     this.refunds = options.refunds ?? oneClickRefundQuotes;
@@ -500,7 +522,8 @@ export class Checkouts {
     if (view.status === "expired") {
       throw new ApiError(409, "checkout_expired", "this checkout has expired");
     }
-    if (view.status !== "pending" && view.status !== "partial") {
+    // When the chain cannot be read the quote goes on: the expiry below is the stored one.
+    if (view.status !== "pending" && view.status !== "partial" && view.status !== "checking") {
       throw new ApiError(409, "checkout_not_payable", `checkout is ${view.status}`);
     }
     const nowSec = Math.floor(context.clock().getTime() / 1000);
@@ -571,6 +594,24 @@ export class Checkouts {
             : mapped === "checkout.refund_started"
               ? "refund_started"
               : "pending";
+    const amountCents = Math.round(Number(totalUsd) * 100);
+    const bookingTx =
+      typeof raw.booking_tx === "string"
+        ? raw.booking_tx
+        : typeof raw.tx_hash === "string"
+          ? raw.tx_hash
+          : typeof (event as { txHash?: unknown }).txHash === "string"
+            ? ((event as { txHash?: string }).txHash as string)
+            : null;
+    const originTx =
+      typeof raw.origin_tx === "string"
+        ? raw.origin_tx
+        : typeof raw.origin_tx_hash === "string"
+          ? raw.origin_tx_hash
+          : null;
+    const transactions = { origin: originTx, booking: bookingTx };
+    const timestamp = new Date(event.created * 1000).toISOString();
+
     return [
       {
         id,
@@ -579,12 +620,17 @@ export class Checkouts {
         data: {
           ...raw,
           token_id: tokenId,
+          checkout_id: stored.id,
           order_ref: orderRef,
+          amount_cents: amountCents,
+          amount_usd_cents: amountCents,
           amount_usd: totalUsd,
           subtotal_usd: subtotalUsd,
           fee_usd: feeUsd,
           total_usd: totalUsd,
           fee_mode: feeMode,
+          transactions,
+          timestamp,
           status,
         },
         indexed: true,
@@ -614,11 +660,48 @@ export class Checkouts {
   ): Promise<ApiResponse> {
     if (typeof raw !== "object" || raw === null) bad("body must be a JSON object");
     const body = raw as Record<string, unknown>;
+    if (body.currency !== undefined && body.currency !== null) {
+      if (
+        typeof body.currency !== "string" ||
+        !["USD", "USDC"].includes(body.currency.toUpperCase())
+      ) {
+        throw new ApiError(
+          400,
+          "unsupported_currency",
+          "currency must be USD; other currencies are not supported",
+        );
+      }
+    }
     const orderRef = body.order_ref;
     if (typeof orderRef !== "string" || !ORDER_REF_RE.test(orderRef)) {
       bad("order_ref is required (1..64 ASCII letters, digits, ., _, :, -)");
     }
-    const amount = parseUsd(body.amount_usd, "amount_usd");
+    const rawAmount =
+      body.amount_usd ??
+      (typeof body.amount_cents === "number"
+        ? (body.amount_cents / 100).toFixed(2)
+        : typeof body.amount_usd_cents === "number"
+          ? (body.amount_usd_cents / 100).toFixed(2)
+          : undefined);
+    const amount = parseUsd(rawAmount, "amount_usd");
+
+    const refKey = `${accountId}/${orderRef}`;
+    const existingRef = context.docs.get<{ token_id: string }>(NS_REFS, refKey);
+    if (existingRef?.token_id) {
+      const existing = context.docs.get<StoredCheckout>(NS_CHECKOUTS, existingRef.token_id);
+      if (existing) {
+        const existingSubtotal = existing.subtotal_usd ?? existing.amount_usd;
+        if (existingSubtotal !== amount.text) {
+          throw new ApiError(
+            409,
+            "order_ref_amount_mismatch",
+            `checkout with order_ref '${orderRef}' already exists with amount ${existingSubtotal} USD (requested ${amount.text} USD)`,
+          );
+        }
+        return { status: 200, body: await this.hydrate(context, existing) };
+      }
+    }
+
     const rawFeeMode = body.fee_mode;
     let feeMode: FeeMode;
     if (rawFeeMode === undefined || rawFeeMode === null) {
@@ -647,7 +730,8 @@ export class Checkouts {
     ) {
       bad("expires_in_minutes must be an integer between 1 and 60");
     }
-    const returnUrl = parseReturnUrl(body.return_url);
+    const returnUrl = parseHttpsUrl(body.return_url, "return_url");
+    const cancelUrl = parseHttpsUrl(body.cancel_url, "cancel_url");
     const rawItems = body.items;
     const feeResolved = resolveFee(amount.text, [], feeMode);
     const feeItem = feeResolved.items[0];
@@ -664,7 +748,6 @@ export class Checkouts {
         : rawItems;
     const itemsSha256 = hashItems(effectiveItems);
 
-    const refKey = `${accountId}/${orderRef}`;
     if (!context.docs.insert(NS_REFS, refKey, { order_ref: orderRef }, accountId)) {
       throw new ApiError(
         409,
@@ -680,6 +763,7 @@ export class Checkouts {
         orderRef,
         expiryMinutes,
         ...(returnUrl === undefined ? {} : { returnUrl }),
+        ...(cancelUrl === undefined ? {} : { cancelUrl }),
         itemsSha256,
       });
     } catch (error) {
@@ -699,10 +783,13 @@ export class Checkouts {
       order_ref: orderRef,
       amount_usd: effectiveAmount.text,
       amount_due: effectiveAmount.baseUnits,
+      amount_cents: Number(effectiveAmount.cents),
+      currency: "USD",
       expires_at: created.expires_at,
       expiry,
       pay_url: created.pay_url,
       return_url: returnUrl ?? null,
+      cancel_url: cancelUrl ?? null,
       items_sha256: itemsSha256,
       created_at: nowIso,
       fee_mode: feeMode,
@@ -720,12 +807,15 @@ export class Checkouts {
       order_ref: orderRef,
       amount_usd: effectiveAmount.text,
       amount_due: effectiveAmount.baseUnits,
+      amount_cents: Number(effectiveAmount.cents),
+      currency: "USD",
       outstanding: effectiveAmount.baseUnits,
       paid_total: "0",
       surplus: "0",
       status: "pending",
       pay_url: created.pay_url,
-      return_url: stored.return_url,
+      return_url: returnUrl ?? null,
+      cancel_url: cancelUrl ?? null,
       expires_at: created.expires_at,
       created_at: nowIso,
       fee_mode: feeMode,
@@ -736,17 +826,79 @@ export class Checkouts {
     return { status: 201, body: view };
   }
 
-  private async hydrate(context: ApiModuleContext, stored: StoredCheckout): Promise<CheckoutView> {
+  /**
+   * The claim and checkout state of a checkout. A settled checkout is answered from the copy kept the one
+   * time it was read; one in flight is read from the chain, and when the chain cannot be read the last copy
+   * read answers with `checking` set (no copy yet gives an empty claim: the stored amounts still show).
+   */
+  private async snapshot(
+    context: ApiModuleContext,
+    stored: StoredCheckout,
+  ): Promise<ChainSnapshot & { checking: boolean }> {
+    const kept = context.docs.get<ChainSnapshot>(NS_SETTLED, stored.token_id);
+    if (kept !== undefined) return { ...kept, checking: false };
     const chain = this.chain(context);
-    const [rawClaim, state] = await Promise.all([
-      chain.claim(stored.token_id).catch(() => ({})),
-      chain.checkoutState(stored.token_id).catch(() => null),
-    ]);
+    try {
+      const [claim, state] = await Promise.all([
+        chain.claim(stored.token_id),
+        chain.checkoutState(stored.token_id),
+      ]);
+      const fresh: ChainSnapshot = { claim, state };
+      context.docs.put(NS_LAST, stored.token_id, fresh, stored.account_id);
+      return { ...fresh, checking: false };
+    } catch {
+      const last = context.docs.get<ChainSnapshot>(NS_LAST, stored.token_id);
+      return { claim: last?.claim ?? {}, state: last?.state ?? null, checking: true };
+    }
+  }
+
+  /** Keeps a checkout that can no longer change, so it is never read from the chain again. */
+  private async settle(
+    context: ApiModuleContext,
+    stored: StoredCheckout,
+    snap: ChainSnapshot,
+    status: CheckoutStatus,
+    state: ChainCheckoutState | null,
+    expiry: number,
+    nowSec: number,
+  ): Promise<void> {
+    if (context.docs.get(NS_SETTLED, stored.token_id) !== undefined) return;
+    const isLateOpen =
+      state?.late === true && toBig(heldAmountOf(state)) > 0n && state?.accepted !== true;
+    const final =
+      !isLateOpen &&
+      (status === "paid" ||
+        ((status === "expired" || status === "accepted" || status === "refunded") &&
+          nowSec >= expiry + this.settleGrace));
+    if (final) {
+      let receipts: Record<string, unknown>[] | undefined;
+      if (context.indexer?.listReceipts !== undefined) {
+        try {
+          receipts = await context.indexer.listReceipts(stored.account_id, stored.token_id);
+        } catch {
+          // indexer failure does not prevent settling
+        }
+      }
+      context.docs.put(
+        NS_SETTLED,
+        stored.token_id,
+        { claim: snap.claim, state: snap.state, receipts },
+        stored.account_id,
+      );
+    }
+  }
+
+  private async hydrate(context: ApiModuleContext, stored: StoredCheckout): Promise<CheckoutView> {
+    const snap = await this.snapshot(context, stored);
+    const rawClaim = snap.claim;
+    const state = snap.state;
     const claim = normaliseClaim(rawClaim, stored);
     const nowSec = Math.floor(context.clock().getTime() / 1000);
-    const status = statusOf(claim, state, stored, nowSec);
+    const computed = statusOf(claim, state, stored, nowSec);
     const expiry =
       state?.expiry ?? (typeof claim.due_date === "number" ? claim.due_date : stored.expiry);
+    const status: CheckoutStatus = snap.checking ? "checking" : computed;
+    if (!snap.checking) await this.settle(context, stored, snap, computed, state, expiry, nowSec);
     const feeMode: FeeMode = stored.fee_mode ?? "absorb";
     const subtotalUsd = stored.subtotal_usd ?? stored.amount_usd;
     const feeUsd = stored.fee_usd ?? "0.00";
@@ -761,12 +913,15 @@ export class Checkouts {
       order_ref: stored.order_ref,
       amount_usd: stored.amount_usd,
       amount_due: String(claim.amount_due),
+      amount_cents: Math.round(Number(stored.amount_usd) * 100),
+      currency: "USD",
       outstanding: outstandingOf(claim),
       paid_total: paidTotalOf(claim, "0"),
       surplus: String(claim.surplus),
       status,
       pay_url: stored.pay_url,
       return_url: stored.return_url,
+      cancel_url: stored.cancel_url ?? null,
       expires_at: new Date(expiry * 1000).toISOString(),
       created_at: stored.created_at,
       fee_mode: feeMode,
@@ -826,6 +981,9 @@ export class Checkouts {
         status: view.status,
         expires_at: view.expires_at,
         return_url: view.return_url,
+        cancel_url: view.cancel_url ?? null,
+        amount_cents: view.amount_cents,
+        currency: view.currency,
         server_time: context.clock().toISOString(),
         routes: allowedRoutes(this.routes).map((route) => ({
           id: route.id,
@@ -855,11 +1013,16 @@ export class Checkouts {
     state: ChainCheckoutState;
   }> {
     const stored = this.owned(context, accountId, id);
-    const chain = this.chain(context);
-    const [rawClaim, state] = await Promise.all([
-      chain.claim(stored.token_id).catch(() => ({})),
-      chain.checkoutState(stored.token_id).catch(() => null),
-    ]);
+    const snap = await this.snapshot(context, stored);
+    if (snap.checking) {
+      throw new ApiError(
+        503,
+        "checkout_checking",
+        "the chain cannot be read now; try again shortly",
+      );
+    }
+    const rawClaim = snap.claim;
+    const state = snap.state;
     const claim = normaliseClaim(rawClaim, stored);
     if (state?.flagged === true) {
       throw new ApiError(409, "checkout_flagged", "this checkout is flagged for accounting review");

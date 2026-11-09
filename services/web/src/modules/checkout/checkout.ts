@@ -1,7 +1,15 @@
 import { formatToken, type PayStage } from "../../lib/pay";
 
 export type CheckoutStatus =
-  "pending" | "partial" | "paid" | "late" | "accepted" | "refunded" | "expired" | "needs_attention";
+  | "pending"
+  | "partial"
+  | "paid"
+  | "late"
+  | "accepted"
+  | "refunded"
+  | "expired"
+  | "needs_attention"
+  | "checking";
 
 export type FeeMode = "absorb" | "pass_to_customer";
 
@@ -19,6 +27,7 @@ export interface PublicCheckout {
   status: CheckoutStatus;
   expires_at: string;
   return_url: string | null;
+  cancel_url?: string | null;
   server_time?: string;
   fee_mode?: FeeMode;
   subtotal_usd?: string;
@@ -55,6 +64,10 @@ export const checkoutCopy = {
   refundedBody: "This late payment is being returned to the refund address you gave.",
   overpaidNote: (extra: string) => `Includes ${extra} above the order amount.`,
   returnToMerchant: "Return to merchant",
+  backToShop: "Back to the shop",
+  cancelAndReturn: "Cancel and return to shop",
+  checkingTitle: "Checking payment status",
+  checkingBody: "Checking payment status on chain. You can still pay below.",
   notFoundTitle: "We can't find this checkout",
   notFoundBody: "The link may be wrong or incomplete. Ask the merchant for a fresh link.",
   loadError: "We couldn't load this checkout. Check your connection and try again.",
@@ -79,7 +92,12 @@ export function countdownTargetMs(input: {
 
 /** Whether a payer may ask for a new quote on this checkout right now. */
 export function canQuoteCheckout(checkout: PublicCheckout, nowMs: number): boolean {
-  if (checkout.status !== "pending" && checkout.status !== "partial") return false;
+  if (
+    checkout.status !== "pending" &&
+    checkout.status !== "partial" &&
+    checkout.status !== "checking"
+  )
+    return false;
   if (BigInt(checkout.outstanding || "0") <= 0n) return false;
   const expiryMs = Date.parse(checkout.expires_at);
   if (!Number.isFinite(expiryMs) || nowMs >= expiryMs) return false;
@@ -103,6 +121,8 @@ export function checkoutStatusLabel(checkout: PublicCheckout): string {
       return checkoutCopy.expiredTitle;
     case "pending":
       return checkoutCopy.waitingTitle;
+    case "checking":
+      return checkoutCopy.checkingTitle;
   }
 }
 
@@ -137,6 +157,9 @@ export function checkoutLiveBanner(
   }
   if (checkout.status === "expired") {
     return { kind: "expired", title: checkoutCopy.expiredTitle, body: checkoutCopy.expiredBody };
+  }
+  if (checkout.status === "checking") {
+    return { kind: "waiting", title: checkoutCopy.checkingTitle, body: checkoutCopy.checkingBody };
   }
   if (checkout.status === "partial") {
     const due = `$${formatToken(checkout.outstanding, 6)}`;

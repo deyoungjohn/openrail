@@ -54,6 +54,7 @@ function harness(
     issuer?: ApiDeps["issuer"];
     modules?: ApiDeps["modules"];
     indexer?: ApiDeps["indexer"];
+    chain?: CheckoutChain;
   } = {},
 ) {
   let now = new Date(NOW);
@@ -89,14 +90,17 @@ function harness(
       expires_at: expires.toISOString(),
     };
   });
+  const claimSpy = vi.fn(async (token: string) => {
+    const found = chain.claims.get(token);
+    if (found === undefined) throw new Error("claim not found");
+    return found;
+  });
+  const checkoutStateSpy = vi.fn(async (token: string) => chain.states.get(token) ?? null);
+  const paymentLogSpy = vi.fn(async (token: string) => chain.log.get(token) ?? []);
   const fakeChain: CheckoutChain = {
-    claim: async (token) => {
-      const found = chain.claims.get(token);
-      if (found === undefined) throw new Error("claim not found");
-      return found;
-    },
-    checkoutState: async (token) => chain.states.get(token) ?? null,
-    paymentLog: async (token) => chain.log.get(token) ?? [],
+    claim: claimSpy,
+    checkoutState: checkoutStateSpy,
+    paymentLog: paymentLogSpy,
   };
   const refundQuote = vi.fn<RefundQuotePort["quote"]>(async (input) => ({
     quote_id: "rq_1",
@@ -108,7 +112,7 @@ function harness(
   }));
   const module = createCheckoutApiModule({
     ...(options.useRealPort ? {} : { checkouts: () => ({ create }) }),
-    chain: () => fakeChain,
+    chain: () => options.chain ?? fakeChain,
     refunds: () => ({ quote: refundQuote }),
   });
   const issueFor = vi.fn(async () => ({
@@ -153,6 +157,10 @@ function harness(
     issueFor,
     keys,
     chain,
+    fakeChain,
+    claimSpy,
+    checkoutStateSpy,
+    paymentLogSpy,
     advance(ms: number) {
       now = new Date(now.getTime() + ms);
     },
@@ -242,10 +250,14 @@ describe("checkout API: create", () => {
   it("checkout_order_ref_unique_per_business", async () => {
     const h = harness();
     expect((await createCheckout(h)).status).toBe(201);
+    // Same merchant, same order_ref, same amount returns 200 with the existing checkout
     const again = await createCheckout(h);
-    expect(again.status).toBe(409);
-    expect(again.body.error.code).toBe("order_ref_taken");
+    expect(again.status).toBe(200);
     expect(h.create).toHaveBeenCalledTimes(1);
+    // Different amount for same order_ref is 409 order_ref_amount_mismatch
+    const mismatch = await createCheckout(h, { amount_usd: "5.00" });
+    expect(mismatch.status).toBe(409);
+    expect(mismatch.body.error.code).toBe("order_ref_amount_mismatch");
     expect((await createCheckout(h, {}, h.keys.other)).status).toBe(201);
   });
 
@@ -454,18 +466,16 @@ describe("checkout API: read the state from the claim", () => {
     expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("paid");
 
     // 4. Expired (booked_total = 0, clock past claim.due_date)
-    h.chain.claims.set(id, {
-      ...(h.chain.claims.get(id) ?? {}),
-      booked_total: "0",
-    });
+    const expId = await made(h, { order_ref: "ORD-EXP" });
+    h.chain.states.set(expId, null);
     h.advance(20 * 60_000);
-    const expired = await get(h, id);
+    const expired = await get(h, expId);
     expect(expired.body).toMatchObject({
       status: "expired",
       outstanding: "2000000",
       paid_total: "0",
     });
-    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("expired");
+    expect((await call(h, "GET", `/v1/public/checkouts/${expId}`)).body.status).toBe("expired");
   });
 
   it("checkout_flagged_state_maps_to_needs_attention", async () => {
@@ -1731,6 +1741,395 @@ describe("checkout events reach the merchant: GET /v1/events and a signed webhoo
     const sent = JSON.parse(body) as { type: string; data: Record<string, unknown> };
     expect(sent.type).toBe("checkout.paid");
     expect(sent.data).toMatchObject({ token_id: "c-101", order_ref: "ORD-1", status: "paid" });
+  });
+
+  it("order_ref_unique_returns_same_checkout_on_same_amount_and_conflicts_on_different_amount", async () => {
+    const h = harness();
+    const first = await createCheckout(h, { order_ref: "ORD-SH-100", amount_usd: "25.00" });
+    expect(first.status).toBe(201);
+    expect(first.body.order_ref).toBe("ORD-SH-100");
+    expect(first.body.amount_usd).toBe("25.00");
+    const checkoutId = first.body.id;
+
+    // Retry with same order_ref and same amount -> 200 with same checkout
+    const retry = await createCheckout(h, { order_ref: "ORD-SH-100", amount_usd: "25.00" });
+    expect(retry.status).toBe(200);
+    expect(retry.body.id).toBe(checkoutId);
+    expect(retry.body.order_ref).toBe("ORD-SH-100");
+    expect(h.create).toHaveBeenCalledTimes(1);
+
+    // Call with same order_ref and different amount -> 409 order_ref_amount_mismatch
+    const mismatch = await createCheckout(h, { order_ref: "ORD-SH-100", amount_usd: "35.00" });
+    expect(mismatch.status).toBe(409);
+    expect(mismatch.body.error.code).toBe("order_ref_amount_mismatch");
+
+    // Another merchant can use the same order_ref without collision
+    const otherMerchant = await createCheckout(
+      h,
+      { order_ref: "ORD-SH-100", amount_usd: "35.00" },
+      h.keys.other,
+    );
+    expect(otherMerchant.status).toBe(201);
+    expect(otherMerchant.body.id).not.toBe(checkoutId);
+  });
+
+  it("return_and_cancel_urls_validated_and_returned_in_api_and_public_view", async () => {
+    const h = harness();
+    // Non-https return_url fails 400
+    const badReturn = await createCheckout(h, {
+      order_ref: "ORD-URL-1",
+      return_url: "http://insecure.example/return",
+    });
+    expect(badReturn.status).toBe(400);
+    expect(badReturn.body.error.code).toBe("invalid_request");
+
+    // Non-https cancel_url fails 400
+    const badCancel = await createCheckout(h, {
+      order_ref: "ORD-URL-2",
+      cancel_url: "javascript:alert(1)",
+    });
+    expect(badCancel.status).toBe(400);
+    expect(badCancel.body.error.code).toBe("invalid_request");
+
+    // Valid URLs accepted, returned in API view and public view
+    const ok = await createCheckout(h, {
+      order_ref: "ORD-URL-3",
+      return_url: "https://shop.example/return",
+      cancel_url: "https://shop.example/cancel",
+    });
+    expect(ok.status).toBe(201);
+    expect(ok.body.return_url).toBe("https://shop.example/return");
+    expect(ok.body.cancel_url).toBe("https://shop.example/cancel");
+
+    const getRes = await call(h, "GET", `/v1/checkouts/${ok.body.id}`, undefined, h.keys.acme);
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.return_url).toBe("https://shop.example/return");
+    expect(getRes.body.cancel_url).toBe("https://shop.example/cancel");
+
+    const pubRes = await call(h, "GET", `/v1/public/checkouts/${ok.body.id}`);
+    expect(pubRes.status).toBe(200);
+    expect(pubRes.body.return_url).toBe("https://shop.example/return");
+    expect(pubRes.body.cancel_url).toBe("https://shop.example/cancel");
+  });
+
+  it("currency_rule_refuses_non_usd_with_named_code_and_accepts_usd_cents", async () => {
+    const h = harness();
+    // Unsupported currency fails with named code unsupported_currency
+    const eur = await call(
+      h,
+      "POST",
+      "/v1/checkouts",
+      { order_ref: "ORD-CURR-1", currency: "EUR", amount_usd: "10.00" },
+      h.keys.acme,
+      { "idempotency-key": "k-curr-1" },
+    );
+    expect(eur.status).toBe(400);
+    expect(eur.body.error.code).toBe("unsupported_currency");
+
+    const gbp = await call(
+      h,
+      "POST",
+      "/v1/checkouts",
+      { order_ref: "ORD-CURR-2", currency: "GBP", amount_usd: "10.00" },
+      h.keys.acme,
+      { "idempotency-key": "k-curr-2" },
+    );
+    expect(gbp.status).toBe(400);
+    expect(gbp.body.error.code).toBe("unsupported_currency");
+
+    // USD is accepted with amount_cents
+    const usd = await call(
+      h,
+      "POST",
+      "/v1/checkouts",
+      { order_ref: "ORD-CURR-3", currency: "USD", amount_cents: 2999 },
+      h.keys.acme,
+      { "idempotency-key": "k-curr-3" },
+    );
+    expect(usd.status).toBe(201);
+    expect(usd.body.amount_usd).toBe("29.99");
+    expect(usd.body.amount_cents).toBe(2999);
+    expect(usd.body.currency).toBe("USD");
+
+    // amount_usd_cents is also accepted
+    const usdCents = await call(
+      h,
+      "POST",
+      "/v1/checkouts",
+      { order_ref: "ORD-CURR-4", amount_usd_cents: 1550 },
+      h.keys.acme,
+      { "idempotency-key": "k-curr-4" },
+    );
+    expect(usdCents.status).toBe(201);
+    expect(usdCents.body.amount_usd).toBe("15.50");
+    expect(usdCents.body.amount_cents).toBe(1550);
+  });
+
+  it("webhook_payloads_carry_order_ref_checkout_id_amount_cents_transactions_and_timestamp", async () => {
+    const h = harness();
+    await createCheckout(h, { order_ref: "ORD-WH-1", amount_usd: "12.34" });
+
+    const rawEvent: IndexedEvent = {
+      id: "ev_1",
+      type: "checkout_paid",
+      created: 1_762_768_800,
+      data: {
+        token_id: "c-101",
+        tx_hash: "0xbookingtx123",
+        origin_tx: "0xorigintx456",
+      },
+      indexed: true,
+    };
+
+    const expanded = expandEvents(rawEvent, [h.module], h.context());
+    expect(expanded).toHaveLength(2);
+    const ev = expanded[1]!;
+    expect(ev.type).toBe("checkout.paid");
+    expect(ev.data).toMatchObject({
+      checkout_id: "c-101",
+      token_id: "c-101",
+      order_ref: "ORD-WH-1",
+      amount_usd: "12.34",
+      amount_cents: 1234,
+      amount_usd_cents: 1234,
+      transactions: {
+        origin: "0xorigintx456",
+        booking: "0xbookingtx123",
+      },
+      status: "paid",
+    });
+    expect(typeof ev.data.timestamp).toBe("string");
+  });
+
+  it("webhook_delivery_receiver_verifies_signature_and_accepts_payload", async () => {
+    const h = harness();
+    await createCheckout(h, { order_ref: "ORD-RCV-1", amount_usd: "50.00" });
+    const store = createMemoryStores().api;
+    const secret = "whsec_shopify_secret_123";
+    store.saveWebhookEndpoint(ACME, {
+      id: "whe_shopify",
+      url: "https://shop.example/webhooks/openrail",
+      secret,
+      events: ["checkout.paid"],
+    });
+
+    let receivedPayload: Record<string, unknown> | null = null;
+    let signatureVerified = false;
+
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const rawSig = headers["Openrail-Signature"] ?? "";
+      const body = String(init?.body ?? "");
+
+      // Documented verification algorithm:
+      // Openrail-Signature: t=<timestamp>,v1=<hmac-sha256(secret, t + "." + body)>
+      const parsed = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(rawSig);
+      if (parsed) {
+        const t = Number(parsed[1]);
+        const expected = signWebhook(secret, t, body);
+        if (rawSig === expected) {
+          signatureVerified = true;
+          receivedPayload = JSON.parse(body);
+          return new Response("OK", { status: 200 });
+        }
+      }
+      return new Response("Unauthorized", { status: 401 });
+    });
+
+    const worker = new WebhookWorker({
+      events: stream([
+        event(1, "checkout_paid", "c-101", {
+          order_ref: "ORD-RCV-1",
+          booking_tx: "0xbook999",
+          origin_tx: "0xorig888",
+        }),
+      ]),
+      store,
+      fetchImpl,
+      validateUrl: async () => undefined,
+      clock: () => NOW,
+      expand: (e) => expandEvents(e, [h.module], h.context()),
+    });
+
+    await worker.runOnce();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(signatureVerified).toBe(true);
+    expect(receivedPayload).toMatchObject({
+      type: "checkout.paid",
+      data: {
+        checkout_id: "c-101",
+        order_ref: "ORD-RCV-1",
+        amount_cents: 5000,
+        transactions: {
+          booking: "0xbook999",
+          origin: "0xorig888",
+        },
+      },
+    });
+  });
+
+  it("finished_checkout_is_read_from_chain_and_indexer_once_across_multiple_reads", async () => {
+    let indexerReceiptCalls = 0;
+    const mockIndexer: NonNullable<ApiDeps["indexer"]> = {
+      listEvents: async () => ({ data: [], next_cursor: null }),
+      listReceipts: async () => {
+        indexerReceiptCalls += 1;
+        return [{ tx_hash: "0x123", amount: "2000000" }];
+      },
+    } as unknown as NonNullable<ApiDeps["indexer"]>;
+
+    const h = harness({ indexer: mockIndexer });
+    const { body: created } = await createCheckout(h, { order_ref: "ORD-SETTLE-1" });
+    const id = created.id;
+
+    // Simulate payment on chain
+    h.chain.claims.set(id, claimView({ token_id: id, booked_total: "2000000", status: "Paid" }));
+
+    // Reset spy counts before reading
+    h.claimSpy.mockClear();
+    h.checkoutStateSpy.mockClear();
+    indexerReceiptCalls = 0;
+
+    // First read: reads from chain and indexer, and settles into docs NS_SETTLED
+    const r1 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r1.status).toBe(200);
+    expect(r1.body.status).toBe("paid");
+    expect(h.claimSpy).toHaveBeenCalledTimes(1);
+    expect(h.checkoutStateSpy).toHaveBeenCalledTimes(1);
+    expect(indexerReceiptCalls).toBe(1);
+
+    // Subsequent API reads: served from NS_SETTLED copy, chain & indexer NOT called again
+    const r2 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r2.status).toBe(200);
+    expect(r2.body.status).toBe("paid");
+    expect(h.claimSpy).toHaveBeenCalledTimes(1);
+    expect(h.checkoutStateSpy).toHaveBeenCalledTimes(1);
+    expect(indexerReceiptCalls).toBe(1);
+
+    // Public /v1/public/checkouts/<id> read: also served from settled copy
+    const r3 = await call(h, "GET", `/v1/public/checkouts/${id}`);
+    expect(r3.status).toBe(200);
+    expect(r3.body.status).toBe("paid");
+    expect(h.claimSpy).toHaveBeenCalledTimes(1);
+    expect(h.checkoutStateSpy).toHaveBeenCalledTimes(1);
+    expect(indexerReceiptCalls).toBe(1);
+  });
+
+  it("open_checkout_is_read_from_chain_again_on_each_read", async () => {
+    const h = harness();
+    const { body: created } = await createCheckout(h, { order_ref: "ORD-OPEN-1" });
+    const id = created.id;
+
+    h.claimSpy.mockClear();
+    h.checkoutStateSpy.mockClear();
+
+    // First read when pending
+    const r1 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r1.status).toBe(200);
+    expect(r1.body.status).toBe("pending");
+    expect(h.claimSpy).toHaveBeenCalledTimes(1);
+
+    // Second read when still pending: chain is read again so live state updates can be seen
+    const r2 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r2.status).toBe(200);
+    expect(r2.body.status).toBe("pending");
+    expect(h.claimSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("late_payment_with_held_amount_counts_as_open_until_accepted_or_refunded", async () => {
+    const h = harness();
+    const { body: created } = await createCheckout(h, { order_ref: "ORD-LATE-1" });
+    const id = created.id;
+
+    // Past expiry, but state has late: true, held_amount > 0, not yet accepted/refunded
+    h.advance(20 * 60 * 1000);
+    h.chain.states.set(id, {
+      expiry: Math.floor(NOW.getTime() / 1000) + 900,
+      late: true,
+      held_amount: "2000000",
+      accepted: false,
+      refunded: false,
+      order_ref: "ORD-LATE-1",
+    });
+
+    h.claimSpy.mockClear();
+    // Read 1: in late open state
+    const r1 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r1.status).toBe(200);
+    expect(r1.body.status).toBe("late");
+    expect(h.claimSpy).toHaveBeenCalledTimes(1);
+
+    // Read 2: still open (not settled), reads chain again
+    const r2 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r2.status).toBe(200);
+    expect(r2.body.status).toBe("late");
+    expect(h.claimSpy).toHaveBeenCalledTimes(2);
+
+    // Now accept the late payment -> accepted
+    h.chain.states.set(id, {
+      expiry: Math.floor(NOW.getTime() / 1000) + 900,
+      late: true,
+      held_amount: "0",
+      accepted: true,
+      refunded: false,
+      order_ref: "ORD-LATE-1",
+    });
+
+    const r3 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r3.status).toBe(200);
+    expect(r3.body.status).toBe("accepted");
+    expect(h.claimSpy).toHaveBeenCalledTimes(3);
+
+    // Advance past settle grace -> now it settles
+    h.advance(3600 * 1000);
+    const r4 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r4.status).toBe(200);
+    expect(r4.body.status).toBe("accepted");
+    expect(h.claimSpy).toHaveBeenCalledTimes(4);
+
+    // Read 5: settled! No new chain read
+    const r5 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r5.status).toBe(200);
+    expect(r5.body.status).toBe("accepted");
+    expect(h.claimSpy).toHaveBeenCalledTimes(4);
+  });
+
+  it("hosted_page_and_api_return_checking_status_when_chain_cannot_be_read", async () => {
+    let failChain = false;
+    const failingChain: CheckoutChain = {
+      claim: async (token) => {
+        if (failChain) throw new Error("RPC network timeout");
+        return claimView({ token_id: token });
+      },
+      checkoutState: async () => {
+        if (failChain) throw new Error("RPC rate limit exceeded");
+        return null;
+      },
+      paymentLog: async () => [],
+    };
+
+    const h = harness({ chain: failingChain });
+    const { body: created } = await createCheckout(h, { order_ref: "ORD-RPC-1" });
+    const id = created.id;
+
+    // Normal read works
+    const r1 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r1.status).toBe(200);
+    expect(r1.body.status).toBe("pending");
+
+    // Now simulate chain failure (RPC down / quota exhausted)
+    failChain = true;
+
+    // API get does not return 500; returns 200 with status "checking"
+    const r2 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r2.status).toBe(200);
+    expect(r2.body.status).toBe("checking");
+
+    // Hosted page public view does not throw 500; returns 200 with status "checking"
+    const r3 = await call(h, "GET", `/v1/public/checkouts/${id}`);
+    expect(r3.status).toBe(200);
+    expect(r3.body.status).toBe("checking");
+    expect(r3.body.order_ref).toBe("ORD-RPC-1");
   });
 
   async function withTwoForWebhook() {

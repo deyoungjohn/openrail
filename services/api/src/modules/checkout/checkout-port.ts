@@ -17,6 +17,7 @@ export interface CheckoutInput {
   orderRef: string;
   expiryMinutes: number;
   returnUrl?: string;
+  cancelUrl?: string;
   itemsSha256?: string;
 }
 

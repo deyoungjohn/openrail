@@ -33,6 +33,7 @@ export interface ApiModuleContext {
   withIdempotency(request: ApiRequest, run: () => Promise<ApiResponse>): Promise<ApiResponse>;
   /** Read-only contract view; the module supplies its own method name and arguments. */
   view(contractMethod: string, args: object): Promise<unknown>;
+  indexer?: import("./app.js").IndexerPort;
 }
 
 export interface ApiModule {
