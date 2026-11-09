@@ -413,9 +413,13 @@ function CheckoutCard({
   return (
     <section aria-label="Checkout" className="surface-card overflow-hidden">
       <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
-        <div>
-          <p className="caption uppercase tracking-wide">{checkoutCopy.order(c.order_ref)}</p>
-          <h1 className="text-[22px] leading-8 font-bold">{checkoutCopy.title(c.merchant)}</h1>
+        <div className="min-w-0 flex-1">
+          <p className="caption uppercase tracking-wide truncate">
+            {checkoutCopy.order(c.order_ref)}
+          </p>
+          <h1 className="text-[22px] leading-8 font-bold break-words">
+            {checkoutCopy.title(c.merchant)}
+          </h1>
         </div>
         {chip ? <StatusChip status={chip} /> : null}
       </div>
@@ -455,15 +459,15 @@ function CheckoutCard({
       </div>
 
       <dl className="grid gap-x-6 gap-y-4 px-5 py-4 text-[14px] sm:grid-cols-2 sm:px-6">
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <dt className="caption">{p.claimAccountLabel}</dt>
-          <dd>
+          <dd className="break-all">
             <AddressChip value={c.claim_account} />
           </dd>
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <dt className="caption">Order reference</dt>
-          <dd className="tabular font-medium">{c.order_ref}</dd>
+          <dd className="tabular font-medium break-all">{c.order_ref}</dd>
         </div>
       </dl>
 
@@ -796,6 +800,12 @@ export function CheckoutScreen({ id }: { id: string }) {
     </div>
   );
 
+  const isPaid =
+    effectiveCheckout.status === "paid" ||
+    effectiveCheckout.status === "accepted" ||
+    effectiveCheckout.status === "refunded" ||
+    (BigInt(c.amount_due || "0") > 0n && BigInt(c.outstanding || "0") === 0n);
+
   return (
     <div className="mx-auto w-full max-w-[640px] space-y-6">
       <CheckoutCard
@@ -808,6 +818,16 @@ export function CheckoutScreen({ id }: { id: string }) {
       />
 
       <div className="min-w-0 space-y-6">
+        {isPaid ? (
+          <div
+            role="status"
+            className="surface-card flex items-center gap-2 p-6 text-[18px] font-semibold text-success-text"
+          >
+            <CheckCircle2 size={22} strokeWidth={1.5} className="text-success-text" aria-hidden />
+            {p.mixAllPaid}
+          </div>
+        ) : null}
+
         {!quotable ? null : routes.length === 0 ? (
           <div className="surface-card">
             <EmptyState title={p.noRoutes} />
@@ -829,18 +849,20 @@ export function CheckoutScreen({ id }: { id: string }) {
           </Card>
         )}
 
-        {legs.map((l, i) => (
-          <SessionView
-            key={l.session.id}
-            session={l.session}
-            route={l.route}
-            canRefresh={quotable}
-            partLabel={split ? p.mixPart(i + 1) : undefined}
-            onStage={(stage) => setStage(l.session.id, stage)}
-            onNewQuote={() => void start(l.route, refund, l.cents, split, l.session.id)}
-            starting={starting}
-          />
-        ))}
+        {!isPaid && quotable
+          ? legs.map((l, i) => (
+              <SessionView
+                key={l.session.id}
+                session={l.session}
+                route={l.route}
+                canRefresh={quotable}
+                partLabel={split ? p.mixPart(i + 1) : undefined}
+                onStage={(stage) => setStage(l.session.id, stage)}
+                onNewQuote={() => void start(l.route, refund, l.cents, split, l.session.id)}
+                starting={starting}
+              />
+            ))
+          : null}
 
         {quotable && starting ? <Card title={p.getting} state="loading" /> : null}
 

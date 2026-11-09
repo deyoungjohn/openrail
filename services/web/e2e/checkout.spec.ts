@@ -404,4 +404,183 @@ for (const scheme of ["light", "dark"] as const) {
       .analyze();
     expect(r.violations).toEqual([]);
   });
+
+  test(`checkout hosted page state: loading at 360px (${scheme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    let resolveRoute: () => void = () => {};
+    const routePromise = new Promise<void>((r) => {
+      resolveRoute = r;
+    });
+    await page.route(`${API}/v1/public/checkouts/**`, async (route) => {
+      await routePromise;
+      return route.fulfill({ status: 200, headers: CORS, body: JSON.stringify({}) });
+    });
+    await page.goto("/c/c-101");
+    await expect(page.locator("[aria-busy]").first()).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `reports/screenshots/checkout/loading-${scheme}-360px.png` });
+    resolveRoute();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+
+  test(`checkout hosted page state: empty at 360px (${scheme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockCheckout(page, { checkoutStatus: 404 });
+    await page.goto("/c/c-101");
+    await expect(page.getByText("We can't find this checkout")).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `reports/screenshots/checkout/empty-${scheme}-360px.png` });
+  });
+
+  test(`checkout hosted page state: error at 360px (${scheme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockCheckout(page, { checkoutStatus: 500 });
+    await page.goto("/c/c-101");
+    await expect(page.getByText("We couldn't load this checkout")).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `reports/screenshots/checkout/error-${scheme}-360px.png` });
+  });
+
+  test(`checkout hosted page state: expired at 360px (${scheme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockCheckout(page, {
+      checkout: {
+        id: "c-101",
+        token_id: "c-101",
+        claim_account: "c-101.claims.openrail.near",
+        merchant: "acme.openrail.near",
+        order_ref: "ORD-EXP",
+        amount_usd: "2.00",
+        amount_due: "2000000",
+        outstanding: "2000000",
+        paid_total: "0",
+        surplus: "0",
+        status: "expired",
+        expires_at: inMinutes(-5),
+        return_url: "https://shop.example/done",
+        routes: fixture("pay.claims.get").routes,
+        sessions: [],
+      },
+    });
+    await page.goto("/c/c-101");
+    await expect(page.getByText("This checkout has expired").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `reports/screenshots/checkout/expired-${scheme}-360px.png` });
+  });
+
+  test(`checkout hosted page state: paid at 360px (${scheme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockCheckout(page, {
+      checkout: {
+        id: "c-101",
+        token_id: "c-101",
+        claim_account: "c-101.claims.openrail.near",
+        merchant: "acme.openrail.near",
+        order_ref: "ORD-PAID",
+        amount_usd: "2.00",
+        amount_due: "2000000",
+        outstanding: "0",
+        paid_total: "2000000",
+        surplus: "0",
+        status: "paid",
+        expires_at: inMinutes(15),
+        return_url: "https://shop.example/done",
+        routes: fixture("pay.claims.get").routes,
+        sessions: [],
+      },
+    });
+    await page.goto("/c/c-101");
+    await expect(page.getByText("All parts paid")).toBeVisible();
+    await expect(page.getByText("Your payment is complete.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
+    await expect(page.getByText("Your price")).toHaveCount(0);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `reports/screenshots/checkout/paid-${scheme}-360px.png` });
+  });
+
+  test(`checkout hosted page state: late at 360px (${scheme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockCheckout(page, {
+      checkout: {
+        id: "c-101",
+        token_id: "c-101",
+        claim_account: "c-101.claims.openrail.near",
+        merchant: "acme.openrail.near",
+        order_ref: "ORD-LATE",
+        amount_usd: "2.00",
+        amount_due: "2000000",
+        outstanding: "0",
+        paid_total: "2000000",
+        surplus: "0",
+        status: "late",
+        expires_at: inMinutes(-15),
+        return_url: "https://shop.example/done",
+        routes: fixture("pay.claims.get").routes,
+        sessions: [],
+      },
+    });
+    await page.goto("/c/c-101");
+    await expect(page.getByText("Paid after expiry").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
+    await expect(page.getByText("Your price")).toHaveCount(0);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `reports/screenshots/checkout/late-${scheme}-360px.png` });
+  });
+
+  test(`checkout hosted page state: checking at 360px (${scheme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockCheckout(page, {
+      checkout: {
+        id: "c-101",
+        token_id: "c-101",
+        claim_account: "c-101.claims.openrail.near",
+        merchant: "acme.openrail.near",
+        order_ref: "ORD-CHECKING",
+        amount_usd: "2.00",
+        amount_due: "2000000",
+        outstanding: "2000000",
+        paid_total: "0",
+        surplus: "0",
+        status: "checking",
+        expires_at: inMinutes(15),
+        return_url: "https://shop.example/done",
+        routes: fixture("pay.claims.get").routes,
+        sessions: [],
+      },
+    });
+    await page.goto("/c/c-101");
+    await expect(page.getByText("Checking payment status").first()).toBeVisible();
+    await expect(page.getByText("Pay this invoice")).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `reports/screenshots/checkout/checking-${scheme}-360px.png` });
+  });
 }
