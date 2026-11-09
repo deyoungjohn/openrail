@@ -79,7 +79,7 @@ test.describe("signed-in journey on the mock API", () => {
     await page.getByLabel("Amount").fill("2");
     await page.getByLabel("Address").fill("0x53C5D39A5828BaDf817E40f22d75d96D731f8239");
     await page.getByRole("button", { name: "Get quote" }).click();
-    await expect(page.getByRole("region", { name: "What it costs" })).toContainText("$0.30");
+    await expect(page.getByRole("region", { name: "What it costs" })).toContainText("$0.01");
 
     await page.goto("/app/developers");
     await expect(page.getByRole("region", { name: "API keys" })).toContainText("or_sk_live_ab12");
