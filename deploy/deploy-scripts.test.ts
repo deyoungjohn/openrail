@@ -48,8 +48,24 @@ function applyEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
     SHIM_LOG: LOG,
     SHIM_HOME: HOME,
     SHIM_CURL_MODE: "health",
+    SHIM_ENV_FAIL: join(BASE, "health-env-fail"),
     ...extra,
   };
+}
+
+function smallPack(name: string, unit: string, envFile: string): string {
+  const dir = mkdtempSync(join(BASE, "small-pack-"));
+  mkdirSync(join(dir, "deploy/systemd"), { recursive: true });
+  writeFileSync(
+    join(dir, `deploy/systemd/${unit}`),
+    `[Service]\nEnvironmentFile=${envFile}\nExecStart=/bin/true\n`,
+  );
+  copyFileSync(join(REPO, "deploy/healthcheck.sh"), join(dir, "deploy/healthcheck.sh"));
+  chmodSync(join(dir, "deploy/healthcheck.sh"), 0o755);
+  const pack = join(HOME, `openrail-server-${name}.tar.gz`);
+  execFileSync("tar", ["-czf", pack, "-C", dir, "."]);
+  rmSync(dir, { recursive: true, force: true });
+  return pack;
 }
 
 function run(script: string, args: string[], extra: Record<string, string> = {}) {
@@ -95,13 +111,29 @@ beforeAll(() => {
   mkdirSync(join(BASE, "opt"), { recursive: true });
   mkdirSync(join(BASE, "etc"), { recursive: true });
   mkdirSync(join(BASE, "units"), { recursive: true });
+  for (const name of ["api", "issuer", "watcher", "indexer", "web"]) {
+    writeFileSync(join(BASE, `etc/${name}.env`), "", { mode: 0o600 });
+  }
   writeShim(
     "id",
     'if [[ -n "${SHIM_ID_REAL:-}" ]]; then exec /usr/bin/id "$@"; fi; if [[ "${1:-}" == "-u" ]]; then echo 0; else /usr/bin/id "$@"; fi',
   );
   writeShim(
     "systemctl",
-    'if [[ "${1:-}" == "restart" ]]; then unit="${2:-}"; if [[ ! -f "$OPENRAIL_UNIT_DIR/$unit" ]]; then printf "systemctl missing %s\\n" "$unit" >> "$SHIM_LOG"; exit 1; fi; fi; printf "systemctl %s\\n" "$*" >> "$SHIM_LOG"; exit 0',
+    `if [[ "\${1:-}" == "restart" ]]; then
+  unit="\${2:-}"
+  unitfile="$OPENRAIL_UNIT_DIR/$unit"
+  if [[ ! -f "$unitfile" ]]; then printf "systemctl missing %s\\n" "$unit" >> "$SHIM_LOG"; exit 1; fi
+  envline="$(grep -m1 -E '^EnvironmentFile=[^-]' "$unitfile" 2>/dev/null || true)"
+  envpath="\${envline#EnvironmentFile=}"
+  if [[ -n "$envpath" && ! -f "$OPENRAIL_ETC/$(basename "$envpath")" ]]; then
+    printf "systemctl env-missing %s\\n" "$unit" >> "$SHIM_LOG"
+    touch "$SHIM_ENV_FAIL"
+  else
+    rm -f "$SHIM_ENV_FAIL"
+  fi
+fi
+printf "systemctl %s\\n" "$*" >> "$SHIM_LOG"; exit 0`,
   );
   writeShim("journalctl", 'printf "journalctl %s\\n" "$*" >> "$SHIM_LOG"; exit 0');
   writeShim("chown", 'printf "chown %s\\n" "$*" >> "$SHIM_LOG"; exit 0');
@@ -113,6 +145,7 @@ beforeAll(() => {
     "curl",
     `mode="\${SHIM_CURL_MODE:-health}"
 if [[ "$mode" == "health" ]]; then
+  if [[ -f "$SHIM_ENV_FAIL" ]]; then exit 1; fi
   if [[ -n "\${SHIM_HEALTH_FAIL_FIRST:-}" ]]; then
     n="$(cat "$SHIM_HEALTH_COUNTER" 2>/dev/null || echo 0)"
     n=$((n + 1))
@@ -152,6 +185,53 @@ exit 0`,
 afterAll(() => {
   rmSync(BASE, { recursive: true, force: true });
 }, 120_000);
+
+describe("split-env", () => {
+  it("copies every fallback spelling into each service that reads NEAR_RPC_URL", () => {
+    const src = join(BASE, "combined.env");
+    writeFileSync(
+      src,
+      [
+        "NEAR_RPC_URL=https://primary.example",
+        "NEAR_RPC_URL_FALLBACK=https://fallback.example",
+        "NEAR_RPC_URL_FALLBACK_2=https://fallback-2.example",
+        "NEAR_RPC_URL_FALLBACK1=https://fallback-1.example",
+      ].join("\n"),
+      { mode: 0o600 },
+    );
+    const out = join(BASE, "split-all");
+    const result = spawnSync("bash", [join(REPO, "deploy/split-env.sh"), src, out], {
+      env: applyEnv(),
+      encoding: "utf8",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    for (const service of ["api", "issuer", "watcher", "indexer"]) {
+      const text = readFileSync(join(out, `${service}.env`), "utf8");
+      expect(text).toContain("NEAR_RPC_URL=https://primary.example");
+      expect(text).toContain("NEAR_RPC_URL_FALLBACK=https://fallback.example");
+      expect(text).toContain("NEAR_RPC_URL_FALLBACK_2=https://fallback-2.example");
+      expect(text).toContain("NEAR_RPC_URL_FALLBACK1=https://fallback-1.example");
+    }
+    const web = readFileSync(join(out, "web.env"), "utf8");
+    expect(web).not.toContain("NEAR_RPC_URL");
+  }, 120_000);
+
+  it("still works with only the primary RPC URL", () => {
+    const src = join(BASE, "primary-only.env");
+    writeFileSync(src, "NEAR_RPC_URL=https://only.example\n", { mode: 0o600 });
+    const out = join(BASE, "split-primary");
+    const result = spawnSync("bash", [join(REPO, "deploy/split-env.sh"), src, out], {
+      env: applyEnv(),
+      encoding: "utf8",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    for (const service of ["api", "issuer", "watcher", "indexer"]) {
+      const text = readFileSync(join(out, `${service}.env`), "utf8");
+      expect(text).toContain("NEAR_RPC_URL=https://only.example");
+      expect(text).not.toContain("NEAR_RPC_URL_FALLBACK");
+    }
+  }, 120_000);
+});
 
 describe("openrail-apply end to end", () => {
   const first = join(HOME, "openrail-server-first.tar.gz");
@@ -283,6 +363,15 @@ describe("openrail-apply end to end", () => {
     expect(result.status, result.stderr).toBe(0);
     expect([...tmpFetchDirs()].filter((name) => !before.has(name))).toEqual([]);
   }, 300_000);
+  it("fails a release and rolls back when a core unit has no env file", () => {
+    const before = currentRelease();
+    const pack = smallPack("core-missing", "openrail-api.service", "/etc/openrail/api-missing.env");
+    const result = run(APPLY, [pack]);
+    expect(result.status).not.toBe(0);
+    expect(currentRelease()).toBe(before);
+    expect(shimCalls()).toContain("systemctl env-missing openrail-api.service");
+  }, 300_000);
+
   it("installs and restarts a private module unit and its env template", () => {
     const dir = mkdtempSync(join(BASE, "private-pack-"));
     mkdirSync(join(dir, "deploy/systemd"), { recursive: true });

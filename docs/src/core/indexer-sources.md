@@ -6,16 +6,17 @@ alternatives below are **exploring** and not switched on.
 ## Calls per action
 
 - **Quiet sweep**: one NearBlocks `/v1/account/<root>/txns` call per page, then one
-  RPC `EXPERIMENTAL_tx_status` per new transaction. The baseline is five minutes with
-  two pages, so a quiet day costs at most 288 NearBlocks calls before the budget cap.
-- **Boost**: `POST /poke` (loopback) raises the cadence to 20 s for five minutes, which
-  is at most 15 NearBlocks calls, and only while the day's budget remains.
+  RPC `EXPERIMENTAL_tx_status` per new transaction. The default cadence is 30 minutes,
+  one page per poll, so a quiet day costs about 48 NearBlocks calls; extra pages only
+  follow new transactions. The 380/day budget remains the hard cap.
+- **Boost**: `POST /poke` (loopback) raises the cadence to 60 s for five minutes, which
+  is at most 5 NearBlocks calls, and only while the day's budget remains.
 - **Registered transaction**: `POST /register-tx` costs one RPC
   `EXPERIMENTAL_tx_status` and no NearBlocks call.
 - **Receipt**: served from the locally indexed `booked` row; no provider call.
 
-The API calls `/poke` when creating a pay session or quote; the watcher calls it after
-`reconcile`.
+The API calls `/poke` when creating a pay session or quote; the issuer and the watcher
+call it after their work.
 
 ## Budget governor
 
