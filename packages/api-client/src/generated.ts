@@ -742,7 +742,7 @@ export interface MachineReceipt {
   amount_usd: string | null;
   paid_amount: string;
   paid_asset: string;
-  network: Record<string, unknown> | null;
+  network: string | null;
   fee_usd: string;
   payer_tx: Record<string, unknown> | null;
   near_tx: string;

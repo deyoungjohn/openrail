@@ -511,7 +511,13 @@ export class ApiApp {
       amount_usd: invoice?.amount_usd ?? null,
       paid_amount: String(receipt.amount ?? ""),
       paid_asset: String(receipt.asset ?? ""),
-      network: receipt.origin_tx ?? null,
+      network:
+        receipt.origin_tx !== null &&
+        receipt.origin_tx !== undefined &&
+        typeof receipt.origin_tx === "object" &&
+        typeof (receipt.origin_tx as { chain?: unknown }).chain === "string"
+          ? String((receipt.origin_tx as { chain: string }).chain)
+          : null,
       fee_usd: feeLine?.amount_usd ?? "0.00",
       payer_tx: receipt.origin_tx ?? null,
       near_tx: nearHashes[0] ?? bookingTxHash,
@@ -1576,17 +1582,19 @@ export class ApiApp {
       };
     }
 
+    // Receipt links are public bearer links: the booking hash is not guessable. They never list anything.
     const receiptPdfMatch = /^\/v1\/receipts\/([^/]+)\.pdf$/.exec(path);
     if (receiptPdfMatch !== null && method === "GET") {
       const receipt = await this.receiptMachine(receiptPdfMatch[1] ?? "");
+      const content = renderReceiptPdfBase64(receipt);
       return {
         status: 200,
         body: {
           receipt_id: receipt.receipt_id,
           filename: `receipt-${receipt.invoice_number}.pdf`,
           content_type: "application/pdf",
-          content_base64: renderReceiptPdfBase64(receipt),
-          sha256: receipt.terms_fingerprint,
+          content_base64: content,
+          sha256: sha256Hex0x(Buffer.from(content, "base64")),
           generated_at: nowIso(this.clock),
         },
       };

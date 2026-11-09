@@ -3056,7 +3056,7 @@
             "type": "string"
           },
           "network": {
-            "type": ["object", "null"]
+            "type": ["string", "null"]
           },
           "fee_usd": {
             "type": "string"

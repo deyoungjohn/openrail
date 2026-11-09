@@ -3,6 +3,7 @@ import { ApiApp, type ApiDeps, ApiError } from "./app.js";
 import { AuthStore } from "./auth.js";
 import { UnsafeWebhookUrl } from "./webhook-url.js";
 import { termsHash } from "./terms.js";
+import { sha256Hex0x } from "./crypto.js";
 
 const clock = () => new Date("2026-11-02T10:00:00Z");
 const config = {
@@ -800,7 +801,6 @@ describe("receipt PDF route", () => {
     const h = harness();
     const created = await h.app.handle(request("POST", "/v1/invoices", invoiceBody, h.secret));
     expect(created.status).toBe(201);
-    const invoice = created.body as { terms_hash: string };
     const store = (h.app as unknown as { store: { saveReceipt: (...args: unknown[]) => void } })
       .store;
     store.saveReceipt("rcpt_0xbooking", "c-1", "0xbooking", {
@@ -828,6 +828,18 @@ describe("receipt PDF route", () => {
     expect(body.filename).toBe("receipt-INV-2026-001.pdf");
     expect(body.content_type).toBe("application/pdf");
     expect(body.content_base64.startsWith("JVBERi0")).toBe(true);
-    expect(body.sha256).toBe(invoice.terms_hash);
+    expect(body.sha256).toBe(sha256Hex0x(Buffer.from(body.content_base64, "base64")));
+
+    const machine = await h.app.handle(
+      request("GET", "/v1/receipts/0xbooking.json", undefined, ""),
+    );
+    expect(machine.status).toBe(200);
+    expect((machine.body as { network: unknown }).network).toBe("base");
+    expect((machine.body as { network: unknown }).network).not.toBe("0xpayer");
+
+    for (const path of ["/v1/receipts/unknown.pdf", "/v1/receipts/unknown.json"]) {
+      const missing = await h.app.handle(request("GET", path, undefined, ""));
+      expect(missing.status).toBe(404);
+    }
   });
 });

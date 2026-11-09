@@ -473,7 +473,7 @@ export interface ReceiptDocument {
   amount_usd?: string | null;
   paid_amount: string;
   paid_asset: string;
-  network?: { chain?: string; hash?: string } | null;
+  network?: string | null;
   fee_usd?: string | null;
   payer_tx?: { hash?: string; chain?: string; sender?: string } | null;
   near_tx: string;
@@ -550,7 +550,7 @@ export function renderReceiptPdf(receipt: ReceiptDocument): Uint8Array {
   text(builder, 360, builder.y, 8, "/F1", GRAY, `Fee $${receipt.fee_usd ?? "0.00"}`);
   builder.y -= 30;
 
-  const network = receipt.network?.chain ?? receipt.payer_tx?.chain ?? "—";
+  const network = receipt.network ?? receipt.payer_tx?.chain ?? "—";
   for (const [caption, value] of [
     ["PAYER'S TRANSACTION", receipt.payer_tx?.hash ?? "—"],
     ["NEAR BOOKING TRANSACTION", receipt.near_tx],

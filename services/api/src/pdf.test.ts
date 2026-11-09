@@ -301,7 +301,7 @@ describe("receipt PDF", () => {
     amount_usd: "12.50",
     paid_amount: "12500000",
     paid_asset: "nep141:usdc",
-    network: { chain: "base" },
+    network: "base",
     fee_usd: "0.00",
     payer_tx: { hash: "0xpayer" },
     near_tx: "0xnear",
