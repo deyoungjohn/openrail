@@ -10,6 +10,7 @@
  * must move, it prints the hosted page URL, the deposit address and the amount, waits for the
  * human to send it, and checks the outcome on chain and in the API.
  */
+import { hasIndexedEvent } from "./checkout-events.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -163,7 +164,7 @@ async function newSession(
 }
 
 function tellToPay(
-  ctx: CheckoutCtx,
+  _ctx: CheckoutCtx,
   payUrl: string,
   session: SessionView,
   route: RouteView | undefined,
@@ -176,20 +177,6 @@ function tellToPay(
   console.log(`  >>> hosted checkout: ${payUrl}`);
   console.log(`  >>> deposit address: ${session.deposit_address}`);
   console.log(`  >>> quote amount:    ${amount}   (valid until ${session.deadline})`);
-}
-
-async function hasCheckoutEvent(
-  ctx: CheckoutCtx,
-  tokenId: string,
-  eventName: string,
-): Promise<boolean> {
-  const page = await readJson(`${ctx.indexer}/events?limit=200`, ctx.fetchImpl).catch(() => ({}));
-  const list = Array.isArray(page.data) ? (page.data as Array<Record<string, unknown>>) : [];
-  return list.some((entry) => {
-    const type = String(entry.event ?? entry.type ?? "");
-    const data = (entry.data ?? {}) as Record<string, unknown>;
-    return type === eventName && data.token_id === tokenId;
-  });
 }
 
 const STEPS: StepDef[] = [
@@ -212,7 +199,7 @@ const STEPS: StepDef[] = [
       });
       const claim = await claimOf(ctx, created.id);
       must(big(claim.booked_total) >= 2n * USDC, "booked_total < 2 USDC");
-      const notified = await hasCheckoutEvent(ctx, created.id, "checkout_paid");
+      const notified = await hasIndexedEvent(ctx, created.id, "checkout_paid");
       state.evidence = {
         token_id: created.id,
         session_id: session.id,
