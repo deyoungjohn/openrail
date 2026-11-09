@@ -315,6 +315,36 @@ describe("openrail-apply end to end", () => {
     expect(readFileSync(join(BASE, "etc/extra.env"), "utf8")).toContain("EXTRA_PORT=9000");
     expect(existsSync(envFile)).toBe(false);
   }, 300_000);
+  it("leaves a unit stopped, and says why, when its environment file does not exist", () => {
+    // The payout unit of a private build crash-looped on "Failed to load environment files" (9 Nov).
+    const dir = mkdtempSync(join(BASE, "lonely-pack-"));
+    mkdirSync(join(dir, "deploy/systemd"), { recursive: true });
+    mkdirSync(join(dir, "deploy/env"), { recursive: true });
+    mkdirSync(join(dir, "services/lonely"), { recursive: true });
+    writeFileSync(join(dir, "services/lonely/package.json"), '{"name":"@openrail/lonely"}\n');
+    writeFileSync(
+      join(dir, "deploy/systemd/openrail-lonely.service"),
+      "[Service]\nEnvironmentFile=/etc/openrail/lonely.env\nExecStart=/bin/true\n",
+    );
+    writeFileSync(join(dir, "deploy/env/lonely.env.example"), "LONELY_PORT=\n");
+    writeFileSync(
+      join(dir, "deploy/split-env.sh"),
+      readFileSync(join(REPO, "deploy/split-env.sh")),
+    );
+    writeFileSync(join(dir, "deploy/healthcheck.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    chmodSync(join(dir, "deploy/split-env.sh"), 0o755);
+    chmodSync(join(dir, "deploy/healthcheck.sh"), 0o755);
+    const pack = join(HOME, "openrail-server-lonely.tar.gz");
+    execFileSync("tar", ["-czf", pack, "-C", dir, "."]);
+    rmSync(dir, { recursive: true, force: true });
+
+    const result = run(APPLY, [pack]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("SKIPPED openrail-lonely.service");
+    expect(result.stdout).toContain("lonely.env");
+    expect(shimCalls()).not.toContain("systemctl restart openrail-lonely.service");
+    expect(shimCalls()).toContain("systemctl disable --now openrail-lonely.service");
+  }, 300_000);
 });
 
 describe("openrail-fetch end to end", () => {

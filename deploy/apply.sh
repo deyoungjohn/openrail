@@ -109,6 +109,16 @@ restart_all() { # restart_all <release dir>
   mapfile -t units < <(service_units "$rel")
   say "restarting: ${units[*]}"
   for unit in "${units[@]}"; do
+    # A unit whose environment file does not exist yet would crash-loop ("Failed to load environment files").
+    # Say what is missing, leave the unit stopped and carry on with the others.
+    local envline envpath
+    envline="$(grep -m1 -E '^EnvironmentFile=[^-]' "$rel/deploy/systemd/$unit" 2>/dev/null || true)"
+    envpath="${envline#EnvironmentFile=}"
+    if [[ -n "$envpath" && ! -f "$ETC/$(basename "$envpath")" ]]; then
+      say "SKIPPED $unit: $ETC/$(basename "$envpath") does not exist. Add its names to your openrail.env (see deploy/env/$(basename "$envpath").example), upload it with deploy/upload.sh --env, and apply again."
+      sysctl_run disable --now "$unit" >/dev/null 2>&1 || true
+      continue
+    fi
     sysctl_run enable "$unit" >/dev/null 2>&1 || true # start at boot (harmless when already on)
     sysctl_run restart "$unit"
   done
