@@ -334,6 +334,13 @@ export interface PaySessionStatus {
 }
 
 export interface PublicClaim {
+  issued_at?: string;
+  issue_tx?: string | null;
+  paid_at?: string | null;
+  payments?: Array<{
+    tx_hash: string;
+    near: boolean;
+  }>;
   token_id: string;
   invoice_number: string;
   issuer_legal_name: string;
@@ -368,6 +375,13 @@ export interface AckMessage {
 }
 
 export interface AckData {
+  issued_at?: string;
+  issue_tx?: string | null;
+  paid_at?: string | null;
+  payments?: Array<{
+    tx_hash: string;
+    near: boolean;
+  }>;
   token_id: string;
   invoice_number: string;
   claim_account: string;
@@ -542,6 +556,7 @@ export interface CashoutQuoteRequest {
   amount: U128;
   destination_chain: "base" | "arbitrum" | "optimism" | "polygon" | "solana" | "ethereum" | "near";
   address: string;
+  source_asset?: string;
 }
 
 export interface CashoutQuote {

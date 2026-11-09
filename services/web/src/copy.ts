@@ -778,6 +778,7 @@ export const copy = {
     intro:
       "Move USDC from your Openrail balance to another network. You see what the transfer costs before you sign anything.",
     available: "Available to cash out now:",
+    heldOn: (network: string) => `(USDC held as ${network})`,
     slider: "Share of what you can cash out",
     amount: "Amount",
     amountHelp: "In USDC, for example 25.50.",

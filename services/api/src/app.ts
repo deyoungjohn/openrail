@@ -150,6 +150,8 @@ export interface CashoutPort {
     address: string;
     /** The business account: where the provider returns the money if the cash-out fails. */
     refundTo: string;
+    /** The token the business holds on intents.near and the money is taken from. */
+    sourceAsset?: string;
   }): Promise<Record<string, unknown>>;
 }
 
@@ -191,6 +193,8 @@ export interface InvoiceRecord {
   terms: Terms;
   line_items?: LineItem[];
   fee_mode?: FeeMode;
+  /** The transaction that issued the claim on NEAR. */
+  issue_tx?: string;
   /** Set when the invoice was issued by a recurring template. */
   recurring_id?: string;
 }
@@ -527,6 +531,44 @@ export class ApiApp {
       terms_fingerprint: invoice?.terms_hash ?? String(receipt.terms_hash ?? ""),
       verify_command: `openrail-verify claim ${claimAccount} --terms-hash ${invoice?.terms_hash ?? String(receipt.terms_hash ?? "")}`,
     }) as unknown as ReceiptDocument;
+  }
+
+  /**
+   * What a client may see of an invoice's life, on the pay and ack pages: the lines, the day it was issued, the
+   * transaction that issued it and, once paid, the day and the transactions of each payment. A page reached by its
+   * unguessable link already shows the invoice; the receipts are public by their own links.
+   */
+  private async publicHistory(invoice: InvoiceRecord): Promise<{
+    issued_at: string;
+    issue_tx: string | null;
+    paid_at: string | null;
+    payments: { tx_hash: string; near: boolean }[];
+  }> {
+    let receipts: Record<string, unknown>[] = [];
+    try {
+      receipts =
+        this.deps.indexer === undefined
+          ? this.store.listReceipts(invoice.token_id)
+          : await this.deps.indexer.listReceipts(invoice.issuer_id, invoice.token_id);
+    } catch {
+      // The history is extra: a failing lookup never takes the pay page down.
+    }
+    const payments: { tx_hash: string; near: boolean }[] = [];
+    let paidAt: string | null = null;
+    for (const r of receipts) {
+      const origin = (r.origin_tx as { hash?: unknown } | null | undefined)?.hash;
+      if (typeof origin === "string") payments.push({ tx_hash: origin, near: false });
+      if (Array.isArray(r.near_tx_hashes))
+        for (const h of r.near_tx_hashes)
+          if (typeof h === "string") payments.push({ tx_hash: h, near: true });
+      if (typeof r.time === "string" && (paidAt === null || r.time > paidAt)) paidAt = r.time;
+    }
+    return {
+      issued_at: invoice.created_at,
+      issue_tx: invoice.issue_tx ?? null,
+      paid_at: invoice.status === "Paid" || receipts.length > 0 ? paidAt : null,
+      payments,
+    };
   }
 
   private invoiceBy(idOrToken: string): InvoiceRecord {
@@ -1274,6 +1316,7 @@ export class ApiApp {
           due_date: invoice.due_date,
           pay_link: invoice.pay_link,
           terms: invoice.terms,
+          ...(await this.publicHistory(invoice)),
           routes: allowedRoutes(this.routes).map((route) => ({
             id: route.id,
             origin_chain: route.originChain,
@@ -1311,6 +1354,7 @@ export class ApiApp {
             due_date: Date.parse(invoice.terms.due_date) / 1000,
             status: invoice.status,
             terms: invoice.terms,
+            ...(await this.publicHistory(invoice)),
             domain: {
               name: "Openrail",
               version: "1",
@@ -1358,6 +1402,7 @@ export class ApiApp {
           amount?: string;
           destination_chain?: string;
           address?: string;
+          source_asset?: string;
         };
         if (!body.amount || !body.destination_chain || !body.address) {
           throw new ApiError(
@@ -1366,11 +1411,18 @@ export class ApiApp {
             "amount, destination_chain and address required",
           );
         }
+        if (
+          body.source_asset !== undefined &&
+          !this.routes.settlementAssets.includes(body.source_asset)
+        ) {
+          throw new ApiError(400, "unsupported_source_asset");
+        }
         const quote = await this.deps.cashout.quote({
           amount: body.amount,
           destinationChain: body.destination_chain,
           address: body.address,
           refundTo: context.accountId,
+          ...(body.source_asset === undefined ? {} : { sourceAsset: body.source_asset }),
         });
         await this.deps.pokeIndexer?.().catch(() => undefined);
         return { status: 201, body: quote };
@@ -1800,8 +1852,9 @@ export class ApiApp {
         const hash = termsHash(terms);
         const amountDue = usdToBaseUnits(Number(terms.amount_usd), 6).toString();
         const debtor = parseDebtor(body.debtor_key);
+        let issueTx: string | undefined;
         try {
-          await this.deps.issuer.issueFor({
+          const issued = await this.deps.issuer.issueFor({
             business: business.account_id,
             kind: 0,
             debtor,
@@ -1812,6 +1865,7 @@ export class ApiApp {
               ? { claimLabel: label as string }
               : { expectedTokenId: prepared.tokenId as string }),
           });
+          issueTx = typeof issued?.txHash === "string" ? issued.txHash : undefined;
         } catch (error) {
           if (
             !labels &&
@@ -1828,6 +1882,7 @@ export class ApiApp {
           debtor,
           terms,
           amountDue,
+          issueTx,
           tokenId: label ?? (prepared.tokenId as string),
         };
       }
@@ -1836,7 +1891,7 @@ export class ApiApp {
       () => undefined,
       () => undefined,
     );
-    const { hash, debtor, terms, amountDue, tokenId } = await run;
+    const { hash, debtor, terms, amountDue, tokenId, issueTx } = await run;
     const invoice: InvoiceRecord = {
       id: invoiceId,
       token_id: tokenId,
@@ -1861,6 +1916,7 @@ export class ApiApp {
       terms,
       line_items: feeResult.items,
       fee_mode: feeMode,
+      ...(issueTx === undefined ? {} : { issue_tx: issueTx }),
       ...(options.recurringId === undefined ? {} : { recurring_id: options.recurringId }),
     };
     this.store.saveInvoice(invoice);

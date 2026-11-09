@@ -1544,6 +1544,20 @@
           "line_items"
         ],
         "properties": {
+          "issued_at": { "type": "string" },
+          "issue_tx": { "type": ["string", "null"] },
+          "paid_at": { "type": ["string", "null"] },
+          "payments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["tx_hash", "near"],
+              "properties": {
+                "tx_hash": { "type": "string" },
+                "near": { "type": "boolean" }
+              }
+            }
+          },
           "token_id": {
             "type": "string"
           },
@@ -1665,6 +1679,20 @@
           "line_items"
         ],
         "properties": {
+          "issued_at": { "type": "string" },
+          "issue_tx": { "type": ["string", "null"] },
+          "paid_at": { "type": ["string", "null"] },
+          "payments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["tx_hash", "near"],
+              "properties": {
+                "tx_hash": { "type": "string" },
+                "near": { "type": "boolean" }
+              }
+            }
+          },
           "token_id": {
             "type": "string"
           },
@@ -2289,6 +2317,9 @@
             "enum": ["base", "arbitrum", "optimism", "polygon", "solana", "ethereum", "near"]
           },
           "address": {
+            "type": "string"
+          },
+          "source_asset": {
             "type": "string"
           }
         }

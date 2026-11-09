@@ -58,7 +58,7 @@ function harness() {
     status: vi.fn(async () => ({ status: "PENDING_DEPOSIT" })),
   };
   const cashout = {
-    quote: vi.fn(async (request: { refundTo: string }) => ({
+    quote: vi.fn(async (request: { refundTo: string; sourceAsset?: string }) => ({
       deposit_address: "0xdeposit",
       refund_to: request.refundTo,
     })),
@@ -440,6 +440,43 @@ describe("invoice route", () => {
     expect(pokeIndexer).toHaveBeenCalledTimes(1);
     // The refund of an Intents deposit must go to the business account, not to the payout address.
     expect(cashout.quote.mock.calls[0]?.[0].refundTo).toBe("acme.openrail.near");
+  });
+
+  it("cashes out from the token the business holds, and refuses one that is not a settlement asset", async () => {
+    // A business paid from Base holds the Base USDC token on intents.near, not the NEAR one: the transfer that
+    // moves the money must name the token that is held (found on mainnet, 9 Nov).
+    const held = "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near";
+    const { app, secret, cashout } = harness();
+    const ok = await app.handle(
+      request(
+        "POST",
+        "/v1/cashout/quote",
+        {
+          amount: "2000000",
+          destination_chain: "arbitrum",
+          address: "0x" + "e".repeat(40),
+          source_asset: held,
+        },
+        secret,
+      ),
+    );
+    expect(ok.status).toBe(201);
+    expect(cashout.quote.mock.calls[0]?.[0].sourceAsset).toBe(held);
+    const bad = await app.handle(
+      request(
+        "POST",
+        "/v1/cashout/quote",
+        {
+          amount: "2000000",
+          destination_chain: "base",
+          address: "0x" + "e".repeat(40),
+          source_asset: "nep141:not-a-settlement-asset.near",
+        },
+        secret,
+      ),
+    );
+    expect(bad.status).toBe(400);
+    expect((bad.body as { error: { code: string } }).error.code).toBe("unsupported_source_asset");
   });
 
   it("lists payments for the business", async () => {

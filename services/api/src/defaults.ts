@@ -331,7 +331,7 @@ export function createCashoutPort(): CashoutPort {
       const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       const response = await client
         .quote({
-          originAsset: defaultSettlementAsset(),
+          originAsset: request.sourceAsset ?? defaultSettlementAsset(),
           destinationAsset: route.originAssetId,
           amount: request.amount,
           swapType: "EXACT_OUTPUT",
@@ -348,7 +348,7 @@ export function createCashoutPort(): CashoutPort {
         .catch(providerFailure);
       return {
         amount: request.amount,
-        source_asset: defaultSettlementAsset(),
+        source_asset: request.sourceAsset ?? defaultSettlementAsset(),
         destination_chain: request.destinationChain,
         destination_address: request.address,
         amount_out: response.quote.amountOut ?? request.amount,

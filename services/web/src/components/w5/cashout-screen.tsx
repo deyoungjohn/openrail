@@ -62,8 +62,17 @@ export function CashoutScreen() {
   const auth = useAuth();
   const account = auth.state.status === "signedIn" ? auth.state.accountId : null;
   const [balance] = useBalance(MOCK_MODE ? null : account);
-  // What can be cashed out now, in whole cents (cut, never rounded up).
-  const availableCents = balance.state === "ready" ? balance.data.total / 10_000n : null;
+  // The money is taken from one token: the one the business holds the most of (a payment from Base is a balance of
+  // the Base USDC token, and moving a token that is not held is refused by the chain). What can be cashed out now is
+  // that balance, in whole cents (cut, never rounded up).
+  const held =
+    balance.state === "ready"
+      ? balance.data.lines.reduce<(typeof balance.data.lines)[number] | null>(
+          (best, l) => (best === null || l.units > best.units ? l : best),
+          null,
+        )
+      : null;
+  const availableCents = held ? held.units / 10_000n : null;
   const units = parseUsdcInput(amountText);
   const percent =
     availableCents !== null && availableCents > 0n && units !== null
@@ -91,7 +100,12 @@ export function CashoutScreen() {
     setExpired(false);
     try {
       const q = await dashClient.cashout.quote(
-        { amount: units.toString(), destination_chain: chain, address: address.trim() },
+        {
+          amount: units.toString(),
+          destination_chain: chain,
+          address: address.trim(),
+          ...(held ? { source_asset: held.tokenId } : {}),
+        },
         { idempotencyKey: idem.current },
       );
       setQuote(q);
@@ -151,6 +165,7 @@ export function CashoutScreen() {
             <p className="text-[15px]" data-testid="cashout-available">
               {t.available}{" "}
               <span className="tabular font-semibold">{formatUsd(availableCents)}</span>
+              {held ? <span className="caption"> {t.heldOn(held.network)}</span> : null}
             </p>
           ) : null}
           <Input
