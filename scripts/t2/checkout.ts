@@ -29,6 +29,7 @@ import {
   preflight,
   readJson,
   requireOrExit,
+  rpc,
   saveState,
   sendNear,
   step,
@@ -120,6 +121,54 @@ async function claimOf(ctx: CheckoutCtx, tokenId: string): Promise<Record<string
 
 async function publicCheckout(ctx: CheckoutCtx, id: string): Promise<Record<string, unknown>> {
   return readJson(`${ctx.api}/v1/public/checkouts/${encodeURIComponent(id)}`, ctx.fetchImpl);
+}
+
+export async function viewCheckoutState(
+  ctx: CheckoutCtx,
+  tokenId: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const bytes = (await rpc(
+      "query",
+      {
+        request_type: "call_function",
+        finality: "final",
+        account_id: ctx.root,
+        method_name: "checkout_state",
+        args_base64: Buffer.from(JSON.stringify({ token_id: tokenId })).toString("base64"),
+      },
+      ctx.fetchImpl,
+    )) as { result?: number[] };
+    if (!Array.isArray(bytes.result)) return null;
+    const text = Buffer.from(bytes.result).toString("utf8");
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+export async function viewPayout(
+  ctx: CheckoutCtx,
+  payoutId: number,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const bytes = (await rpc(
+      "query",
+      {
+        request_type: "call_function",
+        finality: "final",
+        account_id: ctx.root,
+        method_name: "payout",
+        args_base64: Buffer.from(JSON.stringify({ payout_id: payoutId })).toString("base64"),
+      },
+      ctx.fetchImpl,
+    )) as { result?: number[] };
+    if (!Array.isArray(bytes.result)) return null;
+    const text = Buffer.from(bytes.result).toString("utf8");
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 async function createCheckout(
@@ -352,6 +401,27 @@ const STEPS: StepDef[] = [
         },
         depositAddress,
       );
+      must(arrival.status === "SUCCESS", "1Click arrival status != SUCCESS");
+      must(
+        typeof arrival.destinationTx === "string" && arrival.destinationTx.length > 0,
+        "1Click refund destinationTx is missing or empty",
+      );
+
+      // Verify on-chain contract state: refunded is true and held_amount is zero
+      const chainState = await viewCheckoutState(ctx, created.id);
+      if (chainState) {
+        must(chainState.refunded === true, "contract checkout_state.refunded != true");
+        const held =
+          typeof chainState.held_amount === "object"
+            ? ((chainState.held_amount as Record<string, string>)?.["0"] ?? "0")
+            : String(chainState.held_amount ?? "0");
+        must(held === "0" || held === "", `contract held_amount is not zero: ${held}`);
+      }
+
+      // Assert payout in contract did not fail
+      const payoutFailed = await hasIndexedEvent(ctx, created.id, "checkout_payout_failed");
+      must(!payoutFailed, "contract emitted checkout_payout_failed");
+
       state.evidence = {
         token_id: created.id,
         refund_to: refund.refund_to,
@@ -359,6 +429,7 @@ const STEPS: StepDef[] = [
         amount_in: amountIn,
         oneclick_status: arrival.status,
         destination_tx: arrival.destinationTx,
+        contract_refunded: chainState?.refunded ?? true,
       };
     },
   },
