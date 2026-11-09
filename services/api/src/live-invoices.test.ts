@@ -115,4 +115,28 @@ describe("the invoice list while the chain cannot be read", () => {
     expect(second.data[0]?.status).toBe("Paid");
     expect(second.data[0]?.outstanding).toBe("0");
   });
+
+  it("the pay and ack pages still answer when the chain cannot be read", async () => {
+    // 9 Nov: old pay links answered 500 ("couldn't load this invoice") while the RPC refused.
+    const w = world();
+    await w.create();
+    w.failReads();
+    for (const path of ["/v1/pay/claims/c-1", "/v1/ack/c-1"]) {
+      const r = await w.get(path);
+      expect(r.status, path).toBe(200);
+      expect((r.body as { invoice_number: string }).invoice_number).toBe("INV-1");
+    }
+  });
+
+  it("they show the last status read, not the one written at creation", async () => {
+    const w = world();
+    await w.create();
+    w.setStatus("Paid");
+    expect(((await w.get("/v1/pay/claims/c-1")).body as { status: string }).status).toBe("Paid");
+    w.failReads();
+    clockMs.now += 60_000;
+    for (const path of ["/v1/pay/claims/c-1", "/v1/ack/c-1"]) {
+      expect(((await w.get(path)).body as { status: string }).status, path).toBe("Paid");
+    }
+  });
 });

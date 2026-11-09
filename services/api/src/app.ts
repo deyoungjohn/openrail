@@ -554,6 +554,24 @@ export class ApiApp {
   }
 
   /**
+   * The claim as the chain has it, read at most every ten seconds. When the chain cannot be read, the last claim read
+   * answers (a missing claim stays a 404); only a claim never read gives `undefined`.
+   */
+  private async claimOrStale(tokenId: string): Promise<Record<string, unknown> | undefined> {
+    const now = this.clock().getTime();
+    const cached = this.claimCache.get(tokenId);
+    if (cached !== undefined && now - cached.at < 10_000) return cached.claim;
+    try {
+      const claim = await this.deps.contract.claim(tokenId);
+      this.claimCache.set(tokenId, { at: now, claim });
+      return claim;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) throw error;
+      return cached?.claim;
+    }
+  }
+
+  /**
    * Where a cash-out is now: what the provider says about its deposit address and what the chain says about the
    * transaction the merchant signed. Both are asked only while the cash-out can still change.
    */
@@ -1387,7 +1405,8 @@ export class ApiApp {
     const publicClaimMatch = /^\/v1\/pay\/claims\/([^/]+)$/.exec(path);
     if (publicClaimMatch !== null && method === "GET") {
       const invoice = this.invoiceBy(publicClaimMatch[1] ?? "");
-      const claim = await this.deps.contract.claim(invoice.token_id);
+      // A page people open from a link must open even when the chain cannot be read this second.
+      const claim = (await this.claimOrStale(invoice.token_id)) ?? {};
       return {
         status: 200,
         body: {
@@ -1430,6 +1449,7 @@ export class ApiApp {
       const action = ackMatch[2];
       if (method === "GET" && action === undefined) {
         const invoice = this.invoiceBy(tokenId);
+        const live = await this.claimOrStale(invoice.token_id);
         return {
           status: 200,
           body: {
@@ -1442,7 +1462,7 @@ export class ApiApp {
             amount_usd: invoice.amount_usd,
             line_items: invoice.line_items ?? [],
             due_date: Date.parse(invoice.terms.due_date) / 1000,
-            status: invoice.status,
+            status: typeof live?.status === "string" ? live.status : invoice.status,
             terms: invoice.terms,
             ...(await this.publicHistory(invoice)),
             domain: {
