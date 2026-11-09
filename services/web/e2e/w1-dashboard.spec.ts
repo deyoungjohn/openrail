@@ -528,7 +528,6 @@ test.describe("issue form", () => {
     const calls = await mockApi(page, handlers);
     await page.goto("/app/invoices/new");
     await page.getByLabel("Client name").fill("Northwind Studio");
-    await page.getByLabel("Client account", { exact: true }).fill("northwind.near");
     await page.getByLabel("Invoice number").fill("INV-0009");
     await pickDate(
       page,
@@ -548,11 +547,11 @@ test.describe("issue form", () => {
       invoice_number: "INV-0009",
       issuer_legal_name: fixture("business.get").legal_name,
       debtor_legal_name: "Northwind Studio",
-      debtor_key: "northwind.near",
-      debtor_type: "near",
       amount_usd: "250.00",
       line_items: [{ description: "Design", quantity: 2, unit_amount_usd: "125.00" }],
     });
+    // The client's account and chain are not asked for (and not sent).
+    expect(post.body).not.toHaveProperty("debtor_key");
 
     // Email is not available yet: the sheet offers the pay link and the QR code, and no email form.
     await expect(dialog.getByRole("button", { name: "Open invoice" })).toBeVisible();
@@ -567,7 +566,6 @@ test.describe("issue form", () => {
     });
     await page.goto("/app/invoices/new");
     await page.getByLabel("Client name").fill("Northwind Studio");
-    await page.getByLabel("Client account", { exact: true }).fill("northwind.near");
     await page.getByLabel("Invoice number").fill("INV-0009");
     await pickDate(
       page,
@@ -594,7 +592,6 @@ test.describe("issue form", () => {
     });
     await page.goto("/app/invoices/new");
     await page.getByLabel("Client name").fill("Northwind Studio");
-    await page.getByLabel("Client account", { exact: true }).fill("northwind.near");
     await page.getByLabel("Invoice number").fill("INV-0010");
     await pickDate(
       page,

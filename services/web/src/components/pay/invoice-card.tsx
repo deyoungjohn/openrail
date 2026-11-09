@@ -18,9 +18,16 @@ export type PayClaim = PublicClaim & {
   payments?: readonly { tx_hash: string; near?: boolean }[];
 };
 
-export function InvoiceCard({ claim: c }: { claim: PayClaim }) {
+export function InvoiceCard({
+  claim: c,
+  received = false,
+}: {
+  claim: PayClaim;
+  /** The provider has delivered the payment; the claim on chain is being booked and still says Issued. */
+  received?: boolean;
+}) {
   const p = copy.pay;
-  const paid = c.status === "Paid";
+  const paid = c.status === "Paid" || received;
   const partial = c.status === "PartiallyPaid";
   const chip: Status | null = paid
     ? { kind: "paid" }

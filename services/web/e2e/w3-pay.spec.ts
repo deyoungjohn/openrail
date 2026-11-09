@@ -167,6 +167,20 @@ test("follows the payment to Paid and shows the proof", async ({ page }) => {
   await expect(page.getByText("Payout transaction").first()).toBeVisible();
 });
 
+test("money delivered while the claim still says Issued: the page is already a paid page", async ({
+  page,
+}) => {
+  // 9 Nov: the pop-over said paid, the tag still said "Waiting for payment" and the pay card was still offered.
+  await mockApi(page, { statuses: [{ ...fixture("pay.sessions.status"), status: "success" }] });
+  await page.goto("/pay/c-1");
+  await pick(page);
+  await expect(page.getByText("Payment received").first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("region", { name: "Pay this invoice" })).toHaveCount(0);
+  const invoice = page.getByRole("region", { name: "Invoice", exact: true });
+  await expect(invoice).toContainText("Paid");
+  await expect(invoice).not.toContainText("Waiting for payment");
+});
+
 test("an expired price is never reused: a new one is requested", async ({ page }) => {
   const calls = await mockApi(page, {
     sessions: [
@@ -316,6 +330,9 @@ test("desktop: the invoice and the pay card level with each other, what happens 
   await expect(dialog).toBeHidden();
   await page.getByRole("button", { name: "Show payment details" }).click();
   await expect(dialog.getByRole("region", { name: "Your price" })).toBeVisible();
+  // The countdown is still counting after the pop-over was closed and opened again (9 Nov: it came back empty).
+  await expect(dialog).toContainText(/\d+\s*m/);
+  await expect(dialog).toContainText("Time left");
 });
 
 test("one column on a phone, in reading order", async ({ page }) => {

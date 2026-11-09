@@ -185,8 +185,6 @@ export function IssueScreen() {
   const [form, setForm] = useState<IssueForm>({
     invoiceNumber: "",
     debtorName: "",
-    debtorType: "near",
-    debtorKey: "",
     dueDate: "",
     lines: [{ ...blankLine }],
   });
@@ -217,8 +215,6 @@ export function IssueScreen() {
           invoice_number: form.invoiceNumber.trim(),
           issuer_legal_name: issuer.trim(),
           debtor_legal_name: form.debtorName.trim(),
-          debtor_key: form.debtorKey.trim(),
-          debtor_type: form.debtorType,
           amount_usd: formatUsd(total).slice(1).replaceAll(",", ""),
           due_date: form.dueDate,
           line_items: form.lines.map((l) => ({
@@ -278,25 +274,6 @@ export function IssueScreen() {
             onChange={(e) => set("debtorName", e.target.value)}
             error={err("debtorName")}
           />
-          <div className="grid gap-6 sm:grid-cols-2">
-            <Select
-              label={t.clientAccountType}
-              value={form.debtorType}
-              onValueChange={(v) => set("debtorType", v as IssueForm["debtorType"])}
-            >
-              <option value="near">{t.near}</option>
-              <option value="evm">{t.evm}</option>
-            </Select>
-            <Input
-              label={t.clientAccount}
-              helper={form.debtorType === "near" ? t.clientAccountHelpNear : t.clientAccountHelpEvm}
-              value={form.debtorKey}
-              autoCapitalize="none"
-              spellCheck={false}
-              onChange={(e) => set("debtorKey", e.target.value.trim())}
-              error={err("debtorKey")}
-            />
-          </div>
           <div className="grid gap-6 sm:grid-cols-2">
             <Input
               label={t.number}

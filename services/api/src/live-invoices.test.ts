@@ -139,4 +139,27 @@ describe("the invoice list while the chain cannot be read", () => {
       expect(((await w.get(path)).body as { status: string }).status, path).toBe("Paid");
     }
   });
+
+  it("an invoice can be created without naming the client", async () => {
+    // 9 Nov: a merchant should not have to know who or where the client pays from. The contract needs a debtor for an
+    // invoice, so an unnamed client is the placeholder account `anyone.<root>`; the pay link works for anybody.
+    const w = world();
+    const made = await w.app.handle({
+      method: "POST",
+      path: "/v1/invoices",
+      query: new URLSearchParams(),
+      headers: { authorization: `Bearer ${w.key}` },
+      body: {
+        invoice_number: "INV-2",
+        issuer_legal_name: "Alpha",
+        debtor_legal_name: "Debtor",
+        amount_usd: "5.00",
+        due_date: "2026-12-01",
+        line_items: [{ description: "Work", quantity: 1, unit_amount_usd: "5.00" }],
+      },
+    });
+    expect(made.status).toBe(201);
+    const ack = (await w.get("/v1/ack/c-1")).body as { debtor: { Near?: string } };
+    expect(ack.debtor).toEqual({ Near: "anyone.openrail.near" });
+  });
 });

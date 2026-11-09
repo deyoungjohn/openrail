@@ -3,8 +3,6 @@
 
 const CENTS = /^\d+\.\d{2}$/;
 const QTY = /^\d+(\.\d{1,2})?$/;
-const NEAR_ACCOUNT = /^(?=.{2,64}$)([a-z\d]+([-_][a-z\d]+)*\.)*[a-z\d]+([-_][a-z\d]+)*$/;
-const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 /** An API amount like `12.50` as cents, or null when it is not exactly two decimals. */
 export function parseCents(s: string): bigint | null {
@@ -66,8 +64,6 @@ export function invoiceTotalCents(lines: readonly LineForm[]): bigint | null {
 export interface IssueForm {
   invoiceNumber: string;
   debtorName: string;
-  debtorType: "near" | "evm";
-  debtorKey: string;
   /** `YYYY-MM-DD`. */
   dueDate: string;
   lines: LineForm[];
@@ -78,12 +74,6 @@ export function validateIssue(f: IssueForm, today: string): Record<string, strin
   const e: Record<string, string> = {};
   if (f.invoiceNumber.trim() === "") e.invoiceNumber = "Enter an invoice number.";
   if (f.debtorName.trim() === "") e.debtorName = "Enter your client's name.";
-  const key = f.debtorKey.trim();
-  if (f.debtorType === "near" ? !NEAR_ACCOUNT.test(key) : !EVM_ADDRESS.test(key))
-    e.debtorKey =
-      f.debtorType === "near"
-        ? "Enter a valid NEAR account, like client.near."
-        : "Enter a valid wallet address that starts with 0x.";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.dueDate)) e.dueDate = "Pick a due date.";
   else if (f.dueDate <= today) e.dueDate = "Pick a due date after today.";
   if (f.lines.length === 0) e.lines = "Add at least one line.";

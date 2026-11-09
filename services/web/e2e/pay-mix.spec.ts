@@ -55,7 +55,12 @@ const world = (over: Partial<World> = {}): World => ({ posts: [], status: {}, ..
 async function chooseAndGetPrice(page: Page, network: string, amount?: string) {
   // The price of the part before is in a pop-over that opened by itself: close it to reach the form.
   const details = page.getByRole("dialog", { name: "Your payment" });
-  if (await details.isVisible()) await details.getByRole("button", { name: "Close" }).click();
+  // "Show payment details" exists as soon as there is a price; the pop-over opens in the same render.
+  if (await page.getByRole("button", { name: "Show payment details" }).isVisible()) {
+    await details.waitFor({ state: "visible", timeout: 5000 });
+    await details.getByRole("button", { name: "Close" }).click();
+    await details.waitFor({ state: "hidden", timeout: 5000 });
+  }
   await pickRoute(page, network);
   await page.getByLabel("Refund address").fill(REFUND);
   if (amount !== undefined) await page.getByLabel("Amount for this part").fill(amount);

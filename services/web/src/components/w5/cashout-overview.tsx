@@ -13,7 +13,56 @@ const DAY = 86_400_000;
 
 const shell = "surface-card min-w-0 p-5 sm:p-6";
 
-function Stat({ label, cents, hint }: { label: string; cents: bigint | null; hint: string }) {
+/** The last months as a small line, zero or more, drawn the way the dashboard's revenue card draws its trend. */
+function Spark({ series, color, id }: { series: readonly number[]; color: string; id: string }) {
+  const max = Math.max(...series, 1);
+  const points = series.map(
+    (v, i) => `${(i / Math.max(series.length - 1, 1)) * 100},${28 - (v / max) * 24}`,
+  );
+  const last = series[series.length - 1] ?? 0;
+  return (
+    <svg
+      viewBox="0 0 100 28"
+      preserveAspectRatio="none"
+      className="mt-4 h-10 w-full overflow-visible"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop stopColor={color} stopOpacity="0.25" />
+          <stop offset="1" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={`0,28 ${points.join(" ")} 100,28`} fill={`url(#${id})`} />
+      <polyline
+        points={points.join(" ")}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx="100" cy={28 - (last / max) * 24} r="2" fill={color} />
+    </svg>
+  );
+}
+
+function Stat({
+  label,
+  cents,
+  hint,
+  series,
+  color,
+  id,
+}: {
+  label: string;
+  cents: bigint | null;
+  hint: string;
+  series?: readonly number[];
+  color?: string;
+  id?: string;
+}) {
   return (
     <section className={shell} aria-label={label}>
       <h3 className="text-[14px] leading-5 font-medium">{label}</h3>
@@ -25,6 +74,9 @@ function Stat({ label, cents, hint }: { label: string; cents: bigint | null; hin
         </p>
       )}
       <p className="caption mt-1">{hint}</p>
+      {series && color && id && cents !== null ? (
+        <Spark series={series} color={color} id={id} />
+      ) : null}
     </section>
   );
 }
@@ -76,11 +128,21 @@ export function CashoutOverview({
         </div>
       </div>
       <div className="grid items-start gap-4 sm:grid-cols-3">
-        <Stat label={t.revenue} cents={loading ? null : f.revenueCents} hint={t.revenueHint} />
+        <Stat
+          label={t.revenue}
+          cents={loading ? null : f.revenueCents}
+          hint={t.revenueHint}
+          series={bars.map((b) => b.revenue)}
+          color="var(--accent)"
+          id="co-revenue"
+        />
         <Stat
           label={t.cashedOut}
           cents={loading ? null : f.cashedOutCents}
           hint={t.cashedOutHint}
+          series={bars.map((b) => b.cashedOut)}
+          color="var(--success)"
+          id="co-cashed"
         />
         <Stat label={t.kept} cents={loading ? null : f.keptCents} hint={t.keptHint} />
       </div>

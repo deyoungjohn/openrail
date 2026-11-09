@@ -100,7 +100,10 @@ function AckActions({ claim, onAcked }: { claim: Claim; onAcked: () => void }) {
     }
   };
 
-  if (!debtor) return <p className="caption">{copy.ack.noDebtor}</p>;
+  // An invoice made without naming the client has the placeholder account `anyone.<root>`: nobody can accept it, and
+  // nobody has to; the pay link works for everybody.
+  if (!debtor || (debtor.kind === "near" && debtor.account.startsWith("anyone.")))
+    return <p className="caption">{copy.ack.noDebtor}</p>;
 
   const near_ok = debtor.kind !== "near" || near.accountId === debtor.account;
   return (

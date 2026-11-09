@@ -249,6 +249,7 @@ test.describe("cash out", () => {
       "GET /v1/cashouts": { body: { data: [row] } },
     });
     await page.goto("/app/cashout");
+    await page.getByRole("tab", { name: "Stats" }).click();
     const table = page.getByRole("region", { name: "Cash-outs" });
     await expect(table).toContainText("$2.00");
     await expect(table).toContainText("BASE USDC");

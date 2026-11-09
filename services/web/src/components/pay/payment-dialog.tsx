@@ -53,7 +53,7 @@ export function PaymentDialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="surface-card relative my-auto w-full max-w-lg p-4 sm:p-6"
+        className="surface-card relative my-auto w-full max-w-4xl p-4 sm:p-6"
       >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-[20px] leading-7 font-semibold">{title}</h2>
@@ -67,7 +67,10 @@ export function PaymentDialog({
             <X aria-hidden size={18} strokeWidth={1.5} />
           </button>
         </div>
-        {children}
+        {/* One surface: the cards inside lose their own frames, so the price, the code and the progress read as one. */}
+        <div className="[&_.surface-card]:rounded-none [&_.surface-card]:border-0 [&_.surface-card]:bg-transparent [&_.surface-card]:p-0 [&_.surface-card]:shadow-none">
+          {children}
+        </div>
       </div>
     </div>
   );

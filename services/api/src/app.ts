@@ -1952,7 +1952,6 @@ export class ApiApp {
       "invoice_number",
       "issuer_legal_name",
       "debtor_legal_name",
-      "debtor_key",
       "amount_usd",
       "due_date",
     ] as const) {
@@ -1971,6 +1970,12 @@ export class ApiApp {
     const username = business.username;
     const ref = refOf(invoiceId);
     const labels = this.deps.config.claimLabels === true;
+    // The merchant does not name the client: an unnamed client is a placeholder account (the contract needs a debtor
+    // for an invoice) and the pay link works for anybody. A named one (API clients that send it) is kept.
+    const debtorKey =
+      typeof body.debtor_key === "string" && body.debtor_key.trim() !== ""
+        ? body.debtor_key.trim()
+        : `anyone.${this.deps.config.rootAccount}`;
     const feeMode = (body.fee_mode ?? business.fee_mode ?? "absorb") as FeeMode;
     if (feeMode !== "absorb" && feeMode !== "pass_to_customer")
       throw new ApiError(400, "invalid_fee_mode");
@@ -2029,7 +2034,7 @@ export class ApiApp {
           issuer_legal_name: body.issuer_legal_name as string,
           issuer_account: business.account_id,
           debtor_legal_name: body.debtor_legal_name as string,
-          debtor_key: body.debtor_key as string,
+          debtor_key: debtorKey,
           amount_usd: feeResult.amountUsd,
           due_date: dateToUtc(body.due_date as string),
           line_items_sha256: itemsHash,
@@ -2040,7 +2045,7 @@ export class ApiApp {
         });
         const hash = termsHash(terms);
         const amountDue = usdToBaseUnits(Number(terms.amount_usd), 6).toString();
-        const debtor = parseDebtor(body.debtor_key);
+        const debtor = parseDebtor(debtorKey);
         let issueTx: string | undefined;
         try {
           const issued = await this.deps.issuer.issueFor({

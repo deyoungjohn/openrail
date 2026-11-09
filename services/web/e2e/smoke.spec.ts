@@ -24,7 +24,6 @@ test.describe("signed-in journey on the mock API", () => {
     // Create an invoice: the API answers with its fixture and the sheet offers the pay link.
     await page.goto("/app/invoices/new");
     await page.getByLabel("Client name").fill("Northwind Studio");
-    await page.getByLabel("Client account", { exact: true }).fill("northwind.near");
     await page.getByLabel("Invoice number").fill("INV-0900");
     await pickDate(
       page,

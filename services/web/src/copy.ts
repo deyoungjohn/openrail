@@ -251,6 +251,9 @@ export const copy = {
     detailsTitle: "Your payment",
     closeDetails: "Close",
     inProgress: "A payment is in progress.",
+    receivedTitle: "Payment received",
+    receivedBody:
+      "The money has arrived. It is being confirmed on NEAR, and this page updates by itself.",
     termsSummary: "What this invoice says",
     termsCheck:
       "The fingerprint above is a hash of these terms and every other detail. It is recorded on NEAR, so anyone can check that the invoice was not changed.",
@@ -868,6 +871,9 @@ export const copy = {
     signing: "Waiting for your wallet",
     sent: "Cash-out sent",
     again: "Cash out again",
+    tabsLabel: "Cash out",
+    tabCashOut: "Cash out",
+    tabStats: "Stats",
     sentBody: "Your wallet signed it. The money arrives on the other network in a few minutes.",
     quoteFailed: "We couldn't get a quote. Nothing was charged. Try again.",
     signFailed: "The cash-out didn't go through. Nothing was charged. Try again.",

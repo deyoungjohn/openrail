@@ -92,8 +92,6 @@ describe("invoiceTotalCents", () => {
 const form = (over: Partial<IssueForm> = {}): IssueForm => ({
   invoiceNumber: "INV-0001",
   debtorName: "Northwind Studio",
-  debtorType: "near",
-  debtorKey: "northwind.near",
   dueDate: "2026-12-01",
   lines: [{ description: "Design", quantity: "1", unit: "100.00" }],
   ...over,
@@ -111,17 +109,12 @@ describe("validateIssue", () => {
     expect(validateIssue(form({ dueDate: "" }), today).dueDate).toBeTruthy();
     expect(validateIssue(form({ dueDate: "2026-11-03" }), today).dueDate).toBeUndefined();
   });
-  it("checks the client's account by type", () => {
-    expect(validateIssue(form({ debtorKey: "Not An Account" }), today).debtorKey).toBeTruthy();
+  it("does not ask for the client's account or the chain they pay from", () => {
+    // 9 Nov: nothing enforces it, and a merchant should not need to know it before creating an invoice.
+    const e = validateIssue(form({}), today);
     expect(
-      validateIssue(form({ debtorType: "evm", debtorKey: "0x123" }), today).debtorKey,
-    ).toBeTruthy();
-    expect(
-      validateIssue(
-        form({ debtorType: "evm", debtorKey: "0x53C5D39A5828BaDf817E40f22d75d96D731f8239" }),
-        today,
-      ).debtorKey,
-    ).toBeUndefined();
+      Object.keys(e).some((k) => k.startsWith("debtorKey") || k.startsWith("debtorType")),
+    ).toBe(false);
   });
   it("needs at least one valid line, and says which one is wrong", () => {
     expect(validateIssue(form({ lines: [] }), today).lines).toBeTruthy();

@@ -159,7 +159,7 @@ function ApiKeysPanel() {
               <button
                 type="button"
                 aria-label={t.scopesOf(k.name, k.scopes.length)}
-                className="inline-flex h-8 items-center gap-1 rounded-full bg-surface-2 px-3 text-[13px] font-medium text-muted transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-surface-2 px-4 text-[13px] font-medium whitespace-nowrap text-muted transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
               >
                 {t.scopeCount(k.scopes.length)}
                 <ChevronDown aria-hidden size={14} />

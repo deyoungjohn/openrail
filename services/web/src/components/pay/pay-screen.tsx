@@ -105,7 +105,7 @@ function QuoteNote({
   return (
     <section
       aria-label={partLabel ? `${p.quoteTitle}, ${partLabel}` : p.quoteTitle}
-      className="surface-card space-y-4 p-6"
+      className="surface-card space-y-3 p-4 sm:p-6"
     >
       <h2 className="text-[18px] leading-[26px] font-semibold">
         {partLabel ? `${p.quoteTitle} · ${partLabel}` : p.quoteTitle}
@@ -194,11 +194,14 @@ function SessionView({
   starting,
   partLabel,
   onStage,
+  epoch,
 }: {
   session: Session;
   route: Route;
   onNewQuote: () => void;
   starting: boolean;
+  /** Changes each time the pop-over opens: a hidden countdown must start again on the screen. */
+  epoch: number;
   /** `Part 2` when the payment is split. */
   partLabel?: string;
   onStage?: (stage: PayStage) => void;
@@ -296,73 +299,78 @@ function SessionView({
   }));
 
   return (
-    <div className="space-y-4">
-      {/* The locked amount comes before the address (quote_note_before_address_shown). */}
-      <QuoteNote session={session} route={route} partLabel={partLabel} />
+    <div className="grid gap-3 md:grid-cols-2 md:items-start md:gap-6">
+      <div className="space-y-3">
+        {/* The locked amount comes before the address (quote_note_before_address_shown). */}
+        <QuoteNote session={session} route={route} partLabel={partLabel} />
 
-      {stage === "refunded" || stage === "failed" ? (
-        <div role="alert" className="surface-card space-y-2 p-6">
-          <h2 className="text-[18px] leading-[26px] font-semibold">
-            {stage === "refunded" ? p.refundedTitle : p.failedTitle}
-          </h2>
-          <p className="text-[15px]">{stage === "refunded" ? p.refundedBody : p.failedBody}</p>
-          <Button onClick={onNewQuote} loading={starting}>
-            {p.newQuote}
-          </Button>
-        </div>
-      ) : (
-        <>
-          <QrPanel
-            address={session.deposit_address}
-            amount={`${amountOf(session, route)} ${route.payer_asset}`}
-            chain={chain ?? undefined}
-          >
-            <WalletPay session={session} route={route} />
-          </QrPanel>
-          <div className="flex items-center justify-between gap-3 px-1">
-            <button
-              type="button"
-              onClick={() => setNotes(true)}
-              className="text-accent-text inline-flex items-center gap-1.5 text-[14px] font-medium hover:underline"
+        {stage === "refunded" || stage === "failed" ? (
+          <div role="alert" className="surface-card space-y-2 p-6">
+            <h2 className="text-[18px] leading-[26px] font-semibold">
+              {stage === "refunded" ? p.refundedTitle : p.failedTitle}
+            </h2>
+            <p className="text-[15px]">{stage === "refunded" ? p.refundedBody : p.failedBody}</p>
+            <Button onClick={onNewQuote} loading={starting}>
+              {p.newQuote}
+            </Button>
+          </div>
+        ) : (
+          <>
+            <QrPanel
+              address={session.deposit_address}
+              amount={`${amountOf(session, route)} ${route.payer_asset}`}
+              chain={chain ?? undefined}
             >
-              <Info aria-hidden size={16} strokeWidth={1.5} />
-              {p.notesLink}
-            </button>
-          </div>
-          <Modal open={notes} onClose={() => setNotes(false)} title={p.notesTitle}>
-            <div className="space-y-4 text-[15px] leading-6">
-              <p>{p.sendOnly(route.payer_asset, chain ? CHAINS[chain] : route.origin_chain)}</p>
-              <p>
-                {short
-                  ? p.shortSeen(amountOf(session, route), route.payer_asset)
-                  : p.shortRule(amountOf(session, route), route.payer_asset)}
-              </p>
+              <WalletPay session={session} route={route} />
+            </QrPanel>
+            <div className="flex items-center justify-between gap-3 px-1">
+              <button
+                type="button"
+                onClick={() => setNotes(true)}
+                className="text-accent-text inline-flex items-center gap-1.5 text-[14px] font-medium hover:underline"
+              >
+                <Info aria-hidden size={16} strokeWidth={1.5} />
+                {p.notesLink}
+              </button>
             </div>
-          </Modal>
-          <div className="flex items-center justify-between px-1">
-            <span className="caption">{p.timeLeft}</span>
-            <Countdown
-              target={Date.parse(session.deadline)}
-              units={["minutes", "seconds"]}
-              variant="compact"
-              label={p.timeLeft}
-              completeLabel={copy.countdown.expired}
-            />
-          </div>
-        </>
-      )}
+            <Modal open={notes} onClose={() => setNotes(false)} title={p.notesTitle}>
+              <div className="space-y-4 text-[15px] leading-6">
+                <p>{p.sendOnly(route.payer_asset, chain ? CHAINS[chain] : route.origin_chain)}</p>
+                <p>
+                  {short
+                    ? p.shortSeen(amountOf(session, route), route.payer_asset)
+                    : p.shortRule(amountOf(session, route), route.payer_asset)}
+                </p>
+              </div>
+            </Modal>
+            <div className="flex items-center justify-between px-1">
+              <span className="caption">{p.timeLeft}</span>
+              <Countdown
+                key={epoch}
+                target={Date.parse(session.deadline)}
+                units={["minutes", "seconds"]}
+                variant="compact"
+                label={p.timeLeft}
+                completeLabel={copy.countdown.expired}
+              />
+            </div>
+          </>
+        )}
+      </div>
 
-      <Card title={p.progress}>
-        <Timeline steps={steps} />
-        <p role="status" className="caption mt-4">
-          {stage === "waiting"
-            ? p.stepNote.waiting
-            : stage === "processing"
-              ? p.stepNote.processing
-              : ""}
-        </p>
-        {pollFailed ? <p className="text-danger-text mt-2 text-[14px]">{p.pollError}</p> : null}
-      </Card>
+      <div className="border-border border-t pt-3 md:border-t-0 md:border-l md:pt-0 md:pl-6">
+        <Card title={p.progress}>
+          <Timeline steps={steps} />
+          <p role="status" className="caption mt-4">
+            {stage === "waiting"
+              ? p.stepNote.waiting
+              : stage === "processing"
+                ? p.stepNote.processing
+                : ""}
+          </p>
+          {pollFailed ? <p className="text-danger-text mt-2 text-[14px]">{p.pollError}</p> : null}
+        </Card>
+      </div>
     </div>
   );
 }
@@ -395,9 +403,18 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   const restored = useRef(false);
   const [dialog, setDialog] = useState(false);
   const priced = useRef(0);
+  // Bumped each time the pop-over opens, so the countdown inside starts again on screen.
+  const [epoch, setEpoch] = useState(0);
+  const skipOpen = useRef(false);
+  const showDialog = () => {
+    setEpoch((e) => e + 1);
+    setDialog(true);
+  };
   useEffect(() => {
-    // A new price opens the pop-over by itself; closing it is the payer's choice and is kept.
-    if (legs.length > priced.current) setDialog(true);
+    // A price made on this page opens the pop-over by itself; a price brought back by a reload does not (the payer
+    // may have paid already: the page shows the state first). Closing it is the payer's choice and is kept.
+    if (legs.length > priced.current && !skipOpen.current) showDialog();
+    skipOpen.current = false;
     priced.current = legs.length;
   }, [legs.length]);
 
@@ -442,7 +459,12 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           const owed = BigInt(claim?.outstanding ?? "0");
           const current = cents !== null && (owed === 0n || cents * 10_000n <= owed);
           if (r && cents !== null && open && current) {
-            back.push({ session: sess, route: r, cents, stage: "waiting" });
+            back.push({
+              session: sess,
+              route: r,
+              cents,
+              stage: payStage(sess.status, sess.deadline, now),
+            });
           }
         }
         // The newest open price comes back on screen.
@@ -454,6 +476,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           })),
         );
         if (keep.length > 0) {
+          skipOpen.current = true;
           setLegs(keep);
           setRouteId(keep[keep.length - 1]?.route.id ?? null);
           setSplit(keep.length > 1);
@@ -725,6 +748,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           onStage={(stage) => setStage(l.session.id, stage)}
           onNewQuote={() => void start(l.route, refund, l.cents, split, l.session.id)}
           starting={starting}
+          epoch={epoch}
         />
       ))
     : null;
@@ -792,12 +816,44 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   }
 
   const unsettled = legs.some((l) => l.stage === "waiting" || l.stage === "processing");
+  // The provider delivered the whole amount, but the claim on chain is not booked yet (it takes the watcher a moment,
+  // longer when the RPC is busy): the page is already the page of a paid invoice, not a page that asks for money.
+  const received =
+    legs.some((l) => l.stage === "paid") &&
+    (split ? allPaid : legs.every((l) => l.stage === "paid" || l.stage === "expired"));
+  if (received) {
+    return (
+      <>
+        <div className="mx-auto max-w-2xl space-y-6">
+          <InvoiceCard claim={c} received />
+          <div role="status" className="surface-card space-y-2 p-6">
+            <p className="flex items-center gap-2 text-[20px] font-semibold">
+              <CheckCircle2 size={22} strokeWidth={1.5} className="text-success-text" aria-hidden />
+              {split ? p.mixAllPaid : p.receivedTitle}
+            </p>
+            <p className="text-[15px]">{p.receivedBody}</p>
+            <div className="flex justify-center">
+              <Button variant="secondary" size="sm" onClick={showDialog}>
+                {p.showDetails}
+              </Button>
+            </div>
+          </div>
+          {parts}
+          {nextCard}
+        </div>
+        <PaymentDialog open={dialog} onClose={() => setDialog(false)} title={p.detailsTitle}>
+          {prices}
+        </PaymentDialog>
+      </>
+    );
+  }
+
   const payCardWithStatus = (
     <Card title={p.pickTitle}>
       {unsettled ? (
         <div className="bg-surface-2 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] p-3">
           <span className="text-[14px] font-medium">{p.inProgress}</span>
-          <Button variant="secondary" size="sm" onClick={() => setDialog(true)}>
+          <Button variant="secondary" size="sm" onClick={showDialog}>
             {p.showDetails}
           </Button>
         </div>

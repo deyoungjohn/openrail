@@ -170,7 +170,7 @@ export interface CreateInvoiceRequest {
   invoice_number: string;
   issuer_legal_name: string;
   debtor_legal_name: string;
-  debtor_key: string;
+  debtor_key?: string;
   debtor_type?: "evm" | "near";
   amount_usd: string;
   due_date: string;
