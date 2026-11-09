@@ -126,7 +126,7 @@ describe("near client cycles through its RPCs", () => {
 
   it("starts the next call at the RPC that answered, and comes back round to the first", async () => {
     const urls: string[] = [];
-    let oneDown = true;
+    const oneDown = true;
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       urls.push(url);
