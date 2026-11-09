@@ -114,7 +114,12 @@ restart_all() { # restart_all <release dir>
     local envline envpath
     envline="$(grep -m1 -E '^EnvironmentFile=[^-]' "$rel/deploy/systemd/$unit" 2>/dev/null || true)"
     envpath="${envline#EnvironmentFile=}"
-    if [[ -n "$envpath" && ! -f "$ETC/$(basename "$envpath")" ]]; then
+    local core=0 svc
+    for svc in "${CORE_SERVICES[@]}"; do
+      [[ "$unit" == "openrail-$svc.service" ]] && core=1
+    done
+    # Only a module's unit is left stopped: a core service without its environment is a failed release (rolled back).
+    if ((core == 0)) && [[ -n "$envpath" && ! -f "$ETC/$(basename "$envpath")" ]]; then
       say "SKIPPED $unit: $ETC/$(basename "$envpath") does not exist. Add its names to your openrail.env (see deploy/env/$(basename "$envpath").example), upload it with deploy/upload.sh --env, and apply again."
       sysctl_run disable --now "$unit" >/dev/null 2>&1 || true
       continue
