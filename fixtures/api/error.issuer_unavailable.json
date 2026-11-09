@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "issuer_unavailable",
+    "message": "The issuer service is unavailable; retry shortly",
+    "retry_after": 60
+  }
+}

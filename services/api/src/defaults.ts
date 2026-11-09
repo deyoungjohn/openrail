@@ -135,6 +135,19 @@ export function createAccessKeyPort(
  * The business's prepaid storage credit, read from the contract on every call (`storage_credit_of`), so a deposit
  * shows as soon as it is on chain. `amount` is the deposit the page suggests (an env default).
  */
+export function issuerUnavailableError(status?: number, code?: string): ApiError {
+  console.error(
+    `issuer unavailable: ${status === undefined ? "network" : `status=${status}`}${code === undefined || code === "" ? "" : ` code=${code}`}`,
+  );
+  return new ApiError(
+    503,
+    "issuer_unavailable",
+    `The issuer service is unavailable${status === undefined ? "" : ` (HTTP ${status}`}${code === undefined || code === "" ? "" : ` ${code}`}${status === undefined ? "" : ")"}; retry shortly`,
+    undefined,
+    { retry_after: 60 },
+  );
+}
+
 export function rpcBusyError(): ApiError {
   return new ApiError(503, "rpc_busy", "The NEAR RPC is busy; retry shortly", undefined, {
     retry_after: 60,
@@ -236,6 +249,7 @@ export function issuerFailure(status: number, text: string): ApiError {
   } catch {
     // not JSON: the status alone
   }
+  if (status >= 500) return issuerUnavailableError(status, code);
   if (status === 409 && code === "TOKEN_ID_MISMATCH") {
     return new ApiError(409, "token_id_mismatch", message || "the claim id changed while issuing");
   }
@@ -261,14 +275,19 @@ export function createHttpIssuer(baseUrl: string): IssuerPort {
   const url = baseUrl.replace(/\/+$/, "");
   const key = getEnv("ISSUER_SERVICE_KEY");
   const post = async <T>(path: string, body: unknown): Promise<T> => {
-    const response = await fetch(`${url}${path}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(key === undefined ? {} : { authorization: `Bearer ${key}`, "x-issuer-key": key }),
-      },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${url}${path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(key === undefined ? {} : { authorization: `Bearer ${key}`, "x-issuer-key": key }),
+        },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw issuerUnavailableError();
+    }
     const text = await response.text();
     if (!response.ok) throw issuerFailure(response.status, text);
     return JSON.parse(text) as T;

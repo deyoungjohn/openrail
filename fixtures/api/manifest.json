@@ -512,6 +512,14 @@
       "status": 503,
       "schema": "Error",
       "mock": false
+    },
+    {
+      "file": "error.issuer_unavailable.json",
+      "method": "POST",
+      "path": "/v1/pay/sessions",
+      "status": 503,
+      "schema": "Error",
+      "mock": false
     }
   ]
 }

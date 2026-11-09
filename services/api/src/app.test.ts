@@ -1042,3 +1042,45 @@ describe("where the merchant is paid", () => {
     expect(asked.destinationAsset).toBe(base);
   });
 });
+
+describe("fetch once", () => {
+  it("reads a finished pay session from the provider once and then from the database", async () => {
+    const { app, secret, quoteProvider } = harness();
+    const created = await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    expect(created.status).toBe(201);
+    const session = await app.handle(
+      request(
+        "POST",
+        "/v1/pay/sessions",
+        { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) },
+        secret,
+      ),
+    );
+    expect(session.status).toBe(201);
+    const id = (session.body as { id: string }).id;
+    quoteProvider.status.mockResolvedValue({ status: "SUCCESS" });
+    const first = await app.handle(request("GET", `/v1/pay/sessions/${id}`, undefined, secret));
+    expect(first.body).toMatchObject({ status: "success" });
+    await app.handle(request("GET", `/v1/pay/sessions/${id}`, undefined, secret));
+    await app.handle(request("GET", `/v1/pay/sessions/${id}`, undefined, secret));
+    expect(quoteProvider.status).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps asking the provider for an open pay session", async () => {
+    const { app, secret, quoteProvider } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    const session = await app.handle(
+      request(
+        "POST",
+        "/v1/pay/sessions",
+        { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) },
+        secret,
+      ),
+    );
+    const id = (session.body as { id: string }).id;
+    quoteProvider.status.mockResolvedValue({ status: "PROCESSING" });
+    for (let i = 0; i < 3; i += 1)
+      await app.handle(request("GET", `/v1/pay/sessions/${id}`, undefined, secret));
+    expect(quoteProvider.status).toHaveBeenCalledTimes(3);
+  });
+});

@@ -589,10 +589,7 @@ export class ApiApp {
   }
 
   private async receiptMachine(bookingTxHash: string): Promise<ReceiptDocument> {
-    const receipt =
-      this.deps.indexer === undefined
-        ? this.store.getReceipt(bookingTxHash)
-        : await this.deps.indexer.getReceipt(bookingTxHash);
+    const receipt = await this.receiptFor(bookingTxHash);
     if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
     const tokenId = String(receipt.token_id ?? "");
     const invoice = this.store.getInvoice(tokenId);
@@ -715,6 +712,34 @@ export class ApiApp {
    * transaction that issued it and, once paid, the day and the transactions of each payment. A page reached by its
    * unguessable link already shows the invoice; the receipts are public by their own links.
    */
+  private async receiptFor(bookingTxHash: string): Promise<Record<string, unknown> | undefined> {
+    const kept = this.docs.get<Record<string, unknown>>("receipts", bookingTxHash);
+    if (kept?.verified === true) return kept;
+    const receipt =
+      this.deps.indexer === undefined
+        ? this.store.getReceipt(bookingTxHash)
+        : await this.deps.indexer.getReceipt(bookingTxHash);
+    if (receipt?.verified === true) this.docs.put("receipts", bookingTxHash, receipt);
+    return receipt;
+  }
+
+  private async receiptsFor(invoice: InvoiceRecord): Promise<Record<string, unknown>[]> {
+    const claim = await this.claimOrStale(invoice.token_id);
+    if (claim !== undefined && isFinal(claim.status)) {
+      const kept = this.docs.get<Record<string, unknown>[]>("receiptLists", invoice.token_id);
+      if (kept !== undefined) return kept;
+      const receipts =
+        this.deps.indexer === undefined
+          ? this.store.listReceipts(invoice.token_id)
+          : await this.deps.indexer.listReceipts(invoice.issuer_id, invoice.token_id);
+      this.docs.put("receiptLists", invoice.token_id, receipts);
+      return receipts;
+    }
+    return this.deps.indexer === undefined
+      ? this.store.listReceipts(invoice.token_id)
+      : await this.deps.indexer.listReceipts(invoice.issuer_id, invoice.token_id);
+  }
+
   private async publicHistory(invoice: InvoiceRecord): Promise<PublicHistory> {
     const kept = this.docs.get<SettledDoc>("settled", invoice.token_id);
     if (kept?.history !== undefined) return kept.history;
@@ -1515,10 +1540,7 @@ export class ApiApp {
         const context = this.requireAuth(request);
         this.requireScope(context, "receipts:read");
         const invoice = this.ownInvoice(context.accountId, invoiceId);
-        const receipts =
-          this.deps.indexer === undefined
-            ? this.store.listReceipts(invoice.token_id)
-            : await this.deps.indexer.listReceipts(context.accountId, invoice.token_id);
+        const receipts = await this.receiptsFor(invoice);
         return { status: 200, body: { data: receipts } };
       }
       if (action === "pdf" && method === "GET") {
@@ -1665,24 +1687,36 @@ export class ApiApp {
       if (session === undefined) throw new ApiError(404, "pay_session_not_found");
       // The payer's page polls this. The truth is the provider's word about this deposit address;
       // a price that never received money must never look paid, whatever the claim says.
+      const finalStatuses = new Set(["success", "refunded", "failed", "expired"]);
       let status: string = session.status;
       let swap: Record<string, unknown> = { status: "PENDING_DEPOSIT" };
-      try {
-        const live = await this.quotes.status(session.deposit_address);
-        if (live !== undefined) {
-          status = paymentStatusOf(live.status);
-          swap = {
-            status: live.status,
-            ...(live.depositedAmount === undefined
-              ? {}
-              : { deposited_amount: live.depositedAmount }),
-            origin_chain_tx_hashes: live.originChainTxHashes ?? [],
-            destination_chain_tx_hashes: live.destinationChainTxHashes ?? [],
-            near_tx_hashes: live.nearTxHashes ?? [],
-          };
+      if (!finalStatuses.has(status)) {
+        try {
+          const live = await this.quotes.status(session.deposit_address);
+          if (live !== undefined) {
+            status = paymentStatusOf(live.status);
+            swap = {
+              status: live.status,
+              ...(live.depositedAmount === undefined
+                ? {}
+                : { deposited_amount: live.depositedAmount }),
+              origin_chain_tx_hashes: live.originChainTxHashes ?? [],
+              destination_chain_tx_hashes: live.destinationChainTxHashes ?? [],
+              near_tx_hashes: live.nearTxHashes ?? [],
+            };
+          }
+        } catch {
+          /* the provider is slow: keep the stored status */
         }
-      } catch {
-        /* the provider is slow: keep the stored status */
+        if (
+          status === "pending_deposit" &&
+          session.deadline_requested * 1000 < this.clock().getTime()
+        )
+          status = "expired";
+        if (finalStatuses.has(status) && status !== session.status) {
+          session.status = status as typeof session.status;
+          this.store.savePaySession(session);
+        }
       }
       return {
         status: 200,
@@ -2318,10 +2352,7 @@ export class ApiApp {
     const receiptMatch = /^\/v1\/receipts\/([^/]+)$/.exec(path);
     if (receiptMatch !== null && method === "GET") {
       const bookingTxHash = receiptMatch[1] ?? "";
-      const receipt =
-        this.deps.indexer === undefined
-          ? this.store.getReceipt(bookingTxHash)
-          : await this.deps.indexer.getReceipt(bookingTxHash);
+      const receipt = await this.receiptFor(bookingTxHash);
       if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
       return {
         status: 200,

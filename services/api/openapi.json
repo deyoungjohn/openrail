@@ -3550,7 +3550,7 @@
             }
           },
           "503": {
-            "description": "Every NEAR RPC is over quota; retry after retry_after seconds.",
+            "description": "The issuer or every NEAR RPC is unavailable; retry after retry_after seconds.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4274,6 +4274,16 @@
           },
           "403": {
             "description": "Missing required scope (insufficient_scope: missing scope: <name>).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The issuer or every NEAR RPC is unavailable; retry after retry_after seconds.",
             "content": {
               "application/json": {
                 "schema": {

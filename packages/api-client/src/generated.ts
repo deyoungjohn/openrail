@@ -1032,6 +1032,7 @@ export interface operations {
       "401": Error;
       "403": Error;
       "409": Error;
+      "503": Error;
     };
   };
   getPaySession: {
