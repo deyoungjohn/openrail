@@ -23,12 +23,39 @@ signed webhook events, and wallet-signed late-payment handling.
 
 ### Store & plugin API key scopes
 
-The merchant generates an API key in the dashboard under **Settings → API keys**. An integration or e-commerce plugin (such as the WooCommerce store plugin using `OPENRAIL_API_KEY`) requires the following scopes:
+The merchant generates an API key in the dashboard under **Settings → API keys**. An integration or e-commerce plugin (such as the Shopify gateway or WooCommerce store plugin using `OPENRAIL_API_KEY`) requires the following scopes:
 
 - **`invoices:write`**: required by `POST /v1/checkouts` to issue orders (`services/api/src/modules/checkout/checkouts.ts:477`), and by late-payment actions `POST /v1/checkouts/{id}/accept_late` and `POST /v1/checkouts/{id}/refund_quote` (`services/api/src/modules/checkout/checkouts.ts:493`).
 - **`invoices:read`**: required by `GET /v1/checkouts/{id}` to poll order status (`services/api/src/modules/checkout/checkouts.ts:507`) and by `GET /v1/checkouts` to list checkouts (`services/api/src/modules/checkout/checkouts.ts:484`).
 
 When creating the key, tick both **`invoices:read`** and **`invoices:write`**. No other scopes are required for store checkouts.
+
+### Shopify & Store Integration Readiness
+
+1. **Order reference idempotency (`order_ref`)**:
+   `POST /v1/checkouts` treats `order_ref` as a unique key per merchant. When Shopify or an e-commerce platform retries payment sessions for the same order reference with the same amount, the API returns the **existing checkout** with `200 OK` (not creating a duplicate claim). If a request supplies an existing `order_ref` with a different amount, the API refuses it with `409 Conflict` and named code `order_ref_amount_mismatch`.
+
+2. **Return and cancel URLs**:
+   Checkouts accept `return_url` and `cancel_url` (must be valid `https:` URLs). These are stored, returned in API and public views, and wired into the hosted page's "Back to shop" / "Cancel and return" action buttons (`cancel_url` when unpaid, `return_url` once paid).
+
+3. **Currency rule (USD only)**:
+   The API takes USD amounts. Requests can supply `amount_usd` (string e.g. `"29.99"`), `amount_cents` (integer e.g. `2999`), or `amount_usd_cents`. Any other currency (e.g. `EUR`, `CAD`, `GBP`) is refused with `400 Bad Request` and named code `unsupported_currency`. The API never converts currencies silently.
+
+4. **Webhook payload & signatures**:
+   Webhook deliveries for `checkout.paid` and `checkout.paid_late` carry the complete order reconciliation details:
+   - `order_ref`: the merchant's external order reference.
+   - `checkout_id`: the Openrail token id.
+   - `amount_cents` & `amount_usd_cents`: amount in whole USD cents.
+   - `amount_usd`, `subtotal_usd`, `fee_usd`, `total_usd`: breakdown strings.
+   - `transactions`: `{ origin: string | null, booking: string | null }`.
+   - `status`: live status string (`paid` or `late`).
+   - `timestamp`: ISO-8601 creation timestamp.
+   Each delivery includes the standard header `Openrail-Signature: t=<unix_seconds>,v1=<hmac_sha256_hex>` signed with the webhook endpoint secret.
+
+### Fetch-once and RPC Resilience
+
+- **Fetch once on settled checkouts**: Finished checkouts (`paid`, `refunded`, `expired`, `closed`) are read from the blockchain and indexer once and persisted in the module's document store (`docs` namespace `checkout.settled`). Subsequent API calls, hosted page views, and webhook deliveries are answered from this stored snapshot without repeated RPC calls.
+- **RPC failure fallback (`checking` status)**: If the NEAR RPC or rate limits fail when loading a checkout, the hosted page `/c/<id>` and public endpoint `/v1/public/checkouts/{id}` do not error out with 500. Instead, they answer from the stored checkout record with status `"checking"`, allowing payers to view order details while chain connectivity recovers.
 
 ## Events
 
@@ -38,9 +65,9 @@ deduplicated with `sha256(token_id ‖ booking_seq)`:
 | Contract event | Webhook event | Notes |
 | --- | --- | --- |
 | `checkout_created` | `checkout.created` | Emitted when the checkout is created |
-| `checkout_paid` | `checkout.paid` | Full amount booked within expiry (+ 120 s grace) |
+| `checkout_paid` | `checkout.paid` | Full amount booked within expiry (+ 120 s grace); carries `order_ref`, `amount_cents`, `transactions` |
 | `checkout_partial` | `checkout.partial` | Carries `due`, `received`, `remaining`; never contains the word `paid` |
-| `checkout_paid_late` | `checkout.paid_late` | Booked after expiry + grace; held until accepted or refunded |
+| `checkout_paid_late` | `checkout.paid_late` | Booked after expiry + grace; held until accepted or refunded; carries `order_ref`, `amount_cents`, `transactions` |
 | `checkout_accepted` | `checkout.accepted` | Merchant accepted a late checkout |
 | `checkout_refund_started` | `checkout.refund_started` | Carries `refund_to` and `amount_in` |
 
