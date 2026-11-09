@@ -240,6 +240,26 @@ test.describe("cash out", () => {
     await page.getByRole("button", { name: "Get quote" }).click();
   }
 
+  test("lists the cash-outs, follows the money and shows revenue against cash-out", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const row = fixture("cashouts.get");
+    await mockApi(page, {
+      "GET /v1/cashouts": { body: { data: [row] } },
+    });
+    await page.goto("/app/cashout");
+    const table = page.getByRole("region", { name: "Cash-outs" });
+    await expect(table).toContainText("$2.00");
+    await expect(table).toContainText("BASE USDC");
+    await expect(table).toContainText("Arrived");
+    await expect(table).toContainText("AHr9XT");
+    const overview = page.getByRole("region", { name: "Cash-out and revenue" });
+    await expect(overview.getByRole("region", { name: "Cashed out", exact: true })).toBeVisible();
+    // never a negative figure
+    await expect(overview).not.toContainText("-$");
+  });
+
   test("the route cost comes before the sign button, as a share of the amount", async ({
     page,
   }) => {
@@ -314,7 +334,9 @@ test.describe("cash out", () => {
     });
     await page.goto("/app/cashout");
     await ask(page);
-    await expect(page.locator("main [role=alert]")).toContainText("Nothing was charged");
+    await expect(
+      page.locator("main [role=alert]").filter({ hasText: "Nothing was charged" }),
+    ).toContainText("Nothing was charged");
   });
 
   for (const scheme of ["light", "dark"] as const) {

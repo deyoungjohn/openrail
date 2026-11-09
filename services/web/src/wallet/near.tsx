@@ -48,7 +48,7 @@ interface NearState {
   connect: (walletId: string, signal?: AbortSignal) => Promise<string | undefined>;
   signOut: () => Promise<void>;
   /** One FunctionCall transaction, signed by the connected NEAR wallet. */
-  call: (c: NearCall) => Promise<void>;
+  call: (c: NearCall) => Promise<string | undefined>;
   /** NEP-413 signature of the sign-in challenge. Throws `SIGNMESSAGE_UNSUPPORTED` for wallets without it. */
   signMessage: (c: ChallengeToSign, signal?: AbortSignal) => Promise<SignedChallenge>;
   /** Asks the selector which wallets support signMessage. Safe to call again. */
@@ -195,12 +195,15 @@ export function NearProvider({ children }: { children: ReactNode }) {
     const s = selector.current;
     if (!s?.isSignedIn()) throw new Error("NOT_SIGNED_IN");
     const wallet = await s.wallet();
-    await wallet.signAndSendTransaction({
+    const outcome = (await wallet.signAndSendTransaction({
       receiverId: c.receiverId,
       actions: [
         actionCreators.functionCall(c.methodName, c.args, BigInt(c.gas), BigInt(c.deposit)),
       ],
-    });
+    })) as { transaction?: { hash?: string }; transaction_outcome?: { id?: string } } | void;
+    // Wallets answer with the final outcome; the hash is on it (not every wallet returns one).
+    const hash = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id;
+    return typeof hash === "string" ? hash : undefined;
   }, []);
 
   const signMessage = useCallback(

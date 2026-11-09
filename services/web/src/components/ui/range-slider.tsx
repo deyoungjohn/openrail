@@ -71,7 +71,7 @@ export function RangeSlider({ format, marks, className, ...options }: RangeSlide
         className,
       )}
     >
-      <div className="relative h-14 pt-9">
+      <div className="relative h-14 pt-3">
         <div
           {...trackProps}
           className={cn(

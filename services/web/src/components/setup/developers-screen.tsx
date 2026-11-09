@@ -1,5 +1,7 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
+import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "../ui/popover-morph";
 import type { ApiKey, ApiKeyCreated, WebhookEndpoint } from "@openrail/api-client";
 import { Plus, RotateCw, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -152,16 +154,31 @@ function ApiKeysPanel() {
         k.scopes.length === 0 ? (
           "—"
         ) : (
-          <span className="flex flex-wrap gap-1">
-            {k.scopes.map((scope) => (
-              <span
-                key={scope}
-                className="inline-flex rounded-full bg-surface-2 px-2 py-0.5 text-[12px] font-medium text-muted"
+          <MorphPopover>
+            <MorphPopoverTrigger>
+              <button
+                type="button"
+                aria-label={t.scopesOf(k.name, k.scopes.length)}
+                className="inline-flex h-8 items-center gap-1 rounded-full bg-surface-2 px-3 text-[13px] font-medium text-muted transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
               >
-                {scope}
+                {t.scopeCount(k.scopes.length)}
+                <ChevronDown aria-hidden size={14} />
+              </button>
+            </MorphPopoverTrigger>
+            <MorphPopoverContent align="start" className="w-72 max-w-[calc(100vw-1.5rem)] p-3">
+              <p className="caption mb-2">{t.scopesFor(k.name)}</p>
+              <span className="flex flex-wrap gap-1">
+                {k.scopes.map((scope) => (
+                  <span
+                    key={scope}
+                    className="inline-flex rounded-full bg-surface-2 px-2 py-0.5 text-[12px] font-medium text-muted"
+                  >
+                    {scope}
+                  </span>
+                ))}
               </span>
-            ))}
-          </span>
+            </MorphPopoverContent>
+          </MorphPopover>
         ),
     },
     {

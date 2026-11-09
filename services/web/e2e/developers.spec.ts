@@ -50,12 +50,17 @@ test.describe("API keys", () => {
   test("lists keys by prefix with scopes, last use and status, never a secret", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await mockApi(page, base());
     await page.goto("/app/developers");
     const keys = page.getByRole("region", { name: "API keys" });
     await expect(keys).toContainText("Production");
     await expect(keys).toContainText("or_sk_live_ab12");
-    await expect(keys).toContainText("invoices:read");
+    // The scopes are one short button; the list opens in a pop-over on click, so the row stays one line.
+    await expect(keys).not.toContainText("invoices:read");
+    await keys.getByRole("button", { name: /^Show the \d+ scopes of Production/ }).click();
+    await expect(page.getByText("invoices:read").first()).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(keys).toContainText("Never used");
     await expect(keys).not.toContainText("secret");
   });

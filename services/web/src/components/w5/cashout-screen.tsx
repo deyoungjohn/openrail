@@ -8,7 +8,10 @@ import { dashClient } from "@/lib/client";
 import { MOCK_MODE } from "@/lib/auth";
 import { formatUsd } from "@/lib/format";
 import { formatToken, refundAddressProblem } from "@/lib/pay";
+import { tokenLabel, type CashoutRow } from "@/lib/cashout";
 import { useBalance } from "@/lib/use-balance";
+import { useEarnings } from "@/lib/use-earnings";
+import { useAsync } from "@/lib/use-async";
 import { costShare, parseUsdcInput } from "@/lib/w5";
 import { useActions } from "@/wallet/actions";
 import { useNear } from "@/wallet/near";
@@ -19,6 +22,9 @@ import { CHAINS, type ChainId } from "../ui/chain-badge";
 import { Countdown } from "../ui/countdown";
 import { Input, Select } from "../ui/input";
 import { RangeSlider } from "../ui/range-slider";
+import { CashoutFlow } from "./cashout-flow";
+import { CashoutHistory } from "./cashout-history";
+import { CashoutOverview } from "./cashout-overview";
 import { NearWalletView } from "../wallet-buttons";
 import { ErrorNote } from "@/components/ui/error-note";
 
@@ -58,6 +64,12 @@ export function CashoutScreen() {
   const [error, setError] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
   const idem = useRef(crypto.randomUUID());
+  const [list, reloadList] = useAsync(
+    async () => (await dashClient.cashout.list()).data as CashoutRow[],
+    [],
+  );
+  const [earned] = useEarnings();
+  const [flow, setFlow] = useState<CashoutRow | null>(null);
 
   const auth = useAuth();
   const account = auth.state.status === "signedIn" ? auth.state.accountId : null;
@@ -123,12 +135,25 @@ export function CashoutScreen() {
     setError(null);
     setPhase("signing");
     try {
-      await actions.cashOut({
+      const hash = await actions.cashOut({
         tokenId: quote.source_asset,
         depositAddress: quote.deposit_address,
         amount: quote.amount,
       });
       setPhase("sent");
+      const id = (quote as { id?: string }).id;
+      if (id) {
+        // Attach the signed transaction (when the wallet gave one) and show where the money goes from here.
+        try {
+          const row = hash
+            ? await dashClient.cashout.sent(id, hash)
+            : await dashClient.cashout.get(id);
+          setFlow(row as CashoutRow);
+        } catch {
+          // The cash-out is signed and on its way; the table below still lists it.
+        }
+        reloadList();
+      }
     } catch {
       setError(t.signFailed);
       setPhase("quoted");
@@ -151,6 +176,19 @@ export function CashoutScreen() {
             {t.sent}
           </p>
           <p className="text-[15px]">{t.sentBody}</p>
+          <div className="flex justify-center">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setPhase("form");
+                setQuote(null);
+                setAmountText("");
+                idem.current = crypto.randomUUID();
+              }}
+            >
+              {t.again}
+            </Button>
+          </div>
         </div>
       ) : (
         <form
@@ -165,7 +203,7 @@ export function CashoutScreen() {
             <p className="text-[15px]" data-testid="cashout-available">
               {t.available}{" "}
               <span className="tabular font-semibold">{formatUsd(availableCents)}</span>
-              {held ? <span className="caption"> {t.heldOn(held.network)}</span> : null}
+              {held ? <span className="caption"> {tokenLabel(held.tokenId)}</span> : null}
             </p>
           ) : null}
           <Input
@@ -285,7 +323,13 @@ export function CashoutScreen() {
                 <span onClick={undefined}>
                   <Countdown
                     target={Date.parse(quote.deadline)}
-                    units={["minutes", "seconds"]}
+                    units={
+                      Date.parse(quote.deadline) - Date.now() > 86_400_000
+                        ? ["days", "hours", "minutes"]
+                        : Date.parse(quote.deadline) - Date.now() > 3_600_000
+                          ? ["hours", "minutes", "seconds"]
+                          : ["minutes", "seconds"]
+                    }
                     variant="compact"
                   />
                 </span>
@@ -304,6 +348,28 @@ export function CashoutScreen() {
           )}
         </>
       ) : null}
+
+      {flow ? (
+        <CashoutFlow
+          initial={flow}
+          onChange={(row) => {
+            if (row.status !== flow.status) reloadList();
+          }}
+        />
+      ) : null}
+
+      <>
+        <CashoutOverview
+          earnings={earned.state === "ready" ? earned.data.earnings : []}
+          cashouts={list.state === "ready" ? list.data : []}
+          loading={earned.state === "loading" || list.state === "loading"}
+        />
+        <CashoutHistory
+          rows={list.state === "ready" ? list.data : []}
+          state={list.state}
+          onRetry={reloadList}
+        />
+      </>
     </div>
   );
 }

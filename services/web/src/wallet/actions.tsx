@@ -14,7 +14,11 @@ export interface Actions {
   /** Prepays storage for API issuance: `deposit_storage_credit` with the NEAR attached (blueprint 2.2). */
   depositStorageCredit(contractId: string, depositYocto: string): Promise<void>;
   /** `mt_transfer` of the holder's own Intents USDC to a cash-out deposit address (blueprint 2.9). 1 yoctoNEAR. */
-  cashOut(a: { tokenId: string; depositAddress: string; amount: string }): Promise<void>;
+  cashOut(a: {
+    tokenId: string;
+    depositAddress: string;
+    amount: string;
+  }): Promise<string | undefined>;
   /** NEP-171 transfer. Exactly 1 yoctoNEAR; on a sale the memo carries the document hash. */
   nftTransfer(
     rootContract: string,
@@ -28,13 +32,20 @@ const mockActions: Actions = {
   acknowledgeNear: () => wait(800),
   prepareTransfer: () => wait(1000),
   depositStorageCredit: () => wait(800),
-  cashOut: () => wait(1000),
+  cashOut: async () => {
+    await wait(1000);
+    return undefined;
+  },
   nftTransfer: () => wait(1000),
 };
 
 /** Fixture mode never signs. Live mode asks the connected NEAR wallet. */
 export function useActions(): Actions {
-  const { call } = useNear();
+  const { call: signed } = useNear();
+  // Most actions do not need the hash; cash-out does.
+  const call = async (c: Parameters<typeof signed>[0]): Promise<void> => {
+    await signed(c);
+  };
   return useMemo<Actions>(
     () =>
       MOCK_MODE
@@ -65,7 +76,7 @@ export function useActions(): Actions {
                 deposit: depositYocto,
               }),
             cashOut: (a) =>
-              call({
+              signed({
                 receiverId: INTENTS_CONTRACT,
                 methodName: "mt_transfer",
                 args: { token_id: a.tokenId, receiver_id: a.depositAddress, amount: a.amount },
