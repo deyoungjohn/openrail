@@ -36,6 +36,13 @@ export interface NearClientOptions {
   signer?: SignerEnv;
   intentsContractId?: string;
   requestTimeoutMs?: number;
+  /** Pause before repeating a rate-limited call on the same RPC (doubles each time). */
+  quotaBackoffMs?: number;
+  /** How long an RPC that refused is tried last. */
+  cooldownMs?: number;
+  /** The most requests in flight at once from this client (a provider's per-second limit is easy to burst past). */
+  maxConcurrent?: number;
+  now?: () => number;
 }
 
 export interface ViewRequest {
@@ -114,6 +121,13 @@ export class NearClient {
   private readonly maxRetries: number;
   private readonly retryBackoffMs: number;
   private readonly requestTimeoutMs: number;
+  private readonly quotaBackoffMs: number;
+  private readonly cooldownMs: number;
+  private readonly maxConcurrent: number;
+  private readonly now: () => number;
+  private readonly cooling = new Map<string, number>();
+  private inFlight = 0;
+  private readonly waiting: (() => void)[] = [];
   private readonly intentsContractId: string;
   private readonly signerEnv?: SignerEnv;
   private readonly counts = new Map<string, number>();
@@ -129,6 +143,10 @@ export class NearClient {
     this.maxRetries = options.maxRetries ?? 2;
     this.retryBackoffMs = options.retryBackoffMs ?? 100;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
+    this.quotaBackoffMs = options.quotaBackoffMs ?? 250;
+    this.cooldownMs = options.cooldownMs ?? 5_000;
+    this.maxConcurrent = Math.max(1, options.maxConcurrent ?? 6);
+    this.now = options.now ?? (() => Date.now());
     this.intentsContractId = options.intentsContractId ?? "intents.near";
     this.signerEnv = options.signer;
   }
@@ -175,14 +193,38 @@ export class NearClient {
     return { kind: "ok", value: (body as { result?: unknown } | undefined)?.result };
   }
 
+  private async acquire(): Promise<void> {
+    if (this.inFlight < this.maxConcurrent) {
+      this.inFlight += 1;
+      return;
+    }
+    await new Promise<void>((resolve) => this.waiting.push(resolve));
+  }
+
+  private release(): void {
+    const next = this.waiting.shift();
+    if (next) next();
+    else this.inFlight -= 1;
+  }
+
+  /** The RPCs in the order to try them: those that refused a moment ago go last. */
+  private urlOrder(): string[] {
+    const now = this.now();
+    const ready = this.rpcUrls.filter((u) => (this.cooling.get(u) ?? 0) <= now);
+    const resting = this.rpcUrls.filter((u) => (this.cooling.get(u) ?? 0) > now);
+    return [...ready, ...resting];
+  }
+
   private async rpc<T>(method: string, params: unknown, feature: string): Promise<T> {
     let lastError: NearRpcError | undefined;
-    for (let urlIndex = 0; urlIndex < this.rpcUrls.length; urlIndex += 1) {
-      const url = this.rpcUrls[urlIndex];
+    const order = this.urlOrder();
+    for (let urlIndex = 0; urlIndex < order.length; urlIndex += 1) {
+      const url = order[urlIndex];
       if (url === undefined) continue;
       for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
         this.increment(feature);
         let outcome: Outcome;
+        await this.acquire();
         try {
           const response = await this.fetchImpl(url, {
             method: "POST",
@@ -203,13 +245,21 @@ export class NearClient {
               `RPC_NETWORK: ${error instanceof Error ? error.message : String(error)}`,
             ),
           };
+        } finally {
+          this.release();
         }
 
         if (outcome.kind === "ok") return outcome.value as T;
         lastError = outcome.error;
 
         if (outcome.kind === "quota") {
-          if (urlIndex < this.rpcUrls.length - 1) {
+          // A per-second limit clears in a moment: repeat the call here after a pause before leaving this RPC.
+          if (attempt < this.maxRetries) {
+            await this.sleep(this.quotaBackoffMs * 2 ** attempt);
+            continue;
+          }
+          this.cooling.set(url, this.now() + this.cooldownMs);
+          if (urlIndex < order.length - 1) {
             this.fallbacks += 1;
             break;
           }
@@ -220,7 +270,7 @@ export class NearClient {
             await this.sleep(this.retryBackoffMs * 2 ** attempt);
             continue;
           }
-          if (urlIndex < this.rpcUrls.length - 1) {
+          if (urlIndex < order.length - 1) {
             this.fallbacks += 1;
             break;
           }

@@ -610,7 +610,7 @@ export class ApiApp {
   /**
    * The invoices as they are on chain now: status, what is still owed and what was paid come from each
    * claim, not from the record written at creation (which never changes). A claim that cannot be read
-   * keeps its stored values. Reads are cached for ten seconds and run eight at a time.
+   * keeps the last one read, and only a claim never read keeps its stored values. Reads are cached for ten seconds and run eight at a time.
    */
   private async liveInvoices(invoices: InvoiceRecord[]): Promise<unknown[]> {
     const now = this.clock().getTime();
@@ -629,7 +629,9 @@ export class ApiApp {
             claim = await this.deps.contract.claim(invoice.token_id);
             this.claimCache.set(invoice.token_id, { at: now, claim });
           } catch {
-            claim = undefined;
+            // The chain cannot be read now: the last status seen is closer to the truth than the record written at
+            // creation ("Issued"), which would show a paid invoice as outstanding.
+            claim = cached?.claim;
           }
         }
         out[index] =

@@ -61,6 +61,85 @@ describe("near client views", () => {
   });
 });
 
+describe("near client rate limits", () => {
+  it("retries a rate-limited call on the same RPC before leaving it", async () => {
+    // A per-second limit clears in a moment: the call is repeated after a pause, not sent to another provider.
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) return jsonResponse({ error: { message: "request limit reached" } }, 429);
+      return callResult({ ok: true });
+    });
+    const sleep = vi.fn(async () => undefined);
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.primary", "https://rpc.secondary"],
+      fetchImpl,
+      sleep,
+      maxRetries: 2,
+      quotaBackoffMs: 200,
+    });
+    await expect(
+      client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" }),
+    ).resolves.toEqual({ ok: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(client.fallbackCount()).toBe(0);
+    expect(sleep).toHaveBeenCalledWith(200);
+  });
+
+  it("tries an RPC that just refused last, for a while", async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("primary")) return jsonResponse({ error: { message: "rate limit" } }, 429);
+      return callResult({ ok: true });
+    });
+    let now = 1_000_000;
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.primary", "https://rpc.secondary"],
+      fetchImpl,
+      maxRetries: 0,
+      cooldownMs: 5_000,
+      now: () => now,
+    });
+    const call = () =>
+      client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" });
+    await call();
+    expect(urls).toEqual(["https://rpc.primary", "https://rpc.secondary"]);
+    urls.length = 0;
+    await call();
+    expect(urls).toEqual(["https://rpc.secondary"]);
+    now += 6_000;
+    urls.length = 0;
+    await call();
+    expect(urls[0]).toBe("https://rpc.primary");
+  });
+
+  it("never has more than maxConcurrent requests in flight", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const fetchImpl = vi.fn(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight -= 1;
+      return callResult({ ok: true });
+    });
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.primary"],
+      fetchImpl,
+      maxConcurrent: 2,
+    });
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" }),
+      ),
+    );
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
+  });
+});
+
 describe("near client retry and failover", () => {
   it("fails over to the second RPC on a quota error and never reads it as rejected", async () => {
     const urls: string[] = [];
