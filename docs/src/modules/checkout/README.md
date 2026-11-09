@@ -98,14 +98,31 @@ pnpm --filter @openrail/api exec vitest run --config ../../vitest.config.ts --ro
 # Web unit tests (hosted checkout rules):
 pnpm --filter @openrail/web test
 
-# Hosted page e2e + WCAG AA axe checks at 360 px in light and dark themes:
+# Hosted page e2e + WCAG AA axe checks at 360 px in light and dark themes across every state:
 pnpm --filter @openrail/web build
 pnpm --filter @openrail/web exec playwright test e2e/checkout.spec.ts
 
 # Mainnet dry-run runner (lists the 4 steps and writes nothing):
 NEAR_ENV=mainnet NEAR_ROOT_ACCOUNT=openrail.near NEAR_RPC_URL=https://rpc.mainnet.near.org \
   H1_BUSINESS_ACCOUNT=acme.openrail.near pnpm exec tsx scripts/t2/checkout.ts
+
+# Rerun step 4 (resumes from reports/CHECKOUT-state.json and asserts refund arrival):
+pnpm exec tsx scripts/t2/checkout.ts --state reports/CHECKOUT-state.json --env-file <path_to_env>
 ```
+
+### Environment variables for confirmed mainnet step 4 rerun (names only):
+- `NEAR_ENV` (`mainnet`)
+- `NEAR_ROOT_ACCOUNT`
+- `NEAR_RPC_URL`
+- `H1_BUSINESS_ACCOUNT`
+- `OPENRAIL_API_KEY`
+- `H1_REFUND_EVM`
+- `H1_OWNER_ACCOUNT`
+- `H1_OWNER_PRIVATE_KEY`
+- `OWED_CONFIRM_MAINNET` (`yes`)
+- `MAX_SPEND_USD`
+- `ONECLICK_API_URL`
+- `ONECLICK_JWT`
 
 ## Mutation checks
 
