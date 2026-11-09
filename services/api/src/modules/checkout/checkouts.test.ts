@@ -528,6 +528,41 @@ describe("checkout API: read the state from the claim", () => {
     expect(new Set(all).size).toBe(5);
     expect(all).not.toContain("theirs");
     for (const row of first.body.data) expect(row.status).toBe("pending");
+
+    const theirs = await call(h, "GET", "/v1/checkouts", undefined, h.keys.other);
+    expect(theirs.status).toBe(200);
+    expect(theirs.body.data).toHaveLength(1);
+    expect(theirs.body.data[0].order_ref).toBe("theirs");
+  });
+
+  it("checkout_routes_filter_by_merchant", async () => {
+    const h = harness();
+    const acmeId = await made(h, { order_ref: "ORD-ACME" });
+    const otherRes = await createCheckout(h, { order_ref: "ORD-OTHER" }, h.keys.other);
+    expect(otherRes.status).toBe(201);
+    const otherId = (otherRes.body as { id: string }).id;
+
+    // Listing is strictly filtered by merchant:
+    const acmeList = await call(h, "GET", "/v1/checkouts", undefined, h.keys.acme);
+    expect(acmeList.status).toBe(200);
+    expect(acmeList.body.data.map((c: { id: string }) => c.id)).toEqual([acmeId]);
+
+    const otherList = await call(h, "GET", "/v1/checkouts", undefined, h.keys.other);
+    expect(otherList.status).toBe(200);
+    expect(otherList.body.data.map((c: { id: string }) => c.id)).toEqual([otherId]);
+
+    // Single checkout view answers 404 for another merchant's checkout:
+    expect((await get(h, acmeId, h.keys.other)).status).toBe(404);
+    expect((await get(h, otherId, h.keys.acme)).status).toBe(404);
+
+    // Public view is accessible without auth and reports the correct merchant:
+    const pubAcme = await call(h, "GET", `/v1/public/checkouts/${acmeId}`);
+    expect(pubAcme.status).toBe(200);
+    expect(pubAcme.body.merchant).toBe(ACME);
+
+    const pubOther = await call(h, "GET", `/v1/public/checkouts/${otherId}`);
+    expect(pubOther.status).toBe(200);
+    expect(pubOther.body.merchant).toBe(OTHER);
   });
 
   it("checkout_public_view_needs_no_key_and_shows_no_internals", async () => {
@@ -790,6 +825,7 @@ describe("checkout API: late payments never sign for the merchant", () => {
     const h = harness();
     const id = await lateCheckout(h);
     expect((await post(h, id, "accept_late", {}, h.keys.other)).status).toBe(404);
+    expect((await post(h, id, "refund_quote", {}, h.keys.other)).status).toBe(404);
     expect((await post(h, id, "accept_late", {}, h.keys.acmeRead)).status).toBe(403);
     const noKey = await call(h, "POST", `/v1/checkouts/${id}/accept_late`, {}, h.keys.acme);
     expect(noKey.body.error.code).toBe("idempotency_key_required");

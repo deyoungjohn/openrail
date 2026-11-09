@@ -227,7 +227,11 @@ export class PaymentLinks {
         context.requireScope(auth, "invoices:read");
         return {
           status: 200,
-          body: { data: context.docs.list<PaymentLink>(NS_LINKS, auth.accountId) },
+          body: {
+            data: context.docs
+              .list<PaymentLink>(NS_LINKS, auth.accountId)
+              .filter((link) => link.account_id === auth.accountId),
+          },
         };
       }
       return undefined;
