@@ -2132,6 +2132,179 @@ describe("checkout events reach the merchant: GET /v1/events and a signed webhoo
     expect(r3.body.order_ref).toBe("ORD-RPC-1");
   });
 
+  it("shopify_app_replay_creates_retries_and_delivers_signed_webhooks_matching_contract", async () => {
+    const h = harness();
+    const store = createMemoryStores().api;
+    const webhookSecret = "whsec_shopify_replay_test";
+    store.saveWebhookEndpoint(ACME, {
+      id: "whe_shopify_1",
+      url: "https://my-app.example/shopify/webhooks/openrail",
+      secret: webhookSecret,
+      events: ["checkout.paid", "checkout.paid_late", "checkout.partial", "checkout.accepted"],
+    });
+
+    // 1. Initial checkout creation by Shopify app
+    const shopifyCreatePayload = {
+      order_ref: "shopify-6001002003",
+      amount_usd: "12.00",
+      currency: "USD",
+      expires_in_minutes: 60,
+      return_url: "https://my-store.myshopify.com/checkouts/c/123/complete",
+      cancel_url: "https://my-store.myshopify.com/checkouts/c/123/cancel",
+      fee_mode: "pass_to_customer",
+      items: [{ name: "Widget A", quantity: 1, unit_price_usd: "12.00" }],
+    };
+
+    const rCreate = await call(h, "POST", "/v1/checkouts", shopifyCreatePayload, h.keys.acme, {
+      "idempotency-key": "shopify-order-6001002003-session-gid-1",
+    });
+    expect(rCreate.status).toBe(201);
+    const checkout = rCreate.body;
+    expect(checkout.id).toBe("c-101");
+    expect(checkout.token_id).toBe("c-101");
+    expect(checkout.order_ref).toBe("shopify-6001002003");
+    expect(checkout.amount_usd).toBe("12.03");
+    expect(checkout.subtotal_usd).toBe("12.00");
+    expect(checkout.fee_usd).toBe("0.03");
+    expect(checkout.total_usd).toBe("12.03");
+    expect(checkout.fee_mode).toBe("pass_to_customer");
+    expect(checkout.pay_url).toBe("https://pay.example/c/c-101");
+    expect(checkout.return_url).toBe("https://my-store.myshopify.com/checkouts/c/123/complete");
+    expect(checkout.cancel_url).toBe("https://my-store.myshopify.com/checkouts/c/123/cancel");
+    expect(checkout.status).toBe("pending");
+
+    // 2. Repeat session for the same order_ref and amount -> 200 with existing checkout
+    const rRepeat = await call(h, "POST", "/v1/checkouts", shopifyCreatePayload, h.keys.acme, {
+      "idempotency-key": "shopify-order-6001002003-session-gid-2",
+    });
+    expect(rRepeat.status).toBe(200);
+    expect(rRepeat.body.id).toBe(checkout.id);
+    expect(rRepeat.body.order_ref).toBe("shopify-6001002003");
+
+    // 3. Different amount for existing order_ref -> 409 order_ref_amount_mismatch
+    const rConflict = await call(
+      h,
+      "POST",
+      "/v1/checkouts",
+      { ...shopifyCreatePayload, amount_usd: "24.00" },
+      h.keys.acme,
+      { "idempotency-key": "shopify-order-6001002003-session-gid-3" },
+    );
+    expect(rConflict.status).toBe(409);
+    expect(rConflict.body.error?.code).toBe("order_ref_amount_mismatch");
+
+    // 4. Non-USD currency -> 400 unsupported_currency
+    const rEur = await call(
+      h,
+      "POST",
+      "/v1/checkouts",
+      { ...shopifyCreatePayload, order_ref: "shopify-eur-order", currency: "EUR" },
+      h.keys.acme,
+      { "idempotency-key": "shopify-eur-key" },
+    );
+    expect(rEur.status).toBe(400);
+    expect(rEur.body.error?.code).toBe("unsupported_currency");
+
+    // 5. Webhook delivery: simulate indexed checkout_paid event
+    const deliveredWebhooks: Array<{ url: string; headers: Record<string, string>; body: string }> =
+      [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      deliveredWebhooks.push({
+        url: String(url),
+        headers: (init?.headers as Record<string, string>) ?? {},
+        body: String(init?.body ?? ""),
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    const stream = (rows: IndexedEvent[]): NonNullable<ApiDeps["indexer"]> =>
+      ({
+        listEvents: async () => ({ data: rows, next_cursor: null }),
+      }) as unknown as NonNullable<ApiDeps["indexer"]>;
+
+    const paidEvent: IndexedEvent = {
+      id: "1",
+      type: "checkout_paid",
+      created: Math.floor(NOW.getTime() / 1000),
+      data: {
+        token_id: "c-101",
+        booking_tx: "8fJ3kLmN9pQrStUvWxYz",
+        origin_tx: "0xabc123def456",
+      },
+      indexed: true,
+    };
+
+    const worker = new WebhookWorker({
+      events: stream([paidEvent]),
+      store,
+      fetchImpl,
+      validateUrl: async () => undefined,
+      clock: () => NOW,
+      expand: (e) => expandEvents(e, [h.module], h.context()),
+    });
+    await worker.runOnce();
+    expect(deliveredWebhooks).toHaveLength(1);
+    const delivered = deliveredWebhooks[0]!;
+    expect(delivered.url).toBe("https://my-app.example/shopify/webhooks/openrail");
+
+    // Verify Openrail-Signature header
+    const sigHeader =
+      delivered.headers["Openrail-Signature"] ?? delivered.headers["openrail-signature"];
+    expect(sigHeader).toBeDefined();
+    const match = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(sigHeader ?? "");
+    expect(match).not.toBeNull();
+    const ts = Number(match![1]);
+    expect(sigHeader).toBe(signWebhook(webhookSecret, ts, delivered.body));
+
+    // Verify payload shape expected by ag6's Shopify app
+    const eventPayload = JSON.parse(delivered.body) as {
+      id: string;
+      type: string;
+      data: Record<string, unknown>;
+    };
+    expect(eventPayload.type).toBe("checkout.paid");
+    expect(eventPayload.data.token_id).toBe("c-101");
+    expect(eventPayload.data.order_ref).toBe("shopify-6001002003");
+    expect(eventPayload.data.status).toBe("paid");
+    expect(eventPayload.data.subtotal_usd).toBe("12.00");
+    expect(eventPayload.data.fee_usd).toBe("0.03");
+    expect(eventPayload.data.total_usd).toBe("12.03");
+    expect(eventPayload.data.amount_usd).toBe("12.03");
+    expect(eventPayload.data.booking_tx).toBe("8fJ3kLmN9pQrStUvWxYz");
+    expect(eventPayload.data.origin_tx).toBe("0xabc123def456");
+
+    // 6. Webhook delivery: simulate indexed checkout_paid_late event
+    const lateEvent: IndexedEvent = {
+      id: "2",
+      type: "checkout_paid_late",
+      created: Math.floor(NOW.getTime() / 1000) + 10,
+      data: {
+        token_id: "c-101",
+        held_amount: "12030000",
+      },
+      indexed: true,
+    };
+    const workerLate = new WebhookWorker({
+      events: stream([lateEvent]),
+      store,
+      fetchImpl,
+      validateUrl: async () => undefined,
+      clock: () => NOW,
+      expand: (e) => expandEvents(e, [h.module], h.context()),
+    });
+    await workerLate.runOnce();
+    expect(deliveredWebhooks).toHaveLength(2);
+    const deliveredLate = deliveredWebhooks[1]!;
+    const latePayload = JSON.parse(deliveredLate.body) as {
+      type: string;
+      data: Record<string, unknown>;
+    };
+    expect(latePayload.type).toBe("checkout.paid_late");
+    expect(latePayload.data.status).toBe("late");
+    expect(latePayload.data.order_ref).toBe("shopify-6001002003");
+    expect(latePayload.data.amount_usd).toBe("12.03");
+  });
+
   async function withTwoForWebhook() {
     const h = harness();
     await createCheckout(h, { order_ref: "ORD-1" });

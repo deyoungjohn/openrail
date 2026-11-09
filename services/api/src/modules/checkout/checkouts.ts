@@ -629,6 +629,8 @@ export class Checkouts {
           fee_usd: feeUsd,
           total_usd: totalUsd,
           fee_mode: feeMode,
+          booking_tx: bookingTx,
+          origin_tx: originTx,
           transactions,
           timestamp,
           status,
