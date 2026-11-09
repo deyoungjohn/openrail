@@ -538,6 +538,15 @@ export interface PdfDocument {
   generated_at: string;
 }
 
+export interface ReceiptPdfDocument {
+  receipt_id: string;
+  filename: string;
+  content_type: "application/pdf";
+  content_base64: string;
+  sha256: Hex32;
+  generated_at: string;
+}
+
 export interface OpenQuote {
   quote_id: string;
   deposit_address: string;
@@ -568,7 +577,7 @@ export interface CashoutQuote {
   route_cost_usd: string;
   deposit_address: string;
   deposit_type: "INTENTS";
-  swap_type: "EXACT_OUTPUT";
+  swap_type: "EXACT_INPUT";
   route_id: string;
   deadline: string;
   min_amount_in: U128;
@@ -764,15 +773,6 @@ export interface MachineReceipt {
   claim_account: string;
   terms_fingerprint: string;
   verify_command: string;
-}
-
-export interface ReceiptPdfDocument {
-  receipt_id: string;
-  filename: string;
-  content_type: "application/pdf";
-  content_base64: string;
-  sha256: Hex32;
-  generated_at: string;
 }
 
 export type PayoutSchedule = "manual" | "each_payment" | "daily" | "weekly" | "monthly";
@@ -1362,17 +1362,6 @@ export interface operations {
       "401": Error;
     };
   };
-  getMachineReceipt: {
-    parameters: {
-      path: {
-        id: string;
-      };
-    };
-    responses: {
-      "200": MachineReceipt;
-      "404": Error;
-    };
-  };
   getReceiptPdf: {
     parameters: {
       path: {
@@ -1381,6 +1370,17 @@ export interface operations {
     };
     responses: {
       "200": ReceiptPdfDocument;
+      "404": Error;
+    };
+  };
+  getMachineReceipt: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      "200": MachineReceipt;
       "404": Error;
     };
   };

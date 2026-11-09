@@ -776,7 +776,7 @@ export const copy = {
   cashout: {
     title: "Cash out",
     intro:
-      "Move USDC from your Openrail balance to another network. You see what the transfer costs before you sign anything.",
+      "Your payments are held for you on intents.near, under your own account: the balance is yours and Openrail never holds it. Cash out sends USDC from that balance to an address on another network. You see what it costs before you sign anything.",
     available: "Available to cash out now:",
     heldOn: (network: string) => `(USDC held as ${network})`,
     slider: "Share of what you can cash out",
@@ -794,8 +794,9 @@ export const copy = {
     costShare: (p: string) => `${p} of this cash-out`,
     costHigh:
       "This transfer costs a large share of the amount. A bigger amount costs less in proportion.",
-    youReceive: "You receive exactly",
-    bufferNote: "Up to 1% extra is held while the cash-out runs, and comes back to you.",
+    youReceive: "You receive about",
+    bufferNote:
+      "The whole amount you entered leaves your balance. The cost is taken out of it, and you receive the rest.",
     on: (chain: string) => `on ${chain}`,
     to: "To",
     expiresIn: "Quote valid for",

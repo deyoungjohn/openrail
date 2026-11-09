@@ -321,8 +321,21 @@ export function createQuoteProvider(): QuoteProvider {
   };
 }
 
-export function createCashoutPort(): CashoutPort {
-  const client = createOneClickClientFromEnv();
+/** What a cash-out costs: the amount that leaves minus the amount that arrives, in dollars rounded up to the cent. */
+function costInUsd(amountIn: string, amountOut: string | undefined): string {
+  if (amountOut === undefined) return "0.00";
+  const diff = BigInt(amountIn) - BigInt(amountOut);
+  if (diff <= 0n) return "0.00";
+  const cents = (diff + 9_999n) / 10_000n;
+  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
+}
+
+export function createCashoutPort(
+  client: Pick<
+    ReturnType<typeof createOneClickClientFromEnv>,
+    "quote"
+  > = createOneClickClientFromEnv(),
+): CashoutPort {
   const routes = loadRoutes();
   return {
     async quote(request) {
@@ -334,7 +347,8 @@ export function createCashoutPort(): CashoutPort {
           originAsset: request.sourceAsset ?? defaultSettlementAsset(),
           destinationAsset: route.originAssetId,
           amount: request.amount,
-          swapType: "EXACT_OUTPUT",
+          // The amount is what leaves the balance; the fees come out of it (never a deposit that falls short).
+          swapType: "EXACT_INPUT",
           slippageTolerance: 30,
           // The refund of an Intents deposit goes to an Intents account (the business), never to the payout address.
           refundTo: request.refundTo,
@@ -352,11 +366,12 @@ export function createCashoutPort(): CashoutPort {
         destination_chain: request.destinationChain,
         destination_address: request.address,
         amount_out: response.quote.amountOut ?? request.amount,
-        min_amount_in: response.quote.minAmountIn ?? request.amount,
-        route_cost_usd: "0.00",
+        // The whole amount is deposited, so nothing is short of the provider's minimum.
+        min_amount_in: request.amount,
+        route_cost_usd: costInUsd(request.amount, response.quote.amountOut),
         deposit_address: response.quote.depositAddress ?? "",
         deposit_type: "INTENTS",
-        swap_type: "EXACT_OUTPUT",
+        swap_type: "EXACT_INPUT",
         route_id: route.id,
         deadline: response.quote.deadline ?? deadline,
       };

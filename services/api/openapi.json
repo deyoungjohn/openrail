@@ -2367,7 +2367,7 @@
             "const": "INTENTS"
           },
           "swap_type": {
-            "const": "EXACT_OUTPUT"
+            "const": "EXACT_INPUT"
           },
           "route_id": {
             "type": "string"

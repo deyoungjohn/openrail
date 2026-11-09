@@ -4,11 +4,11 @@
   "destination_chain": "base",
   "destination_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   "amount_out": "1998000",
-  "route_cost_usd": "0.30",
+  "route_cost_usd": "0.01",
   "deposit_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   "deposit_type": "INTENTS",
-  "swap_type": "EXACT_OUTPUT",
+  "swap_type": "EXACT_INPUT",
   "route_id": "R1",
   "deadline": "2026-11-02T11:00:00Z",
-  "min_amount_in": "2020000"
+  "min_amount_in": "2000000"
 }
