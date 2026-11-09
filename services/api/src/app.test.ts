@@ -479,7 +479,10 @@ describe("invoice route", () => {
     expect(response.status).toBe(200);
     const body = response.body as { content_type: string; content_base64: string };
     expect(body.content_type).toBe("application/pdf");
-    expect(Buffer.from(body.content_base64, "base64").toString("latin1")).toContain("INV-2026-001");
+    const content = Buffer.from(body.content_base64, "base64").toString("latin1");
+    expect(content).toContain("INV-2026-001");
+    expect(content).toContain("UNPAID");
+    expect(content).toContain("Nov 2, 2026 10:00 UTC");
   });
 });
 

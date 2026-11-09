@@ -67,6 +67,8 @@ export interface ApiConfig {
 }
 
 export interface ContractPort {
+  /** Module support: held settle entries for one token. */
+  settleHeld?(tokenId: string): Promise<Record<string, unknown>[]>;
   claim(tokenId: string): Promise<Record<string, unknown> & { kind: number }>;
   /** Generic read-only view for enabled modules; core never names their methods. */
   view?(methodName: string, args: object): Promise<unknown>;
@@ -380,6 +382,12 @@ export function paidTotalOf(claim: Record<string, unknown>, fallback: string): s
   if (typeof claim.booked_total !== "string") return fallback;
   const paid = toBig(claim.booked_total) - toBig(claim.surplus);
   return (paid < 0n ? 0n : paid).toString();
+}
+/** USDC base units (6 decimals) to a two-decimal display amount. */
+function usdFromBase(value: string): string {
+  const base = toBig(value);
+  const cents = base / 10_000n;
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
 }
 
 export class ApiApp {
@@ -1049,6 +1057,33 @@ export class ApiApp {
         const context = this.requireAuth(request);
         this.requireScope(context, "invoices:read");
         const invoice = this.ownInvoice(context.accountId, invoiceId);
+        const claim = await this.deps.contract.claim(invoice.token_id);
+        const status = typeof claim.status === "string" ? claim.status : invoice.status;
+        const receipts = this.store.listReceipts(invoice.token_id);
+        const latest = receipts[receipts.length - 1];
+        const generatedAt = nowIso(this.clock);
+        const claimAccount =
+          invoice.claim_account || `${invoice.token_id}.${this.deps.config.rootAccount}`;
+        const content_base64 = renderInvoicePdfBase64(
+          invoice.terms,
+          invoice.terms_hash,
+          invoice.created_at,
+          invoice.line_items,
+          {
+            status,
+            ...(status === "PartiallyPaid"
+              ? { outstandingUsd: usdFromBase(outstandingOf(claim)) }
+              : {}),
+            ...(status === "Paid" && latest !== undefined
+              ? {
+                  paidAt: String(latest.time ?? ""),
+                  receiptId: String(latest.id ?? ""),
+                  verifyCommand: `openrail-verify claim ${claimAccount} --terms-hash ${invoice.terms_hash}`,
+                }
+              : {}),
+            generatedAt,
+          },
+        );
         return {
           status: 200,
           body: {
@@ -1056,14 +1091,9 @@ export class ApiApp {
             token_id: invoice.token_id,
             filename: `${invoice.invoice_number}.pdf`,
             content_type: "application/pdf",
-            content_base64: renderInvoicePdfBase64(
-              invoice.terms,
-              invoice.terms_hash,
-              invoice.created_at,
-              invoice.line_items,
-            ),
+            content_base64,
             sha256: invoice.terms_hash,
-            generated_at: nowIso(this.clock),
+            generated_at: generatedAt,
           },
         };
       }
@@ -1605,6 +1635,7 @@ export class ApiApp {
   get moduleContext(): ApiModuleContext {
     return {
       config: this.deps.config,
+      contract: this.deps.contract,
       store: this.store,
       docs: this.docs,
       issuer: this.deps.issuer,

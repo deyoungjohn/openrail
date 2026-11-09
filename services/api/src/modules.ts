@@ -22,6 +22,7 @@ export interface ModuleStore {
 
 export interface ApiModuleContext {
   config: ApiConfig;
+  contract: import("./app.js").ContractPort;
   store: ApiStore;
   docs: ModuleStore;
   issuer: IssuerPort;

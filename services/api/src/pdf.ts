@@ -21,6 +21,15 @@ const GRAY = "0.42 0.42 0.42";
 
 export type Font = "/F1" | "/F2" | "/F3" | "/F4";
 
+export interface InvoiceStatusInfo {
+  status: string;
+  outstandingUsd?: string;
+  paidAt?: string;
+  receiptId?: string;
+  verifyCommand?: string;
+  generatedAt: string;
+}
+
 interface PageBuilder {
   pages: string[];
   content: string;
@@ -46,6 +55,19 @@ function formatDate(iso: string): string {
   const day = Number(match[3]);
   if (month < 1 || month > 12 || day < 1 || day > 31) return "—";
   return `${MONTHS[month - 1]} ${day}, ${year}`;
+}
+
+function formatDateTime(iso: string): string {
+  const date = formatDate(iso);
+  const time = /T(\d{2}):(\d{2})/.exec(iso);
+  if (date === "—" || time === null) return "—";
+  return `${date} ${time[1]}:${time[2]} UTC`;
+}
+
+function statusMark(status: string): string {
+  if (status === "Paid") return "PAID";
+  if (status === "PartiallyPaid") return "PARTIALLY PAID";
+  return "UNPAID";
 }
 
 // Adobe standard-font widths (per 1000 em) for the printable ASCII range. Keeping these
@@ -226,34 +248,112 @@ function drawTop(builder: PageBuilder, terms: Terms, issuedAt?: string): void {
   builder.y = Math.min(builder.y, detailY) - 8;
 }
 
-function drawTable(builder: PageBuilder, terms: Terms, lineItems?: readonly LineItem[]): void {
-  builder.y = builder.y - 40;
+function usdCents(value: string): bigint | null {
+  const match = /^(\d+)\.(\d{2})$/.exec(value);
+  if (match === null) return null;
+  return BigInt(match[1] ?? "0") * 100n + BigInt(match[2] ?? "0");
+}
+
+function lineItemsTotal(items: readonly LineItem[]): string | null {
+  let cents = 0n;
+  for (const item of items) {
+    const amount = usdCents(item.amount_usd);
+    if (amount === null) return null;
+    cents += amount;
+  }
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
+}
+
+const QTY_RIGHT = 388;
+const UNIT_RIGHT = 468;
+
+function drawTableHeader(builder: PageBuilder): void {
   const top = builder.y;
   label(builder, "DESCRIPTION", MARGIN, top);
+  text(builder, QTY_RIGHT, top, 7, "/F2", ACCENT, "QUANTITY", "right");
+  text(builder, UNIT_RIGHT, top, 7, "/F2", ACCENT, "UNIT PRICE", "right");
   text(builder, RIGHT, top, 7, "/F2", ACCENT, "AMOUNT", "right");
   builder.y = top - 8;
   line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.5, ACCENT);
   builder.y -= 18;
-
-  const rows: Array<[string, string]> =
-    lineItems !== undefined && lineItems.length > 0
-      ? lineItems.map((item) => [item.description, `$${item.amount_usd}`])
-      : [[terms.invoice_number, `$${terms.amount_usd}`]];
-  if (terms.assignment_agreement_sha256 !== undefined) {
-    rows.push(["Assignment agreement", "—"]);
-  }
-  for (const [description, amount] of rows) {
-    text(builder, MARGIN, builder.y, 9, "/F1", INK, description);
-    text(builder, RIGHT, builder.y, 9, "/F1", INK, amount, "right");
-    builder.y -= 8;
-    line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.35, "0.82 0.82 0.82");
-    builder.y -= 14;
-  }
-  builder.y -= 6;
 }
 
-function drawTotals(builder: PageBuilder, terms: Terms): void {
+function drawTable(builder: PageBuilder, terms: Terms, lineItems?: readonly LineItem[]): void {
+  builder.y = builder.y - 40;
+  drawTableHeader(builder);
+
+  const items =
+    lineItems !== undefined &&
+    lineItems.length > 0 &&
+    lineItemsTotal(lineItems) === terms.amount_usd
+      ? lineItems
+      : [];
+  const rows: Array<{ description: string; quantity: string; unit: string; amount: string }> =
+    items.length > 0
+      ? items.map((item) => ({
+          description: item.description,
+          quantity: String(item.quantity),
+          unit: `$${item.unit_amount_usd}`,
+          amount: `$${item.amount_usd}`,
+        }))
+      : [
+          {
+            description: terms.invoice_number,
+            quantity: "1",
+            unit: "—",
+            amount: `$${terms.amount_usd}`,
+          },
+        ];
+  if (terms.assignment_agreement_sha256 !== undefined) {
+    rows.push({ description: "Assignment agreement", quantity: "—", unit: "—", amount: "—" });
+  }
+
+  for (const row of rows) {
+    const descriptionWidth = QTY_RIGHT - MARGIN - 16;
+    const lines = wrapText(row.description, descriptionWidth, 9, "/F1");
+    const rowHeight = Math.max(14, lines.length * 11 + 4);
+    if (builder.y - rowHeight - 8 < MARGIN + 20) {
+      beginPage(builder, `Invoice ${terms.invoice_number} (continued)`);
+      drawTableHeader(builder);
+    }
+    const top = builder.y;
+    lines.forEach((line, index) => {
+      text(builder, MARGIN, top - index * 11, 9, "/F1", INK, line);
+    });
+    text(builder, QTY_RIGHT, top, 9, "/F1", INK, row.quantity, "right");
+    text(builder, UNIT_RIGHT, top, 9, "/F1", INK, row.unit, "right");
+    text(builder, RIGHT, top, 9, "/F1", INK, row.amount, "right");
+    builder.y = top - rowHeight;
+    line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.35, "0.82 0.82 0.82");
+    builder.y -= 6;
+  }
+  builder.y -= 4;
+}
+
+function drawTotals(builder: PageBuilder, terms: Terms, status?: InvoiceStatusInfo): void {
   const amount = `$${terms.amount_usd}`;
+  if (status !== undefined) {
+    text(builder, 360, builder.y, 9, "/F2", ACCENT, statusMark(status.status));
+    text(
+      builder,
+      RIGHT,
+      builder.y,
+      7,
+      "/F1",
+      GRAY,
+      `As of ${formatDateTime(status.generatedAt)}`,
+      "right",
+    );
+    builder.y -= 12;
+    if (status.status === "PartiallyPaid" && status.outstandingUsd !== undefined) {
+      text(builder, 360, builder.y, 8, "/F1", INK, `Still due $${status.outstandingUsd}`);
+      builder.y -= 12;
+    }
+    if (status.status === "Paid" && status.paidAt !== undefined) {
+      text(builder, 360, builder.y, 8, "/F1", INK, `Paid ${formatDate(status.paidAt)}`);
+      builder.y -= 12;
+    }
+  }
   builder.y -= 12;
   line(builder, 360, builder.y, RIGHT, builder.y, 1.2, ACCENT);
   builder.y -= 18;
@@ -273,10 +373,25 @@ function drawPayment(builder: PageBuilder, terms: Terms): void {
   builder.y -= 24;
 }
 
-function drawTerms(builder: PageBuilder, terms: Terms, termsHash: string): void {
+function drawTerms(
+  builder: PageBuilder,
+  terms: Terms,
+  termsHash: string,
+  status?: InvoiceStatusInfo,
+): void {
   const invoice = terms.invoice_number;
   builder.y = Math.min(builder.y, 180);
   if (builder.y < MARGIN + 90) beginPage(builder, `Invoice ${invoice} (continued)`);
+  if (status?.status === "Paid" && status.receiptId !== undefined) {
+    label(builder, "RECEIPT", MARGIN, builder.y);
+    builder.y -= 12;
+    text(builder, MARGIN, builder.y, 7, "/F1", GRAY, status.receiptId);
+    builder.y -= 12;
+    if (status.verifyCommand !== undefined) {
+      wrapped(builder, status.verifyCommand, MARGIN, WIDTH, 7, "/F1", GRAY);
+    }
+    builder.y -= 12;
+  }
   label(builder, "TERMS HASH", MARGIN, builder.y);
   builder.y -= 12;
   text(builder, MARGIN, builder.y, 7, "/F1", GRAY, termsHash);
@@ -291,14 +406,15 @@ export function renderInvoicePdf(
   termsHash: string,
   issuedAt?: string,
   lineItems?: readonly LineItem[],
+  status?: InvoiceStatusInfo,
 ): Uint8Array {
   const builder: PageBuilder = { pages: [], content: "", y: PAGE_HEIGHT - MARGIN };
   beginPage(builder, null);
   drawTop(builder, terms, issuedAt);
   drawTable(builder, terms, lineItems);
-  drawTotals(builder, terms);
+  drawTotals(builder, terms, status);
   drawPayment(builder, terms);
-  drawTerms(builder, terms, termsHash);
+  drawTerms(builder, terms, termsHash, status);
   finishPages(builder);
 
   const pageIds = builder.pages.map((_, index) => 7 + index * 2);
@@ -339,6 +455,9 @@ export function renderInvoicePdfBase64(
   termsHash: string,
   issuedAt?: string,
   lineItems?: readonly LineItem[],
+  status?: InvoiceStatusInfo,
 ): string {
-  return Buffer.from(renderInvoicePdf(terms, termsHash, issuedAt, lineItems)).toString("base64");
+  return Buffer.from(renderInvoicePdf(terms, termsHash, issuedAt, lineItems, status)).toString(
+    "base64",
+  );
 }
