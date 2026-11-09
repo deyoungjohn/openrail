@@ -233,6 +233,7 @@ describe("invoice PDF line items", () => {
 });
 
 describe("invoice PDF payment status", () => {
+  const hash = termsHash(terms);
   const generatedAt = "2026-11-09T12:00:00Z";
   const render = (statusInfo: {
     status: string;
