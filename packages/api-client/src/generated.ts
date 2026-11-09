@@ -11,6 +11,7 @@ export interface ErrorDetail {
   code: string;
   message: string;
   rule?: string;
+  retry_after?: number;
 }
 
 export interface Error {
@@ -895,6 +896,7 @@ export interface operations {
       "401": Error;
       "403": Error;
       "409": Error;
+      "503": Error;
     };
   };
   listInvoices: {
@@ -1226,6 +1228,7 @@ export interface operations {
       "200": StorageCredit;
       "400": Error;
       "401": Error;
+      "503": Error;
     };
   };
   getStatement: {

@@ -168,6 +168,11 @@
           "rule": {
             "type": "string",
             "description": "Contract rule number in plain words, when applicable."
+          },
+          "retry_after": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Seconds a client should wait before retrying an rpc_busy response."
           }
         }
       },
@@ -3543,6 +3548,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Every NEAR RPC is over quota; retry after retry_after seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -5271,6 +5286,16 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Every NEAR RPC is over quota; retry after retry_after seconds.",
             "content": {
               "application/json": {
                 "schema": {

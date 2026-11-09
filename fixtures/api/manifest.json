@@ -504,6 +504,14 @@
       "status": 200,
       "schema": "ConfidentialWithdrawStatus",
       "mock": true
+    },
+    {
+      "file": "error.rpc_busy.json",
+      "method": "POST",
+      "path": "/v1/invoices",
+      "status": 503,
+      "schema": "Error",
+      "mock": false
     }
   ]
 }
