@@ -28,8 +28,11 @@ The quote is kept; a later list or get returns the same `id`.
 | `POST` | `/v1/cashouts/{id}/sent` | Attach the `tx_hash` the business signed (20–64 alphanumeric). |
 
 The provider is asked only while the cash-out is under 14 days old; the chain transaction
-status is checked whenever a `tx_hash` is attached. A settled cash-out keeps its stored
-provider evidence. The polling window is in [`app.ts`](../../../services/api/src/app.ts).
+status is checked whenever a `tx_hash` is attached. The API keeps the quote and the
+attached `tx_hash`, not the provider's answer: the status is read from the provider each
+time, and after 14 days it is no longer asked (a cash-out older than that shows the last
+status the quote and the chain support). The window is in
+[`app.ts`](../../../services/api/src/app.ts).
 
 ## Statuses
 

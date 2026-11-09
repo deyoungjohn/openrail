@@ -24,9 +24,9 @@ contains `NEAR_RPC_URL`; a primary-only file still works.
   [`indexer-sources.md`](indexer-sources.md).
 - The API, issuer and watcher poke the indexer before the next idle poll; a boost runs
   every 60 seconds for five minutes.
-- `NEARBLOCKS_DAILY_BUDGET` caps NearBlocks requests (default 380). `/v1/health.indexer`
-  reports the four booleans and this budget; the metrics endpoint exposes counters but no
-  module names. See [`indexer.md`](indexer.md) and
+- `NEARBLOCKS_DAILY_BUDGET` caps NearBlocks requests (default 380). the indexer's own
+  `/health` reports `degraded`, `boost_active` and this budget; the metrics endpoint exposes
+  counters but no module names. See [`indexer.md`](indexer.md) and
   [`indexer-sources.md`](indexer-sources.md).
 - Settled invoices are cached in the `settled` docs namespace, so reads of an old invoice do
   not call NearBlocks or the chain again. Tests are in
