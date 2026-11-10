@@ -131,6 +131,7 @@ export interface CheckoutView {
   cancel_url?: string | null;
   expires_at: string;
   created_at: string;
+  merchant_name?: string;
   fee_mode: FeeMode;
   subtotal_usd: string;
   fee_usd: string;
@@ -905,6 +906,8 @@ export class Checkouts {
     const subtotalUsd = stored.subtotal_usd ?? stored.amount_usd;
     const feeUsd = stored.fee_usd ?? "0.00";
     const totalUsd = stored.total_usd ?? stored.amount_usd;
+    const business = context.store.getBusiness(stored.account_id);
+    const merchantName = business?.legal_name?.trim() || undefined;
     return {
       id: stored.id,
       token_id: stored.token_id,
@@ -926,6 +929,7 @@ export class Checkouts {
       cancel_url: stored.cancel_url ?? null,
       expires_at: new Date(expiry * 1000).toISOString(),
       created_at: stored.created_at,
+      merchant_name: merchantName,
       fee_mode: feeMode,
       subtotal_usd: subtotalUsd,
       fee_usd: feeUsd,
@@ -970,6 +974,7 @@ export class Checkouts {
         token_id: view.token_id,
         claim_account: view.claim_account,
         merchant: stored.account_id,
+        merchant_name: view.merchant_name,
         order_ref: view.order_ref,
         amount_usd: view.amount_usd,
         amount_due: view.amount_due,

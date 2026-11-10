@@ -18,6 +18,7 @@ export interface PublicCheckout {
   token_id: string;
   claim_account: string;
   merchant: string;
+  merchant_name?: string;
   order_ref: string;
   amount_usd: string;
   amount_due: string;
@@ -37,7 +38,8 @@ export interface PublicCheckout {
 
 export const checkoutCopy = {
   order: (ref: string) => `Order ${ref}`,
-  title: (merchant: string) => `Pay ${merchant}`,
+  title: (merchant: string, merchantName?: string) =>
+    merchantName && merchantName.trim() ? `Pay ${merchantName.trim()}` : `Pay ${merchant}`,
   feeBreakdown: (subtotal: string, fee: string, total: string) =>
     `Order $${subtotal} + Processing fee (0.25%) $${fee} = $${total}`,
   expiresIn: "Order expires in",

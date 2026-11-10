@@ -598,6 +598,21 @@ describe("checkout API: read the state from the claim", () => {
     expect(typeof view.body.server_time).toBe("string");
     expect(Array.isArray(view.body.routes)).toBe(true);
     expect(view.body.routes.length).toBeGreaterThan(0);
+
+    // When business profile has legal_name, public view includes merchant_name display name:
+    h.context().store.saveBusiness({
+      account_id: ACME,
+      username: "acme",
+      legal_name: "Acme Ltd",
+      payout_account: ACME,
+      contact_email: "billing@acme.test",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    const withBiz = await call(h, "GET", `/v1/public/checkouts/${id}`);
+    expect(withBiz.status).toBe(200);
+    expect(withBiz.body.merchant).toBe(ACME);
+    expect(withBiz.body.merchant_name).toBe("Acme Ltd");
     expect(Array.isArray(view.body.sessions)).toBe(true);
     const text = JSON.stringify(view.body);
     expect(text).not.toMatch(/idempotency|secret|items_sha256/i);

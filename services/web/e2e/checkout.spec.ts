@@ -271,6 +271,7 @@ test("partial, late, not found and error states", async ({ page }) => {
   await latePage.goto("/c/c-102");
   await expect(latePage.getByText("Paid after expiry").first()).toBeVisible();
   await expect(latePage.getByRole("button", { name: "Get price" })).toHaveCount(0);
+  await expect(latePage.getByText("All parts paid")).toHaveCount(0);
 
   const missing = await page.context().newPage();
   await mockCheckout(missing, { checkoutStatus: 404 });
@@ -508,7 +509,7 @@ for (const scheme of ["light", "dark"] as const) {
       },
     });
     await page.goto("/c/c-101");
-    await expect(page.getByText("All parts paid")).toBeVisible();
+    await expect(page.getByText("All parts paid")).toHaveCount(0);
     await expect(page.getByText("Your payment is complete.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
     await expect(page.getByText("Your price")).toHaveCount(0);
@@ -528,6 +529,7 @@ for (const scheme of ["light", "dark"] as const) {
         token_id: "c-101",
         claim_account: "c-101.claims.openrail.near",
         merchant: "acme.openrail.near",
+        merchant_name: "Acme Ltd",
         order_ref: "ORD-LATE",
         amount_usd: "2.00",
         amount_due: "2000000",
@@ -542,9 +544,11 @@ for (const scheme of ["light", "dark"] as const) {
       },
     });
     await page.goto("/c/c-101");
+    await expect(page.getByRole("heading", { name: "Pay Acme Ltd" })).toBeVisible();
     await expect(page.getByText("Paid after expiry").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
     await expect(page.getByText("Your price")).toHaveCount(0);
+    await expect(page.getByText("All parts paid")).toHaveCount(0);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
@@ -584,3 +588,60 @@ for (const scheme of ["light", "dark"] as const) {
     await page.screenshot({ path: `reports/screenshots/checkout/checking-${scheme}-360px.png` });
   });
 }
+
+test("checkout title shows business display name when provided, and breaks long account only at dots", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await mockCheckout(page, {
+    checkout: {
+      id: "c-101",
+      token_id: "c-101",
+      claim_account: "c-101.claims.openrail.near",
+      merchant: "acme.openrail.near",
+      merchant_name: "Acme Studios Ltd",
+      order_ref: "ORD-NAME",
+      amount_usd: "2.00",
+      amount_due: "2000000",
+      outstanding: "2000000",
+      paid_total: "0",
+      surplus: "0",
+      status: "pending",
+      expires_at: inMinutes(15),
+      return_url: null,
+      routes: fixture("pay.claims.get").routes,
+      sessions: [],
+    },
+  });
+  await page.goto("/c/c-101");
+  await expect(page.getByRole("heading", { name: "Pay Acme Studios Ltd" })).toBeVisible();
+
+  await mockCheckout(page, {
+    checkout: {
+      id: "c-102",
+      token_id: "c-102",
+      claim_account: "c-102.claims.openrail.near",
+      merchant: "acme.openrail.near",
+      order_ref: "ORD-ACCOUNT",
+      amount_usd: "2.00",
+      amount_due: "2000000",
+      outstanding: "2000000",
+      paid_total: "0",
+      surplus: "0",
+      status: "pending",
+      expires_at: inMinutes(15),
+      return_url: null,
+      routes: fixture("pay.claims.get").routes,
+      sessions: [],
+    },
+  });
+  await page.goto("/c/c-102");
+  const heading = page.getByRole("heading", { name: "Pay acme.openrail.near" });
+  await expect(heading).toBeVisible();
+  await expect(heading.locator("wbr")).toHaveCount(2);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+

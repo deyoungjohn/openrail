@@ -417,8 +417,24 @@ function CheckoutCard({
           <p className="caption uppercase tracking-wide truncate">
             {checkoutCopy.order(c.order_ref)}
           </p>
-          <h1 className="text-[22px] leading-8 font-bold break-words">
-            {checkoutCopy.title(c.merchant)}
+          <h1 className="text-[22px] leading-8 font-bold">
+            {c.merchant_name && c.merchant_name.trim() ? (
+              checkoutCopy.title(c.merchant, c.merchant_name)
+            ) : (
+              <span>
+                Pay{" "}
+                {c.merchant.split(".").map((part, i, arr) => (
+                  <span key={i}>
+                    {part}
+                    {i < arr.length - 1 ? (
+                      <>
+                        .<wbr />
+                      </>
+                    ) : null}
+                  </span>
+                ))}
+              </span>
+            )}
           </h1>
         </div>
         {chip ? <StatusChip status={chip} /> : null}
@@ -818,16 +834,6 @@ export function CheckoutScreen({ id }: { id: string }) {
       />
 
       <div className="min-w-0 space-y-6">
-        {isPaid ? (
-          <div
-            role="status"
-            className="surface-card flex items-center gap-2 p-6 text-[18px] font-semibold text-success-text"
-          >
-            <CheckCircle2 size={22} strokeWidth={1.5} className="text-success-text" aria-hidden />
-            {p.mixAllPaid}
-          </div>
-        ) : null}
-
         {!quotable ? null : routes.length === 0 ? (
           <div className="surface-card">
             <EmptyState title={p.noRoutes} />
