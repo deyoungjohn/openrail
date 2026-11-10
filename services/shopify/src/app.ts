@@ -117,6 +117,14 @@ export function loadShopifyAppEnv(
     }
   }
 
+  // The pay links are built from APP_BASE_URL: a bare host would make them relative (the browser resolves them
+  // against the shop's own domain and lands on Shopify's 404, found live 11 Nov), so refuse it at startup.
+  const appBase = String(out.APP_BASE_URL ?? "").trim();
+  if (!/^https?:\/\/[^/\s]+/i.test(appBase)) {
+    throw new Error("INVALID_ENV: APP_BASE_URL (must start with https://)");
+  }
+  out.APP_BASE_URL = appBase.replace(/\/+$/, "");
+
   const staticToken = getVal("SHOPIFY_ADMIN_ACCESS_TOKEN");
   const clientId = getVal("SHOPIFY_CLIENT_ID");
   const clientSecret = getVal("SHOPIFY_CLIENT_SECRET");
@@ -911,8 +919,57 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       };
     }
 
+    // The Admin API refuses the Order object until the app is approved for protected customer data (found live 11 Nov).
+    // Prefer the Admin API (it also gives the order's status page for the return links); when it refuses and the store's
+    // orders/create webhook has already bound this order, the total comes from that binding (Shopify's own webhook,
+    // never the browser) and no Admin API read is needed.
+    const boundNumeric = extractNumericOrderId(verified.payload.orderGid);
+    const bound =
+      bindingsByOrderGid.get(verified.payload.orderGid) ?? bindingsByOrderGid.get(boundNumeric);
+    const redirectFromBinding = async (b: OrderBinding): Promise<HttpResponse> => {
+      if (b.paid || b.status === "paid") {
+        return {
+          status: 409,
+          body: {
+            error: { code: "order_already_paid", message: "This order is already marked as paid." },
+          },
+        };
+      }
+      if (!b.payUrl) {
+        const boundRef = sanitizeOrderRef(`shopify-${boundNumeric}`);
+        const { checkout: boundCheckout } = await checkoutApi.createCheckout(
+          {
+            order_ref: boundRef,
+            amount_usd: b.expectedTotalUsd,
+            currency: "USD",
+            expires_in_minutes: 60,
+          },
+          `shopify-order-${boundNumeric}-${b.expectedTotalUsd}`,
+        );
+        b.checkoutId = boundCheckout.id;
+        b.payUrl = boundCheckout.pay_url;
+        b.orderRef = boundRef;
+        bindingsByOrderRef.set(boundRef, b);
+        bindingsByCheckoutId.set(boundCheckout.id, b);
+      }
+      return {
+        status: 302,
+        headers: { location: b.payUrl },
+        body: { redirect_url: b.payUrl, checkout_id: b.checkoutId, order_ref: b.orderRef },
+      };
+    };
+
     // Rule: ALWAYS read the outstanding total from the Shopify Admin GraphQL API, NEVER from the browser
-    const order = await adminClient.getOrder(verified.payload.orderGid);
+    let order: ShopifyOrder;
+    try {
+      order = await adminClient.getOrder(verified.payload.orderGid);
+    } catch (error) {
+      if (!bound) throw error;
+      console.warn(
+        `[shopify] pay redirect: could not read order ${boundNumeric} from the Admin API (${error instanceof Error ? error.message : "unknown error"}); using the webhook binding`,
+      );
+      return redirectFromBinding(bound);
+    }
     const shopMoney = order.totalOutstandingSet.shopMoney;
     if (order.currencyCode !== "USD" || shopMoney.currencyCode !== "USD") {
       return {

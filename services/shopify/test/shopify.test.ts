@@ -4227,6 +4227,46 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         });
       }
 
+      it("the pay link's redirect route works from the webhook binding when the Admin API refuses the Order object (found live 11 Nov)", async () => {
+        const h = createTestHarness();
+        h.adminClient.getOrder = (async () => {
+          throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
+        }) as any;
+        const webhookRes = await sendOrdersCreateWebhook(h, {
+          id: 6581579383999,
+          admin_graphql_api_id: "gid://shopify/Order/6581579383999",
+          name: "#1099",
+          total_price: "2.00",
+          currency: "USD",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+          confirmation_number: "CONF99",
+          financial_status: "pending",
+        });
+        expect(webhookRes.status).toBe(200);
+        const token = createOrderPayToken(
+          {
+            orderGid: "gid://shopify/Order/6581579383999",
+            orderName: "#1099",
+            shopDomain: TEST_ENV.SHOPIFY_SHOP_DOMAIN,
+            nonce: "nonce-binding-redirect-1",
+            exp: h.nowSec() + 900,
+          },
+          TEST_ENV.SHOPIFY_ORDER_TOKEN_SECRET,
+        );
+        const res = await h.app.handle({
+          method: "GET",
+          path: `/shopify/pay/${encodeURIComponent(token)}`,
+          query: {},
+          headers: {},
+          rawBody: "",
+        });
+        expect(res.status).toBe(302);
+        expect(String(res.headers?.location)).toMatch(/^https:\/\/openrail\.incepture\.dev\/c\//);
+        expect(h.checkoutCreateCalls).toHaveLength(1);
+        expect(h.checkoutCreateCalls[0]?.body.amount_usd).toBe("2.00");
+        expect(h.checkoutCreateCalls[0]?.body.order_ref).toBe("shopify-6581579383999");
+      });
+
       it("creates binding from webhook payload, allowing pay-link and order-status to work without Admin API getOrder", async () => {
         const h = createTestHarness();
         const getOrderMock = vi.fn(async () => {
@@ -4545,6 +4585,19 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
             }),
           ).toThrow(/^INVALID_ENV: SHOPIFY_SHOP_DOMAIN$/);
         }
+      });
+
+      it("refuses an APP_BASE_URL that is not an absolute http(s) URL (found live 11 Nov: a bare host made the pay link relative)", () => {
+        for (const bad of ["belmonte-apparels.myshopify.com", "shopify.openrail.incepture.dev", "//shopify.openrail.incepture.dev", "ftp://x.example", "https://"]) {
+          expect(() => loadShopifyAppEnv(undefined, { ...TEST_ENV, APP_BASE_URL: bad })).toThrow(
+            /^INVALID_ENV: APP_BASE_URL \(must start with https:\/\/\)$/,
+          );
+        }
+        const ok = loadShopifyAppEnv(undefined, {
+          ...TEST_ENV,
+          APP_BASE_URL: " https://shopify.openrail.incepture.dev/ ",
+        });
+        expect(ok.APP_BASE_URL).toBe("https://shopify.openrail.incepture.dev");
       });
 
       it("webhook refused invalid signature logs one line [shopify] webhook refused: invalid signature without body or headers", async () => {
