@@ -494,6 +494,7 @@ function confidentialBase(): string {
 function createConfidentialBalancePort(): ConfidentialBalancePort {
   return {
     async authenticate(signedData) {
+      // Not confirmed by a real call yet: the cited guide shows the SDK call, not this path.
       const response = await fetch(`${confidentialBase()}/v0/auth/authenticate`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -519,15 +520,13 @@ function createConfidentialBalancePort(): ConfidentialBalancePort {
       };
       return (body.balances ?? [])
         .filter(
-          (entry): entry is { tokenId: string; available: string; source: string } =>
-            typeof entry.tokenId === "string" &&
-            typeof entry.available === "string" &&
-            typeof entry.source === "string",
+          (entry): entry is { tokenId: string; available: string; source?: string } =>
+            typeof entry.tokenId === "string" && typeof entry.available === "string",
         )
         .map((entry) => ({
           tokenId: entry.tokenId,
           available: entry.available,
-          source: entry.source,
+          ...(typeof entry.source === "string" ? { source: entry.source } : {}),
         }));
     },
   };

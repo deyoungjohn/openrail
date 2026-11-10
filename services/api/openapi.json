@@ -3349,7 +3349,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["token_id", "available", "source"],
+              "required": ["token_id", "available"],
               "properties": {
                 "token_id": {
                   "type": "string"
@@ -3358,7 +3358,8 @@
                   "type": "string"
                 },
                 "source": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Present only when the provider returns it; not required."
                 }
               }
             }
@@ -6721,7 +6722,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Path and response field names are not confirmed by a real call yet."
       }
     },
     "/v1/balance/confidential": {
@@ -6789,7 +6791,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Path, tokenIds query and optional source field are not confirmed by a real call yet."
       }
     }
   }

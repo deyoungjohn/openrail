@@ -152,7 +152,7 @@ export interface ConfidentialBalancePort {
   balances(
     userToken: string,
     tokenIds: string[],
-  ): Promise<{ tokenId: string; available: string; source: string }[]>;
+  ): Promise<{ tokenId: string; available: string; source?: string }[]>;
 }
 
 export interface PayoutEstimatorPort {
@@ -733,6 +733,11 @@ export class ApiApp {
   }
 
   private readonly claimCache = new Map<string, { at: number; claim: Record<string, unknown> }>();
+  /** Confidential user sessions are read-only and live in this process only; a restart means signing again. */
+  private readonly confidentialSessions = new Map<
+    string,
+    { accessToken: string; expiresAt: number }
+  >();
 
   /**
    * The invoices as they are on chain now: status, what is still owed and what was paid come from each
@@ -1555,12 +1560,10 @@ export class ApiApp {
         body.signed_data as Record<string, unknown>,
       );
       const expires_at = new Date(this.clock().getTime() + session.expiresIn * 1000).toISOString();
-      this.docs.put(
-        "confidentialSessions",
-        context.accountId,
-        { access_token: session.accessToken, expires_at },
-        context.accountId,
-      );
+      this.confidentialSessions.set(context.accountId, {
+        accessToken: session.accessToken,
+        expiresAt: Date.parse(expires_at),
+      });
       return { status: 200, body: { expires_at } };
     }
     if (path === "/v1/balance/confidential" && method === "GET") {
@@ -1569,18 +1572,15 @@ export class ApiApp {
       if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
       const context = this.requireAuth(request);
       this.requireScope(context, "payments:read");
-      const kept = this.docs.get<{ access_token: string; expires_at: string }>(
-        "confidentialSessions",
-        context.accountId,
-      );
-      if (kept === undefined || Date.parse(kept.expires_at) <= this.clock().getTime())
+      const kept = this.confidentialSessions.get(context.accountId);
+      if (kept === undefined || kept.expiresAt <= this.clock().getTime())
         throw new ApiError(409, "confidential_session_required");
       const tokenIds = (request.query.get("token_ids") ?? "")
         .split(",")
         .map((id) => id.trim())
         .filter((id) => id !== "");
       const balances = await this.deps.confidential.balances(
-        kept.access_token,
+        kept.accessToken,
         tokenIds.length === 0 ? [...this.routes.settlementAssets] : tokenIds,
       );
       return {
@@ -1590,7 +1590,7 @@ export class ApiApp {
           balances: balances.map((entry) => ({
             token_id: entry.tokenId,
             available: entry.available,
-            source: entry.source,
+            ...(entry.source === undefined ? {} : { source: entry.source }),
           })),
         },
       };

@@ -842,7 +842,7 @@ export interface ConfidentialBalance {
   balances: Array<{
     token_id: string;
     available: string;
-    source: string;
+    source?: string;
   }>;
 }
 
