@@ -1642,13 +1642,18 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
       const checkScript = resolve(currentDir, "../scripts/check-app-config.sh");
       expect(existsSync(checkScript)).toBe(true);
 
+      // The real file now carries the human's Client ID (public): the check accepts it.
       const appTomlPath = resolve(currentDir, "../shopify.app.toml");
       expect(existsSync(appTomlPath)).toBe(true);
+      execFileSync("bash", [checkScript, appTomlPath], { stdio: "pipe" });
+      const placeholderDir = mkdtempSync(join(tmpdir(), "shopify-config-placeholder-"));
+      const placeholderToml = join(placeholderDir, "shopify.app.toml");
+      writeFileSync(placeholderToml, 'client_id = "${SHOPIFY_CLIENT_ID}"\n');
 
-      // 1. Refuses current placeholder in shopify.app.toml (${SHOPIFY_CLIENT_ID})
+      // 1. Refuses the placeholder (${SHOPIFY_CLIENT_ID})
       let failed = false;
       try {
-        execFileSync("bash", [checkScript, appTomlPath], { stdio: "pipe" });
+        execFileSync("bash", [checkScript, placeholderToml], { stdio: "pipe" });
       } catch (err: any) {
         failed = true;
         const stderr = err.stderr ? err.stderr.toString("utf8") : "";
@@ -1696,5 +1701,60 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
   });
 });
 
+describe("the checkout block gets its pay link with the buyer's session token", () => {
+  // Shopify's checkout UI extensions call the app's backend with `shopify.sessionToken.get()` (a JWT signed with the
+  // app's client secret, HS256, claims exp, aud = client id, dest = the shop). A thank-you page has no other way to
+  // learn the single-use pay link: the orders/create webhook answers Shopify, not the page (found 10 Nov).
+  const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const sessionToken = (claims: Record<string, unknown>, secret = TEST_ENV.SHOPIFY_CLIENT_SECRET) => {
+    const head = b64({ alg: "HS256", typ: "JWT" });
+    const body = b64(claims);
+    const sig = createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
+    return `${head}.${body}.${sig}`;
+  };
+  const good = (h: ReturnType<typeof createTestHarness>) => ({
+    iss: "https://openrail-dev.myshopify.com/admin",
+    dest: "https://openrail-dev.myshopify.com",
+    aud: TEST_ENV.SHOPIFY_CLIENT_ID,
+    exp: h.nowSec() + 300,
+  });
+  const ask = (h: ReturnType<typeof createTestHarness>, token: string | undefined, order = "gid://shopify/Order/6001002003") =>
+    h.app.handle({
+      method: "GET",
+      path: "/shopify/extension/pay-link",
+      query: { order },
+      headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
+      rawBody: "",
+    });
 
+  it("answers a valid session token with a pay link, and CORS headers for the extension's null origin", async () => {
+    const h = createTestHarness({ order: makeOrder({ id: "gid://shopify/Order/6001002003" }) });
+    const res = await ask(h, sessionToken(good(h)));
+    expect(res.status).toBe(200);
+    expect(String(res.body.pay_url)).toMatch(/^https:\/\/shopify\.openrail\.incepture\.dev\/shopify\/pay\//);
+    expect(res.headers?.["access-control-allow-origin"]).toBe("*");
+  });
 
+  it("refuses a bad signature, an expired token, another shop and another app", async () => {
+    const h = createTestHarness({ order: makeOrder({ id: "gid://shopify/Order/6001002003" }) });
+    expect((await ask(h, sessionToken(good(h), "another-secret"))).status).toBe(401);
+    expect((await ask(h, sessionToken({ ...good(h), exp: h.nowSec() - 5 }))).status).toBe(401);
+    expect((await ask(h, sessionToken({ ...good(h), dest: "https://other.myshopify.com" }))).status).toBe(401);
+    expect((await ask(h, sessionToken({ ...good(h), aud: "someone-else" }))).status).toBe(401);
+    expect((await ask(h, undefined)).status).toBe(401);
+  });
+
+  it("needs an order, and answers the browser's preflight", async () => {
+    const h = createTestHarness({ order: makeOrder({ id: "gid://shopify/Order/6001002003" }) });
+    expect((await ask(h, sessionToken(good(h)), "")).status).toBe(400);
+    const pre = await h.app.handle({
+      method: "OPTIONS",
+      path: "/shopify/extension/pay-link",
+      query: {},
+      headers: {},
+      rawBody: "",
+    });
+    expect(pre.status).toBe(204);
+    expect(pre.headers?.["access-control-allow-headers"]?.toLowerCase()).toContain("authorization");
+  });
+});

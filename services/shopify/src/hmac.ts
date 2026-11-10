@@ -168,3 +168,51 @@ export class OrderTokenStore {
     return this.consumedNonces.has(nonce);
   }
 }
+
+
+export type SessionTokenResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Verifies the session token a checkout UI extension sends (`shopify.sessionToken.get()`): a JWT signed HS256 with the
+ * app's client secret, with `exp`, `aud` (the app's client id) and `dest` (the shop). Shopify's guidance: a token lives
+ * five minutes and is asked for just before each call.
+ */
+export function verifyShopifySessionToken(
+  token: string,
+  clientSecret: string,
+  clientId: string,
+  shopDomain: string,
+  nowSec: number,
+): SessionTokenResult {
+  const parts = token.split(".");
+  if (parts.length !== 3) return { ok: false, reason: "malformed" };
+  const [head, body, sig] = parts as [string, string, string];
+  const expected = createHmac("sha256", clientSecret).update(`${head}.${body}`).digest();
+  let given: Buffer;
+  try {
+    given = Buffer.from(sig, "base64url");
+  } catch {
+    return { ok: false, reason: "malformed" };
+  }
+  if (given.length !== expected.length || !timingSafeEqual(given, expected))
+    return { ok: false, reason: "bad_signature" };
+  let header: { alg?: unknown };
+  let claims: { exp?: unknown; aud?: unknown; dest?: unknown };
+  try {
+    header = JSON.parse(Buffer.from(head, "base64url").toString("utf8")) as { alg?: unknown };
+    claims = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as typeof claims;
+  } catch {
+    return { ok: false, reason: "malformed" };
+  }
+  if (header.alg !== "HS256") return { ok: false, reason: "bad_algorithm" };
+  if (typeof claims.exp !== "number" || claims.exp <= nowSec) return { ok: false, reason: "expired" };
+  if (claims.aud !== clientId) return { ok: false, reason: "wrong_app" };
+  let host: string;
+  try {
+    host = new URL(String(claims.dest)).host;
+  } catch {
+    return { ok: false, reason: "wrong_shop" };
+  }
+  if (host !== shopDomain) return { ok: false, reason: "wrong_shop" };
+  return { ok: true };
+}

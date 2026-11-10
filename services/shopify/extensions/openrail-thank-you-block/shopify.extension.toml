@@ -9,12 +9,8 @@ handle = "openrail-thank-you-block"
 type = "ui_extension"
 
 [[extensions.targeting]]
-module = "./src/ThankYouBlock.tsx"
+module = "./src/Extension.tsx"
 target = "purchase.thank-you.block.render"
-
-[[extensions.targeting]]
-module = "./src/ThankYouBlock.tsx"
-target = "customer-account.order-status.block.render"
 
 [extensions.capabilities]
 api_access = true

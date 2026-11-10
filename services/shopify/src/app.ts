@@ -6,6 +6,7 @@ import {
   createOrderPayToken,
   verifyOpenrailWebhookSignature,
   verifyOrderPayToken,
+  verifyShopifySessionToken,
   verifyShopifyWebhookHmac,
 } from "./hmac.js";
 import type {
@@ -771,6 +772,60 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
         (path === "/shopify/webhooks" || path === "/shopify/webhooks/orders-create")
       ) {
         return handleOrdersCreateWebhook(req);
+      }
+
+      // The checkout block (a Shopify checkout UI extension) asks for the pay link with the buyer's session token.
+      if (path === "/shopify/extension/pay-link") {
+        const cors = {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "authorization, content-type",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-max-age": "600",
+        };
+        if (method === "OPTIONS") return { status: 204, headers: cors, body: {} };
+        if (method === "GET") {
+          const auth = getHeader(req.headers, "authorization") ?? "";
+          const token = /^Bearer (.+)$/i.exec(auth)?.[1];
+          const checked =
+            token === undefined
+              ? { ok: false as const, reason: "missing" }
+              : verifyShopifySessionToken(
+                  token,
+                  env.SHOPIFY_CLIENT_SECRET ?? "",
+                  env.SHOPIFY_CLIENT_ID ?? "",
+                  env.SHOPIFY_SHOP_DOMAIN,
+                  clock(),
+                );
+          if (!checked.ok)
+            return {
+              status: 401,
+              headers: cors,
+              body: { error: { code: "invalid_session_token", message: checked.reason } },
+            };
+          const orderGid = (req.query.order ?? "").trim();
+          if (!/^gid:\/\/shopify\/Order\/\d+$/.test(orderGid))
+            return {
+              status: 400,
+              headers: cors,
+              body: { error: { code: "invalid_request", message: "order must be an order id" } },
+            };
+          const orderToken = createOrderPayToken(
+            {
+              orderGid,
+              orderName: orderGid,
+              shopDomain: env.SHOPIFY_SHOP_DOMAIN,
+              nonce: randomUUID(),
+              exp: clock() + 3600,
+            },
+            env.SHOPIFY_ORDER_TOKEN_SECRET,
+          );
+          const base = env.APP_BASE_URL.replace(/\/+$/, "");
+          return {
+            status: 200,
+            headers: cors,
+            body: { pay_url: `${base}/shopify/pay/${encodeURIComponent(orderToken)}` },
+          };
+        }
       }
 
       const payMatch = /^\/shopify\/pay\/([^/]+)$/.exec(path);

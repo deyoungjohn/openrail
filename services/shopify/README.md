@@ -162,6 +162,8 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 
 ### Step 4: Deploy App Configuration, Webhooks, and Extensions via Shopify CLI
 
+> **10 Nov correction (orchestrator):** the first extension had no entry point (only a data model), so `shopify app deploy` failed with `No matching export ... for import "default"`. It is now a real Preact extension (`extensions/openrail-thank-you-block/src/Extension.tsx`, thank-you page only). It asks the connector for the pay link with the buyer's session token (`GET /shopify/extension/pay-link`, verified HS256 with the app's client secret, CORS for the extension's null origin). **Before `shopify app deploy`, run `npm install` once inside `extensions/openrail-thank-you-block`.** The CLI will ask to request network access for the extension: approve it (Shopify approves it automatically).
+
 > [!IMPORTANT]
 > **Paste your Client ID here before `shopify app deploy`**:
 > The Shopify CLI **does not expand environment variables** (e.g. `${SHOPIFY_CLIENT_ID}`) in `shopify.app.toml`. The `client_id` field must contain the literal, public Client ID string copied from the Dev Dashboard.
