@@ -18,10 +18,17 @@ function hashList(value: unknown): { hash: string; explorerUrl?: string }[] {
 }
 
 export class OneClickInPayout implements QuotePort, StatusPort {
-  private readonly client = createOneClickClientFromEnv();
+  constructor(
+    private readonly client: ReturnType<
+      typeof createOneClickClientFromEnv
+    > = createOneClickClientFromEnv(),
+  ) {}
 
   async quote(request: Parameters<QuotePort["quote"]>[0]): Promise<Quote> {
-    const destinationAsset = tokenIdFor(request.destination.chain as Chain, "USDC");
+    const shield = request.destination.chain === "confidential";
+    const destinationAsset = shield
+      ? request.asset
+      : tokenIdFor(request.destination.chain as Chain, "USDC");
     const response = await this.client.quote({
       originAsset: request.asset,
       destinationAsset,
@@ -30,7 +37,8 @@ export class OneClickInPayout implements QuotePort, StatusPort {
       depositType: "INTENTS",
       refundTo: request.refundTo,
       recipient: request.destination.address,
-      recipientType: "DESTINATION_CHAIN",
+      recipientType: shield ? "CONFIDENTIAL_INTENTS" : "DESTINATION_CHAIN",
+      ...(shield ? { refundType: "INTENTS" } : {}),
       deadline: request.deadline,
     });
     const quote = response.quote;

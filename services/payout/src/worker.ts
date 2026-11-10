@@ -244,6 +244,24 @@ export class PayoutWorker {
         });
         return;
       }
+      if (destination.chain === "confidential" && destination.address !== entry.owner) {
+        summary.errors.push(`${key}: confidential destination is not the owner`);
+        this.deps.alert?.("confidential destination is not the owner", {
+          token_id: tokenId,
+          owner: entry.owner,
+          destination: destination.address,
+        });
+        return;
+      }
+      if (BigInt(entry.amount) < BigInt(destination.min_amount)) {
+        summary.errors.push(`${key}: amount below destination minimum`);
+        this.deps.alert?.("payout amount below destination minimum", {
+          token_id: tokenId,
+          amount: entry.amount,
+          minimum: destination.min_amount,
+        });
+        return;
+      }
       const refundTo = await this.deps.chain.claimAccount(tokenId);
       const quote = await this.deps.quote.quote({
         asset: entry.asset,
@@ -270,6 +288,15 @@ export class PayoutWorker {
           quote.recipient,
           destination.address,
         );
+        return;
+      }
+      if (quote.amountIn !== entry.amount) {
+        summary.errors.push(`${key}: quote amount mismatch`);
+        this.deps.alert?.("payout quote amount mismatch", {
+          token_id: tokenId,
+          amount: entry.amount,
+          quote_amount: quote.amountIn,
+        });
         return;
       }
       try {

@@ -263,6 +263,41 @@ describe("settle payout worker", () => {
     expect(chain.reports).toHaveLength(1);
   });
 
+  it("quotes the entry's recorded asset and the confidential owner destination", async () => {
+    const { chain, quote, worker } = fixture("acme.near");
+    const entry = chain.entries.get("c-1")?.[0];
+    if (entry !== undefined) entry.asset = "nep141:custom-token";
+    chain.settlementOf = async () => ({
+      chain: "confidential",
+      address: "acme.near",
+      min_amount: "1",
+    });
+    const summary = await worker.tick();
+    expect(quote.quote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asset: "nep141:custom-token",
+        amount: "2000000",
+        destination: { chain: "confidential", address: "acme.near", min_amount: "1" },
+      }),
+    );
+    expect(summary.sent).toHaveLength(1);
+  });
+
+  it("leaves the entry held and retries after a failed shield quote", async () => {
+    const { chain, quote, worker } = fixture("acme.near");
+    chain.settlementOf = async () => ({
+      chain: "confidential",
+      address: "acme.near",
+      min_amount: "1",
+    });
+    vi.mocked(quote.quote).mockRejectedValueOnce(new Error("quote down"));
+    const first = await worker.tick();
+    expect(first.sent).toHaveLength(0);
+    expect(chain.entries.get("c-1")?.[0]?.status).toBe("Held");
+    const second = await worker.tick();
+    expect(second.sent).toHaveLength(1);
+  });
+
   it("skips a held entry without a destination", async () => {
     const { chain, worker } = fixture();
     chain.settlementOf = async () => null;

@@ -23,6 +23,15 @@ quote recipient equals the recorded `refund_to` before any value-moving call, re
 the booked net, and keeps an ambiguous send uncertain rather than retrying. A restart resumes from the
 on-chain `InFlight` payout.
 
+## Confidential destinations
+
+When the on-chain destination chain is `confidential`, the worker asks for a shield quote with the
+entry's **recorded asset** on both sides, `EXACT_INPUT`, `depositType: INTENTS`,
+`recipientType: CONFIDENTIAL_INTENTS`, `refundType: INTENTS`, and the owner as recipient. It sends
+one `settle_payout` per held entry exactly as for a Base address; `min_amount`, the schedule, retry,
+failure and `settle_release` behaviour are unchanged. A failed quote leaves the entry held for the
+next tick.
+
 ## Run
 
 ```bash
