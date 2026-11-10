@@ -855,8 +855,11 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
         }
       }
     } else {
+      const invoiceStatus = matchedBinding.checkoutId
+        ? `invoice ${matchedBinding.checkoutId} is unpaid`
+        : "no invoice yet";
       logger(
-        `[shopify] order ${orderGid} placed for checkout_token ${checkoutToken}, but invoice ${matchedBinding.checkoutId} is unpaid`,
+        `[shopify] order ${orderGid} placed for checkout_token ${checkoutToken}, but ${invoiceStatus}`,
       );
     }
 
@@ -919,71 +922,118 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       };
     }
 
-    // The Admin API refuses the Order object until the app is approved for protected customer data (found live 11 Nov).
-    // Prefer the Admin API (it also gives the order's status page for the return links); when it refuses and the store's
-    // orders/create webhook has already bound this order, the total comes from that binding (Shopify's own webhook,
-    // never the browser) and no Admin API read is needed.
-    const boundNumeric = extractNumericOrderId(verified.payload.orderGid);
-    const bound =
-      bindingsByOrderGid.get(verified.payload.orderGid) ?? bindingsByOrderGid.get(boundNumeric);
-    const redirectFromBinding = async (b: OrderBinding): Promise<HttpResponse> => {
-      if (b.paid || b.status === "paid") {
-        return {
-          status: 409,
-          body: {
-            error: { code: "order_already_paid", message: "This order is already marked as paid." },
-          },
-        };
-      }
-      if (!b.payUrl) {
-        const boundRef = sanitizeOrderRef(`shopify-${boundNumeric}`);
-        const { checkout: boundCheckout } = await checkoutApi.createCheckout(
-          {
-            order_ref: boundRef,
-            amount_usd: b.expectedTotalUsd,
-            currency: "USD",
-            expires_in_minutes: 60,
-          },
-          `shopify-order-${boundNumeric}-${b.expectedTotalUsd}`,
-        );
-        b.checkoutId = boundCheckout.id;
-        b.payUrl = boundCheckout.pay_url;
-        b.orderRef = boundRef;
-        bindingsByOrderRef.set(boundRef, b);
-        bindingsByCheckoutId.set(boundCheckout.id, b);
-      }
-      return {
-        status: 302,
-        headers: { location: b.payUrl },
-        body: { redirect_url: b.payUrl, checkout_id: b.checkoutId, order_ref: b.orderRef },
-      };
-    };
+    // Rule: Read total from Shopify Admin API when available; fall back to binding if Admin API is blocked
+    const orderGid = verified.payload.orderGid;
+    const parsedOrder = parseAndNormalizeOrderId(orderGid);
+    const numericId = parsedOrder?.numericId ?? extractNumericOrderId(orderGid);
+    const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
+    let binding =
+      bindingsByOrderGid.get(orderGid) ??
+      bindingsByOrderGid.get(numericId) ??
+      bindingsByOrderRef.get(orderRef);
 
-    // Rule: ALWAYS read the outstanding total from the Shopify Admin GraphQL API, NEVER from the browser
-    let order: ShopifyOrder;
+    let order: ShopifyOrder | null = null;
     try {
-      order = await adminClient.getOrder(verified.payload.orderGid);
-    } catch (error) {
-      if (!bound) throw error;
-      console.warn(
-        `[shopify] pay redirect: could not read order ${boundNumeric} from the Admin API (${error instanceof Error ? error.message : "unknown error"}); using the webhook binding`,
-      );
-      return redirectFromBinding(bound);
+      order = await adminClient.getOrder(orderGid);
+    } catch (err) {
+      if (isProtectedCustomerDataError(err)) {
+        logger(
+          `[shopify] cannot read order ${numericId}: the app is not approved for protected customer data; request access in the Dev Dashboard`,
+        );
+      } else {
+        throw err;
+      }
     }
-    const shopMoney = order.totalOutstandingSet.shopMoney;
-    if (order.currencyCode !== "USD" || shopMoney.currencyCode !== "USD") {
+
+    if (!order && !binding) {
       return {
-        status: 422,
+        status: 404,
         body: {
           error: {
-            code: "unsupported_currency",
-            message: `Order currency must be USD (received ${shopMoney.currencyCode}).`,
+            code: "order_not_found",
+            message: "Order not found",
           },
         },
       };
     }
 
-    if (order.fullyPaid || order.displayFinancialStatus === "PAID") {
+    if (order) {
+      const shopMoney = order.totalOutstandingSet.shopMoney;
+      if (order.currencyCode !== "USD" || shopMoney.currencyCode !== "USD") {
+        return {
+          status: 422,
+          body: {
+            error: {
+              code: "unsupported_currency",
+              message: `Order currency must be USD (received ${shopMoney.currencyCode}).`,
+            },
+          },
+        };
+      }
+
+      if (order.fullyPaid || order.displayFinancialStatus === "PAID") {
+        return {
+          status: 409,
+          body: {
+            error: {
+              code: "order_already_paid",
+              message: "This order is already marked as paid.",
+            },
+          },
+        };
+      }
+
+      const amountUsd = Number(shopMoney.amount).toFixed(2);
+      const idempotencyKey = `shopify-order-${numericId}-${amountUsd}`;
+
+      const items = order.lineItems.map((item) => ({
+        name: item.title,
+        quantity: item.quantity,
+        ...(item.unitPriceUsd ? { unit_price_usd: item.unitPriceUsd } : {}),
+      }));
+
+      const { checkout } = await checkoutApi.createCheckout(
+        {
+          order_ref: orderRef,
+          amount_usd: amountUsd,
+          currency: "USD",
+          expires_in_minutes: 60,
+          return_url: order.statusPageUrl,
+          cancel_url: order.statusPageUrl,
+          ...(items.length > 0 ? { items } : {}),
+        },
+        idempotencyKey,
+      );
+
+      const updatedBinding: OrderBinding = {
+        orderGid: order.id,
+        numericId,
+        orderName: order.name,
+        orderRef,
+        checkoutId: checkout.id,
+        expectedTotalUsd: checkout.total_usd ?? checkout.amount_usd,
+        payUrl: checkout.pay_url,
+      };
+      bindingsByOrderRef.set(orderRef, updatedBinding);
+      bindingsByCheckoutId.set(checkout.id, updatedBinding);
+      bindingsByOrderGid.set(orderGid, updatedBinding);
+      bindingsByOrderGid.set(numericId, updatedBinding);
+
+      return {
+        status: 302,
+        headers: {
+          location: checkout.pay_url,
+        },
+        body: {
+          redirect_url: checkout.pay_url,
+          checkout_id: checkout.id,
+          order_ref: orderRef,
+        },
+      };
+    }
+
+    // Order could not be read via Admin API (protected customer data), work from binding
+    if (binding!.paid) {
       return {
         status: 409,
         body: {
@@ -995,39 +1045,37 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       };
     }
 
-    const numericId = extractNumericOrderId(order.id);
-    const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
-    const amountUsd = Number(shopMoney.amount).toFixed(2);
+    if (binding!.payUrl) {
+      return {
+        status: 302,
+        headers: {
+          location: binding!.payUrl,
+        },
+        body: {
+          redirect_url: binding!.payUrl,
+          checkout_id: binding!.checkoutId,
+          order_ref: orderRef,
+        },
+      };
+    }
+
+    const amountUsd = Number(binding!.expectedTotalUsd).toFixed(2);
     const idempotencyKey = `shopify-order-${numericId}-${amountUsd}`;
-
-    const items = order.lineItems.map((item) => ({
-      name: item.title,
-      quantity: item.quantity,
-      ...(item.unitPriceUsd ? { unit_price_usd: item.unitPriceUsd } : {}),
-    }));
-
     const { checkout } = await checkoutApi.createCheckout(
       {
         order_ref: orderRef,
         amount_usd: amountUsd,
         currency: "USD",
         expires_in_minutes: 60,
-        return_url: order.statusPageUrl,
-        cancel_url: order.statusPageUrl,
-        ...(items.length > 0 ? { items } : {}),
       },
       idempotencyKey,
     );
-
-    const binding: OrderBinding = {
-      orderGid: order.id,
-      orderName: order.name,
-      orderRef,
-      checkoutId: checkout.id,
-      expectedTotalUsd: checkout.total_usd ?? checkout.amount_usd,
-    };
-    bindingsByOrderRef.set(orderRef, binding);
-    bindingsByCheckoutId.set(checkout.id, binding);
+    binding!.checkoutId = checkout.id;
+    binding!.payUrl = checkout.pay_url;
+    bindingsByCheckoutId.set(checkout.id, binding!);
+    bindingsByOrderGid.set(orderGid, binding!);
+    bindingsByOrderGid.set(numericId, binding!);
+    bindingsByOrderRef.set(orderRef, binding!);
 
     return {
       status: 302,

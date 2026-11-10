@@ -4657,6 +4657,173 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(h.loggedLines).toContain("[shopify] order 6581579383141 bound from webhook (total 42.00)");
       });
     });
+
+    describe("Update 23: Thank-you block live test findings (text layout, log line, button href)", () => {
+      it("ThankYouViewModel separates body sentence and order total into distinct lines for unpaid and partial states", () => {
+        // Unpaid
+        const vmUnpaid = buildThankYouViewModel({
+          status: "unpaid",
+          paid: false,
+          total_usd: "2.00",
+          pay_url: "https://pay.openrail.incepture.dev/c/chk-123",
+        });
+        expect(vmUnpaid.bodyText).toBe("Complete your payment with stablecoins to confirm this order.");
+        expect(vmUnpaid.orderTotalText).toBe("Order total: $2.00 USD");
+        expect(vmUnpaid.bodyText).not.toContain("Order total");
+
+        // Partial
+        const vmPartial = buildThankYouViewModel({
+          status: "partial",
+          paid: false,
+          total_usd: "10.00",
+          paid_usd: "4.00",
+          remaining_usd: "6.00",
+          pay_url: "https://pay.openrail.incepture.dev/c/chk-123",
+        });
+        expect(vmPartial.bodyText).toContain("We received $4.00 of $10.00");
+        expect(vmPartial.orderTotalText).toBe("Total: $10.00 USD");
+        expect(vmPartial.bodyText).not.toContain("Total: $10.00 USD");
+      });
+
+      it("logs 'no invoice yet' when order is placed via webhook before an invoice exists", async () => {
+        const h = createTestHarness();
+
+        const payload = JSON.stringify({
+          id: 6581579383999,
+          admin_graphql_api_id: "gid://shopify/Order/6581579383999",
+          name: "#1002",
+          total_price: "25.00",
+          currency: "USD",
+          checkout_token: "chk_tok_no_invoice",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+          confirmation_number: "CONF-999",
+          financial_status: "pending",
+        });
+
+        const res = await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks/orders-create",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(payload, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-shop-domain": "openrail-dev.myshopify.com",
+          },
+          rawBody: payload,
+        });
+
+        expect(res.status).toBe(200);
+        // Finding (2): must say 'no invoice yet', not 'invoice  is unpaid'
+        const logLine = h.loggedLines.find((l) => l.includes("placed for checkout_token chk_tok_no_invoice"));
+        expect(logLine).toBeDefined();
+        expect(logLine).toContain("no invoice yet");
+        expect(logLine).not.toContain("invoice  is unpaid");
+      });
+
+      it("proves the button href for each state is an absolute https:// Openrail pay URL (not relative, not Shopify, not redirect route)", async () => {
+        const expectedPayUrlRegex = /^https:\/\/[^/]+\/c\/[a-zA-Z0-9_-]+$/;
+
+        // 1. Unpaid state
+        const vmUnpaid = buildThankYouViewModel({
+          status: "unpaid",
+          paid: false,
+          total_usd: "2.00",
+          pay_url: "https://pay.openrail.incepture.dev/c/chk-123",
+        });
+        expect(vmUnpaid.ctaHref).toBeDefined();
+        expect(vmUnpaid.ctaHref).toMatch(expectedPayUrlRegex);
+        expect(vmUnpaid.ctaHref?.startsWith("https://")).toBe(true);
+        expect(vmUnpaid.ctaHref).not.toContain("shopify.com");
+        expect(vmUnpaid.ctaHref).not.toContain("myshopify.com");
+        expect(vmUnpaid.ctaHref).not.toContain("/shopify/pay/");
+
+        // 2. Partial state
+        const vmPartial = buildThankYouViewModel({
+          status: "partial",
+          paid: false,
+          total_usd: "10.00",
+          paid_usd: "4.00",
+          remaining_usd: "6.00",
+          pay_url: "https://pay.openrail.incepture.dev/c/chk-456",
+        });
+        expect(vmPartial.ctaHref).toBeDefined();
+        expect(vmPartial.ctaHref).toMatch(expectedPayUrlRegex);
+        expect(vmPartial.ctaHref?.startsWith("https://")).toBe(true);
+        expect(vmPartial.ctaHref).not.toContain("shopify.com");
+        expect(vmPartial.ctaHref).not.toContain("myshopify.com");
+        expect(vmPartial.ctaHref).not.toContain("/shopify/pay/");
+
+        // 3. Paid, order_pending, and error states have NO pay button
+        const vmPaid = buildThankYouViewModel({
+          status: "paid",
+          paid: true,
+          total_usd: "2.00",
+          pay_url: "https://pay.openrail.incepture.dev/c/chk-123",
+        });
+        expect(vmPaid.ctaHref).toBeUndefined();
+
+        const vmPending = buildThankYouViewModel({ status: "order_pending" });
+        expect(vmPending.ctaHref).toBeUndefined();
+
+        const vmError = buildThankYouViewModel({ status: "error" });
+        expect(vmError.ctaHref).toBeUndefined();
+      });
+
+      it("/shopify/pay/<token> works from binding when Admin API getOrder fails with protected customer data", async () => {
+        const h = createTestHarness();
+
+        // 1. Bind order from webhook
+        const payload = JSON.stringify({
+          id: 6581777777777,
+          admin_graphql_api_id: "gid://shopify/Order/6581777777777",
+          name: "#1003",
+          total_price: "30.00",
+          currency: "USD",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+          confirmation_number: "CONF-777",
+        });
+
+        await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks/orders-create",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(payload, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-shop-domain": "openrail-dev.myshopify.com",
+          },
+          rawBody: payload,
+        });
+
+        // 2. Admin API throws protected customer data error
+        h.adminClient.getOrder = async () => {
+          throw new Error("Shopify Admin GraphQL error: This app is not approved to access the Order object.");
+        };
+
+        const token = createOrderPayToken(
+          {
+            orderGid: "gid://shopify/Order/6581777777777",
+            orderName: "#1003",
+            shopDomain: TEST_ENV.SHOPIFY_SHOP_DOMAIN,
+            nonce: "test-nonce-777",
+            exp: h.nowSec() + 3600,
+          },
+          TEST_ENV.SHOPIFY_ORDER_TOKEN_SECRET,
+        );
+
+        // 3. /shopify/pay/<token> redirects (302) directly to Openrail checkout URL, not Shopify
+        const res = await h.app.handle({
+          method: "GET",
+          path: `/shopify/pay/${encodeURIComponent(token)}`,
+          query: {},
+          headers: {},
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBeDefined();
+        expect(res.headers.location).toMatch(/^https:\/\/[^/]+\/c\/[a-zA-Z0-9_-]+$/);
+        expect(res.headers.location).not.toContain("shopify.com");
+      });
+    });
   });
 });
 
