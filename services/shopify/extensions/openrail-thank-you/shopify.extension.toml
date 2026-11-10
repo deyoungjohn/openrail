@@ -4,16 +4,11 @@
 api_version = "2025-10"
 
 [[extensions]]
-name = "Openrail Pay Block"
-handle = "openrail-pay-block"
+name = "Thank You"
+handle = "openrail-thank-you"
 type = "ui_extension"
 
-# During checkout, before anything is bought: how paying with stablecoins works.
-[[extensions.targeting]]
-module = "./src/CheckoutNotice.tsx"
-target = "purchase.checkout.block.render"
-
-# After the order is placed (the thank-you page): the payment link.
+# The thank-you page, after the order: thanks, transaction hashes, order summary.
 [[extensions.targeting]]
 module = "./src/Extension.tsx"
 target = "purchase.thank-you.block.render"
