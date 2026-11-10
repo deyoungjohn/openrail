@@ -170,7 +170,7 @@ export class OrderTokenStore {
 }
 
 
-export type SessionTokenResult = { ok: true } | { ok: false; reason: string };
+export type SessionTokenResult = { ok: true } | { ok: false; reason: string; detail?: string };
 
 /**
  * Verifies the session token a checkout UI extension sends (`shopify.sessionToken.get()`): a JWT signed HS256 with the
@@ -211,8 +211,9 @@ export function verifyShopifySessionToken(
   try {
     host = new URL(String(claims.dest)).host;
   } catch {
-    return { ok: false, reason: "wrong_shop" };
+    return { ok: false, reason: "wrong_shop", detail: `token dest unreadable (claim names: ${Object.keys(claims).join(",")})` };
   }
-  if (host !== shopDomain) return { ok: false, reason: "wrong_shop" };
+  if (host !== shopDomain)
+    return { ok: false, reason: "wrong_shop", detail: `token shop ${host}, configured ${shopDomain}` };
   return { ok: true };
 }

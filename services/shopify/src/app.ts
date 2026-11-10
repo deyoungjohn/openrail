@@ -408,11 +408,11 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
 
   const lastRefusalLogTimeByReason = new Map<string, number>();
 
-  function logSessionTokenRefusal(reason: string, nowSec: number) {
+  function logSessionTokenRefusal(reason: string, nowSec: number, detail?: string) {
     const lastSec = lastRefusalLogTimeByReason.get(reason);
     if (lastSec === undefined || nowSec - lastSec >= 60) {
       lastRefusalLogTimeByReason.set(reason, nowSec);
-      console.warn("[shopify] session token refused:", reason);
+      console.warn("[shopify] session token refused:", reason, detail ?? "");
     }
   }
 
@@ -1177,7 +1177,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   clock(),
                 );
           if (!checked.ok) {
-            logSessionTokenRefusal(checked.reason, clock());
+            logSessionTokenRefusal(checked.reason, clock(), "detail" in checked ? checked.detail : undefined);
             return {
               status: 401,
               headers: cors,
@@ -1370,7 +1370,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   clock(),
                 );
           if (!checked.ok) {
-            logSessionTokenRefusal(checked.reason, clock());
+            logSessionTokenRefusal(checked.reason, clock(), "detail" in checked ? checked.detail : undefined);
             return {
               status: 401,
               headers: cors,
@@ -1540,7 +1540,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   clock(),
                 );
           if (!checked.ok) {
-            logSessionTokenRefusal(checked.reason, clock());
+            logSessionTokenRefusal(checked.reason, clock(), "detail" in checked ? checked.detail : undefined);
             return {
               status: 401,
               headers: cors,
