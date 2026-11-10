@@ -82,6 +82,19 @@ export function buildThankYouViewModel(
     };
   }
 
+  if (status === "order_pending") {
+    return {
+      render: true,
+      visible: true,
+      state: "unpaid",
+      heading: "Order placed",
+      text: "Preparing your payment link…",
+      bodyText: "Preparing your payment link…",
+      summary: "Preparing your payment link…",
+      summaryText: "Preparing your payment link…",
+    };
+  }
+
   const total = data.total_usd ?? data.totalUsd ?? "0.00";
 
   if (status === "unpaid") {
@@ -186,6 +199,30 @@ export async function parseOrderStatusResponse(
       // 404 response body was not valid JSON
     }
     return { kind: "failure", status: 404 };
+  }
+
+  if (res.status === 202) {
+    try {
+      const json = res.json ? ((await res.json()) as Record<string, unknown>) : null;
+      if (json && typeof json === "object") {
+        return {
+          kind: "ok",
+          data: {
+            status: "order_pending",
+            summary: (json.summary as string) ?? "Preparing your payment link…",
+          },
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      kind: "ok",
+      data: {
+        status: "order_pending",
+        summary: "Preparing your payment link…",
+      },
+    };
   }
 
   if (!res.ok) {

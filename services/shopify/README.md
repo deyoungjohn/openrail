@@ -202,10 +202,17 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
    ```
    *This validator ensures that `client_id` is neither empty nor an unexpanded placeholder (e.g. `${...}` or `<...>`)*.
 
-3. **Protected Customer Data & `orders/create` Handling**:
-   - **Why `orders/create` is omitted from `shopify.app.toml`**: `shopify app deploy` rejects apps subscribing to `orders/create` via TOML unless the app has passed Shopify's protected customer data review.
-   - **Store Admin Solution**: Creating the webhook directly in Shopify Store Admin (**Settings → Notifications → Webhooks**) bypasses this constraint for dev stores and uses the store-level signing secret (`SHOPIFY_WEBHOOK_SECRET`).
-   - **Zero PII Dependency in Openrail**: The Openrail app does not request or persist customer personal data. When `orders/create` arrives, the webhook handler extracts only the order identifier (`id` or `admin_graphql_api_id`), order display name (e.g. `#1001`), and `payment_gateway_names`. All financial figures (`totalOutstandingSet.shopMoney.amount`, `lineItems`, financial status) are queried directly from the **Shopify Admin GraphQL API** using the server's access token.
+3. **Protected Customer Data, Webhook Fallback & Dual Support**:
+   - **Development Stores Are NOT Exempt**: Development stores are not exempt from Shopify's protected customer data requirements. Live testing confirms Shopify blocks Admin API access to the `Order` GraphQL object with error: `Shopify Admin GraphQL error: This app is not approved to access the Order object. See https://shopify.dev/docs/apps/launch/protected-customer-data`.
+   - **What the App Needs**: Level 1 access to the `Order` object in the Shopify Dev Dashboard. No customer PII fields (name, email, phone, physical address) are requested or needed—only the order ID, line items, and financial totals.
+   - **What Happens Without Approval (Fallback Flow)**:
+     - The store-admin webhook (`orders/create`, signed with `SHOPIFY_WEBHOOK_SECRET`) is not gated by app review and delivers order identifiers (`id`, `admin_graphql_api_id`), totals, currency, confirmation number, and payment gateway names.
+     - The connector builds an in-memory binding from the webhook payload. Both `GET /shopify/extension/pay-link` and `GET /shopify/extension/order-status` answer directly from this binding, without calling `getOrder` through the Admin API.
+     - **The Race Window**: If the Thank-You page loads before the webhook arrives, `order-status` returns HTTP `202 {"status":"order_pending"}` for up to 2 minutes after first seeing the order ID. The extension polls quietly displaying "Preparing your payment link…", transitioning to 200 once the webhook arrives. If 2 minutes elapse without a webhook binding, it answers 404 `order_not_found`.
+     - **Marking Paid**: When payment is booked on NEAR, the connector attempts `orderMarkAsPaid`. If refused due to protected customer data, it logs `[shopify] cannot mark order <id> paid: the app is not approved for protected customer data; request access in the Dev Dashboard`, records the binding as `paid`, and serves the paid state to the buyer with NEAR transaction links. Shopify's order remains 'payment pending' and the merchant marks it paid by hand.
+   - **Where to Request Access**:
+     - *Verified on shopify.dev*: Open Dev Dashboard ([dev.shopify.com](https://dev.shopify.com)) → Select App → **API access** → **Protected customer data** ([Shopify Protected Customer Data Documentation](https://shopify.dev/docs/apps/launch/protected-customer-data)). Request Level 1 access for Order data.
+     - *Unverified boundary*: In some Dev Dashboard configurations, the request form may not be exposed for development-tier custom apps. The webhook binding provides complete functionality regardless of approval status.
 
 4. **Run `shopify app deploy`**:
    ```bash
@@ -328,7 +335,7 @@ In the Openrail Merchant Dashboard:
 git -C openrail switch -c mod-shopify origin/main
 git -C openrail am ../openrail-lab/staging/shopify/patches/*.patch
 
-# Run the 108 Shopify unit, extension, and server pack tests:
+# Run the 117 Shopify unit, extension, and server pack tests:
 /home/antigravity/deyoungjohn/openrail/node_modules/.bin/vitest run \
   --root /home/antigravity/deyoungjohn/openrail-lab/staging/shopify \
   test/shopify.test.ts
@@ -399,10 +406,10 @@ Per Shopify documentation on checkout extensibility, checkout page steps (inform
    - **Throttled Session Token Refusal Logging**: Logs `console.warn("[shopify] session token refused:", reason)` throttled to at most once per 60 seconds per refusal reason (`bad_signature`, `expired`, `wrong_shop`, `wrong_app`, `missing`), writing reason only (never the token) so operators see configuration mismatches in `journalctl`.
 
 8. **Verification Boundaries (What Can & Cannot Be Verified)**:
-   - **Can verify**: Session token cryptographic validity (HS256 HMAC signature, expiry, `aud`, `dest`), throttled operator refusal logs, CORS headers on all extension routes, rate limiting, caller confirmation binding, information minimization, error banner states and 3-failure polling thresholds, order identity normalization, amount validation, underpayment enforcement, cursor-based pagination against real API response shapes, partial state reconstruction, webhook matching across both arrival orders, edge-case log lines, and unit/integration test assertions (108/108 passing).
+   - **Can verify**: Session token cryptographic validity (HS256 HMAC signature, expiry, `aud`, `dest`), throttled operator refusal logs, CORS headers on all extension routes, rate limiting, caller confirmation binding, information minimization, error banner states and 3-failure polling thresholds, order identity normalization, amount validation, underpayment enforcement, cursor-based pagination against real API response shapes, partial state reconstruction, webhook matching across both arrival orders, edge-case log lines, and unit/integration test assertions (117/117 passing).
    - **Cannot verify**: Visual layout and CSS rendering of Polaris web components inside the Shopify checkout iframe without a live browser running on a development store session; live `shopify app deploy` execution without interactive human Partner authentication.
 
-## 8. Test Suite (108 tests, `test/shopify.test.ts`)
+## 8. Test Suite (117 tests, `test/shopify.test.ts`)
 
 | Test | What it proves |
 |---|---|
@@ -510,10 +517,15 @@ Per Shopify documentation on checkout extensibility, checkout page steps (inform
 | `GET /shopify/extension/order-status accepts OrderIdentity GID and normalises to Order GID for Admin API` | Verifies order-status accepts `gid://shopify/OrderIdentity/<n>` and returns normalized `gid://shopify/Order/<n>` |
 | `GET /shopify/extension/pay-link accepts bare numeric order id and normalises to Order GID` | Verifies pay-link accepts bare numeric strings `<n>` and converts to `gid://shopify/Order/<n>` |
 | `GET /shopify/extension/order-status accepts bare numeric order id and normalises to Order GID` | Verifies order-status accepts bare numeric strings `<n>` and converts to `gid://shopify/Order/<n>` |
-| `orders/create webhook binding matches extension query with OrderIdentity GID` | Cross-verifies that webhook indexed with Order GID matches extension query arriving with OrderIdentity GID |
-| `GET /shopify/extension/pay-link rejects invalid order id formats with 400` | Rejects non-numeric strings and invalid GID types (e.g. `Product`) on pay-link with HTTP 400 `invalid_request` |
 | `GET /shopify/extension/order-status rejects invalid order id formats with 400` | Rejects non-numeric strings and invalid GID types (e.g. `Customer`) on order-status with HTTP 400 `invalid_request` |
 | `connector logs session token refusal at most once per minute with reason only` | Throttles session token refusal warnings to at most once per 60s per reason, never logging the token |
+| `creates binding from webhook payload, allowing pay-link and order-status to work without Admin API getOrder` | Verifies full pay-link and order-status flows operate from webhook binding without calling Admin API getOrder |
+| `the race: order-status returns 202 order_pending before webhook arrives (within 2 min), then 200 after webhook` | Handles race condition where Thank-You page polls before webhook delivery, returning 202 without error banner |
+| `the race timeout: order-status returns 404 order_not_found after 2 minutes without binding` | After 120s without webhook arrival, transitions from 202 order_pending to 404 order_not_found |
+| `order-status returns 404 not_openrail_order when webhook recorded non-Openrail gateway` | Ensures non-Openrail gateway reported in orders/create causes extension to return 404 not_openrail_order |
+| `orders/create webhook validates currency and total amount` | Refuses non-USD currencies with 422 and zero or negative totals with 400 |
+| `marking paid logs protected customer data message, does not crash, and buyer sees paid` | On orderMarkAsPaid protected customer data refusal, logs warning, keeps binding paid, and shows paid to buyer |
+| `ThankYouModel parses 202 response and builds non-error view model for order_pending` | Verifies ThankYouModel correctly handles HTTP 202 status returning visible, quiet state without error banner |
 
 ## 9. Mutation Spot-Check Table (10 mutants, all killed)
 

@@ -4185,6 +4185,325 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         }
       });
     });
+
+    describe("Update 21: Work from webhook without reading Order through Admin API (protected customer data)", () => {
+      const PROTECTED_CUSTOMER_DATA_ERR =
+        "Shopify Admin GraphQL error: This app is not approved to access the Order object. See https://shopify.dev/docs/apps/launch/protected-customer-data";
+
+      function sendOrdersCreateWebhook(
+        h: ReturnType<typeof createTestHarness>,
+        payloadObj: Record<string, unknown>,
+      ) {
+        const rawBody = JSON.stringify(payloadObj);
+        return h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+              rawBody,
+              TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+            ),
+            "x-shopify-shop-domain": "openrail-dev.myshopify.com",
+          },
+          rawBody,
+        });
+      }
+
+      function sendOpenrailWebhook(
+        h: ReturnType<typeof createTestHarness>,
+        eventObj: Record<string, unknown>,
+      ) {
+        const rawBody = JSON.stringify(eventObj);
+        const sig = signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawBody);
+        return h.app.handle({
+          method: "POST",
+          path: "/shopify/openrail-webhook",
+          query: {},
+          headers: {
+            "openrail-signature": sig,
+          },
+          rawBody,
+        });
+      }
+
+      it("creates binding from webhook payload, allowing pay-link and order-status to work without Admin API getOrder", async () => {
+        const h = createTestHarness();
+        const getOrderMock = vi.fn(async () => {
+          throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
+        });
+        h.adminClient.getOrder = getOrderMock as any;
+
+        const webhookRes = await sendOrdersCreateWebhook(h, {
+          id: 6581579383141,
+          admin_graphql_api_id: "gid://shopify/Order/6581579383141",
+          name: "#1042",
+          total_price: "42.00",
+          currency: "USD",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+          confirmation_number: "CONF42",
+          financial_status: "pending",
+        });
+        expect(webhookRes.status).toBe(200);
+
+        // 1. order-status answers from binding without calling getOrder
+        const statusRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581579383141",
+            confirmation: "CONF42",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(statusRes.status).toBe(200);
+        expect(statusRes.body.status).toBe("unpaid");
+        expect(statusRes.body.total_usd).toBe("42.00");
+        expect(statusRes.body.order_gid).toBe("gid://shopify/Order/6581579383141");
+        expect(getOrderMock).not.toHaveBeenCalled();
+
+        // 2. pay-link answers from binding without calling getOrder
+        const payRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581579383141",
+            confirmation: "CONF42",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(payRes.status).toBe(200);
+        expect(payRes.body.ok).toBe(true);
+        expect(payRes.body.pay_url).toBeDefined();
+        expect(getOrderMock).not.toHaveBeenCalled();
+      });
+
+      it("the race: order-status returns 202 order_pending before webhook arrives (within 2 min), then 200 after webhook", async () => {
+        const h = createTestHarness();
+        h.adminClient.getOrder = vi.fn(async () => {
+          throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
+        }) as any;
+
+        // 1. Buyer lands on thank-you page before webhook arrives -> 202
+        const res1 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581999999999",
+            confirmation: "CONF99",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res1.status).toBe(202);
+        expect(res1.body.status).toBe("order_pending");
+
+        // 2. Poll 60s later -> still 202
+        h.advanceClock(60);
+        const res2 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581999999999",
+            confirmation: "CONF99",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res2.status).toBe(202);
+        expect(res2.body.status).toBe("order_pending");
+
+        // 3. Webhook arrives
+        await sendOrdersCreateWebhook(h, {
+          id: 6581999999999,
+          admin_graphql_api_id: "gid://shopify/Order/6581999999999",
+          name: "#1099",
+          total_price: "19.99",
+          currency: "USD",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+          confirmation_number: "CONF99",
+        });
+
+        // 4. Next poll receives 200 with full details
+        const res3 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581999999999",
+            confirmation: "CONF99",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res3.status).toBe(200);
+        expect(res3.body.status).toBe("unpaid");
+        expect(res3.body.total_usd).toBe("19.99");
+      });
+
+      it("the race timeout: order-status returns 404 order_not_found after 2 minutes without binding", async () => {
+        const h = createTestHarness();
+        h.adminClient.getOrder = vi.fn(async () => {
+          throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
+        }) as any;
+
+        // First seen at t=0
+        const res1 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581888888888",
+            confirmation: "CONF_TIMEOUT",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res1.status).toBe(202);
+
+        // Advance beyond 2 minutes (121s)
+        h.advanceClock(121);
+        const res2 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581888888888",
+            confirmation: "CONF_TIMEOUT",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res2.status).toBe(404);
+        expect((res2.body.error as any)?.code).toBe("order_not_found");
+      });
+
+      it("order-status returns 404 not_openrail_order when webhook recorded non-Openrail gateway", async () => {
+        const h = createTestHarness();
+        h.adminClient.getOrder = vi.fn(async () => {
+          throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
+        }) as any;
+
+        await sendOrdersCreateWebhook(h, {
+          id: 6581777777777,
+          admin_graphql_api_id: "gid://shopify/Order/6581777777777",
+          name: "#1077",
+          total_price: "25.00",
+          currency: "USD",
+          payment_gateway_names: ["manual_cash_on_delivery"],
+          confirmation_number: "CONF77",
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581777777777",
+            confirmation: "CONF77",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(404);
+        expect((res.body.error as any)?.code).toBe("not_openrail_order");
+      });
+
+      it("orders/create webhook validates currency and total amount", async () => {
+        const h = createTestHarness();
+
+        const eurRes = await sendOrdersCreateWebhook(h, {
+          id: 6581444444444,
+          admin_graphql_api_id: "gid://shopify/Order/6581444444444",
+          total_price: "10.00",
+          currency: "EUR",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+        });
+        expect(eurRes.status).toBe(422);
+
+        const zeroRes = await sendOrdersCreateWebhook(h, {
+          id: 6581333333333,
+          admin_graphql_api_id: "gid://shopify/Order/6581333333333",
+          total_price: "0.00",
+          currency: "USD",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+        });
+        expect(zeroRes.status).toBe(400);
+      });
+
+      it("marking paid logs protected customer data message, does not crash, and buyer sees paid", async () => {
+        const logged: string[] = [];
+        const h = createTestHarness({
+          logger: (msg: string) => { logged.push(msg); },
+        });
+        h.adminClient.getOrder = vi.fn(async () => {
+          throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
+        }) as any;
+        h.adminClient.markOrderAsPaid = vi.fn(async () => {
+          throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
+        }) as any;
+
+        // 1. Webhook sets up binding
+        await sendOrdersCreateWebhook(h, {
+          id: 6581666666666,
+          admin_graphql_api_id: "gid://shopify/Order/6581666666666",
+          name: "#1066",
+          total_price: "50.00",
+          currency: "USD",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+          confirmation_number: "CONF66",
+        });
+
+        // 2. Openrail payment event arrives
+        const webhookRes = await sendOpenrailWebhook(h, {
+          id: "evt-paid-66",
+          type: "checkout.paid",
+          created: h.nowSec(),
+          data: {
+            order_ref: "shopify-6581666666666",
+            amount_usd: "50.00",
+            total_usd: "50.00",
+            booking_tx: "near-tx-hash-66",
+          },
+        });
+        expect(webhookRes.status).toBe(200);
+
+        // 3. Clear operator log line was emitted
+        expect(logged.some((l) => l.includes("cannot mark order 6581666666666 paid") && l.includes("protected customer data"))).toBe(true);
+
+        // 4. Buyer sees paid state in order-status
+        const statusRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581666666666",
+            confirmation: "CONF66",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(statusRes.status).toBe(200);
+        expect(statusRes.body.status).toBe("paid");
+        expect(statusRes.body.paid).toBe(true);
+        expect(statusRes.body.tx_hash).toBe("near-tx-hash-66");
+      });
+
+      it("ThankYouModel parses 202 response and builds non-error view model for order_pending", async () => {
+        const parsed = await parseOrderStatusResponse({
+          status: 202,
+          ok: true,
+          json: async () => ({ status: "order_pending" }),
+        });
+        expect(parsed.kind).toBe("ok");
+        if (parsed.kind === "ok") {
+          expect(parsed.data.status).toBe("order_pending");
+          const vm = buildThankYouViewModel(parsed.data);
+          expect(vm.visible).toBe(true);
+          expect(vm.state).toBe("unpaid");
+          expect(vm.tone).toBeUndefined();
+          expect(vm.text).toBe("Preparing your payment link…");
+          expect(vm.ctaHref).toBeUndefined();
+        }
+      });
+    });
   });
 });
 
