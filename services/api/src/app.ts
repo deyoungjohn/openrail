@@ -62,6 +62,8 @@ export interface ApiConfig {
   rootAccount: string;
   recipient: string;
   payBaseUrl: string;
+  /** Confidential Intents: shield + private balance reads. Off by default. */
+  confidentialIntents?: boolean;
   /** REL-2: new invoices get `<username>-<ref>` claim labels. Off until the contract supports them. */
   claimLabels?: boolean;
 }
@@ -142,6 +144,16 @@ export interface IndexerPort {
 }
 
 export type PayoutSchedule = "manual" | "each_payment" | "daily" | "weekly" | "monthly";
+
+export interface ConfidentialBalancePort {
+  authenticate(
+    signedData: Record<string, unknown>,
+  ): Promise<{ accessToken: string; expiresIn: number }>;
+  balances(
+    userToken: string,
+    tokenIds: string[],
+  ): Promise<{ tokenId: string; available: string; source?: string }[]>;
+}
 
 export interface PayoutEstimatorPort {
   estimate(destination: string): Promise<Record<string, unknown>>;
@@ -309,6 +321,7 @@ export interface ApiDeps {
   accessKey: AccessKeyPort;
   cashout: CashoutPort;
   payoutEstimator?: PayoutEstimatorPort;
+  confidential?: ConfidentialBalancePort;
   indexer?: IndexerPort;
   verifier?: Nep413Verifier;
   routes?: RouteFile;
@@ -720,6 +733,11 @@ export class ApiApp {
   }
 
   private readonly claimCache = new Map<string, { at: number; claim: Record<string, unknown> }>();
+  /** Confidential user sessions are read-only and live in this process only; a restart means signing again. */
+  private readonly confidentialSessions = new Map<
+    string,
+    { accessToken: string; expiresAt: number }
+  >();
 
   /**
    * The invoices as they are on chain now: status, what is still owed and what was paid come from each
@@ -1529,6 +1547,54 @@ export class ApiApp {
       }
     }
 
+    if (path === "/v1/balance/confidential/session" && method === "POST") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const body = (request.body ?? {}) as { signed_data?: unknown };
+      if (body.signed_data === null || typeof body.signed_data !== "object")
+        throw new ApiError(400, "invalid_request", "signed_data required");
+      const session = await this.deps.confidential.authenticate(
+        body.signed_data as Record<string, unknown>,
+      );
+      const expires_at = new Date(this.clock().getTime() + session.expiresIn * 1000).toISOString();
+      this.confidentialSessions.set(context.accountId, {
+        accessToken: session.accessToken,
+        expiresAt: Date.parse(expires_at),
+      });
+      return { status: 200, body: { expires_at } };
+    }
+    if (path === "/v1/balance/confidential" && method === "GET") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const kept = this.confidentialSessions.get(context.accountId);
+      if (kept === undefined || kept.expiresAt <= this.clock().getTime())
+        throw new ApiError(409, "confidential_session_required");
+      const tokenIds = (request.query.get("token_ids") ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => id !== "");
+      const balances = await this.deps.confidential.balances(
+        kept.accessToken,
+        tokenIds.length === 0 ? [...this.routes.settlementAssets] : tokenIds,
+      );
+      return {
+        status: 200,
+        body: {
+          source: "private",
+          balances: balances.map((entry) => ({
+            token_id: entry.tokenId,
+            available: entry.available,
+            ...(entry.source === undefined ? {} : { source: entry.source }),
+          })),
+        },
+      };
+    }
     if (path === "/v1/cashout/quote" && method === "POST") {
       return this.withIdempotency(request, async () => {
         const context = this.requireAuth(request);
@@ -1550,6 +1616,12 @@ export class ApiApp {
           !this.routes.settlementAssets.includes(body.source_asset)
         ) {
           throw new ApiError(400, "unsupported_source_asset");
+        }
+        if (body.destination_chain === "confidential") {
+          if (this.deps.config.confidentialIntents !== true)
+            throw new ApiError(400, "confidential_intents_disabled");
+          if (body.address !== context.accountId)
+            throw new ApiError(400, "confidential_recipient_must_be_the_business");
         }
         const quote = await this.deps.cashout.quote({
           amount: body.amount,

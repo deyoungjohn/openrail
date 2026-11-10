@@ -1543,17 +1543,27 @@
           "line_items"
         ],
         "properties": {
-          "issued_at": { "type": "string" },
-          "issue_tx": { "type": ["string", "null"] },
-          "paid_at": { "type": ["string", "null"] },
+          "issued_at": {
+            "type": "string"
+          },
+          "issue_tx": {
+            "type": ["string", "null"]
+          },
+          "paid_at": {
+            "type": ["string", "null"]
+          },
           "payments": {
             "type": "array",
             "items": {
               "type": "object",
               "required": ["tx_hash", "near"],
               "properties": {
-                "tx_hash": { "type": "string" },
-                "near": { "type": "boolean" }
+                "tx_hash": {
+                  "type": "string"
+                },
+                "near": {
+                  "type": "boolean"
+                }
               }
             }
           },
@@ -1678,17 +1688,27 @@
           "line_items"
         ],
         "properties": {
-          "issued_at": { "type": "string" },
-          "issue_tx": { "type": ["string", "null"] },
-          "paid_at": { "type": ["string", "null"] },
+          "issued_at": {
+            "type": "string"
+          },
+          "issue_tx": {
+            "type": ["string", "null"]
+          },
+          "paid_at": {
+            "type": ["string", "null"]
+          },
           "payments": {
             "type": "array",
             "items": {
               "type": "object",
               "required": ["tx_hash", "near"],
               "properties": {
-                "tx_hash": { "type": "string" },
-                "near": { "type": "boolean" }
+                "tx_hash": {
+                  "type": "string"
+                },
+                "near": {
+                  "type": "boolean"
+                }
               }
             }
           },
@@ -2409,7 +2429,16 @@
           },
           "destination_chain": {
             "type": "string",
-            "enum": ["base", "arbitrum", "optimism", "polygon", "solana", "ethereum", "near"]
+            "enum": [
+              "base",
+              "arbitrum",
+              "optimism",
+              "polygon",
+              "solana",
+              "ethereum",
+              "near",
+              "confidential"
+            ]
           },
           "address": {
             "type": "string"
@@ -3285,6 +3314,54 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          }
+        }
+      },
+      "ConfidentialSessionRequest": {
+        "type": "object",
+        "required": ["signed_data"],
+        "properties": {
+          "signed_data": {
+            "type": "object",
+            "description": "A NEP-413-signed empty intent for intents.near."
+          }
+        }
+      },
+      "ConfidentialSession": {
+        "type": "object",
+        "required": ["expires_at"],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConfidentialBalance": {
+        "type": "object",
+        "required": ["source", "balances"],
+        "properties": {
+          "source": {
+            "const": "private"
+          },
+          "balances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["token_id", "available"],
+              "properties": {
+                "token_id": {
+                  "type": "string"
+                },
+                "available": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Present only when the provider returns it; not required."
+                }
+              }
             }
           }
         }
@@ -6589,6 +6666,133 @@
             }
           }
         }
+      }
+    },
+    "/v1/balance/confidential/session": {
+      "post": {
+        "operationId": "createConfidentialSession",
+        "summary": "Exchange a signed empty intent for a user session",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfidentialSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session stored for this business.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off or malformed signed data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Path and response field names are not confirmed by a real call yet."
+      }
+    },
+    "/v1/balance/confidential": {
+      "get": {
+        "operationId": "getConfidentialBalance",
+        "summary": "Private balance from 1Click",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated public asset ids; defaults to the settlement assets."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private balances.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialBalance"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No valid user session; create one first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Path, tokenIds query and optional source field are not confirmed by a real call yet."
       }
     }
   }

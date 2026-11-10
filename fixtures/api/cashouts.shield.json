@@ -1,0 +1,15 @@
+{
+  "id": "co_shield",
+  "amount": "1000000",
+  "source_asset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+  "destination_chain": "confidential",
+  "destination_address": "merchant.near",
+  "amount_out": "1000000",
+  "route_cost_usd": "0.00",
+  "deposit_address": "shield-deposit",
+  "deposit_type": "INTENTS",
+  "swap_type": "EXACT_INPUT",
+  "route_id": "confidential",
+  "deadline": "2026-11-10T11:00:00Z",
+  "min_amount_in": "1000000"
+}
