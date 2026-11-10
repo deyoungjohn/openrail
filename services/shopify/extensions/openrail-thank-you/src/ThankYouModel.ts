@@ -1,18 +1,21 @@
 /**
  * Pure presentation model for the Thank-You Checkout UI Extension block.
  *
- * Requirements from prompts/ag6.md (Update 15):
- * The block shows three states, no other:
+ * Requirements from prompts/ag6.md (Updates 15 & 17):
+ * The block shows:
  * 1. unpaid: "Order placed" heading, one sentence, a "Pay with stablecoins" button to the pay link, the order total.
  * 2. partial: "Partial payment received", amount paid, amount still due, "Pay remaining balance" button.
  * 3. paid: "Thank you, payment received", "Your payment was confirmed on NEAR.", booking transaction hash(es) as links, summary.
+ * 4. error: "Payment status unavailable", "We could not load the payment status for this order. Reload the page, or contact the shop.", tone: warning, no other controls.
  *
  * Never says thanks before money is booked.
- * An order that is not an Openrail order (route answers 404) renders null (render = false / visible = false).
+ * Only a 404 with code not_openrail_order or order_not_found renders nothing (render = false / visible = false).
+ * All other failures render the error banner.
+ * While polling, transient failures retain the last good state until 3 failures in a row.
  */
 
 export interface ThankYouData {
-  status?: "unpaid" | "partial" | "paid" | string;
+  status?: "unpaid" | "partial" | "paid" | "error" | "hidden" | string;
   totalUsd?: string;
   total_usd?: string;
   paidUsd?: string;
@@ -32,7 +35,8 @@ export interface ThankYouData {
 export interface ThankYouViewModel {
   render: boolean;
   visible: boolean;
-  state: "unpaid" | "partial" | "paid" | "hidden";
+  state: "unpaid" | "partial" | "paid" | "error" | "hidden";
+  tone?: "warning" | "success" | "info" | "critical";
   heading: string;
   text: string;
   bodyText: string;
@@ -64,8 +68,21 @@ export function buildThankYouViewModel(
     };
   }
 
-  const total = data.total_usd ?? data.totalUsd ?? "0.00";
   const status = data.status;
+
+  if (status === "error") {
+    return {
+      render: true,
+      visible: true,
+      state: "error",
+      tone: "warning",
+      heading: "Payment status unavailable",
+      text: "We could not load the payment status for this order. Reload the page, or contact the shop.",
+      bodyText: "We could not load the payment status for this order. Reload the page, or contact the shop.",
+    };
+  }
+
+  const total = data.total_usd ?? data.totalUsd ?? "0.00";
 
   if (status === "unpaid") {
     const payUrl = data.pay_url ?? data.payUrl ?? "";
@@ -123,6 +140,7 @@ export function buildThankYouViewModel(
       render: true,
       visible: true,
       state: "paid",
+      tone: "success",
       heading: "Thank you, payment received",
       text: "Your payment was confirmed on NEAR.",
       bodyText: "Your payment was confirmed on NEAR.",
@@ -142,5 +160,109 @@ export function buildThankYouViewModel(
     heading: "",
     text: "",
     bodyText: "",
+  };
+}
+
+export type OrderStatusResult =
+  | { kind: "ok"; data: ThankYouData }
+  | { kind: "not_openrail" }
+  | { kind: "failure"; status: number | string };
+
+export async function parseOrderStatusResponse(
+  res: { status: number; ok: boolean; json?: () => Promise<unknown> } | null | undefined,
+): Promise<OrderStatusResult> {
+  if (!res) {
+    return { kind: "failure", status: "network_error" };
+  }
+
+  if (res.status === 404) {
+    try {
+      const json = res.json ? ((await res.json()) as Record<string, unknown>) : null;
+      const err = json?.error ?? json?.code;
+      if (err === "not_openrail_order" || err === "order_not_found") {
+        return { kind: "not_openrail" };
+      }
+    } catch {
+      // 404 response body was not valid JSON
+    }
+    return { kind: "failure", status: 404 };
+  }
+
+  if (!res.ok) {
+    return { kind: "failure", status: res.status };
+  }
+
+  try {
+    const json = res.json ? ((await res.json()) as Record<string, unknown>) : null;
+    if (!json || typeof json !== "object") {
+      return { kind: "failure", status: "unparsable_body" };
+    }
+    const parsed: ThankYouData = {
+      status: (json.status as "unpaid" | "partial" | "paid") ?? "unpaid",
+      totalUsd: (json.total_usd as string) ?? (json.amount_usd as string) ?? "0.00",
+      paidUsd: json.paid_usd as string | undefined,
+      remainingUsd: json.remaining_usd as string | undefined,
+      payUrl: json.pay_url as string | undefined,
+      txHash: json.tx_hash as string | null | undefined,
+      summary: json.summary as string | undefined,
+    };
+    return { kind: "ok", data: parsed };
+  } catch {
+    return { kind: "failure", status: "unparsable_body" };
+  }
+}
+
+export interface PollFailureState {
+  lastGoodData: ThankYouData | null;
+  consecutiveFailures: number;
+}
+
+export interface PollTransition {
+  nextData: ThankYouData | null;
+  nextState: PollFailureState;
+  shouldWarn: boolean;
+  warnStatus?: number | string;
+}
+
+export function stepPollState(
+  current: PollFailureState,
+  result: OrderStatusResult,
+): PollTransition {
+  if (result.kind === "not_openrail") {
+    return {
+      nextData: null,
+      nextState: {
+        lastGoodData: null,
+        consecutiveFailures: 0,
+      },
+      shouldWarn: false,
+    };
+  }
+
+  if (result.kind === "ok") {
+    return {
+      nextData: result.data,
+      nextState: {
+        lastGoodData: result.data,
+        consecutiveFailures: 0,
+      },
+      shouldWarn: false,
+    };
+  }
+
+  const nextFailures = current.consecutiveFailures + 1;
+  const shouldShowError = current.lastGoodData === null || nextFailures >= 3;
+  const nextData: ThankYouData = shouldShowError
+    ? { status: "error" }
+    : current.lastGoodData!;
+
+  return {
+    nextData,
+    nextState: {
+      lastGoodData: current.lastGoodData,
+      consecutiveFailures: nextFailures,
+    },
+    shouldWarn: true,
+    warnStatus: result.status,
   };
 }

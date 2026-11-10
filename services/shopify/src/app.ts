@@ -142,6 +142,9 @@ export interface CheckoutCreatedResponse {
   cancel_url?: string | null;
   expires_at: string;
   status: string;
+  paid_usd?: string;
+  remaining_usd?: string;
+  booking_tx?: string;
 }
 
 export interface CheckoutApiPort {
@@ -267,8 +270,40 @@ function getHeader(
   return undefined;
 }
 
+export interface NormalizedOrderId {
+  numericId: string;
+  orderGid: string;
+}
+
+export function parseAndNormalizeOrderId(raw: string | null | undefined): NormalizedOrderId | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const gidMatch = /^gid:\/\/shopify\/(?:Order|OrderIdentity)\/([a-zA-Z0-9_-]+)$/.exec(trimmed);
+  if (gidMatch && gidMatch[1]) {
+    const id = gidMatch[1];
+    return {
+      numericId: id,
+      orderGid: `gid://shopify/Order/${id}`,
+    };
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    return {
+      numericId: trimmed,
+      orderGid: `gid://shopify/Order/${trimmed}`,
+    };
+  }
+
+  return null;
+}
+
+
 function extractNumericOrderId(orderGid: string): string {
-  const match = /(\d+)$/.exec(orderGid);
+  const parsed = parseAndNormalizeOrderId(orderGid);
+  if (parsed) return parsed.numericId;
+  const match = /(\d+)$/.exec(orderGid) ?? /([a-zA-Z0-9_-]+)$/.exec(orderGid);
   return match?.[1] ?? orderGid.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
@@ -304,6 +339,35 @@ async function appendOrderNote(
   await adminClient.updateOrderNote(order.id, updated);
 }
 
+function matchesOrderConfirmation(
+  order: ShopifyOrder,
+  confirmation?: string,
+): boolean {
+  if (!confirmation || typeof confirmation !== "string") return false;
+  const trimmed = confirmation.trim();
+  if (!trimmed) return false;
+  if (
+    order.confirmationNumber &&
+    order.confirmationNumber.toLowerCase() === trimmed.toLowerCase()
+  ) {
+    return true;
+  }
+  if (
+    order.name &&
+    (order.name.toLowerCase() === trimmed.toLowerCase() ||
+      order.name.replace(/^#/, "").toLowerCase() === trimmed.toLowerCase())
+  ) {
+    return true;
+  }
+  if (
+    order.statusPageUrl &&
+    order.statusPageUrl.toLowerCase().includes(trimmed.toLowerCase())
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export interface CreateShopifyAppOptions {
   env: ShopifyAppEnv;
   adminClient: ShopifyAdminClient;
@@ -330,6 +394,27 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
   const checkoutRequestsByShop = new Map<string, number[]>();
   const RATE_LIMIT_WINDOW_SEC = 60;
   const RATE_LIMIT_MAX_REQUESTS = 60;
+
+  function checkRateLimit(shopKey: string, nowSec: number): boolean {
+    const timestamps = checkoutRequestsByShop.get(shopKey) ?? [];
+    const recent = timestamps.filter((t) => t > nowSec - RATE_LIMIT_WINDOW_SEC);
+    if (recent.length >= RATE_LIMIT_MAX_REQUESTS) {
+      return false;
+    }
+    recent.push(nowSec);
+    checkoutRequestsByShop.set(shopKey, recent);
+    return true;
+  }
+
+  const lastRefusalLogTimeByReason = new Map<string, number>();
+
+  function logSessionTokenRefusal(reason: string, nowSec: number) {
+    const lastSec = lastRefusalLogTimeByReason.get(reason);
+    if (lastSec === undefined || nowSec - lastSec >= 60) {
+      lastRefusalLogTimeByReason.set(reason, nowSec);
+      console.warn("[shopify] session token refused:", reason);
+    }
+  }
 
   async function handleInstallCheck(): Promise<HttpResponse> {
     const shop = await adminClient.getShop();
@@ -390,10 +475,16 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       return { status: 200, body: { ignored: true, reason: "non_openrail_gateway" } };
     }
 
-    const orderGid =
+    const rawOrderGid =
       typeof payload.admin_graphql_api_id === "string"
         ? payload.admin_graphql_api_id
-        : `gid://shopify/Order/${String(payload.id ?? "")}`;
+        : String(payload.id ?? "");
+    const parsedOrder = parseAndNormalizeOrderId(rawOrderGid) ?? {
+      numericId: String(payload.id ?? ""),
+      orderGid: `gid://shopify/Order/${String(payload.id ?? "")}`,
+    };
+    const orderGid = parsedOrder.orderGid;
+    const numericId = parsedOrder.numericId;
     const orderName = typeof payload.name === "string" ? payload.name : orderGid;
     const shopDomain =
       getHeader(req.headers, "x-shopify-shop-domain") ?? env.SHOPIFY_SHOP_DOMAIN;
@@ -409,37 +500,90 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
         const orderRefPrefix = `shopify-chk-${checkoutToken}`;
         const recovered = await checkoutApi.getCheckoutByOrderRef(orderRefPrefix);
         if (recovered) {
+          const isPaid = recovered.status === "paid";
+          const isPartial = recovered.status === "partial";
+          const expectedTotal = recovered.total_usd ?? recovered.amount_usd;
+          const paidUsd = isPaid
+            ? expectedTotal
+            : isPartial
+            ? recovered.paid_usd ?? "0.00"
+            : "0.00";
+          const remainingUsd = isPaid
+            ? "0.00"
+            : isPartial
+            ? recovered.remaining_usd ?? ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2)
+            : expectedTotal;
+
           matchedBinding = {
             orderGid,
             orderName,
             orderRef: recovered.order_ref,
             checkoutId: recovered.id,
-            expectedTotalUsd: recovered.total_usd ?? recovered.amount_usd,
+            expectedTotalUsd: expectedTotal,
             checkoutToken,
             payUrl: recovered.pay_url,
-            paid: recovered.status === "paid",
+            paid: isPaid,
+            paidUsd,
+            remainingUsd,
             status: recovered.status,
+            bookingTx: recovered.booking_tx,
           };
           bindingsByCheckoutToken.set(checkoutToken, matchedBinding);
           bindingsByCheckoutId.set(recovered.id, matchedBinding);
           bindingsByOrderRef.set(recovered.order_ref, matchedBinding);
+          bindingsByOrderGid.set(orderGid, matchedBinding);
+          bindingsByOrderGid.set(numericId, matchedBinding);
         }
       }
       if (matchedBinding) {
         matchedBinding.orderGid = orderGid;
         matchedBinding.orderName = orderName;
         bindingsByOrderGid.set(orderGid, matchedBinding);
+        bindingsByOrderGid.set(numericId, matchedBinding);
       }
     }
 
-    const numericId = extractNumericOrderId(orderGid);
     const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
     if (!matchedBinding) {
-      matchedBinding = bindingsByOrderGid.get(orderGid) ?? bindingsByOrderRef.get(orderRef);
-      if (matchedBinding) {
-        matchedBinding.orderGid = orderGid;
-        matchedBinding.orderName = orderName;
-        bindingsByOrderGid.set(orderGid, matchedBinding);
+      matchedBinding =
+        bindingsByOrderGid.get(orderGid) ??
+        bindingsByOrderGid.get(numericId) ??
+        bindingsByOrderRef.get(orderRef);
+      if (!matchedBinding && checkoutApi.getCheckoutByOrderRef) {
+        const recovered = await checkoutApi.getCheckoutByOrderRef(orderRef);
+        if (recovered) {
+          const isPaid = recovered.status === "paid";
+          const isPartial = recovered.status === "partial";
+          const expectedTotal = recovered.total_usd ?? recovered.amount_usd;
+          const paidUsd = isPaid
+            ? expectedTotal
+            : isPartial
+            ? recovered.paid_usd ?? "0.00"
+            : "0.00";
+          const remainingUsd = isPaid
+            ? "0.00"
+            : isPartial
+            ? recovered.remaining_usd ?? ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2)
+            : expectedTotal;
+
+          matchedBinding = {
+            orderGid,
+            orderName,
+            orderRef: recovered.order_ref,
+            checkoutId: recovered.id,
+            expectedTotalUsd: expectedTotal,
+            payUrl: recovered.pay_url,
+            paid: isPaid,
+            paidUsd,
+            remainingUsd,
+            status: recovered.status,
+            bookingTx: recovered.booking_tx,
+          };
+          bindingsByCheckoutId.set(recovered.id, matchedBinding);
+          bindingsByOrderRef.set(recovered.order_ref, matchedBinding);
+          bindingsByOrderGid.set(orderGid, matchedBinding);
+          bindingsByOrderGid.set(numericId, matchedBinding);
+        }
       }
     }
 
@@ -1006,6 +1150,20 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
         };
         if (method === "OPTIONS") return { status: 204, headers: cors, body: {} };
         if (method === "GET") {
+          const shopKey = env.SHOPIFY_SHOP_DOMAIN;
+          if (!checkRateLimit(shopKey, clock())) {
+            return {
+              status: 429,
+              headers: cors,
+              body: {
+                error: {
+                  code: "rate_limited",
+                  message: "Too many requests for this shop",
+                },
+              },
+            };
+          }
+
           const auth = getHeader(req.headers, "authorization") ?? "";
           const token = /^Bearer (.+)$/i.exec(auth)?.[1];
           const checked =
@@ -1018,19 +1176,24 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   env.SHOPIFY_SHOP_DOMAIN,
                   clock(),
                 );
-          if (!checked.ok)
+          if (!checked.ok) {
+            logSessionTokenRefusal(checked.reason, clock());
             return {
               status: 401,
               headers: cors,
               body: { error: { code: "invalid_session_token", message: checked.reason } },
             };
-          const orderGid = (req.query.order ?? "").trim();
-          if (!orderGid.startsWith("gid://shopify/Order/"))
+          }
+
+          const parsedOrder = parseAndNormalizeOrderId(req.query.order);
+          if (!parsedOrder) {
             return {
               status: 400,
               headers: cors,
               body: { error: { code: "invalid_request", message: "order must be an order id" } },
             };
+          }
+          const { numericId, orderGid } = parsedOrder;
 
           let order: ShopifyOrder;
           try {
@@ -1043,8 +1206,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             };
           }
 
-          const gateways = order.paymentGatewayNames ?? [];
-          const usesOpenrail = gateways.some((g) => /openrail|stablecoin/i.test(g));
+          const gateways = (order.paymentGatewayNames ?? []).filter(Boolean);
+          const usesOpenrail = gateways.length > 0 && gateways.some((g) => /openrail|stablecoin/i.test(g));
           if (!usesOpenrail) {
             return {
               status: 404,
@@ -1059,6 +1222,24 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           }
 
           const shopMoney = order.totalOutstandingSet?.shopMoney;
+          const orderTotalAmount = Number(
+            order.currentTotalPriceSet?.shopMoney?.amount ??
+            order.totalOutstandingSet?.shopMoney?.amount ??
+            "0",
+          );
+          if (!Number.isFinite(orderTotalAmount) || orderTotalAmount <= 0) {
+            return {
+              status: 404,
+              headers: cors,
+              body: {
+                error: {
+                  code: "not_openrail_order",
+                  message: "Order total must be greater than zero",
+                },
+              },
+            };
+          }
+
           if (order.currencyCode !== "USD" || shopMoney?.currencyCode !== "USD") {
             return {
               status: 422,
@@ -1072,9 +1253,25 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             };
           }
 
-          const numericId = extractNumericOrderId(order.id);
+          const confirmation = req.query.confirmation;
+          if (!matchesOrderConfirmation(order, confirmation)) {
+            return {
+              status: 403,
+              headers: cors,
+              body: {
+                error: {
+                  code: "order_access_denied",
+                  message: "Order confirmation mismatch or missing",
+                },
+              },
+            };
+          }
+
           const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
-          let binding = bindingsByOrderGid.get(order.id) ?? bindingsByOrderRef.get(orderRef);
+          let binding =
+            bindingsByOrderGid.get(orderGid) ??
+            bindingsByOrderGid.get(numericId) ??
+            bindingsByOrderRef.get(orderRef);
 
           if (!binding) {
             const amountUsd = Number(shopMoney.amount).toFixed(2);
@@ -1099,7 +1296,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             );
 
             binding = {
-              orderGid: order.id,
+              orderGid,
               orderName: order.name,
               orderRef,
               checkoutId: checkout.id,
@@ -1110,7 +1307,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             };
             bindingsByOrderRef.set(orderRef, binding);
             bindingsByCheckoutId.set(checkout.id, binding);
-            bindingsByOrderGid.set(order.id, binding);
+            bindingsByOrderGid.set(orderGid, binding);
+            bindingsByOrderGid.set(numericId, binding);
           }
 
           const orderToken = createOrderPayToken(
@@ -1171,12 +1369,14 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   env.SHOPIFY_SHOP_DOMAIN,
                   clock(),
                 );
-          if (!checked.ok)
+          if (!checked.ok) {
+            logSessionTokenRefusal(checked.reason, clock());
             return {
               status: 401,
               headers: cors,
               body: { error: { code: "invalid_session_token", message: checked.reason } },
             };
+          }
 
           // Defect 2: Rate limit route per shop
           const shopKey = env.SHOPIFY_SHOP_DOMAIN;
@@ -1313,6 +1513,20 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
         };
         if (method === "OPTIONS") return { status: 204, headers: cors, body: {} };
         if (method === "GET") {
+          const shopKey = env.SHOPIFY_SHOP_DOMAIN;
+          if (!checkRateLimit(shopKey, clock())) {
+            return {
+              status: 429,
+              headers: cors,
+              body: {
+                error: {
+                  code: "rate_limited",
+                  message: "Too many requests for this shop",
+                },
+              },
+            };
+          }
+
           const auth = getHeader(req.headers, "authorization") ?? "";
           const token = /^Bearer (.+)$/i.exec(auth)?.[1];
           const checked =
@@ -1325,16 +1539,18 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   env.SHOPIFY_SHOP_DOMAIN,
                   clock(),
                 );
-          if (!checked.ok)
+          if (!checked.ok) {
+            logSessionTokenRefusal(checked.reason, clock());
             return {
               status: 401,
               headers: cors,
               body: { error: { code: "invalid_session_token", message: checked.reason } },
             };
+          }
 
-          const orderQuery = (req.query.order ?? "").trim();
+          const rawOrder = (req.query.order ?? "").trim();
           const checkoutQuery = (req.query.checkout ?? "").trim();
-          if (!orderQuery && !checkoutQuery) {
+          if (!rawOrder && !checkoutQuery) {
             return {
               status: 400,
               headers: cors,
@@ -1347,31 +1563,92 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             };
           }
 
+          let orderGid: string | undefined;
+          let numericId: string | undefined;
+          if (rawOrder) {
+            const parsedOrder = parseAndNormalizeOrderId(rawOrder);
+            if (!parsedOrder) {
+              return {
+                status: 400,
+                headers: cors,
+                body: {
+                  error: {
+                    code: "invalid_request",
+                    message: "order must be a valid order id",
+                  },
+                },
+              };
+            }
+            orderGid = parsedOrder.orderGid;
+            numericId = parsedOrder.numericId;
+          }
+
           let binding: OrderBinding | undefined;
           if (checkoutQuery) {
             binding = bindingsByCheckoutToken.get(checkoutQuery);
           }
-          if (!binding && orderQuery) {
-            binding = bindingsByOrderGid.get(orderQuery);
+          if (!binding && orderGid && numericId) {
+            binding = bindingsByOrderGid.get(orderGid) ?? bindingsByOrderGid.get(numericId);
             if (!binding) {
               for (const b of bindingsByCheckoutId.values()) {
                 if (
-                  b.orderGid === orderQuery ||
-                  (b.orderGid && extractNumericOrderId(b.orderGid) === extractNumericOrderId(orderQuery))
+                  b.orderGid === orderGid ||
+                  (b.orderGid && extractNumericOrderId(b.orderGid) === numericId)
                 ) {
                   binding = b;
                   break;
                 }
               }
             }
+            if (!binding && checkoutApi.getCheckoutByOrderRef) {
+              const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
+              const recovered = await checkoutApi.getCheckoutByOrderRef(orderRef);
+              if (recovered) {
+                const isPaid = recovered.status === "paid";
+                const isPartial = recovered.status === "partial";
+                const expectedTotal = recovered.total_usd ?? recovered.amount_usd;
+                const paidUsd = isPaid
+                  ? expectedTotal
+                  : isPartial
+                  ? recovered.paid_usd ?? "0.00"
+                  : "0.00";
+                const remainingUsd = isPaid
+                  ? "0.00"
+                  : isPartial
+                  ? recovered.remaining_usd ?? ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2)
+                  : expectedTotal;
+
+                binding = {
+                  orderGid,
+                  orderName: orderRef,
+                  orderRef: recovered.order_ref,
+                  checkoutId: recovered.id,
+                  expectedTotalUsd: expectedTotal,
+                  payUrl: recovered.pay_url,
+                  paid: isPaid,
+                  paidUsd,
+                  remainingUsd,
+                  status: recovered.status,
+                  bookingTx: recovered.booking_tx,
+                };
+                bindingsByOrderRef.set(recovered.order_ref, binding);
+                bindingsByCheckoutId.set(recovered.id, binding);
+                bindingsByOrderGid.set(orderGid, binding);
+                bindingsByOrderGid.set(numericId, binding);
+              }
+            }
           }
 
-          // If the order has not been seen by the connector yet (e.g. buyer arrived at thank-you page before webhook fired),
-          // query Shopify Admin API for the order, verify Openrail gateway, and create or bind checkout.
-          if (!binding && orderQuery) {
-            let order: ShopifyOrder | null = null;
+          if (binding && orderGid) {
+            binding.orderGid = orderGid;
+            bindingsByOrderGid.set(orderGid, binding);
+            if (numericId) bindingsByOrderGid.set(numericId, binding);
+          }
+
+          let order: ShopifyOrder | null = null;
+          if (orderGid) {
             try {
-              order = await adminClient.getOrder(orderQuery);
+              order = await adminClient.getOrder(orderGid);
             } catch {
               order = null;
             }
@@ -1391,9 +1668,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
 
             const gateways = (order.paymentGatewayNames ?? []).filter(Boolean);
             const usesOpenrail =
-              gateways.length === 0
-                ? true
-                : gateways.some((g) => /openrail|stablecoin/i.test(g));
+              gateways.length > 0 && gateways.some((g) => /openrail|stablecoin/i.test(g));
             if (!usesOpenrail) {
               return {
                 status: 404,
@@ -1408,6 +1683,24 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             }
 
             const shopMoney = order.totalOutstandingSet?.shopMoney;
+            const orderTotalAmount = Number(
+              order.currentTotalPriceSet?.shopMoney?.amount ??
+              order.totalOutstandingSet?.shopMoney?.amount ??
+              "0",
+            );
+            if (!Number.isFinite(orderTotalAmount) || orderTotalAmount <= 0) {
+              return {
+                status: 404,
+                headers: cors,
+                body: {
+                  error: {
+                    code: "not_openrail_order",
+                    message: "Order total must be greater than zero",
+                  },
+                },
+              };
+            }
+
             if (order.currencyCode !== "USD" || shopMoney?.currencyCode !== "USD") {
               return {
                 status: 422,
@@ -1421,48 +1714,26 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
               };
             }
 
-            const numericId = extractNumericOrderId(order.id);
-            const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
-            binding = bindingsByOrderGid.get(order.id) ?? bindingsByOrderRef.get(orderRef);
-
             if (!binding) {
-              const amountUsd = Number(shopMoney.amount).toFixed(2);
-              const idempotencyKey = `shopify-order-${numericId}-${amountUsd}`;
-              const items = (order.lineItems ?? []).map((item) => ({
-                name: item.title,
-                quantity: item.quantity,
-                ...(item.unitPriceUsd ? { unit_price_usd: item.unitPriceUsd } : {}),
-              }));
-
-              const { checkout } = await checkoutApi.createCheckout(
-                {
-                  order_ref: orderRef,
-                  amount_usd: amountUsd,
-                  currency: "USD",
-                  expires_in_minutes: 60,
-                  return_url: order.statusPageUrl,
-                  cancel_url: order.statusPageUrl,
-                  ...(items.length > 0 ? { items } : {}),
-                },
-                idempotencyKey,
-              );
-
+              const numericId = extractNumericOrderId(order.id);
+              const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
+              const totalUsd = orderTotalAmount.toFixed(2);
               const isPaid = order.fullyPaid || order.displayFinancialStatus === "PAID";
               binding = {
                 orderGid: order.id,
                 orderName: order.name,
                 orderRef,
-                checkoutId: checkout.id,
-                expectedTotalUsd: checkout.total_usd ?? checkout.amount_usd,
-                payUrl: checkout.pay_url,
+                checkoutId: "",
+                expectedTotalUsd: totalUsd,
                 paid: isPaid,
-                paidUsd: isPaid ? amountUsd : "0.00",
-                remainingUsd: isPaid ? "0.00" : amountUsd,
+                paidUsd: isPaid ? totalUsd : "0.00",
+                remainingUsd: isPaid ? "0.00" : totalUsd,
                 status: isPaid ? "paid" : "unpaid",
               };
+              // Prompt 1b: Strictly read-only on cache miss: ZERO calls to checkoutApi.createCheckout!
               bindingsByOrderRef.set(orderRef, binding);
-              bindingsByCheckoutId.set(checkout.id, binding);
               bindingsByOrderGid.set(order.id, binding);
+              bindingsByOrderGid.set(numericId, binding);
             }
           }
 
@@ -1479,16 +1750,40 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             };
           }
 
+          const confirmationMatches = order
+            ? matchesOrderConfirmation(order, req.query.confirmation)
+            : true;
+
           const totalUsd = binding.expectedTotalUsd;
           let status: "unpaid" | "partial" | "paid" | "pending" = "unpaid";
           if (binding.paid || binding.status === "paid") {
             status = "paid";
           } else if (binding.status === "partial") {
             status = "partial";
-          } else if (checkoutQuery && !orderQuery) {
+          } else if (checkoutQuery && !orderGid) {
             status = (binding.status as "pending") ?? "pending";
           } else {
             status = "unpaid";
+          }
+
+          // Prompt 1c: If confirmation number was not matched, minimise what the route returns
+          // (status only, no amounts, no hash, no pay link)
+          if (orderGid && !confirmationMatches) {
+            const minSummary =
+              status === "paid"
+                ? "Payment confirmed on NEAR"
+                : status === "partial"
+                ? "Partial payment received"
+                : "Payment pending";
+            return {
+              status: 200,
+              headers: cors,
+              body: {
+                status,
+                paid: status === "paid",
+                summary: binding.summary ?? minSummary,
+              },
+            };
           }
 
           const paidUsd =
@@ -1540,7 +1835,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
               pay_url: payUrl,
               tx_hash: binding.bookingTx ?? null,
               summary: binding.summary ?? defaultSummary,
-              checkout_id: binding.checkoutId,
+              checkout_id: binding.checkoutId || undefined,
               order_gid: binding.orderGid || undefined,
               amount_usd: totalUsd,
             },

@@ -62,6 +62,7 @@ export interface ShopifyOrder {
   note: string | null;
   tags: string[];
   statusPageUrl: string;
+  confirmationNumber?: string | null;
   totalOutstandingSet: ShopifyMoneyBag;
   currentTotalPriceSet: {
     shopMoney: ShopifyMoneyV2;
@@ -102,6 +103,7 @@ export const ORDER_QUERY = `#graphql
       note
       tags
       statusPageUrl
+      confirmationNumber
       paymentGatewayNames
       totalOutstandingSet {
         shopMoney {

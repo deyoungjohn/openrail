@@ -26,7 +26,11 @@ import {
   type ShopifyAppEnv,
 } from "../src/app.js";
 import { buildThankYouBlockModel } from "../extensions/openrail-thank-you/src/ThankYouBlock.js";
-import { buildThankYouViewModel } from "../extensions/openrail-thank-you/src/ThankYouModel.js";
+import {
+  buildThankYouViewModel,
+  parseOrderStatusResponse,
+  stepPollState,
+} from "../extensions/openrail-thank-you/src/ThankYouModel.js";
 import { shouldRenderCheckoutPay } from "../optional/openrail-checkout/src/CheckoutPayModel.js";
 import {
   OrderTokenStore,
@@ -67,31 +71,34 @@ function makeUsdShop(overrides: Partial<ShopifyShop> = {}): ShopifyShop {
 }
 
 function makeOrder(overrides: Partial<ShopifyOrder> = {}): ShopifyOrder {
+  const defaultAmount = overrides.totalOutstandingSet?.shopMoney?.amount ?? "2.00";
+  const defaultCurrency = overrides.totalOutstandingSet?.shopMoney?.currencyCode ?? overrides.currencyCode ?? "USD";
   return {
     id: "gid://shopify/Order/6001002003",
     name: "#1001",
-    currencyCode: "USD",
-    presentmentCurrencyCode: "USD",
+    currencyCode: defaultCurrency,
+    presentmentCurrencyCode: defaultCurrency,
     displayFinancialStatus: "PENDING",
     fullyPaid: false,
     canMarkAsPaid: true,
     note: null,
     tags: [],
     statusPageUrl: "https://openrail-dev.myshopify.com/6001002003/orders/abc123status",
+    confirmationNumber: "CONF12345",
     totalOutstandingSet: {
       shopMoney: {
-        amount: "2.00",
-        currencyCode: "USD",
+        amount: defaultAmount,
+        currencyCode: defaultCurrency,
       },
       presentmentMoney: {
-        amount: "2.00",
-        currencyCode: "USD",
+        amount: defaultAmount,
+        currencyCode: defaultCurrency,
       },
     },
     currentTotalPriceSet: {
       shopMoney: {
-        amount: "2.00",
-        currencyCode: "USD",
+        amount: defaultAmount,
+        currencyCode: defaultCurrency,
       },
     },
     paymentGatewayNames: ["Pay with stablecoins (Openrail)"],
@@ -149,6 +156,9 @@ function createTestHarness(options: {
       cancel_url: string | null;
       expires_at: string;
       status: string;
+      paid_usd?: string;
+      remaining_usd?: string;
+      booking_tx?: string;
     }
   >();
 
@@ -1744,7 +1754,7 @@ describe("the checkout block gets its pay link with the buyer's session token", 
     h.app.handle({
       method: "GET",
       path: "/shopify/extension/pay-link",
-      query: { order },
+      query: { order, confirmation: "CONF12345" },
       headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
       rawBody: "",
     });
@@ -2169,6 +2179,7 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
       // Query status by order GID
       const paidRes = await askOrderStatus(h, sessionToken(good(h)), {
         order: "gid://shopify/Order/7003",
+        confirmation: "CONF12345",
       });
       expect(paidRes.status).toBe(200);
       expect(paidRes.body.paid).toBe(true);
@@ -2882,6 +2893,226 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const vm = buildThankYouViewModel(null);
         expect(vm.render).toBe(false);
       });
+
+      it("builds view model for error state with warning tone and no controls", () => {
+        const vm = buildThankYouViewModel({ status: "error" });
+        expect(vm.render).toBe(true);
+        expect(vm.visible).toBe(true);
+        expect(vm.state).toBe("error");
+        expect(vm.tone).toBe("warning");
+        expect(vm.heading).toBe("Payment status unavailable");
+        expect(vm.text).toBe("We could not load the payment status for this order. Reload the page, or contact the shop.");
+        expect(vm.bodyText).toBe("We could not load the payment status for this order. Reload the page, or contact the shop.");
+        expect(vm.actionLabel).toBeUndefined();
+        expect(vm.ctaHref).toBeUndefined();
+        expect(vm.txUrl).toBeUndefined();
+      });
+
+      it("parseOrderStatusResponse returns not_openrail for 404 with error code not_openrail_order", async () => {
+        const res = {
+          status: 404,
+          ok: false,
+          json: async () => ({ error: "not_openrail_order" }),
+        };
+        const result = await parseOrderStatusResponse(res);
+        expect(result).toEqual({ kind: "not_openrail" });
+      });
+
+      it("parseOrderStatusResponse returns not_openrail for 404 with error code order_not_found", async () => {
+        const res = {
+          status: 404,
+          ok: false,
+          json: async () => ({ error: "order_not_found" }),
+        };
+        const result = await parseOrderStatusResponse(res);
+        expect(result).toEqual({ kind: "not_openrail" });
+      });
+
+      it("parseOrderStatusResponse returns failure 404 when 404 body is HTML or lacks openrail error code", async () => {
+        const resHtml = {
+          status: 404,
+          ok: false,
+          json: async () => {
+            throw new Error("Unexpected token < in JSON");
+          },
+        };
+        const resultHtml = await parseOrderStatusResponse(resHtml);
+        expect(resultHtml).toEqual({ kind: "failure", status: 404 });
+
+        const resGenericJson = {
+          status: 404,
+          ok: false,
+          json: async () => ({ message: "Route not found" }),
+        };
+        const resultGeneric = await parseOrderStatusResponse(resGenericJson);
+        expect(resultGeneric).toEqual({ kind: "failure", status: 404 });
+      });
+
+      it("parseOrderStatusResponse returns failure for 401 Unauthorized", async () => {
+        const res = {
+          status: 401,
+          ok: false,
+          json: async () => ({ error: "invalid_session_token" }),
+        };
+        const result = await parseOrderStatusResponse(res);
+        expect(result).toEqual({ kind: "failure", status: 401 });
+      });
+
+      it("parseOrderStatusResponse returns failure for 403 Forbidden", async () => {
+        const res = {
+          status: 403,
+          ok: false,
+          json: async () => ({ error: "order_access_denied" }),
+        };
+        const result = await parseOrderStatusResponse(res);
+        expect(result).toEqual({ kind: "failure", status: 403 });
+      });
+
+      it("parseOrderStatusResponse returns failure for 429 Too Many Requests", async () => {
+        const res = {
+          status: 429,
+          ok: false,
+          json: async () => ({ error: "rate_limited" }),
+        };
+        const result = await parseOrderStatusResponse(res);
+        expect(result).toEqual({ kind: "failure", status: 429 });
+      });
+
+      it("parseOrderStatusResponse returns failure for 500 / 502 / 503 Server Error", async () => {
+        const res500 = {
+          status: 500,
+          ok: false,
+          json: async () => ({ error: "internal_error" }),
+        };
+        expect(await parseOrderStatusResponse(res500)).toEqual({ kind: "failure", status: 500 });
+
+        const res502 = {
+          status: 502,
+          ok: false,
+          json: async () => {
+            throw new Error("Bad Gateway HTML");
+          },
+        };
+        expect(await parseOrderStatusResponse(res502)).toEqual({ kind: "failure", status: 502 });
+      });
+
+      it("parseOrderStatusResponse returns failure for unparsable or malformed body on ok response", async () => {
+        const resBadJson = {
+          status: 200,
+          ok: true,
+          json: async () => {
+            throw new Error("JSON parse error");
+          },
+        };
+        expect(await parseOrderStatusResponse(resBadJson)).toEqual({ kind: "failure", status: "unparsable_body" });
+
+        const resNonObject = {
+          status: 200,
+          ok: true,
+          json: async () => null,
+        };
+        expect(await parseOrderStatusResponse(resNonObject)).toEqual({ kind: "failure", status: "unparsable_body" });
+      });
+
+      it("parseOrderStatusResponse returns failure for network error (null response)", async () => {
+        expect(await parseOrderStatusResponse(null)).toEqual({ kind: "failure", status: "network_error" });
+      });
+
+      it("stepPollState immediately shows error banner on initial failure when no good state exists", () => {
+        const transition = stepPollState(
+          { lastGoodData: null, consecutiveFailures: 0 },
+          { kind: "failure", status: 500 },
+        );
+        expect(transition.nextData).toEqual({ status: "error" });
+        expect(transition.nextState.consecutiveFailures).toBe(1);
+        expect(transition.nextState.lastGoodData).toBeNull();
+        expect(transition.shouldWarn).toBe(true);
+        expect(transition.warnStatus).toBe(500);
+      });
+
+      it("stepPollState keeps last good state during 1 or 2 transient failures during polling", () => {
+        const initialGood: ThankYouData = {
+          status: "unpaid",
+          totalUsd: "2.00",
+          payUrl: "https://openrail.incepture.dev/c/chk-1",
+        };
+
+        // Failure 1
+        const t1 = stepPollState(
+          { lastGoodData: initialGood, consecutiveFailures: 0 },
+          { kind: "failure", status: 500 },
+        );
+        expect(t1.nextData).toBe(initialGood);
+        expect(t1.nextState.consecutiveFailures).toBe(1);
+        expect(t1.nextState.lastGoodData).toBe(initialGood);
+        expect(t1.shouldWarn).toBe(true);
+        expect(t1.warnStatus).toBe(500);
+
+        // Failure 2
+        const t2 = stepPollState(
+          t1.nextState,
+          { kind: "failure", status: "network_error" },
+        );
+        expect(t2.nextData).toBe(initialGood);
+        expect(t2.nextState.consecutiveFailures).toBe(2);
+        expect(t2.nextState.lastGoodData).toBe(initialGood);
+        expect(t2.shouldWarn).toBe(true);
+        expect(t2.warnStatus).toBe("network_error");
+      });
+
+      it("stepPollState transitions to error banner on third consecutive failure during polling", () => {
+        const initialGood: ThankYouData = {
+          status: "unpaid",
+          totalUsd: "2.00",
+        };
+
+        const t3 = stepPollState(
+          { lastGoodData: initialGood, consecutiveFailures: 2 },
+          { kind: "failure", status: 503 },
+        );
+        expect(t3.nextData).toEqual({ status: "error" });
+        expect(t3.nextState.consecutiveFailures).toBe(3);
+        expect(t3.nextState.lastGoodData).toBe(initialGood);
+        expect(t3.shouldWarn).toBe(true);
+        expect(t3.warnStatus).toBe(503);
+      });
+
+      it("stepPollState recovers to good state when a poll succeeds after transient failures", () => {
+        const initialGood: ThankYouData = {
+          status: "unpaid",
+          totalUsd: "2.00",
+        };
+        const paidData: ThankYouData = {
+          status: "paid",
+          totalUsd: "2.00",
+          txHash: "8vHq1M5Zabc",
+        };
+
+        const recovered = stepPollState(
+          { lastGoodData: initialGood, consecutiveFailures: 2 },
+          { kind: "ok", data: paidData },
+        );
+        expect(recovered.nextData).toEqual(paidData);
+        expect(recovered.nextState.consecutiveFailures).toBe(0);
+        expect(recovered.nextState.lastGoodData).toEqual(paidData);
+        expect(recovered.shouldWarn).toBe(false);
+      });
+
+      it("stepPollState renders null and stops tracking on not_openrail response", () => {
+        const initialGood: ThankYouData = {
+          status: "unpaid",
+          totalUsd: "2.00",
+        };
+
+        const stopped = stepPollState(
+          { lastGoodData: initialGood, consecutiveFailures: 1 },
+          { kind: "not_openrail" },
+        );
+        expect(stopped.nextData).toBeNull();
+        expect(stopped.nextState.lastGoodData).toBeNull();
+        expect(stopped.nextState.consecutiveFailures).toBe(0);
+        expect(stopped.shouldWarn).toBe(false);
+      });
     });
 
     describe("GET /shopify/extension/pay-link", () => {
@@ -2930,7 +3161,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const res1 = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/pay-link",
-          query: { order: "gid://shopify/Order/openrail_single" },
+          query: { order: "gid://shopify/Order/openrail_single", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -2945,7 +3176,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const res2 = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/pay-link",
-          query: { order: "gid://shopify/Order/openrail_single" },
+          query: { order: "gid://shopify/Order/openrail_single", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -2989,7 +3220,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const payLinkRes = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/pay-link",
-          query: { order: "gid://shopify/Order/path_a_order" },
+          query: { order: "gid://shopify/Order/path_a_order", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3000,7 +3231,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const repeatRes = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/pay-link",
-          query: { order: "gid://shopify/Order/path_a_order" },
+          query: { order: "gid://shopify/Order/path_a_order", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3022,7 +3253,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const payLinkRes = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/pay-link",
-          query: { order: "gid://shopify/Order/path_b_order" },
+          query: { order: "gid://shopify/Order/path_b_order", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3054,7 +3285,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const statusRes = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/order-status",
-          query: { order: "gid://shopify/Order/path_b_order" },
+          query: { order: "gid://shopify/Order/path_b_order", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3083,11 +3314,12 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(res.body.error?.code).toBe("not_openrail_order");
       });
 
-      it("returns unpaid state with pay_url on cache miss for Openrail order", async () => {
+      it("returns unpaid state with pay_url on cache miss for Openrail order without creating checkout", async () => {
         const h = createTestHarness({
           order: makeOrder({
             id: "gid://shopify/Order/order_unseen",
             name: "#UNSEEN",
+            confirmationNumber: "CONF12345",
             paymentGatewayNames: ["Pay with stablecoins (Openrail)"],
             totalOutstandingSet: { shopMoney: { amount: "12.00", currencyCode: "USD" }, presentmentMoney: { amount: "12.00", currencyCode: "USD" } },
           }),
@@ -3096,7 +3328,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const res = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/order-status",
-          query: { order: "gid://shopify/Order/order_unseen" },
+          query: { order: "gid://shopify/Order/order_unseen", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3108,6 +3340,8 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(res.body.remaining_usd).toBe("12.00");
         expect(res.body.pay_url).toBeDefined();
         expect(res.body.tx_hash).toBeNull();
+        // Prompt 1b: order-status is strictly read-only and must NEVER create checkouts
+        expect(h.checkoutCreateCalls).toHaveLength(0);
       });
 
       it("returns paid state with tx_hash and summary once payment is booked", async () => {
@@ -3115,19 +3349,21 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           order: makeOrder({
             id: "gid://shopify/Order/order_paid_flow",
             name: "#PAIDFLOW",
+            confirmationNumber: "CONF12345",
             paymentGatewayNames: ["Pay with stablecoins (Openrail)"],
             totalOutstandingSet: { shopMoney: { amount: "20.00", currencyCode: "USD" }, presentmentMoney: { amount: "20.00", currencyCode: "USD" } },
           }),
         });
 
-        // Query status -> creates unpaid checkout
+        // Pay-link creates the checkout
         await h.app.handle({
           method: "GET",
-          path: "/shopify/extension/order-status",
-          query: { order: "gid://shopify/Order/order_paid_flow" },
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/order_paid_flow", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
+        expect(h.checkoutCreateCalls).toHaveLength(1);
 
         // Openrail payment arrives
         const rawEvent = JSON.stringify({
@@ -3152,11 +3388,11 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           rawBody: rawEvent,
         });
 
-        // Query status again
+        // Query status again with matching confirmation
         const statusRes = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/order-status",
-          query: { order: "gid://shopify/Order/order_paid_flow" },
+          query: { order: "gid://shopify/Order/order_paid_flow", confirmation: "CONF12345" },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3167,6 +3403,752 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(statusRes.body.paid_usd).toBe("20.00");
         expect(statusRes.body.remaining_usd).toBe("0.00");
         expect(statusRes.body.tx_hash).toBe("near_tx_booking_98765");
+      });
+    });
+  });
+
+  describe("Update 16: Security, caller binding, rate limiting, and state recovery", () => {
+    describe("Rate limiting on pay-link and order-status", () => {
+      it("pay-link returns 429 when shop exceeds 60 requests in 60s", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/rate_limit_paylink",
+            confirmationNumber: "CONF_RL",
+          }),
+        });
+
+        for (let i = 0; i < 60; i++) {
+          const res = await h.app.handle({
+            method: "GET",
+            path: "/shopify/extension/pay-link",
+            query: { order: "gid://shopify/Order/rate_limit_paylink", confirmation: "CONF_RL" },
+            headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+            rawBody: "",
+          });
+          expect(res.status).toBe(200);
+        }
+
+        const blocked = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/rate_limit_paylink", confirmation: "CONF_RL" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(blocked.status).toBe(429);
+        expect(blocked.body.error?.code).toBe("rate_limited");
+      });
+
+      it("order-status returns 429 when shop exceeds 60 requests in 60s", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/rate_limit_status",
+            confirmationNumber: "CONF_RL2",
+          }),
+        });
+
+        for (let i = 0; i < 60; i++) {
+          const res = await h.app.handle({
+            method: "GET",
+            path: "/shopify/extension/order-status",
+            query: { order: "gid://shopify/Order/rate_limit_status", confirmation: "CONF_RL2" },
+            headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+            rawBody: "",
+          });
+          expect(res.status).toBe(200);
+        }
+
+        const blocked = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/rate_limit_status", confirmation: "CONF_RL2" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(blocked.status).toBe(429);
+        expect(blocked.body.error?.code).toBe("rate_limited");
+      });
+    });
+
+    describe("order-status is strictly read-only on cache miss", () => {
+      it("does not call createCheckout on cache miss for unpaid Openrail order", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_readonly_miss",
+            name: "#READONLY",
+            confirmationNumber: "CONF_RO",
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_readonly_miss", confirmation: "CONF_RO" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("unpaid");
+        expect(res.body.paid).toBe(false);
+        expect(h.checkoutCreateCalls).toHaveLength(0);
+      });
+    });
+
+    describe("Empty gateway and zero total handling", () => {
+      it("pay-link returns 404 not_openrail_order when paymentGatewayNames is empty []", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_empty_gw",
+            confirmationNumber: "CONF_EGW",
+            paymentGatewayNames: [],
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/order_empty_gw", confirmation: "CONF_EGW" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(404);
+        expect(res.body.error?.code).toBe("not_openrail_order");
+      });
+
+      it("order-status returns 404 not_openrail_order when paymentGatewayNames is empty []", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_empty_gw_status",
+            confirmationNumber: "CONF_EGW2",
+            paymentGatewayNames: [],
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_empty_gw_status", confirmation: "CONF_EGW2" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(404);
+        expect(res.body.error?.code).toBe("not_openrail_order");
+      });
+
+      it("pay-link returns 404 not_openrail_order when order total is 0.00", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_zero_total",
+            confirmationNumber: "CONF_ZERO",
+            totalOutstandingSet: {
+              shopMoney: { amount: "0.00", currencyCode: "USD" },
+              presentmentMoney: { amount: "0.00", currencyCode: "USD" },
+            },
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/order_zero_total", confirmation: "CONF_ZERO" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(404);
+        expect(res.body.error?.code).toBe("not_openrail_order");
+      });
+
+      it("order-status returns 404 not_openrail_order when order total is 0.00", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_zero_total_status",
+            confirmationNumber: "CONF_ZERO2",
+            totalOutstandingSet: {
+              shopMoney: { amount: "0.00", currencyCode: "USD" },
+              presentmentMoney: { amount: "0.00", currencyCode: "USD" },
+            },
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_zero_total_status", confirmation: "CONF_ZERO2" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(404);
+        expect(res.body.error?.code).toBe("not_openrail_order");
+      });
+    });
+
+    describe("Caller binding and information leakage prevention", () => {
+      it("pay-link returns 403 order_access_denied when confirmation is missing", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_bind_test",
+            confirmationNumber: "SECRET_CONF_123",
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/order_bind_test" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(403);
+        expect(res.body.error?.code).toBe("order_access_denied");
+      });
+
+      it("pay-link returns 403 order_access_denied when confirmation does not match", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_bind_test",
+            confirmationNumber: "SECRET_CONF_123",
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/order_bind_test", confirmation: "WRONG_NUMBER" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(403);
+        expect(res.body.error?.code).toBe("order_access_denied");
+      });
+
+      it("pay-link succeeds when confirmation matches confirmationNumber", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_bind_test_match",
+            confirmationNumber: "SECRET_CONF_456",
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/order_bind_test_match", confirmation: "SECRET_CONF_456" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.pay_url).toBeDefined();
+      });
+
+      it("pay-link succeeds when confirmation matches order name (with or without #)", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_bind_name",
+            name: "#1099",
+            confirmationNumber: "CONF_NONE",
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/order_bind_name", confirmation: "1099" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.pay_url).toBeDefined();
+      });
+
+      it("pay-link succeeds when confirmation matches statusPageUrl token", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_bind_status_url",
+            statusPageUrl: "https://openrail-dev.myshopify.com/6001002003/orders/tok_xyz_789",
+            confirmationNumber: "CONF_DIFF",
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/order_bind_status_url", confirmation: "tok_xyz_789" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.pay_url).toBeDefined();
+      });
+
+      it("order-status returns minimized response (status only, NO amounts, NO pay link, NO tx hash) when confirmation is missing", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_leak_check",
+            name: "#LEAK",
+            confirmationNumber: "SECRET_NUMBER_999",
+            totalOutstandingSet: { shopMoney: { amount: "100.00", currencyCode: "USD" } },
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_leak_check" }, // No confirmation provided
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("unpaid");
+        expect(res.body.paid).toBe(false);
+        expect(res.body.summary).toBeDefined();
+
+        // Must NOT leak amounts, pay_url, tx_hash, or checkout_id
+        expect(res.body.total_usd).toBeUndefined();
+        expect(res.body.amount_usd).toBeUndefined();
+        expect(res.body.paid_usd).toBeUndefined();
+        expect(res.body.remaining_usd).toBeUndefined();
+        expect(res.body.pay_url).toBeUndefined();
+        expect(res.body.tx_hash).toBeUndefined();
+        expect(res.body.checkout_id).toBeUndefined();
+      });
+
+      it("order-status returns minimized response when confirmation is mismatched", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_leak_check_2",
+            confirmationNumber: "REAL_CONFIRMATION",
+            totalOutstandingSet: { shopMoney: { amount: "250.00", currencyCode: "USD" } },
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_leak_check_2", confirmation: "ATTACKER_GUESS" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("unpaid");
+        expect(res.body.paid).toBe(false);
+
+        // Minimized response: no amounts, no hash, no pay link
+        expect(res.body.total_usd).toBeUndefined();
+        expect(res.body.amount_usd).toBeUndefined();
+        expect(res.body.paid_usd).toBeUndefined();
+        expect(res.body.remaining_usd).toBeUndefined();
+        expect(res.body.pay_url).toBeUndefined();
+        expect(res.body.tx_hash).toBeUndefined();
+        expect(res.body.checkout_id).toBeUndefined();
+      });
+
+      it("order-status returns full response when confirmation matches", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_leak_check_3",
+            confirmationNumber: "CORRECT_CONF_123",
+            totalOutstandingSet: { shopMoney: { amount: "75.00", currencyCode: "USD" } },
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_leak_check_3", confirmation: "CORRECT_CONF_123" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("unpaid");
+        expect(res.body.paid).toBe(false);
+        expect(res.body.total_usd).toBe("75.00");
+        expect(res.body.paid_usd).toBe("0.00");
+        expect(res.body.remaining_usd).toBe("75.00");
+        expect(res.body.pay_url).toBeDefined();
+        expect(res.body.tx_hash).toBeNull();
+      });
+    });
+
+    describe("Rebuilding partial state on cache miss / restart", () => {
+      it("order-status rebuilds partial state (paid_usd and remaining_usd) from Openrail checkout on restart", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_restart_partial",
+            name: "#RP100",
+            confirmationNumber: "CONF_RP100",
+            totalOutstandingSet: { shopMoney: { amount: "50.00", currencyCode: "USD" } },
+          }),
+        });
+
+        // Simulate Openrail API holding a partially paid checkout for this order ref
+        h.checkoutsByOrderRef.set("shopify-order_restart_partial", {
+          id: "chk-rp-1",
+          token_id: "chk-rp-1",
+          order_ref: "shopify-order_restart_partial",
+          amount_usd: "50.00",
+          total_usd: "50.00",
+          subtotal_usd: "50.00",
+          fee_usd: "0.00",
+          fee_mode: "absorb",
+          amount_due: "500000",
+          pay_url: "https://openrail.incepture.dev/c/chk-rp-1",
+          return_url: null,
+          cancel_url: null,
+          expires_at: new Date(Date.now() + 3600000).toISOString(),
+          status: "partial",
+          paid_usd: "20.00",
+          remaining_usd: "30.00",
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_restart_partial", confirmation: "CONF_RP100" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("partial");
+        expect(res.body.paid).toBe(false);
+        expect(res.body.total_usd).toBe("50.00");
+        expect(res.body.paid_usd).toBe("20.00");
+        expect(res.body.remaining_usd).toBe("30.00");
+        expect(res.body.pay_url).toBe("https://openrail.incepture.dev/c/chk-rp-1");
+      });
+
+      it("orders/create webhook rebuilds partial state (paid_usd and remaining_usd) from Openrail checkout on restart", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/webhook_restart_partial",
+            name: "#WRP200",
+            confirmationNumber: "CONF_WRP200",
+            totalOutstandingSet: { shopMoney: { amount: "60.00", currencyCode: "USD" } },
+          }),
+        });
+
+        // Openrail checkout created earlier during checkout phase
+        h.checkoutsByOrderRef.set("shopify-chk-chk_tok_part-60_00", {
+          id: "chk-wrp-1",
+          token_id: "chk-wrp-1",
+          order_ref: "shopify-chk-chk_tok_part-60_00",
+          amount_usd: "60.00",
+          total_usd: "60.00",
+          subtotal_usd: "60.00",
+          fee_usd: "0.00",
+          fee_mode: "absorb",
+          amount_due: "600000",
+          pay_url: "https://openrail.incepture.dev/c/chk-wrp-1",
+          return_url: null,
+          cancel_url: null,
+          expires_at: new Date(Date.now() + 3600000).toISOString(),
+          status: "partial",
+          paid_usd: "15.00",
+          remaining_usd: "45.00",
+        });
+
+        // orders/create arrives after process restart
+        const orderPayload = {
+          id: "webhook_restart_partial",
+          admin_graphql_api_id: "gid://shopify/Order/webhook_restart_partial",
+          name: "#WRP200",
+          checkout_token: "chk_tok_part",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+        };
+        const rawOrder = JSON.stringify(orderPayload);
+        const webhookRes = await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
+          },
+          rawBody: rawOrder,
+        });
+        expect(webhookRes.status).toBe(200);
+
+        // Query status
+        const statusRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/webhook_restart_partial", confirmation: "CONF_WRP200" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(statusRes.status).toBe(200);
+        expect(statusRes.body.status).toBe("partial");
+        expect(statusRes.body.paid).toBe(false);
+        expect(statusRes.body.total_usd).toBe("60.00");
+        expect(statusRes.body.paid_usd).toBe("15.00");
+        expect(statusRes.body.remaining_usd).toBe("45.00");
+      });
+    });
+
+    describe("Update 18: OrderIdentity normalization and session token refusal logging", () => {
+      it("GET /shopify/extension/pay-link accepts OrderIdentity GID and normalises to Order GID for Admin API", async () => {
+        let queriedId: string | undefined;
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/6581539242341",
+            confirmationNumber: "CONF_ID_1",
+          }),
+        });
+        h.adminClient.getOrder = async (id: string) => {
+          queriedId = id;
+          return makeOrder({
+            id: "gid://shopify/Order/6581539242341",
+            confirmationNumber: "CONF_ID_1",
+          });
+        };
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581539242341",
+            confirmation: "CONF_ID_1",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(queriedId).toBe("gid://shopify/Order/6581539242341");
+      });
+
+      it("GET /shopify/extension/order-status accepts OrderIdentity GID and normalises to Order GID for Admin API", async () => {
+        let queriedId: string | undefined;
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/6581539242341",
+            confirmationNumber: "CONF_ID_2",
+          }),
+        });
+        h.adminClient.getOrder = async (id: string) => {
+          queriedId = id;
+          return makeOrder({
+            id: "gid://shopify/Order/6581539242341",
+            confirmationNumber: "CONF_ID_2",
+          });
+        };
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581539242341",
+            confirmation: "CONF_ID_2",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(queriedId).toBe("gid://shopify/Order/6581539242341");
+        expect(res.body.status).toBe("unpaid");
+      });
+
+      it("GET /shopify/extension/pay-link accepts bare numeric order id and normalises to Order GID", async () => {
+        let queriedId: string | undefined;
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/777888999",
+            confirmationNumber: "CONF_BARE",
+          }),
+        });
+        h.adminClient.getOrder = async (id: string) => {
+          queriedId = id;
+          return makeOrder({
+            id: "gid://shopify/Order/777888999",
+            confirmationNumber: "CONF_BARE",
+          });
+        };
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: {
+            order: "777888999",
+            confirmation: "CONF_BARE",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(queriedId).toBe("gid://shopify/Order/777888999");
+      });
+
+      it("GET /shopify/extension/order-status accepts bare numeric order id and normalises to Order GID", async () => {
+        let queriedId: string | undefined;
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/777888999",
+            confirmationNumber: "CONF_BARE2",
+          }),
+        });
+        h.adminClient.getOrder = async (id: string) => {
+          queriedId = id;
+          return makeOrder({
+            id: "gid://shopify/Order/777888999",
+            confirmationNumber: "CONF_BARE2",
+          });
+        };
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "777888999",
+            confirmation: "CONF_BARE2",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(res.status).toBe(200);
+        expect(queriedId).toBe("gid://shopify/Order/777888999");
+      });
+
+      it("orders/create webhook binding matches extension query with OrderIdentity GID", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/6581539242341",
+            confirmationNumber: "CONF_CROSS_1",
+          }),
+        });
+
+        // 1. Webhook arrives with numeric ID and Order GID
+        const orderPayload = {
+          id: 6581539242341,
+          admin_graphql_api_id: "gid://shopify/Order/6581539242341",
+          name: "#1099",
+          checkout_token: "tok_cross_match",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+        };
+        const rawOrder = JSON.stringify(orderPayload);
+        const webhookRes = await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
+          },
+          rawBody: rawOrder,
+        });
+        expect(webhookRes.status).toBe(200);
+
+        // 2. Extension queries status using OrderIdentity GID
+        const statusRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: {
+            order: "gid://shopify/OrderIdentity/6581539242341",
+            confirmation: "CONF_CROSS_1",
+          },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        expect(statusRes.status).toBe(200);
+        expect(statusRes.body.status).toBe("unpaid");
+        expect(statusRes.body.total_usd).toBe("2.00");
+      });
+
+      it("GET /shopify/extension/pay-link rejects invalid order id formats with 400", async () => {
+        const h = createTestHarness();
+
+        const res1 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "not_a_valid_order_id", confirmation: "CONF" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res1.status).toBe(400);
+
+        const res2 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Product/12345", confirmation: "CONF" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res2.status).toBe(400);
+      });
+
+      it("GET /shopify/extension/order-status rejects invalid order id formats with 400", async () => {
+        const h = createTestHarness();
+
+        const res1 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "not_a_valid_order_id" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res1.status).toBe(400);
+
+        const res2 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Customer/12345" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res2.status).toBe(400);
+      });
+
+      it("connector logs session token refusal at most once per minute with reason only", async () => {
+        const h = createTestHarness();
+
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        try {
+          // 1. First bad token request
+          const res1 = await h.app.handle({
+            method: "GET",
+            path: "/shopify/extension/pay-link",
+            query: { order: "gid://shopify/Order/1001", confirmation: "CONF" },
+            headers: { authorization: "Bearer invalid.signature.token" },
+            rawBody: "",
+          });
+          expect(res1.status).toBe(401);
+          expect(warnSpy).toHaveBeenCalledWith("[shopify] session token refused:", "bad_signature");
+          expect(warnSpy).toHaveBeenCalledTimes(1);
+
+          // 2. Immediate second bad token request (same reason) -> throttled
+          const res2 = await h.app.handle({
+            method: "GET",
+            path: "/shopify/extension/pay-link",
+            query: { order: "gid://shopify/Order/1001", confirmation: "CONF" },
+            headers: { authorization: "Bearer invalid.signature.token" },
+            rawBody: "",
+          });
+          expect(res2.status).toBe(401);
+          expect(warnSpy).toHaveBeenCalledTimes(1);
+
+          // 3. Advance time by 61 seconds -> logged again
+          h.advanceClock(61);
+          const res3 = await h.app.handle({
+            method: "GET",
+            path: "/shopify/extension/pay-link",
+            query: { order: "gid://shopify/Order/1001", confirmation: "CONF" },
+            headers: { authorization: "Bearer invalid.signature.token" },
+            rawBody: "",
+          });
+          expect(res3.status).toBe(401);
+          expect(warnSpy).toHaveBeenCalledTimes(2);
+        } finally {
+          warnSpy.mockRestore();
+        }
       });
     });
   });

@@ -328,32 +328,33 @@ In the Openrail Merchant Dashboard:
 git -C openrail switch -c mod-shopify origin/main
 git -C openrail am ../openrail-lab/staging/shopify/patches/*.patch
 
-# Run the 68 Shopify unit, extension, and server pack tests:
+# Run the 108 Shopify unit, extension, and server pack tests:
 /home/antigravity/deyoungjohn/openrail/node_modules/.bin/vitest run \
   --root /home/antigravity/deyoungjohn/openrail-lab/staging/shopify \
   test/shopify.test.ts
 ```
 
-## 7. Updates 14 & 15: Post-Order Thank-You Flow, Landing Page & Optional Plus Pre-Order Block
+## 7. Updates 14, 15, 16, 17 & 18: Post-Order Thank-You Flow, Landing Page, Failure Resilience & ID Normalization
 
-### Standard Merchant Flow: Thank-You Page Post-Order Payment (All Paid Plans)
-Per Shopify documentation on checkout extensibility, checkout page steps (information, shipping, payment) are restricted to **Shopify Plus** stores in production. The Thank-You page (`purchase.thank-you.block.render`) and Order Status page are available on **all paid plans** (Basic, Grow, Advanced, Plus).
+### Standard Merchant Flow: Thank-You Page Post-Order Payment (Believed Available on All Paid Plans)
+Per Shopify documentation on checkout extensibility, checkout page steps (information, shipping, payment) are restricted to **Shopify Plus** stores in production. The Thank-You page (`purchase.thank-you.block.render`) and Order Status page are believed available; to be confirmed on a Basic store.
 
 1. **Buyer Journey**:
    - Buyer selects manual payment method **"Pay with stablecoins (Openrail)"** and places the order in Shopify.
    - The order is created in Shopify with financial status `PENDING`.
    - Buyer lands on the **Thank you** page.
-   - The Openrail Thank You block mounts, retrieves the order GID from `orderConfirmation`, and checks `GET /shopify/extension/order-status?order=<gid>`.
+   - The Openrail Thank You block mounts, retrieves the order GID and confirmation number from `orderConfirmation`, and checks `GET /shopify/extension/order-status?order=<gid>&confirmation=<number>`.
    - The block renders one of three states. Non-Openrail orders return 404 and the block renders `null` (nothing), requiring zero manual handle settings.
    - Polling: polls `GET /shopify/extension/order-status` every 5 seconds for at most 15 minutes (stopping on tab hide or unmount). Transitions immediately when status becomes `paid`. It **never says thanks before money is booked**.
 
 2. **Thank You Block States & Exact Copy**:
 
-| State | Heading | Text | Action Button | Summary |
-|---|---|---|---|---|
-| **unpaid** | `Order placed` | `Complete your payment with stablecoins to confirm this order.` | `Pay with stablecoins` (links to Openrail hosted checkout `/c/<id>`) | Order total (e.g. `Order total: $2.00 USD`) |
-| **partial** | `Partial payment received` | `We received <paid> of <total>. Please send the remaining <remaining> to complete your order.` | `Pay remaining balance` (links to pay link) | Amounts received & remaining |
-| **paid** | `Thank you, payment received` | `Your payment was confirmed on NEAR.` | *None* | Booking transaction hash with NEAR Explorer link (`https://nearblocks.io/txns/<hash>`), amount paid, order reference |
+| State | Heading | Text | Action Button | Summary | Tone |
+|---|---|---|---|---|---|
+| **unpaid** | `Order placed` | `Complete your payment with stablecoins to confirm this order.` | `Pay with stablecoins` (links to Openrail hosted checkout `/c/<id>`) | Order total (e.g. `Order total: $2.00 USD`) | *Default* |
+| **partial** | `Partial payment received` | `We received <paid> of <total>. Please send the remaining <remaining> to complete your order.` | `Pay remaining balance` (links to pay link) | Amounts received & remaining | *Default* |
+| **paid** | `Thank you, payment received` | `Your payment was confirmed on NEAR.` | *None* | Booking transaction hash with NEAR Explorer link (`https://nearblocks.io/txns/<hash>`), amount paid, order reference | `success` |
+| **error** | `Payment status unavailable` | `We could not load the payment status for this order. Reload the page, or contact the shop.` | *None* | *None* | `warning` |
 
 3. **Install Redirect Landing Page (`GET /`)**:
    - Responds with HTTP `200` `text/html; charset=utf-8`.
@@ -369,11 +370,39 @@ Per Shopify documentation on checkout extensibility, checkout page steps (inform
      4. In Checkout Editor, configure `openrail_payment_handle` on the block.
    - The connector guarantees order independence across both arrival orders (`orders/create` before `pay-link` and `pay-link` before `orders/create`), creating exactly 1 invoice and 0 duplicates.
 
-5. **Verification Boundaries (What Can & Cannot Be Verified)**:
-   - **Can verify**: Session token cryptographic validity (HS256 HMAC signature, expiry, `aud`, `dest`), CORS headers on all extension routes, rate limiting, amount validation, underpayment enforcement, cursor-based pagination against real API response shapes, state reconstruction, webhook matching across both arrival orders, edge-case log lines, and unit/integration test assertions (68/68 passing).
+5. **Update 16: Security, Caller Binding, Rate Limiting & Partial State Recovery**:
+   - **Rate Limiting**: `GET /shopify/extension/pay-link` and `GET /shopify/extension/order-status` enforce a sliding window rate limit of 60 requests per 60 seconds per shop domain (`429 rate_limited`).
+   - **Read-Only Status**: `GET /shopify/extension/order-status` is strictly read-only on cache miss and never triggers checkout or invoice creation (creation happens exclusively in `GET /shopify/extension/pay-link`).
+   - **Caller Binding & Information Minimization**:
+     - The Thank-You extension extracts the random confirmation number from `shopify.orderConfirmation.value.number` (or `current.number`) and passes `&confirmation=<value>`.
+     - In `GET /shopify/extension/pay-link`: `confirmation` parameter is required and validated against the Admin API order (`confirmationNumber`, `name` with/without `#`, or `statusPageUrl` token). If missing or mismatched, returns `403 order_access_denied`.
+     - In `GET /shopify/extension/order-status`: If `confirmation` matches, returns full order details (amounts, pay URL, tx hash). If `confirmation` is missing or mismatched, returns a minimized response (`status` and generic `summary` only; omitting `total_usd`, `paid_usd`, `remaining_usd`, `pay_url`, `tx_hash`, and `checkout_id`) to prevent financial information leakage.
+   - **Empty Gateway & Zero Total Hardening**:
+     - If `payment_gateway_names` is empty or does not include an Openrail payment method, returns `404 not_openrail_order` (preventing draft or free orders from being mistaken as Openrail orders).
+     - If order total is `$0.00` or negative (checked via `currentTotalPriceSet` or `totalOutstandingSet`), returns `404 not_openrail_order`.
+   - **Partial State Recovery on Restart**:
+     - When recovering checkout bindings from the Openrail API after a process restart or cache miss, partial payment values (`paid_usd` and `remaining_usd`) are reconstructed from the recovered checkout entity in both `order-status` and the `orders/create` webhook handler.
+
+6. **Update 17: Visible Failure States & Error Resilience (No Silent Failures)**:
+   - **Silent Failure Elimination**: Previously, `null` was returned on all fetch failures (missing session token, network errors, 401, 500), which made backend errors look identical to "not an Openrail order".
+   - **Strict 404 Discriminator**: **Only** an HTTP 404 with error code `not_openrail_order` or `order_not_found` renders `null`. All other 404s (e.g. reverse-proxy routing failures or server missing-route HTML) render the visible warning banner.
+   - **Warning Banner State**: Any other failure (missing token, 401, 403, 429, 5xx, network error, unparsable body) renders a visible `<s-banner tone="warning">` with heading `"Payment status unavailable"` and sentence `"We could not load the payment status for this order. Reload the page, or contact the shop."` with no other controls, reserving space (AGENTS.md Rule 13).
+   - **Polling Resilience**: During polling, transient network/server glitches retain the last good state (`unpaid`, `partial`, or `paid`) and suppress the error banner until **three failures in a row** (`consecutiveFailures >= 3`). A subsequent successful poll clears failure counters and restores normal rendering.
+   - **Operator Browser Logging**: Logs `console.warn("[openrail] order-status failed", status)` on every failure, passing only the status code or error label (e.g. `401`, `500`, `"network_error"`, `"no_token"`, `"unparsable_body"`), with zero session tokens or response bodies logged.
+
+7. **Update 18: Order ID Normalization, Validation Guard & Session Token Refusal Logging**:
+   - **Order ID & `OrderIdentity` GID Normalization**:
+     - On real Thank-You extension runtimes, `shopify.orderConfirmation.value.order.id` provides `gid://shopify/OrderIdentity/<numeric_id>` (despite Shopify documentation claiming it corresponds to Admin API `Order` GID). In Shopify Admin GraphQL API, queries require `gid://shopify/Order/<numeric_id>`.
+     - The connector accepts both `gid://shopify/Order/<n>` and `gid://shopify/OrderIdentity/<n>`, as well as bare numeric strings `<n>`, across `pay-link`, `order-status`, `bindingsByOrderGid` lookups, and `orders/create` webhook bindings.
+     - Internally normalizes to numeric ID `<n>` for in-memory binding maps and to `gid://shopify/Order/<n>` for Shopify Admin API queries and order notes.
+   - **Strict 400 Validation**: Rejects non-numeric bare strings or other GID types (e.g. `gid://shopify/Product/<n>`, `gid://shopify/Customer/<n>`) with HTTP 400 `invalid_request`.
+   - **Throttled Session Token Refusal Logging**: Logs `console.warn("[shopify] session token refused:", reason)` throttled to at most once per 60 seconds per refusal reason (`bad_signature`, `expired`, `wrong_shop`, `wrong_app`, `missing`), writing reason only (never the token) so operators see configuration mismatches in `journalctl`.
+
+8. **Verification Boundaries (What Can & Cannot Be Verified)**:
+   - **Can verify**: Session token cryptographic validity (HS256 HMAC signature, expiry, `aud`, `dest`), throttled operator refusal logs, CORS headers on all extension routes, rate limiting, caller confirmation binding, information minimization, error banner states and 3-failure polling thresholds, order identity normalization, amount validation, underpayment enforcement, cursor-based pagination against real API response shapes, partial state reconstruction, webhook matching across both arrival orders, edge-case log lines, and unit/integration test assertions (108/108 passing).
    - **Cannot verify**: Visual layout and CSS rendering of Polaris web components inside the Shopify checkout iframe without a live browser running on a development store session; live `shopify app deploy` execution without interactive human Partner authentication.
 
-## 8. Test Suite (68 tests, `test/shopify.test.ts`)
+## 8. Test Suite (108 tests, `test/shopify.test.ts`)
 
 | Test | What it proves |
 |---|---|
@@ -445,6 +474,46 @@ Per Shopify documentation on checkout extensibility, checkout page steps (inform
 | `refuses non-Openrail orders with 404` | Verifies GET /shopify/extension/order-status returns 404 for non-Openrail orders |
 | `returns unpaid state with pay_url on cache miss for Openrail order` | Queries Admin API on miss, creates checkout, returns unpaid with pay URL |
 | `returns paid state with tx_hash and summary once payment is booked` | Returns paid state with booking transaction hash and summary once payment is booked on NEAR |
+| `GET /shopify/extension/pay-link rate-limits excessive requests per shop domain with 429` | Sliding window rate limits pay-link requests to 60 req/60s per shop domain |
+| `GET /shopify/extension/order-status rate-limits excessive requests per shop domain with 429` | Sliding window rate limits order-status requests to 60 req/60s per shop domain |
+| `GET /shopify/extension/order-status is strictly read-only and never creates checkout or invoice on cache miss` | Verifies order-status NEVER triggers createCheckout, preserving strictly read-only semantics |
+| `GET /shopify/extension/pay-link returns 404 not_openrail_order when payment_gateway_names is empty` | Refuses orders with empty gateway names list (e.g. draft/free orders) |
+| `GET /shopify/extension/order-status returns 404 not_openrail_order when payment_gateway_names is empty` | Order status returns 404 when payment gateway names list is empty |
+| `GET /shopify/extension/pay-link returns 404 not_openrail_order when order total is 0.00 or negative` | Refuses zero-dollar or negative orders with 404 not_openrail_order |
+| `GET /shopify/extension/order-status returns 404 not_openrail_order when order total is 0.00 or negative` | Order status returns 404 when total is 0.00 or negative |
+| `GET /shopify/extension/pay-link requires confirmation query matching order confirmationNumber or name, else 403 order_access_denied` | Rejects pay-link when confirmation parameter is missing with 403 order_access_denied |
+| `GET /shopify/extension/pay-link succeeds when confirmation matches order name (with or without hash)` | Binds caller when confirmation parameter matches order name (e.g. #1001 or 1001) |
+| `GET /shopify/extension/pay-link succeeds when confirmation matches token from statusPageUrl` | Binds caller when confirmation matches token slug in order's statusPageUrl |
+| `GET /shopify/extension/pay-link rejects mismatched confirmation with 403 order_access_denied` | Rejects pay-link when confirmation does not match order confirmationNumber, name, or status url |
+| `GET /shopify/extension/order-status returns minimized response (no amounts, pay_url, tx_hash) when confirmation is missing` | Prevents information leakage: returns only status and generic summary without amounts, pay_url, or tx_hash when confirmation missing |
+| `GET /shopify/extension/order-status returns minimized response when confirmation does not match order` | Prevents information leakage: returns minimized response when confirmation does not match order |
+| `GET /shopify/extension/order-status returns full response with amounts and tx_hash when confirmation matches order` | Returns complete response (amounts, pay URL, tx hash) when caller proves order binding via confirmation parameter |
+| `order-status rebuilds partial paidUsd and remainingUsd from recovered Openrail checkout after server restart` | Rebuilds partial payment numbers from Openrail checkout entity on cache miss / restart in order-status |
+| `orders/create rebuilds partial paidUsd and remainingUsd from recovered Openrail checkout after server restart` | Rebuilds partial payment numbers from Openrail checkout entity on cache miss / restart in orders/create |
+| `Thank-You extension extracts confirmationNumber from orderConfirmation and passes confirmation query param` | Verifies Thank You Preact extension retrieves orderConfirmation.value.number and appends &confirmation= to status query |
+| `builds view model for error state with warning tone and no controls` | Verifies ThankYouModel output for error state: warning tone, Payment status unavailable heading, reload/contact text, zero controls |
+| `parseOrderStatusResponse returns not_openrail for 404 with error code not_openrail_order` | Confirms not_openrail_order 404 cleanly classifies as not_openrail (renders null) |
+| `parseOrderStatusResponse returns not_openrail for 404 with error code order_not_found` | Confirms order_not_found 404 cleanly classifies as not_openrail (renders null) |
+| `parseOrderStatusResponse returns failure 404 when 404 body is HTML or lacks openrail error code` | Confirms proxy or unknown 404 without openrail error code classifies as failure (renders warning banner) |
+| `parseOrderStatusResponse returns failure for 401 Unauthorized` | Confirms 401 classifies as failure (renders warning banner) |
+| `parseOrderStatusResponse returns failure for 403 Forbidden` | Confirms 403 classifies as failure (renders warning banner) |
+| `parseOrderStatusResponse returns failure for 429 Too Many Requests` | Confirms 429 classifies as failure (renders warning banner) |
+| `parseOrderStatusResponse returns failure for 500 / 502 / 503 Server Error` | Confirms server errors classify as failure (renders warning banner) |
+| `parseOrderStatusResponse returns failure for unparsable or malformed body on ok response` | Confirms malformed response bodies classify as unparsable_body failure |
+| `parseOrderStatusResponse returns failure for network error (null response)` | Confirms fetch network failure classifies as network_error failure |
+| `stepPollState immediately shows error banner on initial failure when no good state exists` | Verifies immediate transition to error banner on initial failure when no prior good state exists |
+| `stepPollState keeps last good state during 1 or 2 transient failures during polling` | Verifies transient glitches (1 or 2 failures) retain existing unpaid/partial/paid view without showing error banner |
+| `stepPollState transitions to error banner on third consecutive failure during polling` | Verifies transition to warning banner upon 3 consecutive failures during polling |
+| `stepPollState recovers to good state when a poll succeeds after transient failures` | Verifies recovery from failures when a poll succeeds, resetting failure count to 0 |
+| `stepPollState renders null and stops tracking on not_openrail response` | Verifies not_openrail clears state and renders null |
+| `GET /shopify/extension/pay-link accepts OrderIdentity GID and normalises to Order GID for Admin API` | Verifies pay-link accepts `gid://shopify/OrderIdentity/<n>` from Thank-You extension and queries Admin API with `gid://shopify/Order/<n>` |
+| `GET /shopify/extension/order-status accepts OrderIdentity GID and normalises to Order GID for Admin API` | Verifies order-status accepts `gid://shopify/OrderIdentity/<n>` and returns normalized `gid://shopify/Order/<n>` |
+| `GET /shopify/extension/pay-link accepts bare numeric order id and normalises to Order GID` | Verifies pay-link accepts bare numeric strings `<n>` and converts to `gid://shopify/Order/<n>` |
+| `GET /shopify/extension/order-status accepts bare numeric order id and normalises to Order GID` | Verifies order-status accepts bare numeric strings `<n>` and converts to `gid://shopify/Order/<n>` |
+| `orders/create webhook binding matches extension query with OrderIdentity GID` | Cross-verifies that webhook indexed with Order GID matches extension query arriving with OrderIdentity GID |
+| `GET /shopify/extension/pay-link rejects invalid order id formats with 400` | Rejects non-numeric strings and invalid GID types (e.g. `Product`) on pay-link with HTTP 400 `invalid_request` |
+| `GET /shopify/extension/order-status rejects invalid order id formats with 400` | Rejects non-numeric strings and invalid GID types (e.g. `Customer`) on order-status with HTTP 400 `invalid_request` |
+| `connector logs session token refusal at most once per minute with reason only` | Throttles session token refusal warnings to at most once per 60s per reason, never logging the token |
 
 ## 9. Mutation Spot-Check Table (10 mutants, all killed)
 
