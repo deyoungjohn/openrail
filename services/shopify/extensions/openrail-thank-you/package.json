@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@shopify/ui-extensions": "2025.10.16",
+    "@shopify/ui-extensions": "2026.4.4",
     "preact": "^10.25.0",
     "@preact/signals": "^2.0.0"
   }

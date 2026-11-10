@@ -37,6 +37,8 @@ Shopify and Openrail use distinct webhook signatures:
 
 In the app, `SHOPIFY_WEBHOOK_SECRET` defaults to `SHOPIFY_CLIENT_SECRET`, so Dev Dashboard app-subscribed webhooks work out of the box with zero duplicate secret configuration.
 
+> **10 Nov correction (orchestrator), release errors:** (1) `shopify app deploy` refused the `orders/create` subscription in `shopify.app.toml`: the app is not approved for protected customer data. The subscription is removed; create the webhook in the store admin instead (Settings > Notifications > Webhooks > Create webhook: event *Order creation*, format JSON, URL `https://shopify.openrail.incepture.dev/shopify/webhooks`). Shopify shows the store's webhook signing key on that page: put it in `SHOPIFY_WEBHOOK_SECRET` (it is not the app client secret). (2) Checkout UI extensions must use `api_version` 2026-01 or later; both extensions now use `2026-04` with `@shopify/ui-extensions` 2026.4.4. Run `npm install` again in both extension folders.
+
 ---
 
 ## 3. Candidate (1) vs Candidate (2) Approval Comparison

@@ -1,7 +1,7 @@
 # Learn more about configuring a checkout UI extension:
 # https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration
 
-api_version = "2025-10"
+api_version = "2026-04"
 
 [[extensions]]
 name = "Openrail Checkout"

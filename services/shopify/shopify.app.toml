@@ -16,9 +16,10 @@ redirect_urls = [ ]
 [webhooks]
 api_version = "2025-10"
 
-[[webhooks.subscriptions]]
-topics = [ "orders/create" ]
-uri = "https://shopify.openrail.incepture.dev/shopify/webhooks"
+# No app-subscribed webhook: orders/create carries protected customer data, which the app is not approved for (the
+# release fails). The webhook is created in the store admin instead (Settings > Notifications > Webhooks > Create
+# webhook, event "Order creation", format JSON, URL https://shopify.openrail.incepture.dev/shopify/webhooks); it is
+# signed with the store webhook key, which goes in SHOPIFY_WEBHOOK_SECRET.
 
 [build]
 automatically_update_urls_on_dev = false
