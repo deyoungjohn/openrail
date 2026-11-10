@@ -412,7 +412,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
     const lastSec = lastRefusalLogTimeByReason.get(reason);
     if (lastSec === undefined || nowSec - lastSec >= 60) {
       lastRefusalLogTimeByReason.set(reason, nowSec);
-      console.warn("[shopify] session token refused:", reason, detail ?? "");
+      if (detail) console.warn("[shopify] session token refused:", reason, detail);
+      else console.warn("[shopify] session token refused:", reason);
     }
   }
 
