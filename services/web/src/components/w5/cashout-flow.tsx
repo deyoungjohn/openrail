@@ -63,7 +63,12 @@ export function CashoutFlow({
     if (id === "bridge" && row.near_tx_hashes[0] && row.near_tx_hashes[0] !== row.tx_hash)
       return <AddressChip value={row.near_tx_hashes[0]} chain="near" />;
     if (id === "arrived" && row.destination_tx_hashes[0])
-      return <AddressChip value={row.destination_tx_hashes[0]} chain={destChain} />;
+      return (
+        <AddressChip
+          value={row.destination_tx_hashes[0]}
+          chain={row.destination_chain === "confidential" ? undefined : destChain}
+        />
+      );
     return null;
   };
 
