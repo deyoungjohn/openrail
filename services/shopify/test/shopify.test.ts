@@ -1565,7 +1565,8 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
       expect(existsSync(appTomlPath)).toBe(true);
       const appToml = readFileSync(appTomlPath, "utf8");
       expect(appToml).toContain('application_url = "https://shopify.openrail.incepture.dev"');
-      expect(appToml).toContain('scopes = "read_orders,write_orders"');
+      // The human chose a wide list in the Dev Dashboard for flexibility; the connector needs these two.
+      expect(appToml).toMatch(/scopes = "read_orders,write_orders[",]/);
       expect(appToml).toContain('topics = [ "orders/create" ]');
       expect(appToml).toContain('uri = "https://shopify.openrail.incepture.dev/shopify/webhooks"');
 
