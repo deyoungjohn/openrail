@@ -162,7 +162,7 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 
 ### Step 4: Deploy App Configuration, Webhooks, and Extensions via Shopify CLI
 
-> **10 Nov correction (orchestrator):** the first extension had no entry point (only a data model), so `shopify app deploy` failed with `No matching export ... for import "default"`. It is now a real Preact extension (`extensions/openrail-thank-you-block/src/Extension.tsx`, thank-you page only). It asks the connector for the pay link with the buyer's session token (`GET /shopify/extension/pay-link`, verified HS256 with the app's client secret, CORS for the extension's null origin). **Before `shopify app deploy`, run `npm install` once inside `extensions/openrail-thank-you-block`.** The CLI will ask to request network access for the extension: approve it (Shopify approves it automatically).
+> **10 Nov correction (orchestrator):** the first extension had no entry point (only a data model), so `shopify app deploy` failed with `No matching export ... for import "default"`. It is now a real Preact extension (`extensions/openrail-pay-block/src/Extension.tsx`, thank-you page; `CheckoutNotice.tsx` is the separate checkout-page block). It asks the connector for the pay link with the buyer's session token (`GET /shopify/extension/pay-link`, verified HS256 with the app's client secret, CORS for the extension's null origin). **Before `shopify app deploy`, run `npm install` once inside `extensions/openrail-pay-block`.** The CLI will ask to request network access for the extension: approve it (Shopify approves it automatically).
 
 > [!IMPORTANT]
 > **Paste your Client ID here before `shopify app deploy`**:
@@ -211,7 +211,7 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
    **What this command performs**:
    - Synchronizes app configuration (scopes `read_orders,write_orders` and App URL) to Shopify.
    - Automatically subscribes `orders/create` to `https://shopify.openrail.incepture.dev/shopify/webhooks` signed with the app's **Client Secret**.
-   - Builds and deploys the Checkout UI extension `openrail-thank-you-block` (targets `purchase.thank-you.block.render` and `customer-account.order-status.block.render`).
+   - Builds and deploys the Checkout UI extension `openrail-pay-block` (two blocks: `purchase.checkout.block.render`, a notice shown during checkout before anything is bought, and `purchase.thank-you.block.render`, the payment link shown after the order is placed).
    - Releases the app version to stores.
 
 ---
@@ -243,10 +243,10 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 2. In the **Configurations** section, click **Customize** (opens Checkout Editor).
 3. In the top dropdown menu, switch from *Checkout* to **Thank you** page.
 4. In the bottom-left sidebar, click **Add app block**.
-5. Select **Openrail Stablecoin Payment Block** (`openrail-thank-you-block`).
+5. Select **Openrail Pay Block** (`openrail-pay-block`).
 6. In the right-hand settings panel, verify **Openrail App Base URL** is set to `https://shopify.openrail.incepture.dev`.
 7. Drag the block into the desired order summary/status position (e.g. `ORDER_STATUS1`).
-8. Switch the top dropdown to **Order status** page and repeat (click **Add app block**, select **Openrail Stablecoin Payment Block**, position it).
+8. Switch the top dropdown to **Order status** page and repeat (click **Add app block**, select **Openrail Pay Block**, position it).
 9. Click **Save** in the top-right corner.
 
 *(Reference: [Test checkout UI extensions in the checkout editor](https://shopify.dev/docs/apps/build/checkout/test-checkout-ui-extensions))*.

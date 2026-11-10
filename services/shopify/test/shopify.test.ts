@@ -24,7 +24,7 @@ import {
   type CheckoutApiPort,
   type ShopifyAppEnv,
 } from "../src/app.js";
-import { buildThankYouBlockModel } from "../extensions/openrail-thank-you-block/src/ThankYouBlock.js";
+import { buildThankYouBlockModel } from "../extensions/openrail-pay-block/src/ThankYouBlock.js";
 import {
   OrderTokenStore,
   createOrderPayToken,
