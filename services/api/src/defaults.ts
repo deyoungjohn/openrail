@@ -2,7 +2,6 @@
 import {
   createLogger,
   createOneClickClientFromEnv,
-  defaultSettlementAsset,
   getEnv,
   loadRoutes,
   type NearClient,
@@ -349,7 +348,7 @@ export function createCashoutPort(
     async quote(request) {
       const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       if (request.destinationChain === "confidential") {
-        const asset = request.sourceAsset ?? defaultSettlementAsset();
+        const asset = request.sourceAsset;
         const response = await client
           .quote({
             originAsset: asset,
@@ -385,7 +384,7 @@ export function createCashoutPort(
       if (route === undefined) throw new ApiError(400, "unsupported_chain");
       const response = await client
         .quote({
-          originAsset: request.sourceAsset ?? defaultSettlementAsset(),
+          originAsset: request.sourceAsset,
           destinationAsset: route.originAssetId,
           amount: request.amount,
           // The amount is what leaves the balance; the fees come out of it (never a deposit that falls short).
@@ -403,7 +402,7 @@ export function createCashoutPort(
         .catch(providerFailure);
       return {
         amount: request.amount,
-        source_asset: request.sourceAsset ?? defaultSettlementAsset(),
+        source_asset: request.sourceAsset,
         destination_chain: request.destinationChain,
         destination_address: request.address,
         amount_out: response.quote.amountOut ?? request.amount,

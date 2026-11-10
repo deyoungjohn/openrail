@@ -464,6 +464,14 @@
       "status": 201,
       "schema": "CashoutQuote",
       "mock": false
+    },
+    {
+      "file": "error.source_asset_required.json",
+      "method": "POST",
+      "path": "/v1/cashout/quote",
+      "status": 400,
+      "schema": "Error",
+      "mock": false
     }
   ]
 }

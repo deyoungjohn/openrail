@@ -114,7 +114,7 @@ export function CashoutScreen() {
   const ask = async () => {
     setShown(true);
     setError(null);
-    if (units === null || addressProblem !== null) return;
+    if (units === null || addressProblem !== null || held === null) return;
     setPhase("asking");
     setExpired(false);
     try {
@@ -123,7 +123,7 @@ export function CashoutScreen() {
           amount: units.toString(),
           destination_chain: chain,
           address: sendTo,
-          ...(held ? { source_asset: held.tokenId } : {}),
+          source_asset: held.tokenId,
         },
         { idempotencyKey: idem.current },
       );

@@ -2422,7 +2422,7 @@
       },
       "CashoutQuoteRequest": {
         "type": "object",
-        "required": ["amount", "destination_chain", "address"],
+        "required": ["amount", "destination_chain", "address", "source_asset"],
         "properties": {
           "amount": {
             "$ref": "#/components/schemas/U128"

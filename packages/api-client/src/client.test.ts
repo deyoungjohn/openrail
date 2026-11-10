@@ -151,6 +151,7 @@ describe("typed client", () => {
       amount: "2000000",
       destination_chain: "base",
       address: "0x" + "e".repeat(40),
+      source_asset: "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
     });
 
     expect(statement.format).toBe("csv");

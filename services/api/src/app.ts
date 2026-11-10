@@ -167,7 +167,7 @@ export interface CashoutPort {
     /** The business account: where the provider returns the money if the cash-out fails. */
     refundTo: string;
     /** The token the business holds on intents.near and the money is taken from. */
-    sourceAsset?: string;
+    sourceAsset: string;
   }): Promise<Record<string, unknown>>;
 }
 
@@ -1611,10 +1611,8 @@ export class ApiApp {
             "amount, destination_chain and address required",
           );
         }
-        if (
-          body.source_asset !== undefined &&
-          !this.routes.settlementAssets.includes(body.source_asset)
-        ) {
+        if (!body.source_asset) throw new ApiError(400, "source_asset_required");
+        if (!this.routes.settlementAssets.includes(body.source_asset)) {
           throw new ApiError(400, "unsupported_source_asset");
         }
         if (body.destination_chain === "confidential") {
@@ -1628,7 +1626,7 @@ export class ApiApp {
           destinationChain: body.destination_chain,
           address: body.address,
           refundTo: context.accountId,
-          ...(body.source_asset === undefined ? {} : { sourceAsset: body.source_asset }),
+          sourceAsset: body.source_asset,
         });
         await this.deps.pokeIndexer?.().catch(() => undefined);
         const record: CashoutRecord = {

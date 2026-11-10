@@ -589,7 +589,7 @@ export interface CashoutQuoteRequest {
   destination_chain:
     "base" | "arbitrum" | "optimism" | "polygon" | "solana" | "ethereum" | "near" | "confidential";
   address: string;
-  source_asset?: string;
+  source_asset: string;
 }
 
 export interface CashoutQuote {

@@ -432,7 +432,12 @@ describe("invoice route", () => {
       request(
         "POST",
         "/v1/cashout/quote",
-        { amount: "2000000", destination_chain: "base", address: "0x" + "e".repeat(40) },
+        {
+          amount: "2000000",
+          destination_chain: "base",
+          address: "0x" + "e".repeat(40),
+          source_asset: "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+        },
         secret,
       ),
     );
@@ -440,6 +445,21 @@ describe("invoice route", () => {
     expect(pokeIndexer).toHaveBeenCalledTimes(1);
     // The refund of an Intents deposit must go to the business account, not to the payout address.
     expect(cashout.quote.mock.calls[0]?.[0].refundTo).toBe("acme.openrail.near");
+  });
+
+  it("refuses a cash-out quote without source_asset before asking the provider", async () => {
+    const { app, secret, cashout } = harness();
+    const response = await app.handle(
+      request(
+        "POST",
+        "/v1/cashout/quote",
+        { amount: "2000000", destination_chain: "base", address: "0x" + "e".repeat(40) },
+        secret,
+      ),
+    );
+    expect(response.status).toBe(400);
+    expect((response.body as { error: { code: string } }).error.code).toBe("source_asset_required");
+    expect(cashout.quote).not.toHaveBeenCalled();
   });
 
   it("cashes out from the token the business holds, and refuses one that is not a settlement asset", async () => {
