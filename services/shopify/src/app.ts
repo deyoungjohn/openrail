@@ -22,6 +22,7 @@ export interface ShopifyAppEnv {
   SHOPIFY_ADMIN_ACCESS_TOKEN?: string;
   SHOPIFY_ORDER_TOKEN_SECRET: string;
   SHOPIFY_PORT?: string;
+  SHOPIFY_PRE_ORDER_LINK?: string;
   OPENRAIL_API_URL: string;
   OPENRAIL_API_KEY: string;
   OPENRAIL_WEBHOOK_SECRET: string;
@@ -104,6 +105,9 @@ export function loadShopifyAppEnv(
 
   const port = getVal("SHOPIFY_PORT");
   if (port) out.SHOPIFY_PORT = port;
+
+  const preOrder = getVal("SHOPIFY_PRE_ORDER_LINK");
+  if (preOrder) out.SHOPIFY_PRE_ORDER_LINK = preOrder;
 
   return out as ShopifyAppEnv;
 }
@@ -245,6 +249,8 @@ interface OrderBinding {
   checkoutToken?: string;
   payUrl?: string;
   paid?: boolean;
+  paidUsd?: string;
+  remainingUsd?: string;
   status?: string;
   bookingTx?: string;
   summary?: string;
@@ -419,6 +425,17 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           bindingsByOrderRef.set(recovered.order_ref, matchedBinding);
         }
       }
+      if (matchedBinding) {
+        matchedBinding.orderGid = orderGid;
+        matchedBinding.orderName = orderName;
+        bindingsByOrderGid.set(orderGid, matchedBinding);
+      }
+    }
+
+    const numericId = extractNumericOrderId(orderGid);
+    const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
+    if (!matchedBinding) {
+      matchedBinding = bindingsByOrderGid.get(orderGid) ?? bindingsByOrderRef.get(orderRef);
       if (matchedBinding) {
         matchedBinding.orderGid = orderGid;
         matchedBinding.orderName = orderName;
@@ -878,6 +895,9 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       const orderTotalUsd = order.totalOutstandingSet?.shopMoney?.amount;
       if (orderTotalUsd && toCents(paidUsd) < toCents(orderTotalUsd)) {
         const remainingUsd = ((toCents(orderTotalUsd) - toCents(paidUsd)) / 100).toFixed(2);
+        binding.status = "partial";
+        binding.paidUsd = paidUsd;
+        binding.remainingUsd = remainingUsd;
         await adminClient.addOrderTags(order.id, ["openrail-partial"]);
         await appendOrderNote(
           adminClient,
@@ -910,6 +930,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
 
       binding.paid = true;
       binding.status = "paid";
+      binding.paidUsd = paidUsd;
+      binding.remainingUsd = "0.00";
       if (bookingTx) binding.bookingTx = bookingTx;
       binding.summary = `Payment of ${paidUsd} USD booked via Openrail`;
 
@@ -939,6 +961,28 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
 
       if (method === "GET" && path === "/health") {
         return { status: 200, body: { ok: true } };
+      }
+
+      if (method === "GET" && (path === "/" || path === "")) {
+        return {
+          status: 200,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+          },
+          body: {
+            html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Openrail Checkout</title>
+</head>
+<body>
+  <h1>Openrail Checkout</h1>
+  <p>Openrail Checkout is installed on this store. Next: configure the Openrail manual payment method and add the Thank You block in the checkout editor (README step 8).</p>
+</body>
+</html>`,
+          },
+        };
       }
 
       if (method === "POST" && path === "/shopify/install/check") {
@@ -981,16 +1025,98 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
               body: { error: { code: "invalid_session_token", message: checked.reason } },
             };
           const orderGid = (req.query.order ?? "").trim();
-          if (!/^gid:\/\/shopify\/Order\/\d+$/.test(orderGid))
+          if (!orderGid.startsWith("gid://shopify/Order/"))
             return {
               status: 400,
               headers: cors,
               body: { error: { code: "invalid_request", message: "order must be an order id" } },
             };
+
+          let order: ShopifyOrder;
+          try {
+            order = await adminClient.getOrder(orderGid);
+          } catch {
+            return {
+              status: 404,
+              headers: cors,
+              body: { error: { code: "order_not_found", message: "Order not found" } },
+            };
+          }
+
+          const gateways = order.paymentGatewayNames ?? [];
+          const usesOpenrail = gateways.some((g) => /openrail|stablecoin/i.test(g));
+          if (!usesOpenrail) {
+            return {
+              status: 404,
+              headers: cors,
+              body: {
+                error: {
+                  code: "not_openrail_order",
+                  message: "Order does not use Openrail payment method",
+                },
+              },
+            };
+          }
+
+          const shopMoney = order.totalOutstandingSet?.shopMoney;
+          if (order.currencyCode !== "USD" || shopMoney?.currencyCode !== "USD") {
+            return {
+              status: 422,
+              headers: cors,
+              body: {
+                error: {
+                  code: "unsupported_currency",
+                  message: `Order currency must be USD (received ${shopMoney?.currencyCode ?? order.currencyCode}).`,
+                },
+              },
+            };
+          }
+
+          const numericId = extractNumericOrderId(order.id);
+          const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
+          let binding = bindingsByOrderGid.get(order.id) ?? bindingsByOrderRef.get(orderRef);
+
+          if (!binding) {
+            const amountUsd = Number(shopMoney.amount).toFixed(2);
+            const idempotencyKey = `shopify-order-${numericId}-${amountUsd}`;
+            const items = (order.lineItems ?? []).map((item) => ({
+              name: item.title,
+              quantity: item.quantity,
+              ...(item.unitPriceUsd ? { unit_price_usd: item.unitPriceUsd } : {}),
+            }));
+
+            const { checkout } = await checkoutApi.createCheckout(
+              {
+                order_ref: orderRef,
+                amount_usd: amountUsd,
+                currency: "USD",
+                expires_in_minutes: 60,
+                return_url: order.statusPageUrl,
+                cancel_url: order.statusPageUrl,
+                ...(items.length > 0 ? { items } : {}),
+              },
+              idempotencyKey,
+            );
+
+            binding = {
+              orderGid: order.id,
+              orderName: order.name,
+              orderRef,
+              checkoutId: checkout.id,
+              expectedTotalUsd: checkout.total_usd ?? checkout.amount_usd,
+              payUrl: checkout.pay_url,
+              paid: order.fullyPaid || order.displayFinancialStatus === "PAID",
+              status: order.fullyPaid || order.displayFinancialStatus === "PAID" ? "paid" : "unpaid",
+            };
+            bindingsByOrderRef.set(orderRef, binding);
+            bindingsByCheckoutId.set(checkout.id, binding);
+            bindingsByOrderGid.set(order.id, binding);
+          }
+
           const orderToken = createOrderPayToken(
             {
               orderGid,
-              orderName: orderGid,
+              orderName: order.name,
               shopDomain: env.SHOPIFY_SHOP_DOMAIN,
               nonce: randomUUID(),
               exp: clock() + 3600,
@@ -1001,12 +1127,17 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           return {
             status: 200,
             headers: cors,
-            body: { pay_url: `${base}/shopify/pay/${encodeURIComponent(orderToken)}` },
+            body: {
+              pay_url: `${base}/shopify/pay/${encodeURIComponent(orderToken)}`,
+              checkout_pay_url: binding.payUrl ?? `${base}/shopify/pay/${encodeURIComponent(orderToken)}`,
+              checkout_id: binding.checkoutId,
+            },
           };
         }
       }
 
       // The pre-order checkout block asks for the pay link with the buyer's session token and cart info.
+      // Gated behind SHOPIFY_PRE_ORDER_LINK=1 (off by default; returns 404 when off).
       if (path === "/shopify/extension/checkout-pay-link") {
         const cors = {
           "access-control-allow-origin": "*",
@@ -1015,6 +1146,18 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           "access-control-max-age": "600",
         };
         if (method === "OPTIONS") return { status: 204, headers: cors, body: {} };
+        if (env.SHOPIFY_PRE_ORDER_LINK !== "1") {
+          return {
+            status: 404,
+            headers: cors,
+            body: {
+              error: {
+                code: "not_found",
+                message: "Pre-order checkout pay link is disabled",
+              },
+            },
+          };
+        }
         if (method === "GET") {
           const auth = getHeader(req.headers, "authorization") ?? "";
           const token = /^Bearer (.+)$/i.exec(auth)?.[1];
@@ -1160,7 +1303,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
         }
       }
 
-      // The thank-you / order status block queries the order's Openrail status, tx hashes, and summary.
+      // The thank-you / order status block queries the order's Openrail state.
       if (path === "/shopify/extension/order-status") {
         const cors = {
           "access-control-allow-origin": "*",
@@ -1223,6 +1366,106 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             }
           }
 
+          // If the order has not been seen by the connector yet (e.g. buyer arrived at thank-you page before webhook fired),
+          // query Shopify Admin API for the order, verify Openrail gateway, and create or bind checkout.
+          if (!binding && orderQuery) {
+            let order: ShopifyOrder | null = null;
+            try {
+              order = await adminClient.getOrder(orderQuery);
+            } catch {
+              order = null;
+            }
+
+            if (!order) {
+              return {
+                status: 404,
+                headers: cors,
+                body: {
+                  error: {
+                    code: "order_not_found",
+                    message: "No Openrail payment record found for this order",
+                  },
+                },
+              };
+            }
+
+            const gateways = (order.paymentGatewayNames ?? []).filter(Boolean);
+            const usesOpenrail =
+              gateways.length === 0
+                ? true
+                : gateways.some((g) => /openrail|stablecoin/i.test(g));
+            if (!usesOpenrail) {
+              return {
+                status: 404,
+                headers: cors,
+                body: {
+                  error: {
+                    code: "not_openrail_order",
+                    message: "Order does not use Openrail payment method",
+                  },
+                },
+              };
+            }
+
+            const shopMoney = order.totalOutstandingSet?.shopMoney;
+            if (order.currencyCode !== "USD" || shopMoney?.currencyCode !== "USD") {
+              return {
+                status: 422,
+                headers: cors,
+                body: {
+                  error: {
+                    code: "unsupported_currency",
+                    message: `Order currency must be USD (received ${shopMoney?.currencyCode ?? order.currencyCode}).`,
+                  },
+                },
+              };
+            }
+
+            const numericId = extractNumericOrderId(order.id);
+            const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
+            binding = bindingsByOrderGid.get(order.id) ?? bindingsByOrderRef.get(orderRef);
+
+            if (!binding) {
+              const amountUsd = Number(shopMoney.amount).toFixed(2);
+              const idempotencyKey = `shopify-order-${numericId}-${amountUsd}`;
+              const items = (order.lineItems ?? []).map((item) => ({
+                name: item.title,
+                quantity: item.quantity,
+                ...(item.unitPriceUsd ? { unit_price_usd: item.unitPriceUsd } : {}),
+              }));
+
+              const { checkout } = await checkoutApi.createCheckout(
+                {
+                  order_ref: orderRef,
+                  amount_usd: amountUsd,
+                  currency: "USD",
+                  expires_in_minutes: 60,
+                  return_url: order.statusPageUrl,
+                  cancel_url: order.statusPageUrl,
+                  ...(items.length > 0 ? { items } : {}),
+                },
+                idempotencyKey,
+              );
+
+              const isPaid = order.fullyPaid || order.displayFinancialStatus === "PAID";
+              binding = {
+                orderGid: order.id,
+                orderName: order.name,
+                orderRef,
+                checkoutId: checkout.id,
+                expectedTotalUsd: checkout.total_usd ?? checkout.amount_usd,
+                payUrl: checkout.pay_url,
+                paid: isPaid,
+                paidUsd: isPaid ? amountUsd : "0.00",
+                remainingUsd: isPaid ? "0.00" : amountUsd,
+                status: isPaid ? "paid" : "unpaid",
+              };
+              bindingsByOrderRef.set(orderRef, binding);
+              bindingsByCheckoutId.set(checkout.id, binding);
+              bindingsByOrderGid.set(order.id, binding);
+            }
+          }
+
           if (!binding) {
             return {
               status: 404,
@@ -1236,21 +1479,70 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             };
           }
 
+          const totalUsd = binding.expectedTotalUsd;
+          let status: "unpaid" | "partial" | "paid" | "pending" = "unpaid";
+          if (binding.paid || binding.status === "paid") {
+            status = "paid";
+          } else if (binding.status === "partial") {
+            status = "partial";
+          } else if (checkoutQuery && !orderQuery) {
+            status = (binding.status as "pending") ?? "pending";
+          } else {
+            status = "unpaid";
+          }
+
+          const paidUsd =
+            status === "paid"
+              ? binding.paidUsd ?? totalUsd
+              : status === "partial"
+              ? binding.paidUsd ?? "0.00"
+              : "0.00";
+
+          const remainingUsd =
+            status === "paid"
+              ? "0.00"
+              : status === "partial"
+              ? binding.remainingUsd ?? ((toCents(totalUsd) - toCents(paidUsd)) / 100).toFixed(2)
+              : totalUsd;
+
+          let payUrl = binding.payUrl;
+          if (!payUrl && binding.orderGid) {
+            const orderToken = createOrderPayToken(
+              {
+                orderGid: binding.orderGid,
+                orderName: binding.orderName,
+                shopDomain: env.SHOPIFY_SHOP_DOMAIN,
+                nonce: randomUUID(),
+                exp: clock() + 3600,
+              },
+              env.SHOPIFY_ORDER_TOKEN_SECRET,
+            );
+            const base = env.APP_BASE_URL.replace(/\/+$/, "");
+            payUrl = `${base}/shopify/pay/${encodeURIComponent(orderToken)}`;
+          }
+
+          const defaultSummary =
+            status === "paid"
+              ? `Payment of $${totalUsd} USD confirmed on NEAR`
+              : status === "partial"
+              ? `Partial payment of $${paidUsd} of $${totalUsd} USD received`
+              : `Payment of $${totalUsd} USD pending`;
+
           return {
             status: 200,
             headers: cors,
             body: {
-              status: binding.status ?? (binding.paid ? "paid" : "pending"),
-              paid: Boolean(binding.paid),
+              status,
+              paid: status === "paid",
+              total_usd: totalUsd,
+              paid_usd: paidUsd,
+              remaining_usd: remainingUsd,
+              pay_url: payUrl,
+              tx_hash: binding.bookingTx ?? null,
+              summary: binding.summary ?? defaultSummary,
               checkout_id: binding.checkoutId,
               order_gid: binding.orderGid || undefined,
-              amount_usd: binding.expectedTotalUsd,
-              tx_hash: binding.bookingTx ?? null,
-              summary:
-                binding.summary ??
-                (binding.paid
-                  ? `Payment of $${binding.expectedTotalUsd} USD booked via Openrail`
-                  : `Payment of $${binding.expectedTotalUsd} USD pending`),
+              amount_usd: totalUsd,
             },
           };
         }

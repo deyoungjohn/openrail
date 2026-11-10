@@ -26,7 +26,8 @@ import {
   type ShopifyAppEnv,
 } from "../src/app.js";
 import { buildThankYouBlockModel } from "../extensions/openrail-thank-you/src/ThankYouBlock.js";
-import { shouldRenderCheckoutPay } from "../extensions/openrail-checkout/src/CheckoutPayModel.js";
+import { buildThankYouViewModel } from "../extensions/openrail-thank-you/src/ThankYouModel.js";
+import { shouldRenderCheckoutPay } from "../optional/openrail-checkout/src/CheckoutPayModel.js";
 import {
   OrderTokenStore,
   createOrderPayToken,
@@ -49,6 +50,7 @@ const TEST_ENV: ShopifyAppEnv = {
   OPENRAIL_API_KEY: "or_sk_live_test_0000000000000000",
   OPENRAIL_WEBHOOK_SECRET: "whsec_test_openrail_secret_987654",
   APP_BASE_URL: "https://shopify.openrail.incepture.dev",
+  SHOPIFY_PRE_ORDER_LINK: "1",
 };
 
 function makeUsdShop(overrides: Partial<ShopifyShop> = {}): ShopifyShop {
@@ -110,6 +112,7 @@ function createTestHarness(options: {
   feeMode?: "absorb" | "pass_to_customer";
   nowSec?: number;
   logger?: (msg: string) => void;
+  env?: Partial<ShopifyAppEnv>;
 } = {}) {
   let currentNowSec = options.nowSec ?? 1_762_700_000;
   const shop = options.shop ?? makeUsdShop();
@@ -278,7 +281,7 @@ function createTestHarness(options: {
 
   const tokenStore = new OrderTokenStore();
   const app = createShopifyApp({
-    env: TEST_ENV,
+    env: { ...TEST_ENV, ...(options.env ?? {}) },
     adminClient: adminClient as unknown as ShopifyAdminClient,
     paymentsAppClient: paymentsAppClient as unknown as ShopifyPaymentsAppClient,
     checkoutApi,
@@ -2703,7 +2706,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
 
     it("shopify.extension.toml declares openrail_payment_handle setting", () => {
       const tomlContent = readFileSync(
-        resolve(dirname(fileURLToPath(import.meta.url)), "../extensions/openrail-checkout/shopify.extension.toml"),
+        resolve(dirname(fileURLToPath(import.meta.url)), "../optional/openrail-checkout/shopify.extension.toml"),
         "utf8",
       );
       expect(tomlContent).toContain('key = "openrail_payment_handle"');
@@ -2734,6 +2737,437 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           "custom-openrail-stablecoins",
         ),
       ).toBe(true);
+    });
+  });
+
+  describe("Update 14: Install redirect landing page", () => {
+    it("GET / answers 200 text/html with static landing page", async () => {
+      const h = createTestHarness();
+      const res = await h.app.handle({
+        method: "GET",
+        path: "/",
+        query: { embedded: "1", shop: "openrail-dev.myshopify.com", host: "dGVzdC5teXNob3BpZnkuY29t" },
+        headers: {},
+        rawBody: "",
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers?.["content-type"]).toBe("text/html; charset=utf-8");
+      const html = (res.body as { html: string }).html;
+      expect(html).toContain("Openrail Checkout is installed on this store.");
+      expect(html).toContain("Openrail Checkout");
+      // No script tags
+      expect(html.toLowerCase()).not.toContain("<script");
+      // No reflected XSS
+      expect(html).not.toContain("dGVzdC5teXNob3BpZnkuY29t");
+      expect(html).not.toContain("openrail-dev.myshopify.com");
+      // No leaked secrets
+      expect(html).not.toContain(TEST_ENV.SHOPIFY_CLIENT_SECRET);
+      expect(html).not.toContain(TEST_ENV.OPENRAIL_API_KEY);
+      // Doesn't call Shopify API
+      expect(h.adminClient.getShop).not.toHaveBeenCalled();
+      expect(h.adminClient.getOrder).not.toHaveBeenCalled();
+    });
+
+    it("preserves /health endpoint alongside landing page", async () => {
+      const h = createTestHarness();
+      const health = await h.app.handle({
+        method: "GET",
+        path: "/health",
+        query: {},
+        headers: {},
+        rawBody: "",
+      });
+      expect(health.status).toBe(200);
+      expect(health.body.ok).toBe(true);
+    });
+  });
+
+  describe("Update 15: Post-order thank-you page flow and pre-order gating", () => {
+    describe("Pre-order checkout link gating (SHOPIFY_PRE_ORDER_LINK)", () => {
+      it("returns 404 when SHOPIFY_PRE_ORDER_LINK is not set or not '1'", async () => {
+        const h = createTestHarness({ env: { SHOPIFY_PRE_ORDER_LINK: undefined } });
+        const res = await askPayLink(h, sessionToken(good(h)), {
+          checkout: "tok_gated",
+          amount: "10.00",
+        });
+        expect(res.status).toBe(404);
+        expect(res.body.error?.code).toBe("not_found");
+      });
+
+      it("returns 200 when SHOPIFY_PRE_ORDER_LINK='1'", async () => {
+        const h = createTestHarness({ env: { SHOPIFY_PRE_ORDER_LINK: "1" } });
+        const res = await askPayLink(h, sessionToken(good(h)), {
+          checkout: "tok_gated_enabled",
+          amount: "10.00",
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.pay_url).toBeDefined();
+      });
+    });
+
+    describe("ThankYouModel view model logic", () => {
+      it("builds view model for unpaid state", () => {
+        const vm = buildThankYouViewModel({
+          status: "unpaid",
+          paid: false,
+          total_usd: "2.00",
+          paid_usd: "0.00",
+          remaining_usd: "2.00",
+          pay_url: "https://pay.openrail.incepture.dev/c/chk-123",
+          tx_hash: null,
+          summary: "Payment of $2.00 USD pending",
+        });
+
+        expect(vm.render).toBe(true);
+        expect(vm.state).toBe("unpaid");
+        expect(vm.heading).toBe("Order placed");
+        expect(vm.text).toBe("Complete your payment with stablecoins to confirm this order.");
+        expect(vm.actionLabel).toBe("Pay with stablecoins");
+        expect(vm.actionUrl).toBe("https://pay.openrail.incepture.dev/c/chk-123");
+        expect(vm.summary).toBe("Order total: $2.00 USD");
+        expect(vm.explorerUrl).toBeUndefined();
+      });
+
+      it("builds view model for partial state", () => {
+        const vm = buildThankYouViewModel({
+          status: "partial",
+          paid: false,
+          total_usd: "10.00",
+          paid_usd: "4.00",
+          remaining_usd: "6.00",
+          pay_url: "https://pay.openrail.incepture.dev/c/chk-123",
+          tx_hash: null,
+          summary: "Partial payment received",
+        });
+
+        expect(vm.render).toBe(true);
+        expect(vm.state).toBe("partial");
+        expect(vm.heading).toBe("Partial payment received");
+        expect(vm.text).toBe("We received $4.00 of $10.00. Please send the remaining $6.00 to complete your order.");
+        expect(vm.actionLabel).toBe("Pay remaining balance");
+        expect(vm.actionUrl).toBe("https://pay.openrail.incepture.dev/c/chk-123");
+        expect(vm.summary).toContain("Paid: $4.00 USD");
+        expect(vm.summary).toContain("Remaining: $6.00 USD");
+      });
+
+      it("builds view model for paid state with transaction link", () => {
+        const vm = buildThankYouViewModel(
+          {
+            status: "paid",
+            paid: true,
+            total_usd: "2.00",
+            paid_usd: "2.00",
+            remaining_usd: "0.00",
+            pay_url: "https://pay.openrail.incepture.dev/c/chk-123",
+            tx_hash: "8vHq1M5Zabc987654321",
+            summary: "Payment confirmed on NEAR",
+          },
+          "gid://shopify/Order/9999",
+        );
+
+        expect(vm.render).toBe(true);
+        expect(vm.state).toBe("paid");
+        expect(vm.heading).toBe("Thank you, payment received");
+        expect(vm.text).toBe("Your payment was confirmed on NEAR.");
+        expect(vm.actionLabel).toBeUndefined();
+        expect(vm.actionUrl).toBeUndefined();
+        expect(vm.txHash).toBe("8vHq1M5Zabc987654321");
+        expect(vm.explorerUrl).toBe("https://nearblocks.io/txns/8vHq1M5Zabc987654321");
+        expect(vm.summary).toContain("Paid: $2.00 USD");
+        expect(vm.summary).toContain("Transaction: 8vHq1M5Zabc987654321");
+      });
+
+      it("does not render when status is null (non-Openrail order)", () => {
+        const vm = buildThankYouViewModel(null);
+        expect(vm.render).toBe(false);
+      });
+    });
+
+    describe("GET /shopify/extension/pay-link", () => {
+      it("requires valid session token", async () => {
+        const h = createTestHarness();
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/1001" },
+          headers: {},
+          rawBody: "",
+        });
+        expect(res.status).toBe(401);
+      });
+
+      it("refuses non-Openrail gateway with 404", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/cc_only",
+            paymentGatewayNames: ["bogus_credit_card"],
+          }),
+        });
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/cc_only" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(404);
+        expect(res.body.error?.code).toBe("not_openrail_order");
+      });
+
+      it("issues single invoice from Admin API total and is idempotent", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/openrail_single",
+            name: "#1001",
+            paymentGatewayNames: ["Pay with stablecoins (Openrail)"],
+            totalOutstandingSet: {
+              shopMoney: { amount: "2.00", currencyCode: "USD" },
+              presentmentMoney: { amount: "2.00", currencyCode: "USD" },
+            },
+          }),
+        });
+        const res1 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/openrail_single" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res1.status).toBe(200);
+        expect(res1.body.pay_url).toBeDefined();
+        expect(res1.body.checkout_pay_url).toBeDefined();
+        expect(res1.body.checkout_id).toBe("chk-1");
+        expect(h.checkoutCreateCalls).toHaveLength(1);
+        expect(h.checkoutCreateCalls[0].body.amount_usd).toBe("2.00");
+
+        // Second call returns existing invoice
+        const res2 = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/openrail_single" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res2.status).toBe(200);
+        expect(res2.body.checkout_id).toBe("chk-1");
+        expect(h.checkoutCreateCalls).toHaveLength(1);
+      });
+    });
+
+    describe("Order arrival and pay-link independence", () => {
+      it("Path A: orders/create webhook arrives before pay-link -> exactly 1 checkout created, 0 duplicates", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/path_a_order",
+            name: "#PA100",
+            totalOutstandingSet: { shopMoney: { amount: "5.00", currencyCode: "USD" }, presentmentMoney: { amount: "5.00", currencyCode: "USD" } },
+          }),
+        });
+
+        // 1. orders/create webhook arrives
+        const orderPayload = {
+          id: "path_a_order",
+          admin_graphql_api_id: "gid://shopify/Order/path_a_order",
+          name: "#PA100",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+        };
+        const rawOrder = JSON.stringify(orderPayload);
+        const webhookRes = await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
+          },
+          rawBody: rawOrder,
+        });
+        expect(webhookRes.status).toBe(200);
+
+        // 2. Thank-you page calls pay-link
+        const payLinkRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/path_a_order" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(payLinkRes.status).toBe(200);
+        expect(payLinkRes.body.checkout_id).toBe("chk-1");
+
+        // 3. Repeat call
+        const repeatRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/path_a_order" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(repeatRes.status).toBe(200);
+        expect(repeatRes.body.checkout_id).toBe("chk-1");
+        expect(h.checkoutCreateCalls).toHaveLength(1);
+      });
+
+      it("Path B: pay-link called before orders/create webhook -> exactly 1 checkout created, 0 duplicates", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/path_b_order",
+            name: "#PB200",
+            totalOutstandingSet: { shopMoney: { amount: "8.00", currencyCode: "USD" }, presentmentMoney: { amount: "8.00", currencyCode: "USD" } },
+          }),
+        });
+
+        // 1. Thank-you page calls pay-link first
+        const payLinkRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/pay-link",
+          query: { order: "gid://shopify/Order/path_b_order" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(payLinkRes.status).toBe(200);
+        expect(payLinkRes.body.checkout_id).toBe("chk-1");
+        expect(h.checkoutCreateCalls).toHaveLength(1);
+
+        // 2. orders/create webhook arrives subsequently
+        const orderPayload = {
+          id: "path_b_order",
+          admin_graphql_api_id: "gid://shopify/Order/path_b_order",
+          name: "#PB200",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+        };
+        const rawOrder = JSON.stringify(orderPayload);
+        const webhookRes = await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
+          },
+          rawBody: rawOrder,
+        });
+        expect(webhookRes.status).toBe(200);
+
+        // 3. Status route returns unpaid with same checkout
+        const statusRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/path_b_order" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(statusRes.status).toBe(200);
+        expect(statusRes.body.checkout_id).toBe("chk-1");
+        expect(h.checkoutCreateCalls).toHaveLength(1);
+      });
+    });
+
+    describe("GET /shopify/extension/order-status full contract", () => {
+      it("refuses non-Openrail orders with 404", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/cc_status",
+            paymentGatewayNames: ["manual_cash_on_delivery"],
+          }),
+        });
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/cc_status" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(404);
+        expect(res.body.error?.code).toBe("not_openrail_order");
+      });
+
+      it("returns unpaid state with pay_url on cache miss for Openrail order", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_unseen",
+            name: "#UNSEEN",
+            paymentGatewayNames: ["Pay with stablecoins (Openrail)"],
+            totalOutstandingSet: { shopMoney: { amount: "12.00", currencyCode: "USD" }, presentmentMoney: { amount: "12.00", currencyCode: "USD" } },
+          }),
+        });
+
+        const res = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_unseen" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("unpaid");
+        expect(res.body.paid).toBe(false);
+        expect(res.body.total_usd).toBe("12.00");
+        expect(res.body.paid_usd).toBe("0.00");
+        expect(res.body.remaining_usd).toBe("12.00");
+        expect(res.body.pay_url).toBeDefined();
+        expect(res.body.tx_hash).toBeNull();
+      });
+
+      it("returns paid state with tx_hash and summary once payment is booked", async () => {
+        const h = createTestHarness({
+          order: makeOrder({
+            id: "gid://shopify/Order/order_paid_flow",
+            name: "#PAIDFLOW",
+            paymentGatewayNames: ["Pay with stablecoins (Openrail)"],
+            totalOutstandingSet: { shopMoney: { amount: "20.00", currencyCode: "USD" }, presentmentMoney: { amount: "20.00", currencyCode: "USD" } },
+          }),
+        });
+
+        // Query status -> creates unpaid checkout
+        await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_paid_flow" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+
+        // Openrail payment arrives
+        const rawEvent = JSON.stringify({
+          id: "evt_flow_paid",
+          type: "checkout.paid",
+          created: h.nowSec(),
+          data: {
+            token_id: "chk-1",
+            order_ref: "shopify-order_paid_flow",
+            amount_usd: "20.00",
+            total_usd: "20.00",
+            booking_tx: "near_tx_booking_98765",
+          },
+        });
+        await h.app.handle({
+          method: "POST",
+          path: "/shopify/openrail-webhook",
+          query: {},
+          headers: {
+            "openrail-signature": signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawEvent),
+          },
+          rawBody: rawEvent,
+        });
+
+        // Query status again
+        const statusRes = await h.app.handle({
+          method: "GET",
+          path: "/shopify/extension/order-status",
+          query: { order: "gid://shopify/Order/order_paid_flow" },
+          headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+          rawBody: "",
+        });
+        expect(statusRes.status).toBe(200);
+        expect(statusRes.body.status).toBe("paid");
+        expect(statusRes.body.paid).toBe(true);
+        expect(statusRes.body.total_usd).toBe("20.00");
+        expect(statusRes.body.paid_usd).toBe("20.00");
+        expect(statusRes.body.remaining_usd).toBe("0.00");
+        expect(statusRes.body.tx_hash).toBe("near_tx_booking_98765");
+      });
     });
   });
 });

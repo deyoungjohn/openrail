@@ -66,14 +66,21 @@ export function createShopifyHttpListener(
 
     try {
       const httpRes = await app.handle(httpReq);
+      const contentType =
+        Object.entries(httpRes.headers ?? {}).find(
+          ([k]) => k.toLowerCase() === "content-type",
+        )?.[1] ?? "application/json";
+
       const resHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
+        "Content-Type": contentType,
         ...(httpRes.headers ?? {}),
       };
 
       res.writeHead(httpRes.status, resHeaders);
       if (httpRes.status === 302 && httpRes.headers?.location) {
         res.end();
+      } else if (contentType.includes("text/html") && typeof httpRes.body?.html === "string") {
+        res.end(httpRes.body.html);
       } else {
         res.end(JSON.stringify(httpRes.body));
       }

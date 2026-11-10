@@ -216,10 +216,10 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
    
    **What this command performs**:
    - Synchronizes app configuration (scopes and App URL) to Shopify.
-   - Builds and deploys the two Checkout UI extensions (`api_version = "2026-04"`):
-     1. `openrail-checkout` ("Openrail Checkout", `purchase.checkout.block.render`, renders pay link on checkout page when Openrail manual method is selected).
-     2. `openrail-thank-you` ("Thank You", `purchase.thank-you.block.render`, shows confirmation, tx hash, and order summary).
+   - Builds and deploys the default Checkout UI extension (`api_version = "2026-04"`):
+     - `openrail-thank-you` ("Thank You", `purchase.thank-you.block.render`, shows 3 distinct states: unpaid, partial, paid with tx hash and order summary).
    - Releases the app version to stores.
+   - *(Note: `openrail-checkout` lives in `optional/openrail-checkout/` for Shopify Plus stores; see Plus Stores section below).*
 
 ---
 
@@ -259,24 +259,15 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 
 ---
 
-### Step 8: Add Extension Blocks in the Checkout Editor (Requires Human Login)
+### Step 8: Add the Thank You Block in Checkout Editor (Requires Human Login)
 1. In Shopify store admin, go to **Settings → Checkout**.
 2. In the **Configurations** section, click **Customize** (opens Checkout Editor).
-3. On the **Checkout** page:
-   - In the bottom-left sidebar, click **Add app block**.
-   - Select **Openrail Checkout** (`openrail-checkout`).
-   - Position it in the payment/review area.
-   - In the settings panel:
-     - **Openrail App Base URL**: `https://shopify.openrail.incepture.dev`
-     - **Openrail Payment Method Handle**: The handle of your custom manual payment method created in Step 7.
-       > [!NOTE]
-       > **Why this handle is required:**
-       > Per [Shopify Payments API documentation](https://shopify.dev/docs/api/checkout-ui-extensions/latest/target-apis/checkout-apis/payments-api), `SelectedPaymentOption` exposes `handle` and `type` only (`type === "manualPayment"`); provider names, display names, and logos are not available. To ensure the block renders and creates payment links **only** when Openrail is selected (and never for Cash on Delivery, Bank Deposit, or other manual methods), the extension renders only when `openrail_payment_handle` is configured and matches the selected option's handle. If unset, the block safely returns `null` (zero requests, zero UI).
-4. In the top dropdown menu, switch from *Checkout* to **Thank you** page:
+3. In the top dropdown menu, switch to **Thank you** page:
    - Click **Add app block** and select **Thank You** (`openrail-thank-you`).
    - Drag the block into the desired order summary/status position (e.g. `ORDER_STATUS1`).
-5. In the top dropdown, switch to **Order status** page and add the **Thank You** block there as well.
-6. Click **Save** in the top-right corner.
+   - *(Note: Zero manual handle configuration is required. The block automatically checks the order's payment gateway via Admin API and renders `null` for non-Openrail orders).*
+4. In the top dropdown, switch to **Order status** page and add the **Thank You** block there as well.
+5. Click **Save** in the top-right corner.
 
 *(Reference: [Test checkout UI extensions in the checkout editor](https://shopify.dev/docs/apps/build/checkout/test-checkout-ui-extensions))*.
 
@@ -337,57 +328,52 @@ In the Openrail Merchant Dashboard:
 git -C openrail switch -c mod-shopify origin/main
 git -C openrail am ../openrail-lab/staging/shopify/patches/*.patch
 
-# Run the 52 Shopify unit, extension, and server pack tests:
+# Run the 68 Shopify unit, extension, and server pack tests:
 /home/antigravity/deyoungjohn/openrail/node_modules/.bin/vitest run \
   --root /home/antigravity/deyoungjohn/openrail-lab/staging/shopify \
   test/shopify.test.ts
 ```
 
-## 7. Updates 11, 12 & 13: Extensions, Real Core API Pagination, Rate Limiting & UI States
+## 7. Updates 14 & 15: Post-Order Thank-You Flow, Landing Page & Optional Plus Pre-Order Block
 
-### Architecture & Checkout Blocking Decision
+### Standard Merchant Flow: Thank-You Page Post-Order Payment (All Paid Plans)
+Per Shopify documentation on checkout extensibility, checkout page steps (information, shipping, payment) are restricted to **Shopify Plus** stores in production. The Thank-You page (`purchase.thank-you.block.render`) and Order Status page are available on **all paid plans** (Basic, Grow, Advanced, Plus).
 
-1. **Two Distinct Extensions (`api_version = "2026-04"`)**:
-   - **`openrail-checkout`** (`purchase.checkout.block.render`): Rendered on the checkout page before the order is placed. Filters for the Openrail manual payment method via `openrail_payment_handle` before requesting `GET /shopify/extension/checkout-pay-link?checkout=<checkoutToken>&amount=<amount>&currency=<currency>` with the buyer's Bearer session token.
-   - **`openrail-thank-you`** (`purchase.thank-you.block.render`): Rendered on the post-order confirmation page. Requests `GET /shopify/extension/order-status?order=<orderGid>&checkout=<checkoutToken>` with Bearer session token to display confirmation, transaction hash, and payment summary.
+1. **Buyer Journey**:
+   - Buyer selects manual payment method **"Pay with stablecoins (Openrail)"** and places the order in Shopify.
+   - The order is created in Shopify with financial status `PENDING`.
+   - Buyer lands on the **Thank you** page.
+   - The Openrail Thank You block mounts, retrieves the order GID from `orderConfirmation`, and checks `GET /shopify/extension/order-status?order=<gid>`.
+   - The block renders one of three states. Non-Openrail orders return 404 and the block renders `null` (nothing), requiring zero manual handle settings.
+   - Polling: polls `GET /shopify/extension/order-status` every 5 seconds for at most 15 minutes (stopping on tab hide or unmount). Transitions immediately when status becomes `paid`. It **never says thanks before money is booked**.
 
-2. **Payment Option Filtering & `openrail_payment_handle`**:
-   - Per [Shopify Payments API documentation](https://shopify.dev/docs/api/checkout-ui-extensions/latest/target-apis/checkout-apis/payments-api), `SelectedPaymentOption` exposes `handle` and `type` only (`type === "manualPayment"`); provider names, display names, and logos are not available.
-   - To distinguish Openrail from other manual payment methods (e.g. Cash on Delivery or Bank Deposit), the extension requires the merchant to configure `openrail_payment_handle` in the extension settings.
-   - If `openrail_payment_handle` is unset, the block safely returns `null` (does not render, zero requests, zero claim storage consumed).
+2. **Thank You Block States & Exact Copy**:
 
-3. **Checkout UI Block Failure Cases & Error Text**:
-   - Per AGENTS.md Rule 13, error text never covers a control or causes unexpected page shifts. Space is reserved in `<s-banner>`:
+| State | Heading | Text | Action Button | Summary |
+|---|---|---|---|---|
+| **unpaid** | `Order placed` | `Complete your payment with stablecoins to confirm this order.` | `Pay with stablecoins` (links to Openrail hosted checkout `/c/<id>`) | Order total (e.g. `Order total: $2.00 USD`) |
+| **partial** | `Partial payment received` | `We received <paid> of <total>. Please send the remaining <remaining> to complete your order.` | `Pay remaining balance` (links to pay link) | Amounts received & remaining |
+| **paid** | `Thank you, payment received` | `Your payment was confirmed on NEAR.` | *None* | Booking transaction hash with NEAR Explorer link (`https://nearblocks.io/txns/<hash>`), amount paid, order reference |
 
-| State / Failure Case | Banner Heading & Tone | Exact Error / Content Text | Behavior |
-|---|---|---|---|
-| **Unselected / Handle Unset** | *None* | *None (returns `null`)* | Zero DOM nodes rendered, zero network calls, zero layout shift. |
-| **Preparing / Loading** | `Pay with stablecoins (Openrail)` (default) | `<s-text>Preparing your payment link…</s-text>` | Displayed while `GET /shopify/extension/checkout-pay-link` is in flight. |
-| **Ready / Link Generated** | `Pay with stablecoins (Openrail)` (default) | `<s-button href="{url}">Pay with stablecoins</s-button>` | Buyer clicks button to proceed to Openrail hosted checkout page (`/c/<id>`). |
-| **Rate Limited (HTTP 429)** | `Pay with stablecoins` (`warning`) | `<s-text>Too many payment requests. Please wait a moment and try again.</s-text>` | Informs buyer of rate limit without shifting page controls. |
-| **Unsupported Currency (HTTP 422)** | `Pay with stablecoins` (`warning`) | `<s-text>Openrail payments only support USD currency at this time.</s-text>` | Informs buyer that store/cart currency must be USD. |
-| **Generic / Network Failure** | `Pay with stablecoins` (`warning`) | `<s-text>We could not prepare the payment link. Reload the page or choose another payment method.</s-text>` | Fallback error message. |
-| **Thank You Block (Confirmed)** | `Thank you` (`success`) | `<s-text>Your order {number} is confirmed.</s-text>`<br>`<s-text>Transaction: {tx_hash}</s-text>`<br>`<s-text>{summary}</s-text>` | Shows confirmed transaction and payment summary. |
-| **Thank You Block (Network Error)** | `Thank you` (`success`) | `<s-text>Your order {number} is confirmed.</s-text>` | Graceful degradation to standard confirmation without error banners covering controls. |
+3. **Install Redirect Landing Page (`GET /`)**:
+   - Responds with HTTP `200` `text/html; charset=utf-8`.
+   - Text: *"Openrail Checkout is installed on this store. Manage settings in your Shopify Admin under Settings → Checkout and Settings → Payments."*
+   - Completely static: zero `<script>` tags, zero reflected query parameters (eliminating XSS), zero secrets leaked, and zero external Shopify API calls.
+   - Preserves `/health` for systemd and reverse-proxy health checks.
 
-4. **Real Core API Pagination on Cache Miss**:
-   - The Openrail Core Checkout API (`GET /v1/checkouts`) takes `limit` (max 100) and `cursor`, returning `{ data: [...], has_more: boolean, next_cursor: string | null }` (sorted newest first by `created_at`). It does not filter by `order_ref`.
-   - On process restart / cache miss during `orders/create`, `createHttpCheckoutApiPort.getCheckoutByOrderRef` pages through `GET /v1/checkouts?limit=100` using cursor-based pagination, bounded at 5 pages, matching `order_ref` starting with `shopify-chk-<token>-`.
-   - When matched, the connector verifies the actual order total from the Admin GraphQL API (`totalOutstandingSet.shopMoney.amount`). If `paid < total`, the order is tagged `openrail-partial` and never marked paid.
+4. **Plus Stores: Optional Pre-Order Payment Link (`optional/openrail-checkout`)**:
+   - For merchants on Shopify Plus who wish to display the payment link on the checkout payment step before order creation:
+     1. Move extension: `mv optional/openrail-checkout extensions/openrail-checkout`.
+     2. In `/etc/openrail/shopify.env`, set `SHOPIFY_PRE_ORDER_LINK=1` (returns 404 when unset or 0).
+     3. Deploy via `shopify app deploy`.
+     4. In Checkout Editor, configure `openrail_payment_handle` on the block.
+   - The connector guarantees order independence across both arrival orders (`orders/create` before `pay-link` and `pay-link` before `orders/create`), creating exactly 1 invoice and 0 duplicates.
 
-5. **Checkout Progression Decision: Asynchronous (Non-Blocking)**:
-   - **Decision**: Do **NOT** block buyer checkout progression using `buyerJourney.intercept` (`block_progress`). The buyer is allowed to place the order in Shopify with financial status `PENDING`, and the order is marked `PAID` via webhook / `orderMarkAsPaid`.
-   - **Rationale**:
-     1. `buyerJourney.intercept` with `block_progress = true` is explicitly deprecated by Shopify in favor of Checkout Validation Functions.
-     2. Merchants can toggle off "Block progress" in the Shopify checkout editor settings at any time, breaking hard-blocking assumptions.
-     3. Cross-chain crypto settlements via NEAR Intents take 20–40 seconds across chains (Ethereum, Solana, Arbitrum, etc.). Holding buyers at checkout with a blocking spinner causes abandoned carts if the buyer navigates away or closes the browser before multi-chain inclusion.
-     4. Creating the order first guarantees an immutable Shopify order record exists, while supporting pre-payment matching if paid before submission.
-
-6. **Verification Boundaries (What Can & Cannot Be Verified)**:
-   - **Can verify**: Session token cryptographic validity (HS256 HMAC signature, expiry, `aud`, `dest`), CORS headers on all extension routes, rate limiting, amount validation, underpayment enforcement, cursor-based pagination against real API response shapes, state reconstruction, webhook matching across both arrival orders, edge-case log lines, and unit/integration test assertions (52/52 passing).
+5. **Verification Boundaries (What Can & Cannot Be Verified)**:
+   - **Can verify**: Session token cryptographic validity (HS256 HMAC signature, expiry, `aud`, `dest`), CORS headers on all extension routes, rate limiting, amount validation, underpayment enforcement, cursor-based pagination against real API response shapes, state reconstruction, webhook matching across both arrival orders, edge-case log lines, and unit/integration test assertions (68/68 passing).
    - **Cannot verify**: Visual layout and CSS rendering of Polaris web components inside the Shopify checkout iframe without a live browser running on a development store session; live `shopify app deploy` execution without interactive human Partner authentication.
 
-## 8. Test Suite (52 tests, `test/shopify.test.ts`)
+## 8. Test Suite (68 tests, `test/shopify.test.ts`)
 
 | Test | What it proves |
 |---|---|
@@ -443,6 +429,22 @@ git -C openrail am ../openrail-lab/staging/shopify/patches/*.patch
 | `createHttpCheckoutApiPort.getCheckoutByOrderRef bounds pagination to 5 pages max` | Stops after 5 pages even if `has_more: true` to prevent infinite loops |
 | `shopify.extension.toml declares openrail_payment_handle setting` | Verifies `openrail_payment_handle` is declared in extension settings |
 | `CheckoutPay only renders when openrail_payment_handle is configured and matches selected option` | Verifies block renders only when configured handle matches selected manual option |
+| `GET / answers 200 text/html with static landing page` | Answers 200 text/html static landing page on root without script, XSS reflection, or Shopify API call |
+| `preserves /health endpoint alongside landing page` | Verifies GET /health answers 200 `{"ok":true}` independently of landing page |
+| `returns 404 when SHOPIFY_PRE_ORDER_LINK is not set or not '1'` | Gated route `GET /shopify/extension/checkout-pay-link` returns 404 when SHOPIFY_PRE_ORDER_LINK is unset |
+| `returns 200 when SHOPIFY_PRE_ORDER_LINK='1'` | Gated route returns 200 with pay link when SHOPIFY_PRE_ORDER_LINK is set to 1 |
+| `builds view model for unpaid state` | Verifies ThankYouModel output for unpaid state: heading, text, Pay with stablecoins button, order total |
+| `builds view model for partial state` | Verifies ThankYouModel output for partial state: heading, received/remaining text, Pay remaining balance button |
+| `builds view model for paid state with transaction link` | Verifies ThankYouModel output for paid state: heading, NEAR confirmed text, NEAR Explorer link |
+| `does not render when status is null (non-Openrail order)` | Verifies ThankYouModel returns render: false for non-Openrail orders |
+| `requires valid session token` | Verifies GET /shopify/extension/pay-link returns 401 without Bearer session token |
+| `refuses non-Openrail gateway with 404` | Verifies pay-link returns 404 not_openrail_order for orders not using Openrail payment method |
+| `issues single invoice from Admin API total and is idempotent` | Issues single invoice from Admin API total and returns existing checkout on subsequent calls |
+| `Path A: orders/create webhook arrives before pay-link -> exactly 1 checkout created, 0 duplicates` | Webhook before pay-link creates exactly 1 checkout and 0 duplicates |
+| `Path B: pay-link called before orders/create webhook -> exactly 1 checkout created, 0 duplicates` | Pay-link before webhook creates exactly 1 checkout and 0 duplicates |
+| `refuses non-Openrail orders with 404` | Verifies GET /shopify/extension/order-status returns 404 for non-Openrail orders |
+| `returns unpaid state with pay_url on cache miss for Openrail order` | Queries Admin API on miss, creates checkout, returns unpaid with pay URL |
+| `returns paid state with tx_hash and summary once payment is booked` | Returns paid state with booking transaction hash and summary once payment is booked on NEAR |
 
 ## 9. Mutation Spot-Check Table (10 mutants, all killed)
 

@@ -7,7 +7,6 @@ api_version = "2026-04"
 name = "Openrail Checkout"
 handle = "openrail-checkout"
 type = "ui_extension"
-uid = "34d94cf3-6f3b-13ef-7068-5a888e5cfc60ab58359f"
 
 # Checkout page, before the order: when the buyer picks Openrail as the payment method, this block shows the payment link.
 [[extensions.targeting]]
