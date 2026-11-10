@@ -39,6 +39,38 @@ const BASE_REQUIRED_ENV_KEYS: ReadonlyArray<keyof ShopifyAppEnv> = [
 ];
 
 /**
+ * Normalises SHOPIFY_SHOP_DOMAIN: trims, lower-cases, strips scheme, path, query/hash,
+ * and validates that the result is a valid bare host. Refuses invalid host values with
+ * named error INVALID_ENV: SHOPIFY_SHOP_DOMAIN without leaking the value (Hard Rule 1).
+ */
+export function normalizeShopDomain(rawDomain: string): string {
+  let val = rawDomain.trim().toLowerCase();
+  if (val.startsWith("https://")) {
+    val = val.slice("https://".length);
+  } else if (val.startsWith("http://")) {
+    val = val.slice("http://".length);
+  }
+  const slashIdx = val.indexOf("/");
+  if (slashIdx !== -1) {
+    val = val.slice(0, slashIdx);
+  }
+  const qIdx = val.indexOf("?");
+  if (qIdx !== -1) {
+    val = val.slice(0, qIdx);
+  }
+  const hashIdx = val.indexOf("#");
+  if (hashIdx !== -1) {
+    val = val.slice(0, hashIdx);
+  }
+  val = val.trim();
+  const HOST_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+  if (!val || !HOST_REGEX.test(val)) {
+    throw new Error("INVALID_ENV: SHOPIFY_SHOP_DOMAIN");
+  }
+  return val;
+}
+
+/**
  * Loads environment variables from an optional env file (parsed line-by-line, CRLF-safe, never sourced)
  * or `process.env`. Never logs or prints secret values (Hard Rule 1).
  * Exits with `MISSING_ENV: <NAME>` if any required variable is absent.
@@ -78,7 +110,11 @@ export function loadShopifyAppEnv(
     if (!val) {
       throw new Error(`MISSING_ENV: ${key}`);
     }
-    out[key] = val;
+    if (key === "SHOPIFY_SHOP_DOMAIN") {
+      out.SHOPIFY_SHOP_DOMAIN = normalizeShopDomain(val);
+    } else {
+      out[key] = val;
+    }
   }
 
   const staticToken = getVal("SHOPIFY_ADMIN_ACCESS_TOKEN");
@@ -489,6 +525,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
     const hmacHeader = getHeader(req.headers, "x-shopify-hmac-sha256");
     const secret = env.SHOPIFY_WEBHOOK_SECRET || env.SHOPIFY_CLIENT_SECRET || "";
     if (!verifyShopifyWebhookHmac(req.rawBody, hmacHeader, secret)) {
+      logger("[shopify] webhook refused: invalid signature");
       return {
         status: 401,
         body: {
@@ -742,6 +779,10 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
     if (checkoutToken) {
       bindingsByCheckoutToken.set(checkoutToken, matchedBinding);
     }
+
+    logger(
+      `[shopify] order ${numericId} bound from webhook (total ${matchedBinding.expectedTotalUsd})`,
+    );
 
     if (matchedBinding.paid) {
       let order: ShopifyOrder | null = null;

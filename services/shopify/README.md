@@ -284,6 +284,7 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 On the Openrail host, create `/etc/openrail/shopify.env` (mode `0600 root:root`):
 
 ```ini
+# bare host, for example belmonte-apparels.myshopify.com, no https://
 SHOPIFY_SHOP_DOMAIN=openrail-dev.myshopify.com
 SHOPIFY_CLIENT_ID=
 SHOPIFY_CLIENT_SECRET=
@@ -300,7 +301,7 @@ APP_BASE_URL=https://shopify.openrail.incepture.dev
 ### Every Value and Where It Comes From:
 | Environment Variable | Where in Shopify or Openrail It Comes From |
 |---|---|
-| `SHOPIFY_SHOP_DOMAIN` | The `*.myshopify.com` domain of your dev store (e.g. `openrail-dev.myshopify.com`). |
+| `SHOPIFY_SHOP_DOMAIN` | Bare host, for example `belmonte-apparels.myshopify.com`, no https://. The `*.myshopify.com` domain of your dev store. |
 | `SHOPIFY_CLIENT_ID` | Dev Dashboard → Apps → Openrail Payments → **Settings → Client ID**. |
 | `SHOPIFY_CLIENT_SECRET` | Dev Dashboard → Apps → Openrail Payments → **Settings → Client secret**. |
 | `SHOPIFY_WEBHOOK_SECRET` | Shopify Store Admin → **Settings → Notifications → Webhooks** → signing key at bottom of page. |
@@ -409,7 +410,7 @@ Per Shopify documentation on checkout extensibility, checkout page steps (inform
    - **Can verify**: Session token cryptographic validity (HS256 HMAC signature, expiry, `aud`, `dest`), throttled operator refusal logs, CORS headers on all extension routes, rate limiting, caller confirmation binding, information minimization, error banner states and 3-failure polling thresholds, order identity normalization, amount validation, underpayment enforcement, cursor-based pagination against real API response shapes, partial state reconstruction, webhook matching across both arrival orders, edge-case log lines, and unit/integration test assertions (117/117 passing).
    - **Cannot verify**: Visual layout and CSS rendering of Polaris web components inside the Shopify checkout iframe without a live browser running on a development store session; live `shopify app deploy` execution without interactive human Partner authentication.
 
-## 8. Test Suite (117 tests, `test/shopify.test.ts`)
+## 8. Test Suite (120 tests, `test/shopify.test.ts`)
 
 | Test | What it proves |
 |---|---|
@@ -526,6 +527,9 @@ Per Shopify documentation on checkout extensibility, checkout page steps (inform
 | `orders/create webhook validates currency and total amount` | Refuses non-USD currencies with 422 and zero or negative totals with 400 |
 | `marking paid logs protected customer data message, does not crash, and buyer sees paid` | On orderMarkAsPaid protected customer data refusal, logs warning, keeps binding paid, and shows paid to buyer |
 | `ThankYouModel parses 202 response and builds non-error view model for order_pending` | Verifies ThankYouModel correctly handles HTTP 202 status returning visible, quiet state without error banner |
+| `normalises SHOPIFY_SHOP_DOMAIN in loadShopifyAppEnv and rejects invalid host with INVALID_ENV: SHOPIFY_SHOP_DOMAIN` | Strips scheme (`https://`/`http://`), path, query/hash, trims and lowercases bare host; rejects invalid host values with `INVALID_ENV: SHOPIFY_SHOP_DOMAIN` without leaking input values |
+| `webhook refused invalid signature logs one line [shopify] webhook refused: invalid signature without body or headers` | Logs clean operator diagnostic `[shopify] webhook refused: invalid signature` with zero body or header leakage |
+| `webhook accepted for Openrail order logs one line [shopify] order <numeric id> bound from webhook (total <usd>)` | Confirms store-admin `orders/create` webhook binding arrived and registered in `journalctl` |
 
 ## 9. Mutation Spot-Check Table (10 mutants, all killed)
 
@@ -541,3 +545,18 @@ Per Shopify documentation on checkout extensibility, checkout page steps (inform
 | **M8** | `admin-client.ts` | Always request fresh token on every GraphQL call without cache | `shopify_client_credentials_token_fetched_once_and_reused` |
 | **M9** | `admin-client.ts` | Do not retry upon HTTP 401 | `shopify_client_credentials_refetched_after_401` |
 | **M10** | `admin-client.ts` | Include client secret in error message upon token exchange failure | `shopify_client_credentials_failing_exchange_named_error_no_secret` |
+
+## 10. Troubleshooting & Operator Diagnostics Reference
+
+When inspecting service logs (`journalctl -u openrail-shopify`), check these log signatures:
+
+| Service Log Line | What It Means & How to Fix |
+|---|---|
+| `[shopify] session token refused: wrong_shop token dest unreadable ...` | The Thank-You / Checkout UI extension session token did not provide a readable `dest` claim host. Ensure extension was built with modern Shopify CLI. |
+| `[shopify] session token refused: wrong_shop token shop X, configured Y` | The store domain in the extension's session token (`X`) does not match the configured `SHOPIFY_SHOP_DOMAIN` (`Y`). Check `/etc/openrail/shopify.env` and ensure `SHOPIFY_SHOP_DOMAIN` is set to the bare host matching the store. |
+| `[shopify] session token refused: wrong_app ...` | The audience (`aud`) in the session token does not match `SHOPIFY_CLIENT_ID`. Verify `SHOPIFY_CLIENT_ID` in `/etc/openrail/shopify.env` matches Dev Dashboard. |
+| `[shopify] session token refused: bad_signature` | The session token HMAC could not be verified using `SHOPIFY_CLIENT_SECRET`. Verify client secret in `/etc/openrail/shopify.env`. |
+| `[shopify] webhook refused: invalid signature` | Shopify's `orders/create` webhook signature check failed. The signing secret configured in `SHOPIFY_WEBHOOK_SECRET` does not match the store webhook signing key (Shopify Admin → Settings → Notifications → Webhooks). No body or header values are leaked. |
+| `[shopify] order <numeric id> bound from webhook (total <usd>)` | Confirms Shopify's store-admin `orders/create` webhook arrived, HMAC signature was verified, and the order binding was registered in memory. |
+| `[shopify] cannot mark order <id> paid: the app is not approved for protected customer data...` | Expected warning when Level 1 Protected Customer Data approval has not yet been granted. The connector suppresses the error, keeps the internal binding marked `paid`, and presents the paid receipt to the buyer. |
+

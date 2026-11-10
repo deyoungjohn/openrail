@@ -4504,6 +4504,106 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         }
       });
     });
+
+    describe("Update 22: Deliver Update 19 domain normalisation & webhook operator logging", () => {
+      it("normalises SHOPIFY_SHOP_DOMAIN in loadShopifyAppEnv and rejects invalid host with INVALID_ENV: SHOPIFY_SHOP_DOMAIN", () => {
+        // 1. Normalises scheme, trailing slashes, and paths
+        const env1 = loadShopifyAppEnv(undefined, {
+          ...TEST_ENV,
+          SHOPIFY_SHOP_DOMAIN: "https://belmonte-apparels.myshopify.com",
+        });
+        expect(env1.SHOPIFY_SHOP_DOMAIN).toBe("belmonte-apparels.myshopify.com");
+
+        const env2 = loadShopifyAppEnv(undefined, {
+          ...TEST_ENV,
+          SHOPIFY_SHOP_DOMAIN: "http://shop.myshopify.com/",
+        });
+        expect(env2.SHOPIFY_SHOP_DOMAIN).toBe("shop.myshopify.com");
+
+        const env3 = loadShopifyAppEnv(undefined, {
+          ...TEST_ENV,
+          SHOPIFY_SHOP_DOMAIN: "  HTTPS://SHOP.MYSHOPIFY.COM/admin/orders?foo=bar#frag  ",
+        });
+        expect(env3.SHOPIFY_SHOP_DOMAIN).toBe("shop.myshopify.com");
+
+        // 2. Refuses invalid host values with INVALID_ENV: SHOPIFY_SHOP_DOMAIN (no leaked value)
+        const invalidValues = [
+          "https://",
+          "http://",
+          "not a host domain",
+          "foo..bar",
+          "-invalid.myshopify.com",
+          "shop.myshopify.com:8080",
+          "https:///path",
+        ];
+
+        for (const bad of invalidValues) {
+          expect(() =>
+            loadShopifyAppEnv(undefined, {
+              ...TEST_ENV,
+              SHOPIFY_SHOP_DOMAIN: bad,
+            }),
+          ).toThrow(/^INVALID_ENV: SHOPIFY_SHOP_DOMAIN$/);
+        }
+      });
+
+      it("webhook refused invalid signature logs one line [shopify] webhook refused: invalid signature without body or headers", async () => {
+        const h = createTestHarness();
+
+        const payload = JSON.stringify({
+          id: 6581579383141,
+          name: "#1001",
+          total_price: "42.00",
+          currency: "USD",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+        });
+
+        const res = await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks/orders-create",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": "bad-signature-value-12345",
+            "x-shopify-shop-domain": "openrail-dev.myshopify.com",
+          },
+          rawBody: payload,
+        });
+
+        expect(res.status).toBe(401);
+        expect(h.loggedLines).toContain("[shopify] webhook refused: invalid signature");
+        // Ensure no body or header values are logged
+        expect(h.loggedLines.some((l) => l.includes("bad-signature-value-12345"))).toBe(false);
+        expect(h.loggedLines.some((l) => l.includes("42.00"))).toBe(false);
+      });
+
+      it("webhook accepted for Openrail order logs one line [shopify] order <numeric id> bound from webhook (total <usd>)", async () => {
+        const h = createTestHarness();
+
+        const payload = JSON.stringify({
+          id: 6581579383141,
+          admin_graphql_api_id: "gid://shopify/Order/6581579383141",
+          name: "#1001",
+          total_price: "42.00",
+          currency: "USD",
+          payment_gateway_names: ["Pay with stablecoins (Openrail)"],
+          confirmation_number: "CONF-42",
+        });
+
+        const res = await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks/orders-create",
+          query: {},
+          headers: {
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(payload, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-shop-domain": "openrail-dev.myshopify.com",
+          },
+          rawBody: payload,
+        });
+
+        expect(res.status).toBe(200);
+        expect(h.loggedLines).toContain("[shopify] order 6581579383141 bound from webhook (total 42.00)");
+      });
+    });
   });
 });
 
