@@ -1199,7 +1199,10 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           let order: ShopifyOrder;
           try {
             order = await adminClient.getOrder(orderGid);
-          } catch {
+          } catch (error) {
+            console.warn(
+              `[shopify] pay-link: could not read order ${numericId} from the Admin API: ${error instanceof Error ? error.message : "unknown error"}`,
+            );
             return {
               status: 404,
               headers: cors,
@@ -1210,6 +1213,9 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           const gateways = (order.paymentGatewayNames ?? []).filter(Boolean);
           const usesOpenrail = gateways.length > 0 && gateways.some((g) => /openrail|stablecoin/i.test(g));
           if (!usesOpenrail) {
+            console.warn(
+              `[shopify] pay-link: order ${numericId} is not an Openrail order (gateway names: ${gateways.length > 0 ? gateways.join(" | ") : "none"})`,
+            );
             return {
               status: 404,
               headers: cors,
@@ -1650,7 +1656,10 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           if (orderGid) {
             try {
               order = await adminClient.getOrder(orderGid);
-            } catch {
+            } catch (error) {
+              console.warn(
+                `[shopify] order-status: could not read order ${numericId || orderGid} from the Admin API: ${error instanceof Error ? error.message : "unknown error"}`,
+              );
               order = null;
             }
 
@@ -1671,6 +1680,9 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             const usesOpenrail =
               gateways.length > 0 && gateways.some((g) => /openrail|stablecoin/i.test(g));
             if (!usesOpenrail) {
+              console.warn(
+                `[shopify] order-status: order ${numericId || order.id} is not an Openrail order (gateway names: ${gateways.length > 0 ? gateways.join(" | ") : "none"})`,
+              );
               return {
                 status: 404,
                 headers: cors,

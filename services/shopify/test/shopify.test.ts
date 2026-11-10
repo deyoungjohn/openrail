@@ -3323,6 +3323,31 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(res.body.error?.code).toBe("not_openrail_order");
       });
 
+      it("says in the service log why an order was refused (gateway names), so the operator can see it", async () => {
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          const h = createTestHarness({
+            order: makeOrder({
+              id: "gid://shopify/Order/6001009001",
+              paymentGatewayNames: ["manual_cash_on_delivery"],
+            }),
+          });
+          const res = await h.app.handle({
+            method: "GET",
+            path: "/shopify/extension/order-status",
+            query: { order: "gid://shopify/OrderIdentity/6001009001" },
+            headers: { authorization: `Bearer ${sessionToken(good(h))}` },
+            rawBody: "",
+          });
+          expect(res.status).toBe(404);
+          const lines = warnSpy.mock.calls.map((c) => c.join(" "));
+          expect(lines.some((l) => l.includes("not an Openrail order") && l.includes("manual_cash_on_delivery"))).toBe(true);
+          expect(lines.join("\n")).not.toMatch(/Bearer|shpss|token=/i);
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
+
       it("returns unpaid state with pay_url on cache miss for Openrail order without creating checkout", async () => {
         const h = createTestHarness({
           order: makeOrder({
