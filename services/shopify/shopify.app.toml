@@ -1,22 +1,24 @@
-# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+# Learn more about configuring your app at https://shopify.dev/docs/apps/build/cli-for-apps/app-configuration
 
 name = "Openrail Extension"
 client_id = "60c714696b8435c0259363c5e1f282e3"
-application_url = "https://shopify.openrail.incepture.dev/"
+application_url = "https://shopify.openrail.incepture.dev"
 embedded = false
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,write_orders,read_products,write_products,read_inventory,write_inventory,read_customers,write_customers,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_draft_orders,write_draft_orders,read_discounts,write_discounts,read_price_rules,write_price_rules,read_locations,read_files,write_files"
-optional_scopes = [ ]
+# Scopes required for inspecting USD orders and marking them paid on settlement
+scopes = "read_orders,write_orders"
 use_legacy_install_flow = false
-
-[webhooks]
-api_version = "2026-10"
-
-  [[webhooks.subscriptions]]
-  uri = "/shopify/webhooks"
-  topics = [ "orders/create" ]
 
 [auth]
 redirect_urls = [ ]
+
+[webhooks]
+api_version = "2025-10"
+
+[[webhooks.subscriptions]]
+topics = [ "orders/create" ]
+uri = "https://shopify.openrail.incepture.dev/shopify/webhooks"
+
+[build]
+automatically_update_urls_on_dev = false
