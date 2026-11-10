@@ -395,7 +395,7 @@ const STEPS: StepDef[] = [
       });
       const arrival = await waitForRefundArrival(
         {
-          oneClickUrl: getEnv("ONECLICK_API_URL") ?? "https://1click.defuse.org",
+          oneClickUrl: getEnv("ONECLICK_API_URL") ?? "https://1click.chaindefuser.com",
           oneClickJwt: getEnv("ONECLICK_JWT"),
           fetchImpl: ctx.fetchImpl,
         },

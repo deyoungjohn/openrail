@@ -88,8 +88,10 @@ describe("waitForRefundArrival", () => {
     ).rejects.toThrow("1Click refund did not reach SUCCESS within 2 attempts");
   });
 
-  it("failed refund payout restores held_amount and checkout returns to refundable", async () => {
-    // Simulates the contract failed-payout callback (ag2 post-REL-2 upgrade semantics)
+  it("runner simulation: handles retry flow if simulated payout fails and state is restored", async () => {
+    // Note: This TypeScript unit test simulates the runner's state handling during a retry flow.
+    // Contract-level state transitions and on_payout callbacks are tested and proven by ag1's
+    // sandbox tests (0006) and the gate, not by this off-chain unit test.
     interface MockCheckoutContractState {
       expiry: number;
       late: boolean;

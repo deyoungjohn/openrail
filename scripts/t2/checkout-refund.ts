@@ -23,7 +23,7 @@ export async function waitForRefundArrival(
   ctx: RefundArrivalLookup,
   depositAddress: string,
 ): Promise<RefundArrival> {
-  const url = ctx.oneClickUrl ?? "https://1click.defuse.org";
+  const url = ctx.oneClickUrl ?? "https://1click.chaindefuser.com";
   const sleep = ctx.sleep ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
   const attempts = ctx.attempts ?? 30;
   const intervalMs = ctx.intervalMs ?? 10_000;
