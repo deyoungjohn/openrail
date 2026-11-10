@@ -1567,8 +1567,9 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
       expect(appToml).toContain('application_url = "https://shopify.openrail.incepture.dev"');
       // The human chose a wide list in the Dev Dashboard for flexibility; the connector needs these two.
       expect(appToml).toMatch(/scopes = "read_orders,write_orders[",]/);
-      expect(appToml).toContain('topics = [ "orders/create" ]');
-      expect(appToml).toContain('uri = "https://shopify.openrail.incepture.dev/shopify/webhooks"');
+      // No app-subscribed orders/create: Shopify refuses the release (protected customer data). The webhook is created
+      // in the store admin (see README); the URL stays the same.
+      expect(appToml).not.toContain("[[webhooks.subscriptions]]");
 
       // 3. Verify systemd unit configuration matches services/shopify
       const findFile = (candidates: string[]): string => {
