@@ -1,0 +1,20 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/build/cli-for-apps/app-configuration
+
+name = "Openrail Payments"
+client_id = "${SHOPIFY_CLIENT_ID}"
+application_url = "https://shopify.openrail.incepture.dev"
+embedded = false
+
+[access_scopes]
+# Scopes required for inspecting USD orders and marking them paid on settlement
+scopes = "read_orders,write_orders"
+
+[webhooks]
+api_version = "2025-10"
+
+[[webhooks.subscriptions]]
+topics = [ "orders/create" ]
+uri = "https://shopify.openrail.incepture.dev/shopify/webhooks"
+
+[build]
+automatically_update_urls_on_dev = false

@@ -277,6 +277,12 @@ importers:
 
   services/relayer: {}
 
+  services/shopify:
+    dependencies:
+      '@openrail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+
   services/watcher:
     dependencies:
       '@openrail/shared':
