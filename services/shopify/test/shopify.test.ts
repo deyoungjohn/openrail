@@ -1776,6 +1776,15 @@ describe("the checkout block gets its pay link with the buyer's session token", 
     expect((await ask(h, undefined)).status).toBe(401);
   });
 
+  it("accepts a `dest` claim written as a bare host (what the live checkout token carries, found 10 Nov), and still refuses another shop", async () => {
+    const h = createTestHarness({ order: makeOrder({ id: "gid://shopify/Order/6001002003" }) });
+    expect((await ask(h, sessionToken({ ...good(h), dest: "openrail-dev.myshopify.com" }))).status).toBe(200);
+    expect((await ask(h, sessionToken({ ...good(h), dest: "https://openrail-dev.myshopify.com/" }))).status).toBe(200);
+    expect((await ask(h, sessionToken({ ...good(h), dest: "other.myshopify.com" }))).status).toBe(401);
+    expect((await ask(h, sessionToken({ ...good(h), dest: "" }))).status).toBe(401);
+    expect((await ask(h, sessionToken({ ...good(h), dest: undefined }))).status).toBe(401);
+  });
+
   it("needs an order, and answers the browser's preflight", async () => {
     const h = createTestHarness({ order: makeOrder({ id: "gid://shopify/Order/6001002003" }) });
     expect((await ask(h, sessionToken(good(h)), "")).status).toBe(400);

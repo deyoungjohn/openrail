@@ -207,13 +207,24 @@ export function verifyShopifySessionToken(
   if (header.alg !== "HS256") return { ok: false, reason: "bad_algorithm" };
   if (typeof claims.exp !== "number" || claims.exp <= nowSec) return { ok: false, reason: "expired" };
   if (claims.aud !== clientId) return { ok: false, reason: "wrong_app" };
-  let host: string;
-  try {
-    host = new URL(String(claims.dest)).host;
-  } catch {
-    return { ok: false, reason: "wrong_shop", detail: `token dest unreadable (claim names: ${Object.keys(claims).join(",")})` };
+  // `dest` is the shop. Shopify's docs call it a URL; the checkout extension's token carries a bare host
+  // (`<shop>.myshopify.com`, found on a live thank-you page 10 Nov): accept both, compare the host only.
+  const rawDest = typeof claims.dest === "string" ? claims.dest.trim() : "";
+  let host = "";
+  if (rawDest !== "") {
+    try {
+      host = (rawDest.includes("://") ? new URL(rawDest).host : rawDest.replace(/\/.*$/, "")).toLowerCase();
+    } catch {
+      host = "";
+    }
   }
-  if (host !== shopDomain)
+  if (host === "")
+    return {
+      ok: false,
+      reason: "wrong_shop",
+      detail: `token dest unreadable (claim names: ${Object.keys(claims).join(",")})`,
+    };
+  if (host !== shopDomain.toLowerCase())
     return { ok: false, reason: "wrong_shop", detail: `token shop ${host}, configured ${shopDomain}` };
   return { ok: true };
 }
