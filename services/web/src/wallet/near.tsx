@@ -21,7 +21,7 @@ import type { PickerPurpose } from "./groups";
 import { nearWalletModules } from "./near-wallets";
 import { abortable } from "./abortable";
 import { signInParams } from "./sign-in-params";
-import { classifyProbe, staticSignsMessage, withTimeout } from "./probe";
+import { classifyProbe, staticSignsMessage } from "./probe";
 
 /** One wallet in the picker. `signsMessage`: true or false from the selector, null while unknown. */
 export interface NearWalletInfo {
@@ -77,7 +77,6 @@ const network = process.env.NEXT_PUBLIC_NEAR_NETWORK === "testnet" ? "testnet" :
 const ROOT_CONTRACT = process.env.NEXT_PUBLIC_ROOT_CONTRACT ?? "openrail.near";
 
 /** How long the live capability check may take for one wallet before its source decides. */
-const PROBE_TIMEOUT_MS = 4000;
 
 export function NearProvider({ children }: { children: ReactNode }) {
   const selector = useRef<WalletSelector | null>(null);
@@ -128,30 +127,10 @@ export function NearProvider({ children }: { children: ReactNode }) {
     const s = selector.current;
     if (!s || probed.current) return;
     probed.current = true;
-    // All wallets at once, each with its own limit: a module that hangs gets the answer its source gives.
-    await Promise.all(
-      s.store.getState().modules.map(async (m) => {
-        let verdict: boolean | null = null;
-        try {
-          await withTimeout(
-            (async () => {
-              const w = await s.wallet(m.id);
-              // Empty parameters: an unsupported wallet is refused first, a supporting one fails validation.
-              await w.signMessage({ message: "", recipient: "", nonce: Buffer.alloc(0) });
-            })(),
-            PROBE_TIMEOUT_MS,
-          );
-        } catch (e) {
-          verdict =
-            e instanceof Error && e.message === "PROBE_TIMEOUT"
-              ? staticSignsMessage(m.id)
-              : (classifyProbe(e) ?? staticSignsMessage(m.id));
-        }
-        setWallets((prev) =>
-          prev.map((p) => (p.id === m.id ? { ...p, signsMessage: verdict } : p)),
-        );
-      }),
-    );
+    // What each module can do is read from a table pinned to the installed versions (capabilities.test.ts), never by
+    // calling the wallet: asking a wallet to sign an empty message opened Meteor's pop-up over the HOT wallet
+    // while the person was signing in with HOT (10 Nov).
+    setWallets((prev) => prev.map((p) => ({ ...p, signsMessage: staticSignsMessage(p.id) })));
   }, []);
 
   const pickWallet = useCallback(

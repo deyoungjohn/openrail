@@ -39,3 +39,13 @@ describe("static wallet capabilities and the probe timeout", () => {
     await expect(withTimeout(Promise.resolve(3), 1000)).resolves.toBe(3);
   });
 });
+
+import { readFileSync } from "node:fs";
+
+describe("the wallet check never calls a wallet", () => {
+  it("does not ask any wallet to sign an empty message to learn what it can do", () => {
+    // 10 Nov: that call opened Meteor's pop-up over the HOT wallet during a HOT sign-in.
+    const source = readFileSync(new URL("./near.tsx", import.meta.url), "utf8");
+    expect(source).not.toMatch(/signMessage\(\{\s*message:\s*""/);
+  });
+});
