@@ -440,6 +440,30 @@
       "status": 200,
       "schema": "Cashout",
       "mock": true
+    },
+    {
+      "file": "confidential.session.json",
+      "method": "POST",
+      "path": "/v1/balance/confidential/session",
+      "status": 200,
+      "schema": "ConfidentialSession",
+      "mock": true
+    },
+    {
+      "file": "confidential.balance.json",
+      "method": "GET",
+      "path": "/v1/balance/confidential",
+      "status": 200,
+      "schema": "ConfidentialBalance",
+      "mock": true
+    },
+    {
+      "file": "cashouts.shield.json",
+      "method": "POST",
+      "path": "/v1/cashout/quote",
+      "status": 201,
+      "schema": "CashoutQuote",
+      "mock": false
     }
   ]
 }

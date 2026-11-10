@@ -586,7 +586,8 @@ export interface CashoutList {
 
 export interface CashoutQuoteRequest {
   amount: U128;
-  destination_chain: "base" | "arbitrum" | "optimism" | "polygon" | "solana" | "ethereum" | "near";
+  destination_chain:
+    "base" | "arbitrum" | "optimism" | "polygon" | "solana" | "ethereum" | "near" | "confidential";
   address: string;
   source_asset?: string;
 }
@@ -826,6 +827,23 @@ export interface LineItemInput {
 
 export interface WebhookEventTypes {
   types: string[];
+}
+
+export interface ConfidentialSessionRequest {
+  signed_data: Record<string, unknown>;
+}
+
+export interface ConfidentialSession {
+  expires_at: string;
+}
+
+export interface ConfidentialBalance {
+  source: "private";
+  balances: Array<{
+    token_id: string;
+    available: string;
+    source: string;
+  }>;
 }
 
 export interface operations {
@@ -1461,6 +1479,27 @@ export interface operations {
     responses: {
       "200": WebhookEventTypes;
       "401": Error;
+    };
+  };
+  createConfidentialSession: {
+    requestBody: ConfidentialSessionRequest;
+    responses: {
+      "200": ConfidentialSession;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  getConfidentialBalance: {
+    parameters: {
+      query: {
+        token_ids?: string;
+      };
+    };
+    responses: {
+      "200": ConfidentialBalance;
+      "400": Error;
+      "401": Error;
+      "409": Error;
     };
   };
 }
