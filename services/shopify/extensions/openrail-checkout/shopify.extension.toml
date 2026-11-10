@@ -6,8 +6,8 @@ api_version = "2026-04"
 [[extensions]]
 name = "Openrail Checkout"
 handle = "openrail-checkout"
-uid = "34d94cf3-6f3b-13ef-7068-5a888e5cfc60ab58359f"
 type = "ui_extension"
+uid = "34d94cf3-6f3b-13ef-7068-5a888e5cfc60ab58359f"
 
 # Checkout page, before the order: when the buyer picks Openrail as the payment method, this block shows the payment link.
 [[extensions.targeting]]
@@ -24,3 +24,9 @@ key = "openrail_app_base_url"
 type = "single_line_text_field"
 name = "Openrail App Base URL"
 description = "HTTPS base URL of the Openrail Shopify connector (for example https://shopify.openrail.incepture.dev)."
+
+[[extensions.settings.fields]]
+key = "openrail_payment_handle"
+type = "single_line_text_field"
+name = "Openrail Payment Method Handle"
+description = "Handle of the manual payment method for Openrail (from Shopify Admin Settings > Payments > Manual payment methods). Required to distinguish Openrail from other manual payment methods."

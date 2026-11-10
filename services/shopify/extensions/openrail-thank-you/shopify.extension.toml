@@ -6,8 +6,8 @@ api_version = "2026-04"
 [[extensions]]
 name = "Thank You"
 handle = "openrail-thank-you"
-uid = "ac472b4c-4c8a-b03a-c6f2-1041fb472106b8107e12"
 type = "ui_extension"
+uid = "ac472b4c-4c8a-b03a-c6f2-1041fb472106b8107e12"
 
 # The thank-you page, after the order: thanks, transaction hashes, order summary.
 [[extensions.targeting]]

@@ -31,13 +31,12 @@ Shopify and Openrail use distinct webhook signatures:
 
 | Webhook Stream | Direction | Verification Header | Signing Secret Used | Subscription Source & Final URL |
 |---|---|---|---|---|
-| **App-Subscribed Webhooks** (`orders/create`) | Shopify → Openrail Shopify App | `X-Shopify-Hmac-Sha256` (base64 HMAC-SHA256 of raw body) | **App's Client Secret** (`SHOPIFY_CLIENT_SECRET`) | Subscribed with the app via `shopify.app.toml` and deployed via Shopify CLI (`shopify app deploy`).<br>**Final URL**: `https://shopify.openrail.incepture.dev/shopify/webhooks`<br>*(Zero manual setup in Shopify store admin)*. |
-| **Store-Level Webhooks** (manual fallback) | Shopify → Openrail Shopify App | `X-Shopify-Hmac-Sha256` (base64 HMAC-SHA256 of raw body) | **Store Webhook Secret** (`SHOPIFY_WEBHOOK_SECRET`) | Configured manually in Shopify Admin under **Settings → Notifications → Webhooks**.<br>Signing secret displayed at the bottom of the Notifications page. |
+| **Shopify Store Webhook** (`orders/create`) | Shopify → Openrail Shopify App | `X-Shopify-Hmac-Sha256` (base64 HMAC-SHA256 of raw body) | **Store Webhook Secret** (`SHOPIFY_WEBHOOK_SECRET`) | Configured in Shopify Store Admin under **Settings → Notifications → Webhooks** (Event: *Order creation*, Format: *JSON*, API Version: *2026-04*).<br>Signing key displayed at the bottom of the Notifications page.<br>**Final URL**: `https://shopify.openrail.incepture.dev/shopify/webhooks` |
 | **Openrail Webhooks** (`checkout.paid`, `checkout.paid_late`, etc.) | Openrail Checkout API → Shopify App | `Openrail-Signature: t=<unix>,v1=<hex>` (hex HMAC-SHA256 of `<t>.<body>`) | **Openrail Webhook Secret** (`OPENRAIL_WEBHOOK_SECRET`) | Registered in Openrail Merchant Dashboard under **/app/developers → Webhooks**.<br>**Final URL**: `https://shopify.openrail.incepture.dev/shopify/openrail-webhook`<br>Enforces 300 s timestamp tolerance. |
 
-In the app, `SHOPIFY_WEBHOOK_SECRET` defaults to `SHOPIFY_CLIENT_SECRET`, so Dev Dashboard app-subscribed webhooks work out of the box with zero duplicate secret configuration.
-
-> **10 Nov correction (orchestrator), release errors:** (1) `shopify app deploy` refused the `orders/create` subscription in `shopify.app.toml`: the app is not approved for protected customer data. The subscription is removed; create the webhook in the store admin instead (Settings > Notifications > Webhooks > Create webhook: event *Order creation*, format JSON, URL `https://shopify.openrail.incepture.dev/shopify/webhooks`). Shopify shows the store's webhook signing key on that page: put it in `SHOPIFY_WEBHOOK_SECRET` (it is not the app client secret). (2) Checkout UI extensions must use `api_version` 2026-01 or later; both extensions now use `2026-04` with `@shopify/ui-extensions` 2026.4.4. Run `npm install` again in both extension folders.
+> [!NOTE]
+> **Why `orders/create` is created in store admin instead of app-subscribed:**
+> Shopify refuses app-level `orders/create` webhook subscriptions in `shopify.app.toml` unless the app has completed Shopify's protected customer data review. The webhook is therefore created in the store admin (**Settings → Notifications → Webhooks**). It is signed with the store-level signing secret displayed on that page and configured in `SHOPIFY_WEBHOOK_SECRET` (not the app client secret). Both extensions (`openrail-checkout` and `openrail-thank-you`) use `api_version = "2026-04"`.
 
 ---
 
@@ -102,7 +101,7 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 1. **Send me your Client ID**: Visible under Dev Dashboard → Apps → Openrail Payments → **Settings → Client ID** (this is public).
 2. **Put your Client secret in `/etc/openrail/shopify.env`**: Set `SHOPIFY_CLIENT_SECRET=...` directly on your server (never send it in chat or logs).
 3. **What I will do with the Client ID**: I will write it into `services/shopify/shopify.app.toml`, run `bash scripts/check-app-config.sh` to verify it, and commit the configuration.
-4. **Deploy**: You then run `shopify app deploy` in `services/shopify` to link the configuration, register the webhooks, and deploy the checkout extension.
+4. **Deploy**: You then run `shopify app deploy` in `services/shopify` to link the configuration and deploy the two checkout extensions.
 
 ### Summary of Human Login Requirements vs Machine Steps
 
@@ -113,10 +112,12 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 | **Step 3** | Install Shopify CLI & Link Config | Terminal (`shopify app config link`) | **Yes** (Browser OAuth prompt) |
 | **Step 4** | Deploy App Config & Extensions | Terminal (`shopify app deploy`) | No (uses CLI credentials from Step 3) |
 | **Step 5** | Install App on Dev Store | Browser (`dev.shopify.com` → Install app) | **Yes** (Shopify OAuth grant approval) |
-| **Step 6** | Add Manual Payment Method | Browser (`admin.shopify.com/store/...`) | **Yes** (Store admin login) |
-| **Step 7** | Add Block in Checkout Editor | Browser (Checkout Editor) | **Yes** (Store admin login) |
-| **Step 8** | Register Webhook in Openrail | Browser (`dashboard.openrail.../app/developers`) | **Yes** (Openrail account login) |
-| **Step 9** | Server Service Startup | Server shell (`openrail-apply`) | No (server SSH / admin) |
+| **Step 6** | Create Store Webhook (`orders/create`) | Browser (`admin.shopify.com` → Notifications) | **Yes** (Store admin login) |
+| **Step 7** | Add Manual Payment Method | Browser (`admin.shopify.com/store/...`) | **Yes** (Store admin login) |
+| **Step 8** | Add Blocks in Checkout Editor | Browser (Checkout Editor) | **Yes** (Store admin login) |
+| **Step 9** | Configure Server Environment | Server shell (`/etc/openrail/shopify.env`) | No (server SSH / admin) |
+| **Step 10** | Register Webhook in Openrail | Browser (`dashboard.openrail.../app/developers`) | **Yes** (Openrail account login) |
+| **Step 11** | Server Service Startup | Server shell (`openrail-apply`) | No (server SSH / admin) |
 
 ---
 
@@ -172,20 +173,23 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 
 1. **Verify or set your Client ID in `services/shopify/shopify.app.toml`**:
    ```toml
-   name = "Openrail Payments"
-   client_id = "0193248a-your-real-client-id" # <-- Paste your Client ID here before deploy
+   name = "Openrail Checkout"
+   client_id = "60c714696b8435c0259363c5e1f282e3" # <-- Paste your Client ID here before deploy
    application_url = "https://shopify.openrail.incepture.dev"
    embedded = false
 
    [access_scopes]
-   scopes = "read_orders,write_orders"
+   scopes = "read_orders,write_orders,read_products,write_products,read_inventory,write_inventory,read_customers,write_customers,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_draft_orders,write_draft_orders,read_discounts,write_discounts,read_price_rules,write_price_rules,read_locations,read_files,write_files"
+   use_legacy_install_flow = false
+
+   [auth]
+   redirect_urls = [ ]
 
    [webhooks]
    api_version = "2025-10"
 
-   [[webhooks.subscriptions]]
-   topics = [ "orders/create" ]
-   uri = "https://shopify.openrail.incepture.dev/shopify/webhooks"
+   # No app-subscribed webhook: orders/create carries protected customer data, which the app is not approved for (the
+   # release fails). The webhook is created in the store admin instead (Settings > Notifications > Webhooks).
 
    [build]
    automatically_update_urls_on_dev = false
@@ -199,9 +203,9 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
    *This validator ensures that `client_id` is neither empty nor an unexpanded placeholder (e.g. `${...}` or `<...>`)*.
 
 3. **Protected Customer Data & `orders/create` Handling**:
-   - **What Shopify Requires**: By default, `orders/create` payloads contain customer personal data (names, email, phone, addresses). Outside development stores, Shopify requires apps to request [Protected customer data access](https://shopify.dev/docs/apps/launch/protected-customer-data) in the Dev Dashboard / Partner Dashboard under **App → Settings → Data and privacy** and complete the data protection review.
-   - **Development Store Rule**: **Development stores do NOT require a review or approval**. Shopify automatically allows access to customer data during development and testing on dev stores without submitting a review request ([Work with protected customer data](https://shopify.dev/docs/apps/launch/protected-customer-data)).
-   - **Zero PII Dependency in Openrail**: The Openrail app does not request or persist customer personal data. When `orders/create` arrives, the webhook handler extracts only the order identifier (`id` or `admin_graphql_api_id`), order display name (e.g. `#1001`), and `payment_gateway_names`. All financial figures (`totalOutstandingSet.shopMoney.amount`, `lineItems`, financial status) are queried directly from the **Shopify Admin GraphQL API** using the server's access token. Even if Shopify redacts customer fields in production, Openrail operates normally.
+   - **Why `orders/create` is omitted from `shopify.app.toml`**: `shopify app deploy` rejects apps subscribing to `orders/create` via TOML unless the app has passed Shopify's protected customer data review.
+   - **Store Admin Solution**: Creating the webhook directly in Shopify Store Admin (**Settings → Notifications → Webhooks**) bypasses this constraint for dev stores and uses the store-level signing secret (`SHOPIFY_WEBHOOK_SECRET`).
+   - **Zero PII Dependency in Openrail**: The Openrail app does not request or persist customer personal data. When `orders/create` arrives, the webhook handler extracts only the order identifier (`id` or `admin_graphql_api_id`), order display name (e.g. `#1001`), and `payment_gateway_names`. All financial figures (`totalOutstandingSet.shopMoney.amount`, `lineItems`, financial status) are queried directly from the **Shopify Admin GraphQL API** using the server's access token.
 
 4. **Run `shopify app deploy`**:
    ```bash
@@ -211,25 +215,40 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
    *(Reference: [shopify app deploy](https://shopify.dev/docs/api/shopify-cli/app/app-deploy))*.
    
    **What this command performs**:
-   - Synchronizes app configuration (scopes `read_orders,write_orders` and App URL) to Shopify.
-   - Automatically subscribes `orders/create` to `https://shopify.openrail.incepture.dev/shopify/webhooks` signed with the app's **Client Secret**.
-   - Builds and deploys the Checkout UI extension two extensions: `openrail-checkout` ("Openrail Checkout", `purchase.checkout.block.render`, the payment link before the order) and `openrail-thank-you` ("Thank You", `purchase.thank-you.block.render`, thanks only).
+   - Synchronizes app configuration (scopes and App URL) to Shopify.
+   - Builds and deploys the two Checkout UI extensions (`api_version = "2026-04"`):
+     1. `openrail-checkout` ("Openrail Checkout", `purchase.checkout.block.render`, renders pay link on checkout page when Openrail manual method is selected).
+     2. `openrail-thank-you` ("Thank You", `purchase.thank-you.block.render`, shows confirmation, tx hash, and order summary).
    - Releases the app version to stores.
 
 ---
 
 ### Step 5: Install the App on the Development Store (Requires Human Login)
-1. Open the Dev Dashboard ([dev.shopify.com](https://dev.shopify.com)) and click on **Openrail Payments**.
+1. Open the Dev Dashboard ([dev.shopify.com](https://dev.shopify.com)) and click on **Openrail Checkout**.
 2. On the **Home / Overview** page, locate the **Installs** card and click **Install app** (or three-dot menu `⋯` → **Install app**).
 3. Select your development store from the list.
-4. An OAuth approval tab will open on your store admin: review requested scopes (`read_orders`, `write_orders`) and click **Install**.
+4. An OAuth approval tab will open on your store admin: review requested scopes and click **Install**.
 
 *(Reference: [Create apps using the Dev Dashboard — Install app](https://shopify.dev/docs/apps/build/dev-dashboard/create-apps-using-dev-dashboard))*.
 
 ---
 
-### Step 6: Add the Manual Payment Method (Requires Human Login)
-1. In the Shopify store admin (`https://admin.shopify.com/store/<store-name>`), navigate to:
+### Step 6: Create Store Webhook (`orders/create`) in Shopify Admin (Requires Human Login)
+1. In Shopify store admin (`https://admin.shopify.com/store/<store-name>`), go to:
+   **Settings → Notifications → Webhooks** (scroll to the bottom).
+2. Click **Create webhook**:
+   - **Event**: `Order creation`
+   - **Format**: `JSON`
+   - **URL**: `https://shopify.openrail.incepture.dev/shopify/webhooks`
+   - **Webhook API version**: `2026-04` (or latest)
+3. Click **Save**.
+4. Scroll to the bottom of the Webhooks card and copy the **webhook signing key**.
+5. Put this key into `SHOPIFY_WEBHOOK_SECRET` in `/etc/openrail/shopify.env` (it is unique to the store, not the app client secret).
+
+---
+
+### Step 7: Add the Manual Payment Method (Requires Human Login)
+1. In the Shopify store admin, navigate to:
    **Settings → Payments → Manual payment methods**.
 2. Click **Add manual payment method** → **Create custom payment method**.
 3. Fill in:
@@ -240,28 +259,37 @@ tar -tzf dist/openrail-server-<version>.tar.gz | grep -E '^(services/shopify/|de
 
 ---
 
-### Step 7: Add Extension Block in the Checkout Editor (Requires Human Login)
+### Step 8: Add Extension Blocks in the Checkout Editor (Requires Human Login)
 1. In Shopify store admin, go to **Settings → Checkout**.
 2. In the **Configurations** section, click **Customize** (opens Checkout Editor).
-3. In the top dropdown menu, switch from *Checkout* to **Thank you** page.
-4. In the bottom-left sidebar, click **Add app block**.
-5. Select **Openrail Checkout** (`openrail-checkout`) for the checkout page and **Thank You** (`openrail-thank-you`) for the thank-you page.
-6. In the right-hand settings panel, verify **Openrail App Base URL** is set to `https://shopify.openrail.incepture.dev`.
-7. Drag the block into the desired order summary/status position (e.g. `ORDER_STATUS1`).
-8. Switch the top dropdown to **Order status** page and repeat (click **Add app block**, select **Openrail Pay Block**, position it).
-9. Click **Save** in the top-right corner.
+3. On the **Checkout** page:
+   - In the bottom-left sidebar, click **Add app block**.
+   - Select **Openrail Checkout** (`openrail-checkout`).
+   - Position it in the payment/review area.
+   - In the settings panel:
+     - **Openrail App Base URL**: `https://shopify.openrail.incepture.dev`
+     - **Openrail Payment Method Handle**: The handle of your custom manual payment method created in Step 7.
+       > [!NOTE]
+       > **Why this handle is required:**
+       > Per [Shopify Payments API documentation](https://shopify.dev/docs/api/checkout-ui-extensions/latest/target-apis/checkout-apis/payments-api), `SelectedPaymentOption` exposes `handle` and `type` only (`type === "manualPayment"`); provider names, display names, and logos are not available. To ensure the block renders and creates payment links **only** when Openrail is selected (and never for Cash on Delivery, Bank Deposit, or other manual methods), the extension renders only when `openrail_payment_handle` is configured and matches the selected option's handle. If unset, the block safely returns `null` (zero requests, zero UI).
+4. In the top dropdown menu, switch from *Checkout* to **Thank you** page:
+   - Click **Add app block** and select **Thank You** (`openrail-thank-you`).
+   - Drag the block into the desired order summary/status position (e.g. `ORDER_STATUS1`).
+5. In the top dropdown, switch to **Order status** page and add the **Thank You** block there as well.
+6. Click **Save** in the top-right corner.
 
 *(Reference: [Test checkout UI extensions in the checkout editor](https://shopify.dev/docs/apps/build/checkout/test-checkout-ui-extensions))*.
 
 ---
 
-### Step 8: Configure Server Environment (`/etc/openrail/shopify.env`)
+### Step 9: Configure Server Environment (`/etc/openrail/shopify.env`)
 On the Openrail host, create `/etc/openrail/shopify.env` (mode `0600 root:root`):
 
 ```ini
 SHOPIFY_SHOP_DOMAIN=openrail-dev.myshopify.com
 SHOPIFY_CLIENT_ID=
 SHOPIFY_CLIENT_SECRET=
+SHOPIFY_WEBHOOK_SECRET=
 SHOPIFY_ORDER_TOKEN_SECRET=
 SHOPIFY_PORT=8083
 
@@ -277,6 +305,7 @@ APP_BASE_URL=https://shopify.openrail.incepture.dev
 | `SHOPIFY_SHOP_DOMAIN` | The `*.myshopify.com` domain of your dev store (e.g. `openrail-dev.myshopify.com`). |
 | `SHOPIFY_CLIENT_ID` | Dev Dashboard → Apps → Openrail Payments → **Settings → Client ID**. |
 | `SHOPIFY_CLIENT_SECRET` | Dev Dashboard → Apps → Openrail Payments → **Settings → Client secret**. |
+| `SHOPIFY_WEBHOOK_SECRET` | Shopify Store Admin → **Settings → Notifications → Webhooks** → signing key at bottom of page. |
 | `SHOPIFY_ORDER_TOKEN_SECRET` | Generated random 32-byte hex secret (`openssl rand -hex 32`) for HMAC-signing single-use order tokens. |
 | `SHOPIFY_PORT` | `8083` (dedicated port for the Shopify service). |
 | `OPENRAIL_API_URL` | Root HTTPS API URL (`https://api.openrail.incepture.dev`). |
@@ -286,7 +315,7 @@ APP_BASE_URL=https://shopify.openrail.incepture.dev
 
 ---
 
-### Step 9: Register the Openrail Webhook in Openrail Dashboard (Requires Human Login)
+### Step 10: Register the Openrail Webhook in Openrail Dashboard (Requires Human Login)
 In the Openrail Merchant Dashboard:
 1. Navigate to **`/app/developers`**, tab **Webhooks**.
 2. Click **Add endpoint**.
@@ -308,13 +337,57 @@ In the Openrail Merchant Dashboard:
 git -C openrail switch -c mod-shopify origin/main
 git -C openrail am ../openrail-lab/staging/shopify/patches/*.patch
 
-# Run the 22 Shopify unit and server pack tests:
+# Run the 52 Shopify unit, extension, and server pack tests:
 /home/antigravity/deyoungjohn/openrail/node_modules/.bin/vitest run \
   --root /home/antigravity/deyoungjohn/openrail-lab/staging/shopify \
   test/shopify.test.ts
 ```
 
-## 7. Test Suite (22 tests, `test/shopify.test.ts`)
+## 7. Updates 11, 12 & 13: Extensions, Real Core API Pagination, Rate Limiting & UI States
+
+### Architecture & Checkout Blocking Decision
+
+1. **Two Distinct Extensions (`api_version = "2026-04"`)**:
+   - **`openrail-checkout`** (`purchase.checkout.block.render`): Rendered on the checkout page before the order is placed. Filters for the Openrail manual payment method via `openrail_payment_handle` before requesting `GET /shopify/extension/checkout-pay-link?checkout=<checkoutToken>&amount=<amount>&currency=<currency>` with the buyer's Bearer session token.
+   - **`openrail-thank-you`** (`purchase.thank-you.block.render`): Rendered on the post-order confirmation page. Requests `GET /shopify/extension/order-status?order=<orderGid>&checkout=<checkoutToken>` with Bearer session token to display confirmation, transaction hash, and payment summary.
+
+2. **Payment Option Filtering & `openrail_payment_handle`**:
+   - Per [Shopify Payments API documentation](https://shopify.dev/docs/api/checkout-ui-extensions/latest/target-apis/checkout-apis/payments-api), `SelectedPaymentOption` exposes `handle` and `type` only (`type === "manualPayment"`); provider names, display names, and logos are not available.
+   - To distinguish Openrail from other manual payment methods (e.g. Cash on Delivery or Bank Deposit), the extension requires the merchant to configure `openrail_payment_handle` in the extension settings.
+   - If `openrail_payment_handle` is unset, the block safely returns `null` (does not render, zero requests, zero claim storage consumed).
+
+3. **Checkout UI Block Failure Cases & Error Text**:
+   - Per AGENTS.md Rule 13, error text never covers a control or causes unexpected page shifts. Space is reserved in `<s-banner>`:
+
+| State / Failure Case | Banner Heading & Tone | Exact Error / Content Text | Behavior |
+|---|---|---|---|
+| **Unselected / Handle Unset** | *None* | *None (returns `null`)* | Zero DOM nodes rendered, zero network calls, zero layout shift. |
+| **Preparing / Loading** | `Pay with stablecoins (Openrail)` (default) | `<s-text>Preparing your payment link…</s-text>` | Displayed while `GET /shopify/extension/checkout-pay-link` is in flight. |
+| **Ready / Link Generated** | `Pay with stablecoins (Openrail)` (default) | `<s-button href="{url}">Pay with stablecoins</s-button>` | Buyer clicks button to proceed to Openrail hosted checkout page (`/c/<id>`). |
+| **Rate Limited (HTTP 429)** | `Pay with stablecoins` (`warning`) | `<s-text>Too many payment requests. Please wait a moment and try again.</s-text>` | Informs buyer of rate limit without shifting page controls. |
+| **Unsupported Currency (HTTP 422)** | `Pay with stablecoins` (`warning`) | `<s-text>Openrail payments only support USD currency at this time.</s-text>` | Informs buyer that store/cart currency must be USD. |
+| **Generic / Network Failure** | `Pay with stablecoins` (`warning`) | `<s-text>We could not prepare the payment link. Reload the page or choose another payment method.</s-text>` | Fallback error message. |
+| **Thank You Block (Confirmed)** | `Thank you` (`success`) | `<s-text>Your order {number} is confirmed.</s-text>`<br>`<s-text>Transaction: {tx_hash}</s-text>`<br>`<s-text>{summary}</s-text>` | Shows confirmed transaction and payment summary. |
+| **Thank You Block (Network Error)** | `Thank you` (`success`) | `<s-text>Your order {number} is confirmed.</s-text>` | Graceful degradation to standard confirmation without error banners covering controls. |
+
+4. **Real Core API Pagination on Cache Miss**:
+   - The Openrail Core Checkout API (`GET /v1/checkouts`) takes `limit` (max 100) and `cursor`, returning `{ data: [...], has_more: boolean, next_cursor: string | null }` (sorted newest first by `created_at`). It does not filter by `order_ref`.
+   - On process restart / cache miss during `orders/create`, `createHttpCheckoutApiPort.getCheckoutByOrderRef` pages through `GET /v1/checkouts?limit=100` using cursor-based pagination, bounded at 5 pages, matching `order_ref` starting with `shopify-chk-<token>-`.
+   - When matched, the connector verifies the actual order total from the Admin GraphQL API (`totalOutstandingSet.shopMoney.amount`). If `paid < total`, the order is tagged `openrail-partial` and never marked paid.
+
+5. **Checkout Progression Decision: Asynchronous (Non-Blocking)**:
+   - **Decision**: Do **NOT** block buyer checkout progression using `buyerJourney.intercept` (`block_progress`). The buyer is allowed to place the order in Shopify with financial status `PENDING`, and the order is marked `PAID` via webhook / `orderMarkAsPaid`.
+   - **Rationale**:
+     1. `buyerJourney.intercept` with `block_progress = true` is explicitly deprecated by Shopify in favor of Checkout Validation Functions.
+     2. Merchants can toggle off "Block progress" in the Shopify checkout editor settings at any time, breaking hard-blocking assumptions.
+     3. Cross-chain crypto settlements via NEAR Intents take 20–40 seconds across chains (Ethereum, Solana, Arbitrum, etc.). Holding buyers at checkout with a blocking spinner causes abandoned carts if the buyer navigates away or closes the browser before multi-chain inclusion.
+     4. Creating the order first guarantees an immutable Shopify order record exists, while supporting pre-payment matching if paid before submission.
+
+6. **Verification Boundaries (What Can & Cannot Be Verified)**:
+   - **Can verify**: Session token cryptographic validity (HS256 HMAC signature, expiry, `aud`, `dest`), CORS headers on all extension routes, rate limiting, amount validation, underpayment enforcement, cursor-based pagination against real API response shapes, state reconstruction, webhook matching across both arrival orders, edge-case log lines, and unit/integration test assertions (52/52 passing).
+   - **Cannot verify**: Visual layout and CSS rendering of Polaris web components inside the Shopify checkout iframe without a live browser running on a development store session; live `shopify app deploy` execution without interactive human Partner authentication.
+
+## 8. Test Suite (52 tests, `test/shopify.test.ts`)
 
 | Test | What it proves |
 |---|---|
@@ -340,8 +413,38 @@ git -C openrail am ../openrail-lab/staging/shopify/patches/*.patch
 | `shopify_app_health_endpoint` | `GET /health` returns HTTP 200 `{"ok":true}` |
 | `shopify_http_listener_handles_requests_and_payload_limits` | HTTP server listener dispatches requests and rejects payloads > 1 MB with `413 payload_too_large` |
 | `shopify_server_pack_includes_service_and_unit` | Validates package `@openrail/shopify`, `shopify.app.toml`, `openrail-shopify.service` unit configuration for `services/shopify`, and server pack `tar -tzf` contents |
+| `shopify_deploy_check_refuses_placeholder_client_id` | Verifies `check-app-config.sh` rejects `${SHOPIFY_CLIENT_ID}`, empty, or `<YOUR_CLIENT_ID>` in `shopify.app.toml` and accepts configured literal client ID |
+| `answers a valid session token with a pay link, and CORS headers for the extension's null origin` | `GET /shopify/extension/pay-link` verifies Bearer session token and returns order pay URL with CORS headers |
+| `refuses a bad signature, an expired token, another shop and another app` | `GET /shopify/extension/pay-link` returns 401 for bad signature, expired token, wrong shop destination, or wrong audience |
+| `needs an order, and answers the browser's preflight` | `GET /shopify/extension/pay-link` returns 400 when order param missing; OPTIONS returns 204 with CORS preflight headers |
+| `answers valid session token with a pay_url and CORS headers` | `GET /shopify/extension/checkout-pay-link` creates pre-order invoice keyed by checkout token and returns pay link with CORS |
+| `is idempotent: same checkout token returns the same pay_url without re-creating invoice` | Repeat requests with same checkout token return identical `pay_url` without re-creating Openrail checkout |
+| `refuses missing checkout token with 400` | `GET /shopify/extension/checkout-pay-link` returns 400 invalid_request when checkout query parameter is missing |
+| `refuses non-USD currency with 422` | `GET /shopify/extension/checkout-pay-link` returns 422 unsupported_currency when currency is not USD |
+| `refuses invalid or expired session token with 401` | `GET /shopify/extension/checkout-pay-link` returns 401 on missing, expired, or invalid session token |
+| `answers OPTIONS preflight with 204 and CORS headers` | `OPTIONS /shopify/extension/checkout-pay-link` returns 204 with CORS headers |
+| `pre-paid flow: checkout.paid arrives before orders/create, logs pending order, marks paid when orders/create arrives` | When invoice is paid before Shopify order creation, logs pending order, and subsequent `orders/create` immediately marks order paid and notes booking tx |
+| `order-first flow: orders/create arrives before checkout.paid, logs unpaid invoice, marks paid when checkout.paid arrives` | When order is created before payment, logs unpaid invoice, and subsequent `checkout.paid` marks order paid |
+| `unmatched paid invoice: invoice paid whose order never appears is logged` | When paid webhook arrives for checkout link but order never appears, logs pending order line and returns 200 |
+| `returns order Openrail status, tx hash, and summary with session token` | `GET /shopify/extension/order-status` returns payment status, tx hash, and summary for valid session token and order/checkout query |
+| `refuses missing query params with 400` | `GET /shopify/extension/order-status` returns 400 when neither order nor checkout query parameter is passed |
+| `returns 404 for unknown order or checkout token` | `GET /shopify/extension/order-status` returns 404 order_not_found for unrecognized order or checkout token |
+| `refuses invalid session token with 401` | `GET /shopify/extension/order-status` returns 401 when Bearer session token is invalid |
+| `answers OPTIONS preflight with 204 and CORS headers` | `OPTIONS /shopify/extension/order-status` returns 204 with CORS headers |
+| `refuses amount missing, non-numeric, or <= 0 with 400 invalid_request` | `GET /shopify/extension/checkout-pay-link` rejects missing, negative, zero, or non-numeric amounts |
+| `creates new invoice when cart total differs instead of returning stale link` | Creates new checkout when buyer changes cart total instead of returning stale pay link |
+| `underpaid order on orders/create is tagged partial, logged, and NEVER marked as paid` | When paid invoice amount is less than order total on `orders/create`, tags `openrail-partial` and does not mark paid |
+| `underpaid payment arriving for existing linked order is tagged partial, logged, and NEVER marked as paid` | When paid invoice amount is less than order total on `checkout.paid`, tags `openrail-partial` and does not mark paid |
+| `rate-limits excessive requests per shop and returns 429` | Enforces 60 requests/minute per shop domain on `checkout-pay-link`, returning 429 `rate_limited` |
+| `reconstructs binding from Openrail checkout on orders/create when in-memory binding is absent` | Recovers checkout by order ref from Openrail Checkout API on cache miss (e.g. process restart) and marks paid |
+| `createHttpCheckoutApiPort.getCheckoutByOrderRef queries GET /v1/checkouts?limit=100 and matches order_ref from real hydrate response` | Pages through `GET /v1/checkouts?limit=100` and extracts matching `order_ref` from `data[]` in real shape |
+| `createHttpCheckoutApiPort.getCheckoutByOrderRef pages through multiple pages using cursor` | Navigates across multiple pages using `next_cursor` until match is found |
+| `createHttpCheckoutApiPort.getCheckoutByOrderRef returns null on miss` | Returns `null` when no matching checkout exists across all pages |
+| `createHttpCheckoutApiPort.getCheckoutByOrderRef bounds pagination to 5 pages max` | Stops after 5 pages even if `has_more: true` to prevent infinite loops |
+| `shopify.extension.toml declares openrail_payment_handle setting` | Verifies `openrail_payment_handle` is declared in extension settings |
+| `CheckoutPay only renders when openrail_payment_handle is configured and matches selected option` | Verifies block renders only when configured handle matches selected manual option |
 
-## 8. Mutation Spot-Check Table (10 mutants, all killed)
+## 9. Mutation Spot-Check Table (10 mutants, all killed)
 
 | Mutant | Component | Code Mutation | Killing Test |
 |---|---|---|---|
