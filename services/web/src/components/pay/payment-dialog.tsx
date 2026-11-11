@@ -1,7 +1,14 @@
 "use client";
 
 import { X } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { copy } from "@/copy";
 
 /**
@@ -9,6 +16,9 @@ import { copy } from "@/copy";
  * payment is not settled. Its content stays mounted when it is closed, so the status keeps being read and the page
  * behind stays in step.
  */
+const FOCUSABLE =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 export function PaymentDialog({
   open,
   onClose,
@@ -22,6 +32,11 @@ export function PaymentDialog({
 }) {
   const close = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  // The pop-over lives on <body>: inside the page it sits in a transformed container, where `fixed` means "fixed to
+  // that container", so the scrim stopped at the page column and a click outside it never reached the dialog.
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => setHost(document.body), []);
 
   useEffect(() => {
     if (!open) return;
@@ -41,15 +56,34 @@ export function PaymentDialog({
     };
   }, [open, onClose]);
 
-  return (
+  // Tab stays inside the pop-over while it is open (the notes dialog opened from inside it keeps its own loop).
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab" || document.querySelector("dialog[open]")) return;
+    const nodes = Array.from(panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  if (host === null) return null;
+  return createPortal(
     <div
       hidden={!open}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[var(--scrim)] p-2 [backdrop-filter:var(--scrim-blur)] sm:items-center sm:p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
+      onKeyDown={onKeyDown}
     >
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -74,6 +108,7 @@ export function PaymentDialog({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    host,
   );
 }

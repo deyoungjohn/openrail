@@ -173,7 +173,17 @@ test.describe("tab order follows the visual order", () => {
     const idx = (re: RegExp) => order.findIndex((n) => re.test(n));
     expect(idx(/^Network/), order.join(" | ")).toBeLessThan(idx(/^Refund address$/));
     expect(idx(/^Refund address$/)).toBeLessThan(idx(/^Get price$/));
-    expect(idx(/^Get price$/)).toBeLessThan(idx(/^Copy 0xeeee/));
+    expect(idx(/^Get price$/)).toBeGreaterThan(-1);
+    // The price opens in a pop-over: focus is inside it and Tab stays inside it (the page behind is out of reach).
+    const dialog = page.getByRole("dialog", { name: "Your payment" });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Tab");
+    for (let i = 0; i < 30; i += 1) {
+      expect(await page.evaluate(() => !!document.activeElement?.closest("[role=dialog]"))).toBe(
+        true,
+      );
+      await page.keyboard.press("Tab");
+    }
   });
 
   test("transfer page: the terms, the open payment links, then the buyer and the agreement", async ({

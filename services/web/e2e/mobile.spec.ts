@@ -144,7 +144,7 @@ for (const [phone, device] of Object.entries(PHONES)) {
       const vp = page.viewportSize()!;
       // The QR code is fully inside the screen width.
       const qr = (await page
-        .locator("main svg[role=img], main svg")
+        .locator("[role=dialog] svg[role=img], [role=dialog] svg")
         .filter({ has: page.locator("title") })
         .first()
         .boundingBox())!;
