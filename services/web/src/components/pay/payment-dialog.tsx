@@ -67,8 +67,10 @@ export function PaymentDialog({
             <X aria-hidden size={18} strokeWidth={1.5} />
           </button>
         </div>
-        {/* One surface: the cards inside lose their own frames, so the price, the code and the progress read as one. */}
-        <div className="[&_.surface-card]:rounded-none [&_.surface-card]:border-0 [&_.surface-card]:bg-transparent [&_.surface-card]:p-0 [&_.surface-card]:shadow-none">
+        {/* One surface: the cards inside lose their own frames, so the price, the code and the progress read as one.
+            `.surface-card` is plain CSS outside Tailwind's layers, so only an important utility beats its border,
+            fill and radius (the first version of this did not, and left the frames on a padding-less card). */}
+        <div className="[&_.surface-card]:rounded-none! [&_.surface-card]:border-0! [&_.surface-card]:bg-transparent! [&_.surface-card]:p-0! [&_.surface-card]:shadow-none!">
           {children}
         </div>
       </div>
