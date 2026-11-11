@@ -299,6 +299,8 @@ Whenever new code is pushed to `main`, CI builds the pack (workflow `server-pack
    sudo chmod +x /usr/local/bin/openrail-fetch
    ```
 
+> **The env upload replaces every service file.** `upload.sh --env-only` followed by `openrail-apply` runs `split-env.sh`, which rewrites each `/etc/openrail/<service>.env` from the combined laptop file alone: a name that is only in a server file (added by hand there) is dropped. Use that route only when the laptop file holds every value. To add or change one setting on the server, edit that service's file directly (`sudo nano /etc/openrail/<service>.env`) and `sudo systemctl restart openrail-<service>`; then also add it to the laptop file, so a later upload does not lose it.
+
 Changed a key or setting only? `./deploy/upload.sh --env-only` (small file), then `sudo openrail-apply --restart-only`. Changed a `NEXT_PUBLIC_` value? Update the repository Variable and re-run the `server-pack` workflow (Actions → server-pack → Run workflow).
 
 The old laptop path still works when GitHub is unavailable: `./deploy/build.sh && ./deploy/upload.sh`, then `sudo openrail-apply`.
