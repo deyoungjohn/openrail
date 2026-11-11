@@ -252,8 +252,12 @@ test.describe("cash out", () => {
     await page.getByRole("tab", { name: "Stats" }).click();
     const table = page.getByRole("region", { name: "Cash-outs" });
     await expect(table).toContainText("$2.00");
-    await expect(table).toContainText("BASE USDC");
     await expect(table).toContainText("Arrived");
+    // the short row has no network or transaction; the opened row has the rest
+    await expect(table).not.toContainText("AHr9XT");
+    await table.getByRole("button", { name: "Show details" }).click();
+    await expect(table).toContainText("BASE");
+    await expect(table).toContainText("USDC");
     await expect(table).toContainText("AHr9XT");
     const overview = page.getByRole("region", { name: "Cash-out and revenue" });
     await expect(overview.getByRole("region", { name: "Cashed out", exact: true })).toBeVisible();

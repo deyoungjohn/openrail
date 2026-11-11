@@ -97,15 +97,15 @@ function Spinner({ size, speed, reduce }: PartProps) {
   const stroke = Math.max(2, size * 0.09);
   const r = (size - stroke) / 2;
   return (
-    <motion.svg
+    // A CSS animation, not `motion`: it runs on the compositor, so the spinner keeps turning while the page is busy
+    // (a wallet prompt, a transaction being signed, a large response being parsed). A JS-driven rotation froze then.
+    <svg
       aria-hidden
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      animate={reduce ? REDUCED.animate : { rotate: 360 }}
-      transition={
-        reduce ? REDUCED.transition : { duration: speed, ease: "linear", repeat: Infinity }
-      }
+      className={reduce ? "loader-pulse" : "loader-spin"}
+      style={{ animationDuration: `${reduce ? 1.4 : speed}s` }}
     >
       <circle
         cx={size / 2}
@@ -123,7 +123,7 @@ function Spinner({ size, speed, reduce }: PartProps) {
         strokeWidth={stroke}
         strokeLinecap="round"
       />
-    </motion.svg>
+    </svg>
   );
 }
 

@@ -422,7 +422,7 @@ export function DashboardScreen() {
         <Card state="error" errorBody={d.loadError} onRetry={retry} />
       ) : (
         <>
-          <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MonthlyRevenueCard
               cents={rev.currentCents}
               deltaPct={rev.deltaPct}
@@ -434,7 +434,7 @@ export function DashboardScreen() {
             <TopClientsCard clients={clients} state={loading ? "loading" : "ready"} />
           </div>
 
-          <div className="grid items-start gap-4 lg:grid-cols-3">
+          <div className="grid items-stretch gap-4 lg:grid-cols-3">
             <div className="min-w-0 lg:col-span-2">
               {loading ? (
                 <DataTable data={[]} columns={[]} rowId={() => ""} title={d.activity} loading />
