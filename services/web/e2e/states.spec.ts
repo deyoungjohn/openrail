@@ -357,3 +357,27 @@ test.describe("reduced motion: prefers-reduced-motion turns every animation and 
     expect(d.transition).toBeLessThanOrEqual(1);
   });
 });
+
+test.describe("a payment with no origin transaction (booked directly on NEAR) does not crash the pages", () => {
+  test.beforeEach(async ({ context }) => {
+    await signIn(context);
+  });
+
+  test("the invoice page lists it and the receipt page opens", async ({ page }) => {
+    const receipts = fixture("invoices.receipts") as { data: Record<string, unknown>[] };
+    const noOrigin = { ...receipts, data: receipts.data.map((r) => ({ ...r, origin_tx: null })) };
+    const receipt = { ...(fixture("receipts.get") as Record<string, unknown>) };
+    receipt.receipt = { ...(receipt.receipt as object), origin_tx: null };
+    await mockApi(page, {
+      ...base(),
+      "GET /v1/invoices/{id}/receipts": ok(noOrigin),
+      "GET /v1/receipts/{id}": ok(receipt),
+    });
+    await page.goto("/app/invoices/inv_01J00000000000000000000000");
+    await expect(page.getByText("This page couldn't load")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.goto(`/r/${RECEIPT_HASH}`);
+    await expect(page.getByText("This page couldn't load")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  });
+});
