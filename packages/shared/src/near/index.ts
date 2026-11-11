@@ -266,6 +266,19 @@ export class NearClient {
     return JSON.parse(new TextDecoder().decode(bytes)) as T;
   }
 
+  /** The NEAR balance of an account in yoctoNEAR. Throws when no RPC can say: a failed read is not a zero balance. */
+  async accountBalanceYocto(accountId: string): Promise<bigint> {
+    const result = await this.rpc<{ amount?: unknown }>(
+      "query",
+      { request_type: "view_account", finality: "final", account_id: accountId },
+      "account_balance",
+    );
+    if (typeof result?.amount !== "string" || !/^\d+$/.test(result.amount)) {
+      throw new NearRpcError("RPC_RESULT_MISSING");
+    }
+    return BigInt(result.amount);
+  }
+
   /**
    * What became of a transaction: `success`, `failed`, or `pending` (not executed yet, or not known to the node yet).
    * An RPC that cannot answer throws, so a caller can tell "unknown" from "pending".

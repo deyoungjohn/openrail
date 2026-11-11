@@ -29,6 +29,54 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("near client account balance", () => {
+  it("reads an account's balance and moves to the next RPC when one is out of quota (the payout worker read 0 NEAR from a spent first RPC: 11 Nov)", async () => {
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.includes("primary")
+        ? jsonResponse({
+            jsonrpc: "2.0",
+            id: 1,
+            error: { code: -32003, message: "daily request limit reached" },
+          })
+        : rpcResult({ amount: "1000000000000000000000000", block_height: 1 }),
+    );
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.primary", "https://rpc.second"],
+      fetchImpl: fetchImpl as never,
+    });
+    expect(await client.accountBalanceYocto("payout.openrail.near")).toBe(
+      1_000_000_000_000_000_000_000_000n,
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws when no RPC can tell, instead of answering 0", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        error: { code: -32003, message: "daily request limit reached" },
+      }),
+    );
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.primary", "https://rpc.second"],
+      fetchImpl: fetchImpl as never,
+    });
+    await expect(client.accountBalanceYocto("payout.openrail.near")).rejects.toBeInstanceOf(
+      NearQuotaError,
+    );
+  });
+
+  it("throws when the answer has no amount", async () => {
+    const fetchImpl = vi.fn(async () => rpcResult({ block_height: 1 }));
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.primary"],
+      fetchImpl: fetchImpl as never,
+    });
+    await expect(client.accountBalanceYocto("nobody.near")).rejects.toBeInstanceOf(NearRpcError);
+  });
+});
+
 describe("near client views", () => {
   it("decodes a view call and counts the call per feature", async () => {
     const fetchImpl = vi.fn(async () => callResult({ balance: "10" }));
