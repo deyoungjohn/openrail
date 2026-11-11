@@ -240,6 +240,48 @@ test("checkout_no_quote_after_expiry: expired checkout shows plain notice and no
   expect(calls.posts).toHaveLength(0);
 });
 
+test("checkout_paid_page_shows_history: the dates and the transactions, as an invoice's page does", async ({
+  page,
+}) => {
+  await mockCheckout(page, {
+    checkout: {
+      id: "c-104",
+      token_id: "c-104",
+      claim_account: "c-104.claims.openrail.near",
+      merchant: "acme.openrail.near",
+      order_ref: "ORD-77",
+      amount_usd: "2.00",
+      amount_due: "2000000",
+      outstanding: "0",
+      paid_total: "2000000",
+      surplus: "0",
+      status: "paid",
+      expires_at: inMinutes(-10),
+      return_url: null,
+      routes: [],
+      sessions: [],
+      history: {
+        issued_at: "2026-11-11T05:20:00.000Z",
+        paid_at: "2026-11-11T05:23:10.000Z",
+        issue_tx: "IssueTxHash111111111111111111111111111111111",
+        payments: [
+          {
+            tx_hash: "0xe1b5764529654a62b8604ff286dfe8dea87778e94aebc31b6be4efb979f2a5a9",
+            near: false,
+          },
+          { tx_hash: "CVRtjVbZoLmqj82YCrvTBdd7K5DRhdLq9N3hJc39AAKb", near: true },
+        ],
+      },
+    },
+  });
+  await page.goto("/c/c-104");
+  const history = page.getByRole("region", { name: "History" });
+  await expect(history).toBeVisible();
+  await expect(history).toContainText("Issued");
+  await expect(history).toContainText("Paid");
+  await expect(history.getByRole("button", { name: /Copy/ }).first()).toBeVisible();
+});
+
 test("pos_shows_settling_on_origin_seen, then paid", async ({ page }) => {
   await mockCheckout(page, {
     statuses: [

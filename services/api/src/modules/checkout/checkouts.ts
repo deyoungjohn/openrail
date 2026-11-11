@@ -1029,8 +1029,65 @@ export class Checkouts {
           part_b: route.partB,
         })),
         sessions: context.store.listPaySessions(view.token_id),
+        ...(view.status === "pending" || view.status === "checking"
+          ? {}
+          : { history: await this.history(context, stored) }),
       },
     };
+  }
+
+  /**
+   * What happened to this checkout, for the page that has nothing left to pay: when it was made, when the money was
+   * booked and the transactions that prove it (the same shape an invoice's page gets). Extra information only: a failing
+   * lookup gives an empty list and never takes the page down.
+   */
+  private async history(
+    context: ApiModuleContext,
+    stored: StoredCheckout,
+  ): Promise<{
+    issued_at: string;
+    paid_at: string | null;
+    issue_tx: string | null;
+    payments: { tx_hash: string; near: boolean }[];
+  }> {
+    const settled = context.docs.get<{ receipts?: Record<string, unknown>[] }>(
+      NS_SETTLED,
+      stored.token_id,
+    );
+    let receipts = settled?.receipts;
+    if (receipts === undefined && context.indexer?.listReceipts !== undefined) {
+      try {
+        receipts = await context.indexer.listReceipts(stored.account_id, stored.token_id);
+      } catch {
+        receipts = undefined;
+      }
+    }
+    const payments: { tx_hash: string; near: boolean }[] = [];
+    const seen = new Set<string>();
+    const add = (hash: string, near: boolean) => {
+      if (seen.has(hash)) return;
+      seen.add(hash);
+      payments.push({ tx_hash: hash, near });
+    };
+    let paidAt: string | null = null;
+    for (const r of receipts ?? []) {
+      const origin = (r.origin_tx as { hash?: unknown } | null | undefined)?.hash;
+      if (typeof origin === "string") add(origin, false);
+      if (Array.isArray(r.near_tx_hashes))
+        for (const h of r.near_tx_hashes) if (typeof h === "string") add(h, true);
+      // The booking transaction on NEAR is always there, whatever the provider's evidence says.
+      if (typeof r.booking_tx === "string") add(r.booking_tx, true);
+      if (typeof r.time === "string" && (paidAt === null || r.time > paidAt)) paidAt = r.time;
+    }
+    let issueTx: string | null = null;
+    if (context.indexer?.issueTx !== undefined) {
+      try {
+        issueTx = (await context.indexer.issueTx(stored.token_id)) ?? null;
+      } catch {
+        issueTx = null;
+      }
+    }
+    return { issued_at: stored.created_at, paid_at: paidAt, issue_tx: issueTx, payments };
   }
 
   private async requireLate(

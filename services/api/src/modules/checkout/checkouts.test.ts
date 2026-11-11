@@ -205,6 +205,68 @@ function createCheckout(h: H, body: Record<string, unknown> = {}, secret = h.key
   );
 }
 
+describe("checkout history on the public page (11 Nov: the paid page showed no history, an invoice does)", () => {
+  it("a paid checkout's public view lists the dates and the transactions that prove the payment", async () => {
+    const receipts = [
+      {
+        time: "2026-11-11T05:23:10.000Z",
+        origin_tx: { hash: "0xe1b5764529654a62b8604ff286dfe8dea87778e94aebc31b6be4efb979f2a5a9" },
+        near_tx_hashes: ["DJyPo1C5NXEg7TReunqxJB2gscLpeeQdPfNg1qsj4EM5"],
+        booking_tx: "CVRtjVbZoLmqj82YCrvTBdd7K5DRhdLq9N3hJc39AAKb",
+      },
+    ];
+    const indexer = {
+      listReceipts: vi.fn(async () => receipts),
+      issueTx: vi.fn(async () => "IssueTxHash111111111111111111111111111111111"),
+    } as unknown as ApiDeps["indexer"];
+    const h = harness({ indexer });
+    const created = await createCheckout(h);
+    const id = created.body.id as string;
+    const claim = h.chain.claims.get(id);
+    if (claim !== undefined) {
+      claim.booked_total = claim.amount_due;
+      claim.distributed_total = claim.amount_due;
+    }
+    const view = (await call(h, "GET", `/v1/public/checkouts/${id}`)).body;
+    expect(view.status).toBe("paid");
+    const history = view.history as {
+      issued_at: string;
+      paid_at: string | null;
+      issue_tx: string | null;
+      payments: { tx_hash: string; near: boolean }[];
+    };
+    expect(history.paid_at).toBe("2026-11-11T05:23:10.000Z");
+    expect(history.issue_tx).toBe("IssueTxHash111111111111111111111111111111111");
+    expect(history.payments).toEqual([
+      { tx_hash: receipts[0]!.origin_tx.hash, near: false },
+      { tx_hash: "DJyPo1C5NXEg7TReunqxJB2gscLpeeQdPfNg1qsj4EM5", near: true },
+      { tx_hash: "CVRtjVbZoLmqj82YCrvTBdd7K5DRhdLq9N3hJc39AAKb", near: true },
+    ]);
+    expect(typeof history.issued_at).toBe("string");
+  });
+
+  it("an open checkout has no history to show, and a failing indexer never takes the page down", async () => {
+    const indexer = {
+      listReceipts: vi.fn(async () => {
+        throw new Error("indexer down");
+      }),
+    } as unknown as ApiDeps["indexer"];
+    const h = harness({ indexer });
+    const id = (await createCheckout(h)).body.id as string;
+    const open = await call(h, "GET", `/v1/public/checkouts/${id}`);
+    expect(open.status).toBe(200);
+    expect(open.body.history).toBeUndefined();
+    const claim = h.chain.claims.get(id);
+    if (claim !== undefined) {
+      claim.booked_total = claim.amount_due;
+      claim.distributed_total = claim.amount_due;
+    }
+    const paid = await call(h, "GET", `/v1/public/checkouts/${id}`);
+    expect(paid.status).toBe(200);
+    expect((paid.body.history as { payments: unknown[] }).payments).toEqual([]);
+  });
+});
+
 describe("checkout freshness", () => {
   it("pokes once when a public checkout is first seen paid", async () => {
     const h = harness();

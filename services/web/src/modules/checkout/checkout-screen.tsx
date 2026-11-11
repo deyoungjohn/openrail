@@ -2,6 +2,8 @@
 
 import { ApiError, type PaySession, type Route } from "@openrail/api-client";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock } from "lucide-react";
+import { HistoryCard } from "@/components/pay/history-card";
+import type { PayClaim } from "@/components/pay/invoice-card";
 import { PayScreen, type PayFlowClaim, type PayScreenSource } from "@/components/pay/pay-screen";
 import { AddressChip } from "@/components/ui/address-chip";
 import { Countdown } from "@/components/ui/countdown";
@@ -25,6 +27,13 @@ const POLL_MS = 3000;
 export interface PublicCheckoutPayload extends PublicCheckout {
   routes?: Route[];
   sessions?: PaySession[];
+  /** The dates and transactions of a checkout that is not open any more (what an invoice's page also shows). */
+  history?: {
+    issued_at: string;
+    paid_at: string | null;
+    issue_tx: string | null;
+    payments: { tx_hash: string; near: boolean }[];
+  };
 }
 
 async function fetchCheckout(id: string): Promise<PublicCheckoutPayload> {
@@ -248,7 +257,26 @@ const checkoutSource = (id: string): PayScreenSource => ({
     return status === "paid" || status === "accepted";
   },
   summary: (claim, { topStage }) => summaryOf(claim as unknown as PublicCheckoutPayload, topStage),
-  closed: (claim) => summaryOf(claim as unknown as PublicCheckoutPayload, null),
+  closed: (claim) => {
+    const c = claim as unknown as PublicCheckoutPayload;
+    return (
+      <>
+        {summaryOf(c, null)}
+        {c.history ? (
+          <HistoryCard
+            claim={
+              {
+                issued_at: c.history.issued_at,
+                paid_at: c.history.paid_at ?? undefined,
+                issue_tx: c.history.issue_tx ?? undefined,
+                payments: c.history.payments,
+              } as unknown as PayClaim
+            }
+          />
+        ) : null}
+      </>
+    );
+  },
   words: checkoutPayWords,
   sessionNote: (e) =>
     e instanceof ApiError &&
