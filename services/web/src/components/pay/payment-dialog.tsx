@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { copy } from "@/copy";
+import { cn } from "@/lib/cn";
 
 /**
  * The payment (price, address, QR code, progress) in a pop-over that can be closed and opened again while the
@@ -37,6 +38,27 @@ export function PaymentDialog({
   // that container", so the scrim stopped at the page column and a click outside it never reached the dialog.
   const [host, setHost] = useState<HTMLElement | null>(null);
   useEffect(() => setHost(document.body), []);
+  // It fades and rises in and out (320 ms, like the other pop-ups). `visible` keeps it on screen while it leaves,
+  // `shown` is the state the transition runs to.
+  const [visible, setVisible] = useState(false);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setVisible(true);
+      let inner = 0;
+      const outer = requestAnimationFrame(() => {
+        inner = requestAnimationFrame(() => setShown(true));
+      });
+      return () => {
+        cancelAnimationFrame(outer);
+        cancelAnimationFrame(inner);
+      };
+    }
+    setShown(false);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timer = setTimeout(() => setVisible(false), reduced ? 0 : 320);
+    return () => clearTimeout(timer);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -75,8 +97,12 @@ export function PaymentDialog({
   if (host === null) return null;
   return createPortal(
     <div
-      hidden={!open}
-      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[var(--scrim)] p-2 [backdrop-filter:var(--scrim-blur)] sm:items-center sm:p-4"
+      hidden={!visible}
+      className={cn(
+        "fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[var(--scrim)] p-2 [backdrop-filter:var(--scrim-blur)] sm:items-center sm:p-4",
+        "transition-opacity duration-[var(--dur-slow)] ease-[var(--ease)]",
+        shown ? "opacity-100" : "opacity-0",
+      )}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -87,7 +113,13 @@ export function PaymentDialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="surface-card relative my-auto w-full max-w-4xl p-4 sm:p-6"
+        className={cn(
+          // Liquid glass like the other pop-ups; the fill is the surface at 82% so the prices and steps stay easy to
+          // read over the dimmed page (the token is changed here, not the background of the component).
+          "glass relative my-auto w-full max-w-4xl p-4 sm:p-6 [--pop-bg:color-mix(in_srgb,var(--surface)_82%,transparent)]",
+          "transition-[opacity,transform] duration-[var(--dur-slow)] ease-[var(--ease)]",
+          shown ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-[0.97] opacity-0",
+        )}
       >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-[20px] leading-7 font-semibold">{title}</h2>
