@@ -606,6 +606,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
       payBaseUrl: getEnv("PAY_BASE_URL") ?? "https://pay.openrail.near",
       claimLabels: getEnv("CLAIM_LABELS") === "1",
       confidentialIntents: getEnv("CONFIDENTIAL_INTENTS") === "1",
+      confidentialWithdrawMax: getEnv("CONFIDENTIAL_WITHDRAW_MAX") ?? "10000000000",
     },
     store: stores.api,
     recurring: stores.recurring,

@@ -6861,9 +6861,6 @@
         "tags": ["Business"],
         "security": [
           {
-            "secretKey": []
-          },
-          {
             "sessionAuth": []
           }
         ],
@@ -6907,6 +6904,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "A dashboard session is required; API keys cannot prepare or submit a withdraw.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6917,9 +6924,6 @@
         "summary": "Generate the NEP-413 intent to sign",
         "tags": ["Business"],
         "security": [
-          {
-            "secretKey": []
-          },
           {
             "sessionAuth": []
           }
@@ -6970,6 +6974,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "A dashboard session is required; API keys cannot prepare or submit a withdraw.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6980,9 +6994,6 @@
         "summary": "Submit the signed intent",
         "tags": ["Business"],
         "security": [
-          {
-            "secretKey": []
-          },
           {
             "sessionAuth": []
           }
@@ -7026,6 +7037,16 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A dashboard session is required; API keys cannot prepare or submit a withdraw.",
             "content": {
               "application/json": {
                 "schema": {

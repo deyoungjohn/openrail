@@ -64,6 +64,8 @@ export interface ApiConfig {
   payBaseUrl: string;
   /** Confidential Intents: shield + private balance reads. Off by default. */
   confidentialIntents?: boolean;
+  /** Largest confidential withdraw amount in settlement base units (default 10,000 USDC). */
+  confidentialWithdrawMax?: string;
   /** REL-2: new invoices get `<username>-<ref>` claim labels. Off until the contract supports them. */
   claimLabels?: boolean;
 }
@@ -1611,6 +1613,7 @@ export class ApiApp {
         throw new ApiError(400, "confidential_intents_disabled");
       if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
       const context = this.requireAuth(request);
+      if (context.kind !== "session") throw new ApiError(403, "session_required");
       this.requireScope(context, "payments:read");
       const body = (request.body ?? {}) as {
         amount?: unknown;
@@ -1631,6 +1634,17 @@ export class ApiApp {
         );
       if (!this.routes.settlementAssets.includes(body.source_asset))
         throw new ApiError(400, "unsupported_source_asset");
+      if (!/^[1-9]\d*$/.test(body.amount)) throw new ApiError(400, "invalid_amount");
+      const max = BigInt(this.deps.config.confidentialWithdrawMax ?? "10000000000");
+      if (BigInt(body.amount) > max) throw new ApiError(400, "invalid_amount");
+      const zeroEvm = /^0x0{40}$/i;
+      if (zeroEvm.test(body.address)) throw new ApiError(400, "invalid_address");
+      try {
+        validateRefundAddress(body.destination_chain, body.address);
+      } catch (error) {
+        if (error instanceof AddressError) throw new ApiError(400, "invalid_address");
+        throw error;
+      }
       return {
         status: 200,
         body: await this.deps.confidential.withdrawQuote({
@@ -1647,6 +1661,7 @@ export class ApiApp {
         throw new ApiError(400, "confidential_intents_disabled");
       if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
       const context = this.requireAuth(request);
+      if (context.kind !== "session") throw new ApiError(403, "session_required");
       this.requireScope(context, "payments:read");
       const body = (request.body ?? {}) as { deposit_address?: unknown };
       if (typeof body.deposit_address !== "string" || body.deposit_address === "")
@@ -1660,7 +1675,9 @@ export class ApiApp {
       if (this.deps.config.confidentialIntents !== true)
         throw new ApiError(400, "confidential_intents_disabled");
       if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
-      this.requireScope(this.requireAuth(request), "payments:read");
+      const submitter = this.requireAuth(request);
+      if (submitter.kind !== "session") throw new ApiError(403, "session_required");
+      this.requireScope(submitter, "payments:read");
       const body = (request.body ?? {}) as { signed_data?: unknown };
       if (body.signed_data === null || typeof body.signed_data !== "object")
         throw new ApiError(400, "invalid_request", "signed_data required");

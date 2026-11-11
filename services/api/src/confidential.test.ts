@@ -41,10 +41,21 @@ describe("confidential cash-out quote", () => {
   });
 });
 
-function harness() {
+async function harness() {
   const stores = createMemoryStores();
   const auth = new AuthStore(() => Date.parse("2026-11-10T10:00:00Z"));
   const { secret } = auth.createApiKey("merchant.near", "Production", "secret", ["payments:read"]);
+  const challenge = auth.challenge("merchant.near", "api.near");
+  const session = await auth.verify(
+    {
+      accountId: "merchant.near",
+      publicKey: "ed25519:example",
+      signature: "sig",
+      nonce: challenge.nonce,
+    },
+    () => true,
+    async () => true,
+  );
   const deps: ApiDeps = {
     config: {
       rootAccount: "openrail.near",
@@ -81,15 +92,15 @@ function harness() {
     method,
     path,
     query: new URLSearchParams(),
-    headers: { authorization: `Bearer ${secret}` },
+    headers: { authorization: `Bearer ${session.sessionToken}` },
     body,
   });
-  return { app, request };
+  return { app, request, apiKey: secret };
 }
 
 describe("confidential balance", () => {
   it("requires a user session and then reads the private balance", async () => {
-    const { app, request } = harness();
+    const { app, request } = await harness();
     expect((await app.handle(request("GET", "/v1/balance/confidential"))).status).toBe(409);
     const session = await app.handle(
       request("POST", "/v1/balance/confidential/session", { signed_data: { standard: "nep413" } }),
@@ -106,7 +117,7 @@ describe("confidential balance", () => {
 
 describe("confidential withdraw", () => {
   it("quotes, generates the intent, submits the signature and reports status", async () => {
-    const { app, request } = harness();
+    const { app, request } = await harness();
     const quote = await app.handle(
       request("POST", "/v1/balance/confidential/withdraw/quote", {
         amount: "500000",
@@ -133,5 +144,86 @@ describe("confidential withdraw", () => {
     );
     expect(submitted.status).toBe(200);
     expect(submitted.body).toMatchObject({ intentHash: "intent-1" });
+  });
+
+  it("refuses an API key for money-moving preparation", async () => {
+    const { app, request, apiKey } = await harness();
+    const response = await app.handle({
+      ...request("POST", "/v1/balance/confidential/withdraw/quote", {
+        amount: "500000",
+        source_asset: USDC,
+        destination_chain: "base",
+        address: "0x" + "e".repeat(40),
+      }),
+      headers: { authorization: `Bearer ${apiKey}` },
+    });
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: { code: "session_required" } });
+  });
+
+  it("validates the destination address and amount before quoting", async () => {
+    const { app, request } = await harness();
+    const badAddress = await app.handle(
+      request("POST", "/v1/balance/confidential/withdraw/quote", {
+        amount: "500000",
+        source_asset: USDC,
+        destination_chain: "base",
+        address: "0x" + "0".repeat(40),
+      }),
+    );
+    expect(badAddress.status).toBe(400);
+    expect(badAddress.body).toMatchObject({ error: { code: "invalid_address" } });
+    const badAmount = await app.handle(
+      request("POST", "/v1/balance/confidential/withdraw/quote", {
+        amount: "10000000001",
+        source_asset: USDC,
+        destination_chain: "base",
+        address: "0x" + "e".repeat(40),
+      }),
+    );
+    expect(badAmount.status).toBe(400);
+    expect(badAmount.body).toMatchObject({ error: { code: "invalid_amount" } });
+  });
+});
+
+describe("confidential withdraw address validation", () => {
+  it("accepts a valid address on each supported chain and refuses a bad one", async () => {
+    const { app, request } = await harness();
+    const valid: Array<[string, string]> = [
+      ["base", "0x" + "e".repeat(40)],
+      ["arbitrum", "0x" + "e".repeat(40)],
+      ["optimism", "0x" + "e".repeat(40)],
+      ["polygon", "0x" + "e".repeat(40)],
+      ["ethereum", "0x" + "e".repeat(40)],
+      ["solana", "11111111111111111111111111111111"],
+      ["near", "merchant.near"],
+    ];
+    for (const [chain, address] of valid) {
+      const response = await app.handle(
+        request("POST", "/v1/balance/confidential/withdraw/quote", {
+          amount: "500000",
+          source_asset: USDC,
+          destination_chain: chain,
+          address,
+        }),
+      );
+      expect(response.status, chain).toBe(200);
+    }
+    for (const [chain, address] of [
+      ["base", "0x1234"],
+      ["solana", "not-base58!"],
+      ["near", "Invalid Account"],
+    ] as Array<[string, string]>) {
+      const response = await app.handle(
+        request("POST", "/v1/balance/confidential/withdraw/quote", {
+          amount: "500000",
+          source_asset: USDC,
+          destination_chain: chain,
+          address,
+        }),
+      );
+      expect(response.status, chain).toBe(400);
+      expect((response.body as { error: { code: string } }).error.code).toBe("invalid_address");
+    }
   });
 });

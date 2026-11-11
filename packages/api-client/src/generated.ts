@@ -1532,6 +1532,7 @@ export interface operations {
       "200": ConfidentialWithdrawQuote;
       "400": Error;
       "401": Error;
+      "403": Error;
     };
   };
   confidentialWithdrawIntent: {
@@ -1542,6 +1543,7 @@ export interface operations {
       "200": ConfidentialWithdrawIntent;
       "400": Error;
       "401": Error;
+      "403": Error;
     };
   };
   confidentialWithdrawSubmit: {
@@ -1552,6 +1554,7 @@ export interface operations {
       "200": ConfidentialWithdrawSubmit;
       "400": Error;
       "401": Error;
+      "403": Error;
     };
   };
   confidentialWithdrawStatus: {
