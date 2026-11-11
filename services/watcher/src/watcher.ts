@@ -335,7 +335,12 @@ export class Watcher {
    * five minutes until the quote TTL, and the slow cadence after. A claim nobody has priced is probed once a minute
    * for its first quote. (The blueprint's 72 h of 15 s polling read every priced claim 5,760 times a day.)
    */
-  private intervalFor(lastQuoteSec: number | null, nowMs: number, finished: boolean): number {
+  private intervalFor(
+    lastQuoteSec: number | null,
+    nowMs: number,
+    finished: boolean,
+    isInvoice: boolean,
+  ): number {
     const c = this.config;
     if (lastQuoteSec === null)
       return finished ? c.slowIntervalMs : (c.idleProbeMs ?? DEFAULT_IDLE_PROBE_MS);
@@ -345,6 +350,8 @@ export class Watcher {
       return c.warmIntervalMs ?? DEFAULT_WARM_INTERVAL_MS;
     }
     if (age <= c.quoteTtlMs) return c.coolIntervalMs ?? DEFAULT_COOL_INTERVAL_MS;
+    // An invoice has no deadline for paying: anyone can still send to its account, so it keeps the slow cadence.
+    if (isInvoice) return c.slowIntervalMs;
     // Past the quote TTL the deposit address is inactive (1Click `timeWhenInactive` = deadline + 72 h): nothing can arrive
     // through that quote any more. Not looked at again until the API says a new price was asked (`poke`).
     return Number.POSITIVE_INFINITY;
@@ -511,7 +518,7 @@ export class Watcher {
         }
       }
       const interval = quoteKnown
-        ? this.intervalFor(lastQuote, nowMs, finished)
+        ? this.intervalFor(lastQuote, nowMs, finished, claim.kind === undefined || claim.kind === 0)
         : this.config.fastIntervalMs;
       const quoteExpiryMs = lastQuote === null ? null : lastQuote * 1000 + this.config.quoteTtlMs;
       const openQuote = quoteExpiryMs !== null && nowMs <= quoteExpiryMs;

@@ -12,6 +12,8 @@ export type ClaimLock =
 
 export interface ClaimView {
   token_id: string;
+  /** Claim kind; 0 is the standard invoice. Absent is read as an invoice (the safe side). */
+  kind?: number;
   issuer_id: string;
   claim_account: string;
   status: ClaimStatus;

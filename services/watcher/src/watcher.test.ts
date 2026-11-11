@@ -405,7 +405,7 @@ describe("watcher decisions", () => {
     const expiredDeadline = NOW / 1000 - 73 * 60 * 60;
     const fixture = setup({
       config: CONFIG_VIEW,
-      claims: [makeClaim("c-1")],
+      claims: [makeClaim("c-1", { kind: 1 })],
       quotes: { "c-1": [makeQuote(expiredDeadline)] },
       balances: { "c-1.openrail.near": ["0", "0", "0", "0"] },
     });
@@ -424,6 +424,20 @@ describe("watcher decisions", () => {
     const third = await fixture.watcher.tick();
     expect(third.skipped).toBe(1);
     expect(fixture.near.batches).toHaveLength(1);
+  });
+
+  it("an invoice keeps the slow cadence after the last quote +72 h", async () => {
+    const fixture = setup({
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1", { kind: 0 })],
+      quotes: { "c-1": [makeQuote(NOW / 1000 - 73 * 60 * 60)] },
+      balances: { "c-1.openrail.near": ["0", "0", "0", "0"] },
+    });
+    await fixture.watcher.tick();
+    expect(fixture.near.batches).toHaveLength(1);
+    fixture.advance(CONFIG.slowIntervalMs);
+    await fixture.watcher.tick();
+    expect(fixture.near.batches).toHaveLength(2);
   });
 
   it("keeps a hot claim on the 15-second cadence", async () => {
@@ -558,7 +572,12 @@ describe("watcher call volume (11 Nov: the 15 s loop used 7.6M QuickNode credits
     const hours = (h: number) => NOW / 1000 - h * 60 * 60;
     const fixture = setup({
       config: CONFIG_VIEW,
-      claims: [makeClaim("hot"), makeClaim("warm"), makeClaim("cool"), makeClaim("old")],
+      claims: [
+        makeClaim("hot"),
+        makeClaim("warm"),
+        makeClaim("cool"),
+        makeClaim("old", { kind: 1 }),
+      ],
       quotes: {
         hot: [makeQuote(hours(0.2))],
         warm: [makeQuote(hours(2))],
