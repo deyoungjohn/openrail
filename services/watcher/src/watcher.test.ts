@@ -18,6 +18,8 @@ const CONFIG: WatcherConfig = {
   minBalanceNear: 0.5,
   extraClaims: [],
   healthPort: 0,
+  // The balance is read every tick here: the alert tests change it between two ticks (production: every ten minutes).
+  balanceCheckMs: 0,
 };
 
 const CONFIG_VIEW: ConfigView = {
@@ -122,6 +124,7 @@ function makeQuote(deadlineRequested: number): Quote {
 function setup(
   state: FakeState,
   indexer?: { poke(): Promise<void>; registerTx(hash: string): Promise<void> },
+  config: WatcherConfig = CONFIG,
 ): {
   watcher: Watcher;
   near: FakeNear;
@@ -138,7 +141,7 @@ function setup(
   const watcher = new Watcher({
     near,
     chain,
-    config: CONFIG,
+    config,
     logger,
     alert: async (alert) => {
       alerts.push(alert);
@@ -496,5 +499,93 @@ describe("watcher discovery", () => {
     const summary = await watcher.tick();
     expect(summary.reconciled).toEqual(["c-9"]);
     expect(fixture.near.views.some((view) => view.methodName === "claim")).toBe(true);
+  });
+});
+
+describe("watcher call volume (11 Nov: the 15 s loop used 7.6M QuickNode credits in three days)", () => {
+  const callsOf = (near: FakeNear) => near.views.length + near.batches.length;
+
+  it("open claims nobody priced cost one probe a minute, not three calls every tick", async () => {
+    const claims = Array.from({ length: 10 }, (_, i) => makeClaim(`c-${i + 1}`));
+    const fixture = setup({ config: CONFIG_VIEW, claims, quotes: {}, balances: {} });
+    for (let tick = 0; tick < 20; tick += 1) {
+      await fixture.watcher.tick();
+      fixture.advance(15_000);
+    }
+    // five minutes: the old loop made 20 ticks x (3 + 10 x 3) = about 660 calls
+    expect(callsOf(fixture.near)).toBeLessThan(150);
+  });
+
+  it("a claim idles by the age of its last quote: hot, a minute, five minutes, then the slow cadence", async () => {
+    const hours = (h: number) => NOW / 1000 - h * 60 * 60;
+    const fixture = setup({
+      config: CONFIG_VIEW,
+      claims: [makeClaim("hot"), makeClaim("warm"), makeClaim("cool"), makeClaim("old")],
+      quotes: {
+        hot: [makeQuote(hours(0.2))],
+        warm: [makeQuote(hours(2))],
+        cool: [makeQuote(hours(30))],
+        old: [makeQuote(hours(80))],
+      },
+      balances: {},
+    });
+    await fixture.watcher.tick();
+    const seen = (id: string) =>
+      fixture.near.batches.filter((b) => b.accountId === `${id}.openrail.near`).length;
+    expect(["hot", "warm", "cool", "old"].map(seen)).toEqual([1, 1, 1, 1]);
+    fixture.advance(15_000);
+    await fixture.watcher.tick();
+    expect(["hot", "warm", "cool", "old"].map(seen)).toEqual([2, 1, 1, 1]);
+    fixture.advance(45_000);
+    await fixture.watcher.tick();
+    expect(["hot", "warm", "cool", "old"].map(seen)).toEqual([3, 2, 1, 1]);
+    fixture.advance(240_000);
+    await fixture.watcher.tick();
+    expect(["hot", "warm", "cool", "old"].map(seen)).toEqual([4, 3, 2, 1]);
+    fixture.advance(CONFIG.slowIntervalMs);
+    await fixture.watcher.tick();
+    expect(seen("old")).toBe(2);
+  });
+
+  it("a payment on a hot claim is still reconciled on the next tick", async () => {
+    const state = {
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1")],
+      quotes: openQuote(),
+      balances: {} as Record<string, string[]>,
+    };
+    const fixture = setup(state);
+    await fixture.watcher.tick();
+    state.balances["c-1.openrail.near"] = ["0", "2000000", "0", "0"];
+    fixture.advance(15_000);
+    const summary = await fixture.watcher.tick();
+    expect(summary.reconciled).toEqual(["c-1"]);
+  });
+
+  it("the block height and the balance are read at most once in their cache time", async () => {
+    const claims = [makeClaim("c-1")];
+    let heights = 0;
+    let balances = 0;
+    const fixture = setup({ config: CONFIG_VIEW, claims, quotes: {}, balances: {} }, undefined, {
+      ...CONFIG,
+      balanceCheckMs: 600_000,
+    });
+    const chain = fixture.chain;
+    const height = chain.blockHeight.bind(chain);
+    const balance = chain.accountBalanceYocto.bind(chain);
+    chain.blockHeight = async () => {
+      heights += 1;
+      return height();
+    };
+    chain.accountBalanceYocto = async () => {
+      balances += 1;
+      return balance();
+    };
+    for (let tick = 0; tick < 8; tick += 1) {
+      await fixture.watcher.tick();
+      fixture.advance(15_000);
+    }
+    expect(heights).toBeLessThanOrEqual(3);
+    expect(balances).toBe(1);
   });
 });

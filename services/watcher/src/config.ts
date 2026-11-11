@@ -5,6 +5,17 @@ export const DEFAULT_SLOW_INTERVAL_MS = 10 * 60_000;
 export const DEFAULT_QUOTE_TTL_MS = 72 * 60 * 60_000;
 export const DEFAULT_MIN_BALANCE_NEAR = 0.5;
 export const DEFAULT_HEALTH_PORT = 8080;
+/** A claim whose last quote is at most this far past its deadline is "hot": the 15 s cadence. */
+export const DEFAULT_HOT_WINDOW_MS = 60 * 60_000;
+/** Then "warm" (one read a minute) until this long past the deadline, then "cool" until the quote TTL. */
+export const DEFAULT_WARM_WINDOW_MS = 24 * 60 * 60_000;
+export const DEFAULT_WARM_INTERVAL_MS = 60_000;
+export const DEFAULT_COOL_INTERVAL_MS = 5 * 60_000;
+/** A claim nobody has asked a price for: looked at this often for a first quote. */
+export const DEFAULT_IDLE_PROBE_MS = 60_000;
+export const DEFAULT_BALANCE_CHECK_MS = 10 * 60_000;
+export const DEFAULT_BLOCK_CACHE_MS = 60_000;
+export const DEFAULT_DISCOVER_CACHE_MS = 60_000;
 
 export interface WatcherConfig {
   /** `<root>` contract account. */
@@ -22,6 +33,18 @@ export interface WatcherConfig {
   /** Optional extra token ids (claims issued permissionlessly by non-allow-listed issuers). */
   extraClaims: string[];
   healthPort: number;
+  /**
+   * Cadence tuning (11 Nov: the 15 s loop read every open claim three times a tick and used 7.6M QuickNode credits in
+   * three days). Optional: the defaults above apply when a field is missing.
+   */
+  hotWindowMs?: number;
+  warmWindowMs?: number;
+  warmIntervalMs?: number;
+  coolIntervalMs?: number;
+  idleProbeMs?: number;
+  balanceCheckMs?: number;
+  blockCacheMs?: number;
+  discoverCacheMs?: number;
 }
 
 function numberEnv(name: string, fallback: number): number {
@@ -48,5 +71,13 @@ export function watcherConfigFromEnv(): WatcherConfig {
       .map((id) => id.trim())
       .filter((id) => id !== ""),
     healthPort: numberEnv("WATCHER_HEALTH_PORT", DEFAULT_HEALTH_PORT),
+    hotWindowMs: numberEnv("WATCHER_HOT_WINDOW_MS", DEFAULT_HOT_WINDOW_MS),
+    warmWindowMs: numberEnv("WATCHER_WARM_WINDOW_MS", DEFAULT_WARM_WINDOW_MS),
+    warmIntervalMs: numberEnv("WATCHER_WARM_INTERVAL_MS", DEFAULT_WARM_INTERVAL_MS),
+    coolIntervalMs: numberEnv("WATCHER_COOL_INTERVAL_MS", DEFAULT_COOL_INTERVAL_MS),
+    idleProbeMs: numberEnv("WATCHER_IDLE_PROBE_MS", DEFAULT_IDLE_PROBE_MS),
+    balanceCheckMs: numberEnv("WATCHER_BALANCE_CHECK_MS", DEFAULT_BALANCE_CHECK_MS),
+    blockCacheMs: numberEnv("WATCHER_BLOCK_CACHE_MS", DEFAULT_BLOCK_CACHE_MS),
+    discoverCacheMs: numberEnv("WATCHER_DISCOVER_CACHE_MS", DEFAULT_DISCOVER_CACHE_MS),
   };
 }

@@ -28,8 +28,15 @@ export class RpcChainStatus implements ChainStatus {
     this.timeoutMs = timeoutMs;
   }
 
+  private readonly counts = new Map<string, number>();
+
+  callCounts(): Record<string, number> {
+    return Object.fromEntries(this.counts);
+  }
+
   private async rpc<T>(method: string, params: unknown): Promise<T> {
     let lastError: Error | undefined;
+    this.counts.set(`chain.${method}`, (this.counts.get(`chain.${method}`) ?? 0) + 1);
     for (const url of rpcOrder(this.urls)) {
       try {
         const response = await this.fetchImpl(url, {
