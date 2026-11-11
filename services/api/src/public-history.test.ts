@@ -108,7 +108,7 @@ describe("the public pay and ack answers", () => {
     const body = (await w.get("/v1/pay/claims/c-1")).body as Public;
     expect(body.paid_at).toBe("2026-11-09T12:30:00Z");
     expect(body.payments).toEqual([
-      { tx_hash: "0xORIGIN", near: false },
+      { tx_hash: "0xORIGIN", near: false, chain: "base" },
       { tx_hash: "NEARTX333", near: true },
     ]);
   });
