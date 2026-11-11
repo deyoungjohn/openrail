@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadModuleEarnings } from "./use-earnings";
+import { loadModuleEarnings } from "./module-earnings";
 import type { Earning, EarningsSource } from "./earnings";
 
 const row = (id: string, stream: "checkout" | "pay_link"): Earning => ({
