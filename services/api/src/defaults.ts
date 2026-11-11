@@ -491,6 +491,21 @@ function confidentialBase(): string {
   return (getEnv("ONECLICK_API_URL") ?? "https://1click.chaindefuser.com").replace(/\/+$/, "");
 }
 
+async function confidentialPost(path: string, body: unknown): Promise<Record<string, unknown>> {
+  const response = await fetch(`${confidentialBase()}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "X-API-Key": requireEnv("ONECLICK_JWT"),
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new ApiError(502, "confidential_withdraw_failed", text.slice(0, 200));
+  return JSON.parse(text) as Record<string, unknown>;
+}
+
 function createConfidentialBalancePort(): ConfidentialBalancePort {
   return {
     async authenticate(signedData) {
@@ -507,6 +522,48 @@ function createConfidentialBalancePort(): ConfidentialBalancePort {
       if (typeof body.accessToken !== "string" || typeof body.expiresIn !== "number")
         throw new ApiError(502, "confidential_auth_failed");
       return { accessToken: body.accessToken, expiresIn: body.expiresIn };
+    },
+    async withdrawQuote(request) {
+      const target = PAYOUT_DESTINATIONS[request.destinationChain];
+      if (target === undefined) throw new ApiError(400, "unsupported_chain");
+      const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const body = await confidentialPost("/v0/quote", {
+        dry: false,
+        swapType: "EXACT_INPUT",
+        slippageTolerance: 30,
+        originAsset: request.sourceAsset,
+        destinationAsset: target.asset,
+        amount: request.amount,
+        depositType: "CONFIDENTIAL_INTENTS",
+        recipientType: "DESTINATION_CHAIN",
+        refundType: "CONFIDENTIAL_INTENTS",
+        recipient: request.address,
+        refundTo: request.refundTo,
+        deadline,
+      });
+      return body;
+    },
+    async generateIntent(depositAddress, signerId) {
+      return confidentialPost("/v0/generate-intent", {
+        type: "swap_transfer",
+        standard: "nep413",
+        signerId,
+        depositAddress,
+      });
+    },
+    async submitIntent(signedData) {
+      return confidentialPost("/v0/submit-intent", { type: "swap_transfer", signedData });
+    },
+    async withdrawStatus(depositAddress) {
+      const response = await fetch(
+        `${confidentialBase()}/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`,
+        {
+          headers: { "X-API-Key": requireEnv("ONECLICK_JWT") },
+          signal: AbortSignal.timeout(20_000),
+        },
+      );
+      if (!response.ok) throw new ApiError(502, "confidential_status_failed");
+      return (await response.json()) as Record<string, unknown>;
     },
     async balances(userToken, tokenIds) {
       const query = tokenIds.map(encodeURIComponent).join(",");
@@ -549,6 +606,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
       payBaseUrl: getEnv("PAY_BASE_URL") ?? "https://pay.openrail.near",
       claimLabels: getEnv("CLAIM_LABELS") === "1",
       confidentialIntents: getEnv("CONFIDENTIAL_INTENTS") === "1",
+      confidentialWithdrawMax: getEnv("CONFIDENTIAL_WITHDRAW_MAX") ?? "10000000000",
     },
     store: stores.api,
     recurring: stores.recurring,
