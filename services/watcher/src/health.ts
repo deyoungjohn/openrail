@@ -13,6 +13,8 @@ export interface HealthSnapshot {
   last_error: string | null;
   /** RPC requests since the start, per feature: where the provider's credits go. */
   rpc_calls?: Record<string, number>;
+  /** Failed batched writes to the watcher store (never fatal). */
+  store_write_failures?: number;
 }
 
 export interface HealthServer {
