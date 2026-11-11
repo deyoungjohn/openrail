@@ -82,7 +82,7 @@ export function PaymentsScreen() {
               <div className="sm:col-span-2">
                 <dt className="caption">{t.transaction}</dt>
                 <dd>
-                  <AddressChip value={e.txHash} chain={e.chain as ChainId} />
+                  <AddressChip value={e.txHash} chain={e.chain as ChainId} tx />
                 </dd>
               </div>
             ) : null}

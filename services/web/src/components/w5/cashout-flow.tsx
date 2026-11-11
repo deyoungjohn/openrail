@@ -59,14 +59,15 @@ export function CashoutFlow({
 
   const destChain = row.destination_chain as ChainId;
   const txFor = (id: string) => {
-    if (id === "balance" && row.tx_hash) return <AddressChip value={row.tx_hash} chain="near" />;
+    if (id === "balance" && row.tx_hash) return <AddressChip value={row.tx_hash} chain="near" tx />;
     if (id === "bridge" && row.near_tx_hashes[0] && row.near_tx_hashes[0] !== row.tx_hash)
-      return <AddressChip value={row.near_tx_hashes[0]} chain="near" />;
+      return <AddressChip value={row.near_tx_hashes[0]} chain="near" tx />;
     if (id === "arrived" && row.destination_tx_hashes[0])
       return (
         <AddressChip
           value={row.destination_tx_hashes[0]}
           chain={row.destination_chain === "confidential" ? undefined : destChain}
+          tx
         />
       );
     return null;

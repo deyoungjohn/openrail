@@ -1567,6 +1567,10 @@
                 "tx_hash": {
                   "type": "string"
                 },
+                "chain": {
+                  "type": "string",
+                  "description": "The chain of an origin transaction (base, arbitrum, solana ...). Absent for NEAR transactions."
+                },
                 "near": {
                   "type": "boolean"
                 }
@@ -1711,6 +1715,10 @@
               "properties": {
                 "tx_hash": {
                   "type": "string"
+                },
+                "chain": {
+                  "type": "string",
+                  "description": "The chain of an origin transaction (base, arbitrum, solana ...). Absent for NEAR transactions."
                 },
                 "near": {
                   "type": "boolean"
@@ -2042,6 +2050,10 @@
           },
           "event_id": {
             "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "description": "Why the test was not delivered (blocked address, no answer, a non-2xx answer). Absent when delivered."
           }
         }
       },
