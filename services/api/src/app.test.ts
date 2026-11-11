@@ -64,7 +64,7 @@ function harness() {
     })),
   };
   const pokeIndexer = vi.fn(async () => undefined);
-  const pokeWatcher = vi.fn(async (_tokenId: string) => undefined);
+  const pokeWatcher = vi.fn<(tokenId: string) => Promise<undefined>>(async () => undefined);
   const deps: ApiDeps = {
     config,
     auth,
