@@ -735,6 +735,7 @@ export class ApiApp {
   }
 
   private readonly claimCache = new Map<string, { at: number; claim: Record<string, unknown> }>();
+  /** Last 500 claim ids whose Paid/Partial status already poked the indexer. */
   private readonly paidPoked = new Set<string>();
   private dashboardPokeAt = 0;
   /** Confidential user sessions are read-only and live in this process only; a restart means signing again. */
@@ -748,6 +749,17 @@ export class ApiApp {
    * claim, not from the record written at creation (which never changes). A claim that cannot be read
    * keeps the last one read, and only a claim never read keeps its stored values. Reads are cached for ten seconds and run eight at a time.
    */
+  /** True when this status is new for the claim; keeps only the most recent 500 ids. */
+  private markPaidPoked(tokenId: string): boolean {
+    if (this.paidPoked.has(tokenId)) return false;
+    this.paidPoked.add(tokenId);
+    if (this.paidPoked.size > 500) {
+      const oldest = this.paidPoked.values().next().value;
+      if (oldest !== undefined) this.paidPoked.delete(oldest);
+    }
+    return true;
+  }
+
   private async dashboardMeta(): Promise<{
     last_polled_at: string | null;
     boost_active: boolean;
@@ -1487,9 +1499,8 @@ export class ApiApp {
       const claim = (await this.claimOrStale(invoice.token_id)) ?? {};
       if (
         (claim.status === "Paid" || claim.status === "PartiallyPaid") &&
-        !this.paidPoked.has(invoice.token_id)
+        this.markPaidPoked(invoice.token_id)
       ) {
-        this.paidPoked.add(invoice.token_id);
         void this.deps.pokeIndexer?.().catch(() => undefined);
       }
       return {
