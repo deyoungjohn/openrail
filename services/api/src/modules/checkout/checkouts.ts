@@ -48,6 +48,8 @@ interface ChainSnapshot {
   state: ChainCheckoutState | null;
 }
 const NS_REFS = "checkout.order_refs";
+/** One poke per checkout and money status; bounded so a long-lived process keeps no more than 500 ids. */
+const POKE_STATUSES = new Set(["paid", "partial", "late", "accepted"]);
 
 const ORDER_REF_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const USD_RE = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?$/;
@@ -458,6 +460,8 @@ export class Checkouts {
   private readonly refunds: (context: ApiModuleContext) => RefundQuotePort;
   private readonly routes: RouteFile;
   private readonly settleGrace: number;
+  /** One poke per checkout and money status; bounded so a long-lived process keeps no more than 500 ids. */
+  private readonly poked = new Map<string, string>();
 
   constructor(options: CheckoutOptions = {}) {
     this.settleGrace = options.settleGraceSeconds ?? DEFAULT_SETTLE_GRACE_SECONDS;
@@ -465,6 +469,17 @@ export class Checkouts {
     this.chain = options.chain ?? defaultCheckoutChain;
     this.refunds = options.refunds ?? oneClickRefundQuotes;
     this.routes = loadRoutes();
+  }
+
+  private pokeOnce(context: ApiModuleContext, tokenId: string, status: string): void {
+    if (!POKE_STATUSES.has(status)) return;
+    if (this.poked.get(tokenId) === status) return;
+    this.poked.set(tokenId, status);
+    if (this.poked.size > 500) {
+      const oldest = this.poked.keys().next().value;
+      if (oldest !== undefined) this.poked.delete(oldest);
+    }
+    void context.pokeIndexer?.().catch(() => undefined);
   }
 
   async route(request: ApiRequest, context: ApiModuleContext): Promise<ApiResponse | undefined> {
@@ -560,6 +575,11 @@ export class Checkouts {
     const feeUsd = stored.fee_usd ?? "0.00";
     const totalUsd = stored.total_usd ?? stored.amount_usd;
     const id = noticeId(event, tokenId, raw);
+    this.pokeOnce(
+      context,
+      tokenId,
+      mapped === "checkout.paid_late" ? "late" : mapped.replace("checkout.", ""),
+    );
     if (mapped === "checkout.partial") {
       // A partial notice must never contain the word "paid".
       const clean: Record<string, unknown> = {
@@ -901,7 +921,10 @@ export class Checkouts {
     const expiry =
       state?.expiry ?? (typeof claim.due_date === "number" ? claim.due_date : stored.expiry);
     const status: CheckoutStatus = snap.checking ? "checking" : computed;
-    if (!snap.checking) await this.settle(context, stored, snap, computed, state, expiry, nowSec);
+    if (!snap.checking) {
+      this.pokeOnce(context, stored.token_id, status);
+      await this.settle(context, stored, snap, computed, state, expiry, nowSec);
+    }
     const feeMode: FeeMode = stored.fee_mode ?? "absorb";
     const subtotalUsd = stored.subtotal_usd ?? stored.amount_usd;
     const feeUsd = stored.fee_usd ?? "0.00";

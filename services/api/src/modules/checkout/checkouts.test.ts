@@ -102,6 +102,7 @@ function harness(
     checkoutState: checkoutStateSpy,
     paymentLog: paymentLogSpy,
   };
+  const poke = vi.fn(async () => undefined);
   const refundQuote = vi.fn<RefundQuotePort["quote"]>(async (input) => ({
     quote_id: "rq_1",
     deposit_address: "deposit-near-addr",
@@ -144,6 +145,7 @@ function harness(
     accessKey: { has: async () => true },
     verifier: () => true,
     cashout: { quote: async () => ({}) },
+    pokeIndexer: poke,
     clock,
     modules: options.modules ?? [module],
     ...(options.indexer === undefined ? {} : { indexer: options.indexer }),
@@ -154,6 +156,7 @@ function harness(
     module,
     create,
     refundQuote,
+    poke,
     issueFor,
     keys,
     chain,
@@ -201,6 +204,38 @@ function createCheckout(h: H, body: Record<string, unknown> = {}, secret = h.key
     { "idempotency-key": `k-${idem}` },
   );
 }
+
+describe("checkout freshness", () => {
+  it("pokes once when a public checkout is first seen paid", async () => {
+    const h = harness();
+    const created = await createCheckout(h);
+    const id = created.body.id as string;
+    const claim = h.chain.claims.get(id);
+    if (claim !== undefined) {
+      claim.booked_total = claim.amount_due;
+      claim.distributed_total = claim.amount_due;
+    }
+    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("paid");
+    expect((await call(h, "GET", `/v1/public/checkouts/${id}`)).body.status).toBe("paid");
+    expect(h.poke).toHaveBeenCalledTimes(1);
+  });
+
+  it("pokes once when the same checkout event is delivered again", async () => {
+    const h = harness();
+    const created = await createCheckout(h);
+    const tokenId = created.body.token_id as string;
+    const event = {
+      id: "evt-1",
+      type: "checkout_partial",
+      created: Math.floor(NOW.getTime() / 1000),
+      data: { token_id: tokenId },
+      indexed: true,
+    } as IndexedEvent;
+    h.module.events?.(event, h.context());
+    h.module.events?.(event, h.context());
+    expect(h.poke).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("checkout API: create", () => {
   it("checkout_create_returns_pay_url_expiry_and_claim_account", async () => {

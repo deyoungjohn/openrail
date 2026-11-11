@@ -33,6 +33,8 @@ export interface ApiModuleContext {
   withIdempotency(request: ApiRequest, run: () => Promise<ApiResponse>): Promise<ApiResponse>;
   /** Read-only contract view; the module supplies its own method name and arguments. */
   view(contractMethod: string, args: object): Promise<unknown>;
+  /** Ask the indexer to poll sooner after a booked payment (core throttling lives in the API). */
+  pokeIndexer?(): Promise<void>;
   indexer?: import("./app.js").IndexerPort;
 }
 

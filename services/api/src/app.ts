@@ -2036,6 +2036,9 @@ export class ApiApp {
       requireAuth: (request, allowPublishable) => this.requireAuth(request, allowPublishable),
       requireScope: (context, scope) => this.requireScope(context, scope),
       withIdempotency: (request, run) => this.withIdempotency(request, run),
+      ...(this.deps.pokeIndexer === undefined
+        ? {}
+        : { pokeIndexer: () => this.deps.pokeIndexer?.() ?? Promise.resolve() }),
       view: async (methodName, args) => {
         if (this.deps.contract.view === undefined)
           throw new ApiError(503, "contract_view_unavailable");
