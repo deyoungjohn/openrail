@@ -48,6 +48,15 @@ function Spark({ series, color, id }: { series: readonly number[]; color: string
   );
 }
 
+/** What was left in the balance at the end of each bar: revenue in, cash-outs out, never below zero. */
+function keptSeries(bars: readonly { revenue: number; cashedOut: number }[]): number[] {
+  let running = 0;
+  return bars.map((b) => {
+    running = Math.max(0, running + b.revenue - b.cashedOut);
+    return running;
+  });
+}
+
 function Stat({
   label,
   cents,
@@ -144,7 +153,14 @@ export function CashoutOverview({
           color="var(--success)"
           id="co-cashed"
         />
-        <Stat label={t.kept} cents={loading ? null : f.keptCents} hint={t.keptHint} />
+        <Stat
+          label={t.kept}
+          cents={loading ? null : f.keptCents}
+          hint={t.keptHint}
+          series={keptSeries(bars)}
+          color="var(--warning)"
+          id="co-kept"
+        />
       </div>
       <section className={shell} aria-label={t.chart}>
         <h3 className="text-[14px] leading-5 font-medium">{t.chart}</h3>
