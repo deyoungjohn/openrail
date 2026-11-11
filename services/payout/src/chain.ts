@@ -1,5 +1,5 @@
 /** NEAR adapter for the settle/payout views and calls. */
-import { getEnv, nearClientFromEnv, requireEnv, type NearClient } from "@openrail/shared";
+import { getEnv, nearClientFromEnv, type NearClient } from "@openrail/shared";
 import type { CallBudget } from "./budget.js";
 import type {
   ChainPort,
@@ -264,21 +264,10 @@ export class PayoutChain implements ChainPort {
     );
   }
 
+  /** The relayer's NEAR balance, read through the shared RPC cycle. A failed read throws: it is not a zero balance. */
   async balanceYocto(): Promise<bigint> {
-    const rpc = requireEnv("NEAR_RPC_URL").split(",")[0];
     const account = getEnv("PAYOUT_RELAYER_ACCOUNT_ID") ?? "";
-    if (rpc === undefined || account === "") return 0n;
-    const response = await fetch(rpc, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "query",
-        params: { request_type: "view_account", finality: "final", account_id: account },
-      }),
-    });
-    const body = (await response.json()) as { result?: { amount?: unknown } };
-    return typeof body.result?.amount === "string" ? BigInt(body.result.amount) : 0n;
+    if (account === "") throw new Error("MISSING_ENV: PAYOUT_RELAYER_ACCOUNT_ID");
+    return this.guarded(() => this.near.accountBalanceYocto(account));
   }
 }

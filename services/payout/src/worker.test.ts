@@ -384,3 +384,28 @@ describe("checkout refund payout worker", () => {
     expect(second.skipped.some((s) => s.includes("uncertain"))).toBe(true);
   });
 });
+
+describe("the relayer balance read (11 Nov: the first RPC was spent and the worker read 0 NEAR)", () => {
+  it("relayer_balance_comes_from_the_shared_RPC_cycle_and_a_failed_read_throws", async () => {
+    const { PayoutChain } = await import("./chain.js");
+    process.env.PAYOUT_RELAYER_ACCOUNT_ID = "payout.openrail.near";
+    try {
+      const ok = new PayoutChain({
+        rootAccount: "openrail.near",
+        near: { accountBalanceYocto: async () => 1_000_000_000_000_000_000_000_000n } as never,
+      });
+      expect(await ok.balanceYocto()).toBe(1_000_000_000_000_000_000_000_000n);
+      const down = new PayoutChain({
+        rootAccount: "openrail.near",
+        near: {
+          accountBalanceYocto: async () => {
+            throw new Error("RPC_QUOTA_EXCEEDED");
+          },
+        } as never,
+      });
+      await expect(down.balanceYocto()).rejects.toThrow("RPC_QUOTA_EXCEEDED");
+    } finally {
+      delete process.env.PAYOUT_RELAYER_ACCOUNT_ID;
+    }
+  });
+});

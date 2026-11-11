@@ -81,25 +81,35 @@ async function main(): Promise<void> {
       lastSummary = await worker.tick();
       lastTick = new Date().toISOString();
       lastError = null;
-      const yocto = await chain.balanceYocto();
-      balanceNear = Number(yocto) / 1e24;
-      if (balanceNear < minBalance && !lowAlerted) {
-        lowAlerted = true;
-        if (alertUrl !== undefined) {
-          await fetch(alertUrl, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              service: "payout",
-              kind: "low_balance",
-              balance_near: balanceNear,
-              threshold_near: minBalance,
-              at: lastTick,
-            }),
-          }).catch(() => undefined);
+      // The balance is read apart from the tick: when no RPC can answer, say so and keep the last known value; a failed
+      // read is never a zero balance and never raises the low-balance alert (11 Nov: "balance is low 0" with 1 NEAR in it).
+      try {
+        const yocto = await chain.balanceYocto();
+        balanceNear = Number(yocto) / 1e24;
+        if (balanceNear >= minBalance) lowAlerted = false;
+        if (balanceNear < minBalance && !lowAlerted) {
+          lowAlerted = true;
+          if (alertUrl !== undefined) {
+            await fetch(alertUrl, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                service: "payout",
+                kind: "low_balance",
+                balance_near: balanceNear,
+                threshold_near: minBalance,
+                at: lastTick,
+              }),
+            }).catch(() => undefined);
+          }
+          lastAlert = "relayer balance is low";
+          logger.warn("payout relayer balance is low", balanceNear);
         }
-        lastAlert = "relayer balance is low";
-        logger.warn("payout relayer balance is low", balanceNear);
+      } catch (error) {
+        logger.warn(
+          "payout relayer balance could not be read",
+          error instanceof Error ? error.message : String(error),
+        );
       }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
