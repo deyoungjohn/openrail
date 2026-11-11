@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Select } from "@/components/ui/input";
 import { useNear } from "@/wallet/near";
+import { MoneyTrailCard } from "./money-trail-card";
 import { readSettlement } from "./read-settlement";
 import {
   clearSettlementCall,
@@ -146,6 +147,7 @@ export function PayoutsPanel() {
       {auth.state.status === "signedIn" ? (
         <PrivateBalanceCard accountId={auth.state.accountId} />
       ) : null}
+      <MoneyTrailCard />
     </div>
   );
 }
