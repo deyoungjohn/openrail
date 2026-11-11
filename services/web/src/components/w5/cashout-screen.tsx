@@ -30,7 +30,10 @@ import { NearWalletView } from "../wallet-buttons";
 import { ErrorNote } from "@/components/ui/error-note";
 
 // Cash-out destinations (blueprint 2.9). Not BNB Chain: it cannot be quoted (K11).
-type Destination = Exclude<ChainId, "bnb">;
+type Destination = Exclude<ChainId, "bnb"> | "confidential";
+// "confidential" moves the merchant's own balance to their private (Near Intents confidential) balance: no address is
+// asked, it is their own account. Offered only when the build says the API has it switched on.
+const PRIVATE_BALANCE = process.env.NEXT_PUBLIC_CONFIDENTIAL_INTENTS === "1";
 const DESTINATIONS: readonly Destination[] = [
   "base",
   "arbitrum",
@@ -39,6 +42,7 @@ const DESTINATIONS: readonly Destination[] = [
   "solana",
   "ethereum",
   "near",
+  ...(PRIVATE_BALANCE ? (["confidential"] as const) : []),
 ];
 
 /** A route that costs this share of the cash-out or more is called out. */
@@ -98,7 +102,9 @@ export function CashoutScreen() {
     setPhase("form");
     setQuote(null);
   };
-  const addressProblem = refundAddressProblem(chain, address);
+  const isPrivate = chain === "confidential";
+  const sendTo = isPrivate ? (account ?? "") : address.trim();
+  const addressProblem = isPrivate ? null : refundAddressProblem(chain as ChainId, address);
   const canSign = MOCK_MODE || near.accountId !== null;
   const share = useMemo(
     () => (quote && units ? costShare(quote.route_cost_usd, BigInt(quote.amount)) : null),
@@ -116,7 +122,7 @@ export function CashoutScreen() {
         {
           amount: units.toString(),
           destination_chain: chain,
-          address: address.trim(),
+          address: sendTo,
           ...(held ? { source_asset: held.tokenId } : {}),
         },
         { idempotencyKey: idem.current },
@@ -262,25 +268,29 @@ export function CashoutScreen() {
                     >
                       {DESTINATIONS.map((c) => (
                         <option key={c} value={c}>
-                          {CHAINS[c]}
+                          {c === "confidential" ? t.privateBalance : CHAINS[c]}
                         </option>
                       ))}
                     </Select>
-                    <Input
-                      label={t.address}
-                      helper={t.addressHelp}
-                      value={address}
-                      autoCapitalize="none"
-                      autoComplete="off"
-                      spellCheck={false}
-                      onChange={(e) => {
-                        setAddress(e.target.value.trim());
-                        setPhase("form");
-                        setQuote(null);
-                      }}
-                      error={(shown && addressProblem) || undefined}
-                      disabled={busy}
-                    />
+                    {isPrivate ? (
+                      <p className="caption">{t.privateHelp}</p>
+                    ) : (
+                      <Input
+                        label={t.address}
+                        helper={t.addressHelp}
+                        value={address}
+                        autoCapitalize="none"
+                        autoComplete="off"
+                        spellCheck={false}
+                        onChange={(e) => {
+                          setAddress(e.target.value.trim());
+                          setPhase("form");
+                          setQuote(null);
+                        }}
+                        error={(shown && addressProblem) || undefined}
+                        disabled={busy}
+                      />
+                    )}
                     <ErrorNote>{error && phase === "form" ? error : null}</ErrorNote>
                     <div className="flex justify-center">
                       <Button type="submit" loading={phase === "asking"}>
@@ -316,7 +326,7 @@ export function CashoutScreen() {
                           <dd className="tabular text-[18px] font-semibold">
                             {formatToken(quote.amount_out, 6)} USDC{" "}
                             <span className="text-[15px] font-normal text-muted">
-                              {t.on(CHAINS[chain])}
+                              {isPrivate ? t.onPrivate : t.on(CHAINS[chain as ChainId])}
                             </span>
                           </dd>
                         </div>
@@ -325,7 +335,7 @@ export function CashoutScreen() {
                           <dd>
                             <AddressChip
                               value={quote.destination_address}
-                              chain={chain}
+                              chain={isPrivate ? undefined : (chain as ChainId)}
                               head={10}
                               tail={8}
                             />

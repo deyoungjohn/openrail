@@ -21,6 +21,7 @@ import {
   type ContractPort,
   type IssuerPort,
   type PayoutEstimatorPort,
+  type ConfidentialBalancePort,
 } from "./app.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -346,9 +347,42 @@ export function createCashoutPort(
   const routes = loadRoutes();
   return {
     async quote(request) {
+      const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      if (request.destinationChain === "confidential") {
+        const asset = request.sourceAsset ?? defaultSettlementAsset();
+        const response = await client
+          .quote({
+            originAsset: asset,
+            destinationAsset: asset,
+            amount: request.amount,
+            swapType: "EXACT_INPUT",
+            slippageTolerance: 30,
+            refundTo: request.refundTo,
+            recipient: request.address,
+            recipientType: "CONFIDENTIAL_INTENTS",
+            depositType: "INTENTS",
+            refundType: "INTENTS",
+            dry: false,
+            deadline,
+          })
+          .catch(providerFailure);
+        return {
+          amount: request.amount,
+          source_asset: asset,
+          destination_chain: "confidential",
+          destination_address: request.address,
+          amount_out: response.quote.amountOut ?? request.amount,
+          min_amount_in: request.amount,
+          route_cost_usd: costInUsd(request.amount, response.quote.amountOut),
+          deposit_address: response.quote.depositAddress ?? "",
+          deposit_type: "INTENTS",
+          swap_type: "EXACT_INPUT",
+          route_id: "confidential",
+          deadline: response.quote.deadline ?? deadline,
+        };
+      }
       const route = routes.routes.find((entry) => entry.originChain === request.destinationChain);
       if (route === undefined) throw new ApiError(400, "unsupported_chain");
-      const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       const response = await client
         .quote({
           originAsset: request.sourceAsset ?? defaultSettlementAsset(),
@@ -453,6 +487,51 @@ function createPayoutEstimator(): PayoutEstimatorPort {
   };
 }
 
+function confidentialBase(): string {
+  return (getEnv("ONECLICK_API_URL") ?? "https://1click.chaindefuser.com").replace(/\/+$/, "");
+}
+
+function createConfidentialBalancePort(): ConfidentialBalancePort {
+  return {
+    async authenticate(signedData) {
+      // Not confirmed by a real call yet: the cited guide shows the SDK call, not this path.
+      const response = await fetch(`${confidentialBase()}/v0/auth/authenticate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ signedData }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new ApiError(502, "confidential_auth_failed", text.slice(0, 200));
+      const body = JSON.parse(text) as { accessToken?: unknown; expiresIn?: unknown };
+      if (typeof body.accessToken !== "string" || typeof body.expiresIn !== "number")
+        throw new ApiError(502, "confidential_auth_failed");
+      return { accessToken: body.accessToken, expiresIn: body.expiresIn };
+    },
+    async balances(userToken, tokenIds) {
+      const query = tokenIds.map(encodeURIComponent).join(",");
+      const response = await fetch(`${confidentialBase()}/v0/account/balances?tokenIds=${query}`, {
+        headers: { authorization: `Bearer ${userToken}` },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) throw new ApiError(502, "confidential_balance_failed");
+      const body = (await response.json()) as {
+        balances?: { tokenId?: unknown; available?: unknown; source?: unknown }[];
+      };
+      return (body.balances ?? [])
+        .filter(
+          (entry): entry is { tokenId: string; available: string; source?: string } =>
+            typeof entry.tokenId === "string" && typeof entry.available === "string",
+        )
+        .map((entry) => ({
+          tokenId: entry.tokenId,
+          available: entry.available,
+          ...(typeof entry.source === "string" ? { source: entry.source } : {}),
+        }));
+    },
+  };
+}
+
 export async function createApiAppFromEnv(): Promise<ApiApp> {
   const rootAccount = requireEnv("NEAR_ROOT_ACCOUNT");
   const issuerUrl = requireEnv("ISSUER_URL");
@@ -469,6 +548,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
       recipient: getEnv("API_RECIPIENT") ?? "api.openrail.near",
       payBaseUrl: getEnv("PAY_BASE_URL") ?? "https://pay.openrail.near",
       claimLabels: getEnv("CLAIM_LABELS") === "1",
+      confidentialIntents: getEnv("CONFIDENTIAL_INTENTS") === "1",
     },
     store: stores.api,
     recurring: stores.recurring,
@@ -480,6 +560,9 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     accessKey: createAccessKeyPort(nearRpcUrlsFromEnv()),
     cashout: createCashoutPort(),
     payoutEstimator: createPayoutEstimator(),
+    ...(getEnv("CONFIDENTIAL_INTENTS") === "1"
+      ? { confidential: createConfidentialBalancePort() }
+      : {}),
     indexer,
     pokeIndexer: async () => {
       await fetch(`${indexerUrl.replace(/\/+$/, "")}/poke`, { method: "POST" });

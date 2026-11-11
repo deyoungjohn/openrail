@@ -8,6 +8,7 @@
  *   RELAY_PRIVATE_KEY                       (function-call key: acknowledge_evm only)
  *   ISSUER_PORT (8787), ISSUER_ACCOUNT_WAIT_MS (15000), ISSUER_ACCOUNT_POLL_MS (250)
  */
+import { cachedHealth } from "./health-cache.js";
 import {
   createIndexerControl,
   createLogger,
@@ -151,13 +152,16 @@ async function main(): Promise<void> {
     service,
     serviceKey,
     logger,
-    health: async () => {
-      const [issuer, relay] = await Promise.all([
-        inspector.keyInfo(issuerAccount, issuerPublicKey),
-        inspector.keyInfo(issuerAccount, relayPublicKey),
-      ]);
-      return { issuer_key: keySummary(issuer), relay_key: keySummary(relay) };
-    },
+    health: cachedHealth(
+      async () => {
+        const [issuer, relay] = await Promise.all([
+          inspector.keyInfo(issuerAccount, issuerPublicKey),
+          inspector.keyInfo(issuerAccount, relayPublicKey),
+        ]);
+        return { issuer_key: keySummary(issuer), relay_key: keySummary(relay) };
+      },
+      { okMs: 60_000, failMs: 15_000 },
+    ),
   });
 
   const server = createServer((request, response) => {

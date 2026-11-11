@@ -58,8 +58,15 @@ export function CashoutHistory({
       value: (r) => `${r.destination_chain} ${r.destination_address}`,
       cell: (r) => (
         <span className="space-y-1">
-          <span className="caption block uppercase">{r.destination_chain}</span>
-          <AddressChip value={r.destination_address} chain={r.destination_chain as ChainId} />
+          <span className="caption block uppercase">
+            {r.destination_chain === "confidential" ? "Private balance" : r.destination_chain}
+          </span>
+          <AddressChip
+            value={r.destination_address}
+            chain={
+              r.destination_chain === "confidential" ? undefined : (r.destination_chain as ChainId)
+            }
+          />
         </span>
       ),
     },
