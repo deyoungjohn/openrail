@@ -264,6 +264,7 @@ function SessionView({
   starting,
   partLabel,
   onStage,
+  onFresh,
   epoch,
 }: {
   session: Session;
@@ -275,6 +276,8 @@ function SessionView({
   /** `Part 2` when the payment is split. */
   partLabel?: string;
   onStage?: (stage: PayStage) => void;
+  /** Called once the status has been read from the server at least once on this page. */
+  onFresh?: () => void;
 }) {
   const p = usePayWords();
   const now = useNow();
@@ -309,15 +312,19 @@ function SessionView({
           near: hashStrings(r.swap_details.near_tx_hashes),
         });
         setPollFailed(false);
+        onFresh?.();
       } catch {
         if (!off) setPollFailed(true);
       }
     };
+    // The first read is at once, not after the first interval: a payer who just paid sees it ticked sooner.
+    void tick();
     const id = setInterval(() => void tick(), POLL_MS);
     return () => {
       off = true;
       clearInterval(id);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, session.id]);
 
   if (stage === "expired")
@@ -484,6 +491,12 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   const [amountShown, setAmountShown] = useState(false);
   const [earlier, setEarlier] = useState<{ address: string; route: string }[]>([]);
   const restored = useRef(false);
+  // A reload brings back the prices already made. Until they have been read fresh, the page says it is loading: it must
+  // not show "Pay this order" for a few seconds to a payer whose money has already arrived.
+  const [restoring, setRestoring] = useState(true);
+  const restoredIds = useRef<Set<string>>(new Set());
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
+  const [gaveUp, setGaveUp] = useState(false);
   const [dialog, setDialog] = useState(false);
   const priced = useRef(0);
   // Bumped each time the pop-over opens, so the countdown inside starts again on screen.
@@ -527,7 +540,11 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   // A reload must not lose a price the payer may already have sent money to: the server keeps every
   // price it gave for this invoice. Open ones come back as they were; the rest are listed as earlier.
   useEffect(() => {
-    if (restored.current || routes.length === 0) return;
+    if (restored.current) return;
+    if (routes.length === 0) {
+      if (load.state === "ready") setRestoring(false);
+      return;
+    }
     restored.current = true;
     source
       .listSessions(tokenId, claim as PayFlowClaim)
@@ -560,13 +577,22 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
         );
         if (keep.length > 0) {
           skipOpen.current = true;
+          for (const k of keep) restoredIds.current.add(k.session.id);
           setLegs(keep);
           setRouteId(keep[keep.length - 1]?.route.id ?? null);
           setSplit(keep.length > 1);
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setRestoring(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routes, tokenId, claim, source]);
+
+  // Never wait for ever: if the server does not answer, show the page as it is after a few seconds.
+  useEffect(() => {
+    const id = setTimeout(() => setGaveUp(true), 6000);
+    return () => clearTimeout(id);
+  }, []);
 
   // A price made on this page joins the list of addresses once it is replaced.
   useEffect(() => {
@@ -847,6 +873,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
           route={l.route}
           partLabel={split ? p.mixPart(i + 1) : undefined}
           onStage={(stage) => setStage(l.session.id, stage)}
+          onFresh={() => setFresh((f) => (f.has(l.session.id) ? f : new Set(f).add(l.session.id)))}
           onNewQuote={() => void start(l.route, refund, l.cents, split, l.session.id)}
           starting={starting}
           epoch={epoch}
@@ -905,6 +932,27 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
           <EmptyState title={p.noRoutes} />
         </div>
       </div>
+    );
+  }
+
+  const waitingFresh = legs.some(
+    (l) =>
+      restoredIds.current.has(l.session.id) &&
+      !fresh.has(l.session.id) &&
+      (l.stage === "waiting" || l.stage === "processing"),
+  );
+  if ((restoring || waitingFresh) && !gaveUp) {
+    return (
+      <>
+        <div className="mx-auto max-w-2xl space-y-6">
+          {source.summary(c, { received: false, topStage })}
+          <Card state="loading" />
+        </div>
+        {/* mounted but hidden, so the status of the restored prices is read while the page says it is loading */}
+        <PaymentDialog open={false} onClose={() => undefined} title={p.detailsTitle}>
+          {prices}
+        </PaymentDialog>
+      </>
     );
   }
 
