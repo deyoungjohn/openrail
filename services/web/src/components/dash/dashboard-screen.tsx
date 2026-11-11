@@ -322,7 +322,13 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
   );
 }
 
-function Streams({ earnings }: { earnings: readonly Earning[] }) {
+function Streams({
+  earnings,
+  failedStreams,
+}: {
+  earnings: readonly Earning[];
+  failedStreams: readonly Stream[];
+}) {
   const d = copy.dash;
   const data = byStream(earnings);
   const total = data.reduce((n, s) => n + s.cents, 0n);
@@ -355,6 +361,9 @@ function Streams({ earnings }: { earnings: readonly Earning[] }) {
             ))}
           </Pie>
         </PieChart>
+        {failedStreams.length > 0 ? (
+          <p className="text-[12px] text-muted">Some payment sources could not be loaded.</p>
+        ) : null}
         <ul className="space-y-1.5 text-[14px]">
           {data.map((s) => (
             <li key={s.stream} className="flex items-center gap-2">
@@ -437,7 +446,10 @@ export function DashboardScreen() {
               {loading ? (
                 <Card title={d.streamsTitle} state="loading" />
               ) : (
-                <Streams earnings={earnings} />
+                <Streams
+                  earnings={earnings}
+                  failedStreams={load.state === "ready" ? load.data.failedStreams : []}
+                />
               )}
             </div>
           </div>
