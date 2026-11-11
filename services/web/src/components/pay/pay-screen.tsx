@@ -370,6 +370,8 @@ function SessionView({
 
   return (
     <div className="grid gap-3 md:grid-cols-2 md:items-start md:gap-6">
+      {/* Left: what to send and how far it has got. Right: where to send it. Both columns are about as tall, so the
+          pop-over stays short enough to fit a laptop screen. */}
       <div className="space-y-3">
         {/* The locked amount comes before the address (quote_note_before_address_shown). */}
         <QuoteNote session={session} route={route} partLabel={partLabel} />
@@ -384,51 +386,8 @@ function SessionView({
               {p.newQuote}
             </Button>
           </div>
-        ) : (
-          <>
-            <QrPanel
-              address={session.deposit_address}
-              amount={`${amountOf(session, route)} ${route.payer_asset}`}
-              chain={chain ?? undefined}
-            >
-              <WalletPay session={session} route={route} />
-            </QrPanel>
-            <div className="flex items-center justify-between gap-3 px-1">
-              <button
-                type="button"
-                onClick={() => setNotes(true)}
-                className="text-accent-text inline-flex items-center gap-1.5 text-[14px] font-medium hover:underline"
-              >
-                <Info aria-hidden size={16} strokeWidth={1.5} />
-                {p.notesLink}
-              </button>
-            </div>
-            <Modal open={notes} onClose={() => setNotes(false)} title={p.notesTitle}>
-              <div className="space-y-4 text-[15px] leading-6">
-                <p>{p.sendOnly(route.payer_asset, chain ? CHAINS[chain] : route.origin_chain)}</p>
-                <p>
-                  {short
-                    ? p.shortSeen(amountOf(session, route), route.payer_asset)
-                    : p.shortRule(amountOf(session, route), route.payer_asset)}
-                </p>
-              </div>
-            </Modal>
-            <div className="flex items-center justify-between px-1">
-              <span className="caption">{p.timeLeft}</span>
-              <Countdown
-                key={epoch}
-                target={Date.parse(session.deadline)}
-                units={["minutes", "seconds"]}
-                variant="compact"
-                label={p.timeLeft}
-                completeLabel={copy.countdown.expired}
-              />
-            </div>
-          </>
-        )}
-      </div>
+        ) : null}
 
-      <div className="border-border border-t pt-3 md:border-t-0 md:border-l md:pt-0 md:pl-6">
         <Card title={p.progress}>
           <Timeline steps={steps} />
           <p role="status" className="caption mt-4">
@@ -441,6 +400,49 @@ function SessionView({
           {pollFailed ? <p className="text-danger-text mt-2 text-[14px]">{p.pollError}</p> : null}
         </Card>
       </div>
+
+      {stage === "refunded" || stage === "failed" ? null : (
+        <div className="border-border space-y-3 border-t pt-3 md:border-t-0 md:border-l md:pt-0 md:pl-6">
+          <QrPanel
+            address={session.deposit_address}
+            amount={`${amountOf(session, route)} ${route.payer_asset}`}
+            chain={chain ?? undefined}
+          >
+            <WalletPay session={session} route={route} />
+          </QrPanel>
+          <div className="flex items-center justify-between gap-3 px-1">
+            <button
+              type="button"
+              onClick={() => setNotes(true)}
+              className="text-accent-text inline-flex items-center gap-1.5 text-[14px] font-medium hover:underline"
+            >
+              <Info aria-hidden size={16} strokeWidth={1.5} />
+              {p.notesLink}
+            </button>
+          </div>
+          <Modal open={notes} onClose={() => setNotes(false)} title={p.notesTitle}>
+            <div className="space-y-4 text-[15px] leading-6">
+              <p>{p.sendOnly(route.payer_asset, chain ? CHAINS[chain] : route.origin_chain)}</p>
+              <p>
+                {short
+                  ? p.shortSeen(amountOf(session, route), route.payer_asset)
+                  : p.shortRule(amountOf(session, route), route.payer_asset)}
+              </p>
+            </div>
+          </Modal>
+          <div className="flex items-center justify-between px-1">
+            <span className="caption">{p.timeLeft}</span>
+            <Countdown
+              key={epoch}
+              target={Date.parse(session.deadline)}
+              units={["minutes", "seconds"]}
+              variant="compact"
+              label={p.timeLeft}
+              completeLabel={copy.countdown.expired}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
