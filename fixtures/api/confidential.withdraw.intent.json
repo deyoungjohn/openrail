@@ -1,0 +1,11 @@
+{
+  "intent": {
+    "standard": "nep413",
+    "payload": {
+      "message": "{}",
+      "nonce": "n",
+      "recipient": "intents.near"
+    }
+  },
+  "correlationId": "c1"
+}
