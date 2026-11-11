@@ -19,7 +19,6 @@ export class WatcherStore {
   private failures = 0;
 
   constructor(path: string) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     const open = (file: string): DatabaseSync => {
       const db = new DatabaseSync(file);
       db.exec(`
@@ -36,9 +35,10 @@ export class WatcherStore {
       return db;
     };
     try {
+      if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
       this.db = open(path);
     } catch {
-      // A corrupt file starts empty rather than stopping the watcher.
+      // A corrupt file, or a folder the service may not write to, starts empty rather than stopping the watcher.
       this.db = open(":memory:");
     }
   }

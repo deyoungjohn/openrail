@@ -73,7 +73,7 @@ export function watcherConfigFromEnv(): WatcherConfig {
       .map((id) => id.trim())
       .filter((id) => id !== ""),
     healthPort: numberEnv("WATCHER_HEALTH_PORT", DEFAULT_HEALTH_PORT),
-    dbPath: getEnv("WATCHER_DB_PATH") ?? "data/watcher.sqlite",
+    dbPath: getEnv("WATCHER_DB_PATH") ?? "/var/lib/openrail/watcher.sqlite",
     hotWindowMs: numberEnv("WATCHER_HOT_WINDOW_MS", DEFAULT_HOT_WINDOW_MS),
     warmWindowMs: numberEnv("WATCHER_WARM_WINDOW_MS", DEFAULT_WARM_WINDOW_MS),
     warmIntervalMs: numberEnv("WATCHER_WARM_INTERVAL_MS", DEFAULT_WARM_INTERVAL_MS),
