@@ -99,7 +99,7 @@ test.describe("H10: pay from any wallet or exchange, without connecting", () => 
     await page.getByRole("button", { name: "Get price" }).click();
     expect(w.posts).toHaveLength(0);
     await expect(page.getByRole("region", { name: "Your price" })).toHaveCount(0);
-    await expect(page.locator("main svg title")).toHaveCount(0);
+    await expect(page.locator("svg title")).toHaveCount(0);
 
     await page.getByLabel("Refund address").fill(REFUND);
     await page.getByRole("button", { name: "Get price" }).click();
@@ -107,7 +107,7 @@ test.describe("H10: pay from any wallet or exchange, without connecting", () => 
     expect(w.posts).toEqual([{ token_id: "c-1", route_id: "R1", refund_to: REFUND }]);
     // The address, the QR code and the exact amount are all there.
     await expect(page.locator("code", { hasText: "0x1111" }).first()).toBeVisible();
-    await expect(page.locator("main svg title").first()).toBeAttached();
+    await expect(page.locator("svg title").first()).toBeAttached();
     await expect(page.getByRole("region", { name: "Your price" })).toContainText("12.50 USDC");
   });
 

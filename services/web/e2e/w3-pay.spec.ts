@@ -335,6 +335,30 @@ test("desktop: the invoice and the pay card level with each other, what happens 
   await expect(dialog).toContainText("Time left");
 });
 
+test("the price pop-over follows the pop-up rules: the scrim covers the whole page, a click outside or Escape closes it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto("/pay/c-1");
+  await pick(page);
+  const dialog = page.getByRole("dialog", { name: "Your payment" });
+  await expect(dialog).toBeVisible();
+  // The scrim is the top layer everywhere on the page, not only over the page column.
+  const topAtEdge = await page.evaluate(() => {
+    const el = document.elementFromPoint(20, 450);
+    return el?.closest("[role=dialog]") === null && el?.parentElement === document.body;
+  });
+  expect(topAtEdge).toBe(true);
+  // A click outside closes it, and the page behind keeps the price (open again from the page).
+  await page.mouse.click(20, 450);
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "Show payment details" }).click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
 test("one column on a phone, in reading order", async ({ page }) => {
   await mockApi(page);
   await page.goto("/pay/c-1");
