@@ -15,7 +15,10 @@ export interface BudgetStateStore {
 
 export interface BudgetGovernorOptions {
   store: BudgetStateStore;
+  /** Calls a day for ONE key. */
   dailyBudget?: number;
+  /** How many keys share the work: the budget of the day is dailyBudget times this. */
+  keyCount?: number;
   minSpacingMs?: number;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -43,6 +46,8 @@ function nextUtcMidnight(timestamp: number): string {
 
 export class BudgetGovernor {
   private readonly store: BudgetStateStore;
+  private readonly perKey: number;
+  private readonly keyCount: number;
   private readonly dailyBudget: number;
   private readonly minSpacingMs: number;
   private readonly now: () => number;
@@ -53,7 +58,9 @@ export class BudgetGovernor {
 
   constructor(options: BudgetGovernorOptions) {
     this.store = options.store;
-    this.dailyBudget = Math.max(0, options.dailyBudget ?? 380);
+    this.perKey = Math.max(0, options.dailyBudget ?? 380);
+    this.keyCount = Math.max(1, Math.floor(options.keyCount ?? 1));
+    this.dailyBudget = this.perKey * this.keyCount;
     this.minSpacingMs = Math.max(0, options.minSpacingMs ?? 7_000);
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
@@ -85,6 +92,12 @@ export class BudgetGovernor {
     if (elapsed < this.minSpacingMs) await this.sleep(this.minSpacingMs - elapsed);
   }
 
+  /** The key to use for the next call: each key takes its own share of the day, in order. */
+  keyIndex(): number {
+    if (this.perKey === 0) return 0;
+    return Math.min(this.keyCount - 1, Math.floor(this.state().used / this.perKey));
+  }
+
   /** Count one NearBlocks attempt. */
   recordCall(): void {
     const state = this.state();
@@ -97,11 +110,14 @@ export class BudgetGovernor {
     }
   }
 
-  /** A 429 stops calls until the next UTC day. */
+  /** A 429 spends the day of the key that got it: the next key takes over, and with none left calls stop until the next UTC day. */
   on429(): void {
     const state = this.state();
-    this.store.setBudgetState(state.day, this.dailyBudget);
-    if (this.loggedDay !== state.day) {
+    const index = this.keyIndex();
+    this.store.setBudgetState(state.day, Math.min(this.dailyBudget, (index + 1) * this.perKey));
+    if (index + 1 < this.keyCount) {
+      this.log(`NearBlocks key ${index + 1} returned 429; using key ${index + 2}`);
+    } else if (this.loggedDay !== state.day) {
       this.loggedDay = state.day;
       this.log(`NearBlocks returned 429; blocked until ${nextUtcMidnight(this.now())}`);
     }

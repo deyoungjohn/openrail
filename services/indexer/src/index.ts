@@ -5,7 +5,7 @@
  * Environment:
  *   NEAR_ROOT_ACCOUNT, NEAR_RPC_URL, NEAR_RPC_URL_FALLBACK
  *   INDEXER_DB_PATH (required), INDEXER_SOURCE (nearblocks|rpc; default nearblocks),
- *   NEARBLOCKS_API_URL / NEARBLOCKS_API_KEY (account-scoped source),
+ *   NEARBLOCKS_API_URL / NEARBLOCKS_API_KEY (account-scoped source), NEARBLOCKS_API_KEY_2, _3 ... (more keys: each has its own daily budget),
  *   NEARBLOCKS_DAILY_BUDGET (380), 7 s minimum spacing,
  *   INDEXER_POLL_INTERVAL_MS (1800000), INDEXER_MAX_PAGES (2), INDEXER_RETENTION_DAYS (30),
  *   INDEXER_PORT (8788), INDEXER_START_HEIGHT (0, RPC scanner only)
@@ -53,9 +53,16 @@ async function main(): Promise<void> {
   const rpcUrls = nearRpcUrls();
 
   const store = new IndexerStore(dbPath, rootAccount);
+  // NEARBLOCKS_API_KEY, then NEARBLOCKS_API_KEY_2, _3 ...: each key has its own daily budget, used in order.
+  const nearBlocksKeys: string[] = [];
+  for (let n = 1; n <= 10; n += 1) {
+    const key = getEnv(n === 1 ? "NEARBLOCKS_API_KEY" : `NEARBLOCKS_API_KEY_${n}`);
+    if (key !== undefined && key !== "") nearBlocksKeys.push(key);
+  }
   const budget = new BudgetGovernor({
     store,
     dailyBudget: Math.floor(numberEnv("NEARBLOCKS_DAILY_BUDGET", 380)),
+    keyCount: Math.max(1, nearBlocksKeys.length),
     minSpacingMs: 7_000,
     log: (message) => logger.warn(message),
   });
@@ -72,7 +79,7 @@ async function main(): Promise<void> {
           new NearBlocksEventSource(
             rootAccount,
             getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
-            getEnv("NEARBLOCKS_API_KEY") ?? "",
+            nearBlocksKeys,
             rpcUrls,
             undefined,
             100,

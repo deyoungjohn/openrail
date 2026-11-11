@@ -53,7 +53,7 @@ function cursorHeight(cursor: string | null): number {
 
 export class NearBlocksEventSource implements EventSource {
   private readonly baseUrl: string;
-  private readonly apiKey: string;
+  private readonly apiKeys: string[];
   private readonly rpcUrls: string[];
   private readonly fetchImpl: FetchLike;
   private readonly limit: number;
@@ -63,7 +63,7 @@ export class NearBlocksEventSource implements EventSource {
   constructor(
     private readonly rootAccount: string,
     baseUrl = "https://api.nearblocks.io",
-    apiKey = "",
+    apiKey: string | readonly string[] = "",
     rpcUrls: string[] = [],
     fetchImpl: FetchLike = (input, init) => fetch(input, init),
     limit = 100,
@@ -71,7 +71,7 @@ export class NearBlocksEventSource implements EventSource {
     private readonly budget?: BudgetGovernor,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
-    this.apiKey = apiKey;
+    this.apiKeys = (typeof apiKey === "string" ? [apiKey] : [...apiKey]).filter((k) => k !== "");
     this.rpcUrls = rpcUrls;
     this.fetchImpl = fetchImpl;
     this.limit = Math.max(1, Math.min(limit, 100));
@@ -88,6 +88,9 @@ export class NearBlocksEventSource implements EventSource {
 
   private async listPage(cursor: string | null): Promise<NbResponse> {
     if (this.budget !== undefined) await this.budget.beforeCall();
+    // With several keys each takes its own share of the day (the governor says which one is on).
+    const apiKey =
+      this.apiKeys[Math.min(this.budget?.keyIndex() ?? 0, this.apiKeys.length - 1)] ?? "";
     const query = new URLSearchParams({ limit: String(this.limit) });
     if (cursor !== null) query.set("cursor", cursor);
     const url = `${this.baseUrl}/v1/account/${encodeURIComponent(this.rootAccount)}/txns?${query.toString()}`;
@@ -98,7 +101,7 @@ export class NearBlocksEventSource implements EventSource {
         method: "GET",
         headers: {
           accept: "application/json",
-          ...(this.apiKey === "" ? {} : { authorization: `Bearer ${this.apiKey}` }),
+          ...(apiKey === "" ? {} : { authorization: `Bearer ${apiKey}` }),
         },
         signal: AbortSignal.timeout(20_000),
       });
