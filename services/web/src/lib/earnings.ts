@@ -23,6 +23,11 @@ export interface ReceiptLike {
   booking_tx_hash: string;
 }
 
+export interface EarningsSource {
+  stream: Stream;
+  load(): Promise<Earning[]>;
+}
+
 export interface Earning {
   id: string;
   /** Epoch milliseconds. */
