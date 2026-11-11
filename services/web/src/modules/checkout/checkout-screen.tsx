@@ -127,7 +127,9 @@ function CheckoutCard({
             {p.ofInvoice(`$${c.amount_usd}`, `$${formatToken(String(settled), 6)}`)}
           </p>
         ) : null}
-        {effectiveCheckout.status === "pending" || effectiveCheckout.status === "partial" ? (
+        {/* The countdown stops and goes away as soon as the money has arrived (booked or not yet). */}
+        {!paid &&
+        (effectiveCheckout.status === "pending" || effectiveCheckout.status === "partial") ? (
           <div className="flex flex-wrap items-center gap-2 pt-2">
             <span className="caption">{checkoutCopy.expiresIn}</span>
             <Countdown
