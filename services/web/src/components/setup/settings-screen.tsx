@@ -6,15 +6,20 @@ import { useEffect, useState } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { isNearAccountId } from "@/lib/near-account";
+import { enabledModules } from "@/enabled";
+import { collectSettingsSections } from "@/lib/module-settings";
 import { useStorageCredit } from "@/lib/use-storage-credit";
 import { useAsync } from "@/lib/use-async";
 import { AccountBar } from "../auth/account-bar";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
+import { Tabs } from "../ui/tabs";
 import { ErrorState } from "../ui/state";
 import { StorageCreditCard } from "./storage-credit-card";
 import { ErrorNote } from "@/components/ui/error-note";
+
+const moduleSettingsSections = collectSettingsSections(enabledModules);
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -111,10 +116,8 @@ export function SettingsScreen() {
 
   const business = saved ?? (biz.state === "ready" ? biz.data : null);
 
-  return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-[32px] leading-10 font-bold">{s.title}</h1>
-
+  const general = (
+    <div className="space-y-6">
       {biz.state === "loading" ? <Card state="loading" /> : null}
       {biz.state === "error" ? (
         <div className="surface-card">
@@ -137,6 +140,27 @@ export function SettingsScreen() {
           <Button variant="secondary">{s.openSetup}</Button>
         </Link>
       </Card>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      <h1 className="text-[32px] leading-10 font-bold">{s.title}</h1>
+      {moduleSettingsSections.length === 0 ? (
+        general
+      ) : (
+        <Tabs
+          label={s.title}
+          items={[
+            { id: "general", label: s.generalTab, panel: general },
+            ...moduleSettingsSections.map(({ id, label, Panel }) => ({
+              id,
+              label,
+              panel: <Panel />,
+            })),
+          ]}
+        />
+      )}
     </div>
   );
 }
