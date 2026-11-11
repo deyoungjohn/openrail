@@ -2,7 +2,16 @@
 
 import { ApiError, type PaySession, type PublicClaim, type Route } from "@openrail/api-client";
 import { CheckCircle2, Info } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { copy } from "@/copy";
 import { client } from "@/lib/client";
 import {
@@ -45,11 +54,65 @@ import { ErrorNote } from "@/components/ui/error-note";
 
 type Session = PaySession;
 
+/** What the pay flow needs of whatever is being paid: an invoice's claim, or a checkout. */
+export interface PayFlowClaim {
+  status: string;
+  outstanding: string;
+  routes: Route[];
+}
+
+/**
+ * Where the pay flow gets its data and how it dresses the page. The invoice page and the hosted checkout page are the
+ * same flow with a different source: one pay card, one pop-over for the price and QR code, one set of steps (so a fix
+ * to the pay page reaches both). Without a source the flow pays an invoice.
+ */
+export interface PayScreenSource {
+  load: (tokenId: string) => Promise<PayFlowClaim>;
+  listSessions: (tokenId: string, claim: PayFlowClaim) => Promise<Session[]>;
+  /** A price can be asked for it. */
+  isOpen: (claim: PayFlowClaim) => boolean;
+  /** Settled on chain: stop reading it again. */
+  isPaid: (claim: PayFlowClaim) => boolean;
+  /** The card on the left; `topStage` is how far the payment on screen has got. */
+  summary: (
+    claim: PayFlowClaim,
+    ctx: { received: boolean; topStage: PayStage | null },
+  ) => ReactNode;
+  /** The page when nothing is left to pay (paid, closed, expired). */
+  closed: (claim: PayFlowClaim) => ReactNode;
+  /** Words that differ from the invoice page (a checkout says order, not invoice). */
+  words?: Partial<typeof copy.pay>;
+  /** A plain-words reason a price could not be asked, when the source knows one (an expired checkout). */
+  sessionNote?: (error: unknown) => string | null;
+  /** The flow reads the source again at this interval while it is open and not settled. */
+  refreshMs?: number;
+}
+
+const PayWordsContext = createContext<typeof copy.pay>(copy.pay);
+const usePayWords = () => useContext(PayWordsContext);
+
 type Load =
   | { state: "loading" }
   | { state: "error" }
   | { state: "notfound" }
-  | { state: "ready"; claim: PublicClaim };
+  | { state: "ready"; claim: PayFlowClaim };
+
+const invoiceSource: PayScreenSource = {
+  load: (tokenId) => client.pay.getClaim(tokenId),
+  listSessions: async (tokenId) => (await client.pay.listSessions(tokenId)).data,
+  isOpen: (c) => c.status === "Issued" || c.status === "PartiallyPaid",
+  isPaid: (c) => c.status === "Paid",
+  summary: (c, { received }) => <InvoiceCard claim={c as PublicClaim} received={received} />,
+  closed: (c) => (
+    <>
+      <InvoiceCard claim={c as PublicClaim} />
+      <div role="status" className="surface-card p-6 text-[15px]">
+        {c.status === "Paid" ? copy.pay.alreadyPaid : copy.pay.closed}
+      </div>
+      <HistoryCard claim={c as PublicClaim} />
+    </>
+  ),
+};
 
 const POLL_MS = 3000;
 
@@ -98,7 +161,7 @@ function QuoteNote({
   route: Route;
   partLabel?: string;
 }) {
-  const p = copy.pay;
+  const p = usePayWords();
   const chain = chainOfRoute(route);
   const chainName = chain ? CHAINS[chain] : route.origin_chain;
   const upto = amountPrefix(route) === "upto";
@@ -137,7 +200,7 @@ function QuoteNote({
 
 /** Pay straight from the connected wallet instead of copying the address or scanning the code. */
 function WalletPay({ session, route }: { session: Session; route: Route }) {
-  const p = copy.pay;
+  const p = usePayWords();
   const evm = useEvm();
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
@@ -206,7 +269,7 @@ function SessionView({
   partLabel?: string;
   onStage?: (stage: PayStage) => void;
 }) {
-  const p = copy.pay;
+  const p = usePayWords();
   const now = useNow();
   const [status, setStatus] = useState<PayStatus>(session.status);
   const [hashes, setHashes] = useState<{ origin: string[]; near: string[] }>({
@@ -384,8 +447,18 @@ interface Leg {
 
 type Mode = "paste" | "wallet" | "split";
 
-export function PayScreen({ tokenId }: { tokenId: string }) {
-  const p = copy.pay;
+export function PayScreen({ tokenId, source }: { tokenId: string; source?: PayScreenSource }) {
+  const flow = source ?? invoiceSource;
+  const words = useMemo(() => ({ ...copy.pay, ...(flow.words ?? {}) }), [flow]);
+  return (
+    <PayWordsContext.Provider value={words}>
+      <PayFlow tokenId={tokenId} source={flow} />
+    </PayWordsContext.Provider>
+  );
+}
+
+function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource }) {
+  const p = usePayWords();
   const evm = useEvm();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [tick, setTick] = useState(0);
@@ -394,6 +467,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   const [legs, setLegs] = useState<Leg[]>([]);
   const [starting, setStarting] = useState(false);
   const [sessionError, setSessionError] = useState<null | "failed" | "refund">(null);
+  const [sessionNote, setSessionNote] = useState<string | null>(null);
   const [refund, setRefund] = useState("");
   const [refundShown, setRefundShown] = useState(false);
   const [split, setSplit] = useState(false);
@@ -421,8 +495,8 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   useEffect(() => {
     let off = false;
     setLoad((prev) => (prev.state === "ready" ? prev : { state: "loading" }));
-    client.pay
-      .getClaim(tokenId)
+    source
+      .load(tokenId)
       .then((claim) => !off && setLoad({ state: "ready", claim }))
       .catch((e: unknown) => {
         if (off) return;
@@ -433,7 +507,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     return () => {
       off = true;
     };
-  }, [tokenId, tick]);
+  }, [tokenId, tick, source]);
 
   const claim = load.state === "ready" ? load.claim : null;
   const routes = useMemo(
@@ -446,9 +520,9 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   useEffect(() => {
     if (restored.current || routes.length === 0) return;
     restored.current = true;
-    client.pay
-      .listSessions(tokenId)
-      .then(({ data }) => {
+    source
+      .listSessions(tokenId, claim as PayFlowClaim)
+      .then((data) => {
         const now = Date.now();
         const back: Leg[] = [];
         for (const sess of data) {
@@ -483,7 +557,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
         }
       })
       .catch(() => undefined);
-  }, [routes, tokenId, claim]);
+  }, [routes, tokenId, claim, source]);
 
   // A price made on this page joins the list of addresses once it is replaced.
   useEffect(() => {
@@ -498,9 +572,9 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
 
   // The status at the top follows the payment: when a part is paid, read the invoice again until it says so.
   const anyPaid = legs.some((l) => l.stage === "paid");
-  const statusNow = claim?.status;
+  const settledNow = claim ? source.isPaid(claim) : false;
   useEffect(() => {
-    if (!anyPaid || statusNow === "Paid") return;
+    if (!anyPaid || settledNow) return;
     let tries = 0;
     const id = setInterval(() => {
       tries += 1;
@@ -509,7 +583,16 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     }, 4000);
     setTick((t) => t + 1);
     return () => clearInterval(id);
-  }, [anyPaid, statusNow]);
+  }, [anyPaid, settledNow]);
+
+  // A source that changes by itself (a checkout: partial, late, expired) is read again while it is open.
+  const openNow = claim ? source.isOpen(claim) : false;
+  const refreshMs = source.refreshMs;
+  useEffect(() => {
+    if (!refreshMs || !openNow) return;
+    const id = setInterval(() => setTick((t) => t + 1), refreshMs);
+    return () => clearInterval(id);
+  }, [refreshMs, openNow]);
 
   const route = routes.find((r) => r.id === routeId) ?? null;
   const outstanding = claim?.outstanding ?? "0";
@@ -562,6 +645,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
   const start = useCallback(
     async (r: Route, refundTo: string, cents: bigint, partial: boolean, replace?: string) => {
       setSessionError(null);
+      setSessionNote(null);
       setStarting(true);
       try {
         const s = await client.pay.createSession({
@@ -585,6 +669,8 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           setAmountShown(false);
         }
       } catch (e) {
+        const note = source.sessionNote?.(e) ?? null;
+        setSessionNote(note);
         setSessionError(
           e instanceof ApiError && e.code === "invalid_refund_address" ? "refund" : "failed",
         );
@@ -592,7 +678,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
         setStarting(false);
       }
     },
-    [tokenId, outstanding, legs],
+    [tokenId, outstanding, legs, source],
   );
 
   if (load.state === "loading") return <Card state="loading" />;
@@ -610,7 +696,12 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     );
 
   const c = load.claim;
-  const open = c.status === "Issued" || c.status === "PartiallyPaid";
+  const open = source.isOpen(c);
+  const topStage: PayStage | null =
+    legs.find((l) => l.stage === "paid")?.stage ??
+    legs.find((l) => l.stage === "processing")?.stage ??
+    legs[legs.length - 1]?.stage ??
+    null;
   const covered = split && legs.length > 0 && remaining === 0n;
   const allPaid =
     covered &&
@@ -794,20 +885,12 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
 
   // Nothing left to pay (paid, cancelled, closed): one centered column, with the whole history of the invoice.
   if (!open) {
-    return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        <InvoiceCard claim={c} />
-        <div role="status" className="surface-card p-6 text-[15px]">
-          {c.status === "Paid" ? p.alreadyPaid : p.closed}
-        </div>
-        <HistoryCard claim={c} />
-      </div>
-    );
+    return <div className="mx-auto max-w-2xl space-y-6">{source.closed(c)}</div>;
   }
   if (routes.length === 0) {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
-        <InvoiceCard claim={c} />
+        {source.summary(c, { received: false, topStage: null })}
         <div className="surface-card">
           <EmptyState title={p.noRoutes} />
         </div>
@@ -825,7 +908,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     return (
       <>
         <div className="mx-auto max-w-2xl space-y-6">
-          <InvoiceCard claim={c} received />
+          {source.summary(c, { received: true, topStage })}
           <div role="status" className="surface-card space-y-2 p-6">
             <p className="flex items-center gap-2 text-[20px] font-semibold">
               <CheckCircle2 size={22} strokeWidth={1.5} className="text-success-text" aria-hidden />
@@ -884,7 +967,7 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
     <>
       <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-8">
         <div className="flex min-w-0 flex-col [&>*]:flex-1">
-          <InvoiceCard claim={c} />
+          {source.summary(c, { received: false, topStage })}
         </div>
         <div className="flex min-w-0 flex-col [&>*]:flex-1">{payCardWithStatus}</div>
         <div className="min-w-0 space-y-6 lg:col-span-2">
@@ -900,7 +983,11 @@ export function PayScreen({ tokenId }: { tokenId: string }) {
           {parts}
           {pastNote}
           {starting ? <Card title={p.getting} state="loading" /> : null}
-          {sessionError === "failed" ? (
+          {sessionError === "failed" && sessionNote ? (
+            <div role="alert" className="surface-card p-6 text-[15px]">
+              {sessionNote}
+            </div>
+          ) : sessionError === "failed" ? (
             <div className="surface-card">
               <ErrorState
                 body={split && legs.length > 0 ? p.mixPartFailed : p.sessionError}

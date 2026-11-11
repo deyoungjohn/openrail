@@ -127,6 +127,8 @@ export interface AccessKeyPort {
 }
 
 export interface IndexerPort {
+  /** Last successful poll and boost state, for the dashboard's freshness caption/poke decision. */
+  status?(): Promise<{ last_polled_at: string | null; boost_active: boolean }>;
   /** The transaction that issued a claim, from its issue event (for invoices issued before it was stored). */
   issueTx?(tokenId: string): Promise<string | undefined>;
   listReceipts(accountId: string, tokenId: string): Promise<Record<string, unknown>[]>;
@@ -733,6 +735,8 @@ export class ApiApp {
   }
 
   private readonly claimCache = new Map<string, { at: number; claim: Record<string, unknown> }>();
+  private readonly paidPoked = new Set<string>();
+  private dashboardPokeAt = 0;
   /** Confidential user sessions are read-only and live in this process only; a restart means signing again. */
   private readonly confidentialSessions = new Map<
     string,
@@ -744,6 +748,29 @@ export class ApiApp {
    * claim, not from the record written at creation (which never changes). A claim that cannot be read
    * keeps the last one read, and only a claim never read keeps its stored values. Reads are cached for ten seconds and run eight at a time.
    */
+  private async dashboardMeta(): Promise<{
+    last_polled_at: string | null;
+    boost_active: boolean;
+  }> {
+    if (this.deps.indexer?.status === undefined)
+      return { last_polled_at: null, boost_active: false };
+    let status: { last_polled_at: string | null; boost_active: boolean };
+    try {
+      status = await this.deps.indexer.status();
+    } catch {
+      return { last_polled_at: null, boost_active: false };
+    }
+    const now = this.clock().getTime();
+    const last = status.last_polled_at === null ? null : Date.parse(status.last_polled_at);
+    const stale = last === null || Number.isNaN(last) || now - last > 5 * 60 * 1000;
+    if (stale && now - this.dashboardPokeAt >= 60_000) {
+      this.dashboardPokeAt = now;
+      await this.deps.pokeIndexer?.().catch(() => undefined);
+      status = { ...status, boost_active: true };
+    }
+    return status;
+  }
+
   private async liveInvoices(invoices: InvoiceRecord[]): Promise<unknown[]> {
     const now = this.clock().getTime();
     const out: unknown[] = new Array<unknown>(invoices.length);
@@ -1237,6 +1264,7 @@ export class ApiApp {
         status: 200,
         body: {
           data: await this.liveInvoices(this.store.listInvoices(context.accountId)),
+          meta: await this.dashboardMeta(),
         },
       };
     }
@@ -1457,6 +1485,13 @@ export class ApiApp {
       const invoice = this.invoiceBy(publicClaimMatch[1] ?? "");
       // A page people open from a link must open even when the chain cannot be read this second.
       const claim = (await this.claimOrStale(invoice.token_id)) ?? {};
+      if (
+        (claim.status === "Paid" || claim.status === "PartiallyPaid") &&
+        !this.paidPoked.has(invoice.token_id)
+      ) {
+        this.paidPoked.add(invoice.token_id);
+        void this.deps.pokeIndexer?.().catch(() => undefined);
+      }
       return {
         status: 200,
         body: {
@@ -1859,7 +1894,10 @@ export class ApiApp {
     if (path === "/v1/analytics" && method === "GET") {
       this.requireScope(this.requireAuth(request), "invoices:read");
       if (this.deps.indexer === undefined) throw new ApiError(503, "analytics_unavailable");
-      return { status: 200, body: await this.deps.indexer.analytics() };
+      return {
+        status: 200,
+        body: { ...(await this.deps.indexer.analytics()), meta: await this.dashboardMeta() },
+      };
     }
 
     if (path === "/v1/events" && method === "GET") {
@@ -1963,6 +2001,7 @@ export class ApiApp {
           data: this.store
             .listPayments(context.accountId)
             .filter((payment) => payment.issuer_id === context.accountId),
+          meta: await this.dashboardMeta(),
         },
       };
     }
