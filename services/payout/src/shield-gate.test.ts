@@ -131,7 +131,8 @@ function createTestHarness(options: TestSetupOptions = {}) {
     },
   ]);
 
-  const quoteCalls: unknown[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const quoteCalls: any[] = [];
   const quote: QuotePort = {
     quote: vi.fn(async (req) => {
       quoteCalls.push(req);
