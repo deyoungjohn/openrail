@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One file in, one file per service out.
+# One file in, one file per service out. A service file already on the server is MERGED, never replaced (see merge_env).
 #
 #   sudo deploy/split-env.sh /path/to/openrail.env            # writes /etc/openrail/<service>.env
 #   deploy/split-env.sh /path/to/openrail.env /tmp/check      # dry look, writes to another folder
@@ -46,6 +46,101 @@ names_of() {
   fi
 }
 
+# Merge the newly generated file into the one already on the server. Nothing the server has is dropped: a name only
+# the server file has stays; a name only the new file has is appended; a name in both with the same value is left;
+# a name in both with a DIFFERENT value is asked about (keep the server's or take the new one). The question shows
+# no secret: a URL is shown as its host, anything else as its length. Answers: k keep, o overwrite, K keep all the
+# rest, O overwrite all the rest. Where it asks: the terminal (/dev/tty), or the file named by OPENRAIL_ENV_ANSWERS
+# (one answer per line, for tests). With neither, OPENRAIL_ENV_CONFLICT=keep|overwrite decides (default keep).
+merge_env() {
+  python3 -I - "$1" "$2" "$3" "$4" <<'PY'
+import os, re, sys
+
+new_path, old_path, out_path, svc = sys.argv[1:5]
+NAME = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
+
+def read(path):
+    lines = open(path, encoding="utf-8").read().splitlines()
+    values = {}
+    for line in lines:
+        m = NAME.match(line)
+        if m:
+            values[m.group(1)] = m.group(2)
+    return lines, values
+
+old_lines, old = read(old_path)
+_, new = read(new_path)
+
+def mask(value):
+    m = re.match(r"^(https?://[^/?#]+)", value)
+    return (m.group(1) + "/...") if m else f"{len(value)} characters"
+
+answers = None
+source = os.environ.get("OPENRAIL_ENV_ANSWERS")
+try:
+    answers = open(source if source else "/dev/tty", encoding="utf-8")
+except OSError:
+    answers = None
+policy = os.environ.get("OPENRAIL_ENV_CONFLICT", "keep")
+standing = None  # "k" or "o" once the person said "all the rest"
+
+added, overwrote, kept, same = [], [], [], 0
+result = list(old_lines)
+index = {}
+for i, line in enumerate(result):
+    m = NAME.match(line)
+    if m:
+        index[m.group(1)] = i
+
+for name, value in new.items():
+    if name not in old:
+        result.append(f"{name}={value}")
+        added.append(name)
+        continue
+    if old[name] == value:
+        same += 1
+        continue
+    choice = standing
+    if choice is None:
+        if answers is None:
+            choice = "o" if policy == "overwrite" else "k"
+        else:
+            while choice is None:
+                sys.stderr.write(
+                    f"{svc}.env: {name} differs. On the server: {mask(old[name])}. In the new file: {mask(value)}.\n"
+                    "  [k] keep the server's   [o] overwrite   [K] keep all the rest   [O] overwrite all the rest > "
+                )
+                sys.stderr.flush()
+                reply = answers.readline()
+                if reply == "":
+                    choice = "k"
+                    break
+                reply = reply.strip()
+                if reply in ("k", "o"):
+                    choice = reply
+                elif reply in ("K", "O"):
+                    standing = reply.lower()
+                    choice = standing
+    if choice == "o":
+        result[index[name]] = f"{name}={value}"
+        overwrote.append(name)
+    else:
+        kept.append(name)
+
+only_server = [n for n in old if n not in new]
+open(out_path, "w", encoding="utf-8").write("\n".join(result) + "\n")
+parts = [f"{len(added)} added" + (f" ({', '.join(added)})" if added else "")]
+parts.append(f"{same} same")
+if overwrote:
+    parts.append(f"{len(overwrote)} overwritten ({', '.join(overwrote)})")
+if kept:
+    parts.append(f"{len(kept)} differ, server value kept ({', '.join(kept)})")
+if only_server:
+    parts.append(f"{len(only_server)} only on the server, untouched")
+print(f"{svc}.env merged: " + "; ".join(parts))
+PY
+}
+
 mkdir -p "$out"
 declare -A used=()
 for svc in "${services[@]}"; do
@@ -61,6 +156,13 @@ for svc in "${services[@]}"; do
       missing+=("$name")
     fi
   done < <(names_of "$svc")
+  if [[ -f "$out/$svc.env" ]]; then
+    # A file already on the server may hold settings added by hand: merge, never replace.
+    merged="$(mktemp)"
+    summary="$(merge_env "$tmp" "$out/$svc.env" "$merged" "$svc")" || { rm -f "$tmp" "$merged"; exit 1; }
+    mv "$merged" "$tmp"
+    echo "$summary"
+  fi
   if [[ "$(id -u)" == 0 ]]; then
     install -m 0600 -o root -g root "$tmp" "$out/$svc.env"
   else
@@ -68,7 +170,7 @@ for svc in "${services[@]}"; do
   fi
   rm -f "$tmp"
   count="$(grep -cE "^[A-Z]" "$out/$svc.env" || true)"
-  echo "$svc.env: $count names written${missing:+, not set: ${missing[*]}}"
+  echo "$svc.env: $count names${missing:+, not set: ${missing[*]}}"
 done
 
 laptop_only=" SERVER_IP SSH_KEY_FILE RELAYER_ACCOUNT_ID WATCHER_PUBLIC_KEY ISSUER_PUBLIC_KEY RELAYER_PUBLIC_KEY "

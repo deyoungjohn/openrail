@@ -299,7 +299,7 @@ Whenever new code is pushed to `main`, CI builds the pack (workflow `server-pack
    sudo chmod +x /usr/local/bin/openrail-fetch
    ```
 
-> **The env upload replaces every service file.** `upload.sh --env-only` followed by `openrail-apply` runs `split-env.sh`, which rewrites each `/etc/openrail/<service>.env` from the combined laptop file alone: a name that is only in a server file (added by hand there) is dropped. Use that route only when the laptop file holds every value. To add or change one setting on the server, edit that service's file directly (`sudo nano /etc/openrail/<service>.env`) and `sudo systemctl restart openrail-<service>`; then also add it to the laptop file, so a later upload does not lose it.
+> **The env upload merges into the service files already on the server.** `upload.sh --env-only` followed by `openrail-apply` runs `split-env.sh`. For a service file that already exists it never replaces the file: a name only the server file has (added by hand) stays; a name only the new file has is appended; a name in both with the same value is left; a name in both with a **different** value is asked about in the terminal (`k` keep the server's, `o` overwrite, `K` or `O` for all the rest). The question shows a URL as its host and any other value only as its length, never the secret. With no terminal the server's value is kept (`OPENRAIL_ENV_CONFLICT=overwrite` takes the new ones instead). A file that does not exist yet is written whole.
 
 Changed a key or setting only? `./deploy/upload.sh --env-only` (small file), then `sudo openrail-apply --restart-only`. Changed a `NEXT_PUBLIC_` value? Update the repository Variable and re-run the `server-pack` workflow (Actions → server-pack → Run workflow).
 
