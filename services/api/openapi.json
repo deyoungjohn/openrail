@@ -3390,6 +3390,40 @@
             "type": "boolean"
           }
         }
+      },
+      "ConfidentialWithdrawQuoteRequest": {
+        "type": "object",
+        "required": ["amount", "source_asset", "destination_chain", "address"],
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "source_asset": {
+            "type": "string"
+          },
+          "destination_chain": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfidentialWithdrawQuote": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "ConfidentialWithdrawIntent": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "ConfidentialWithdrawSubmit": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "ConfidentialWithdrawStatus": {
+        "type": "object",
+        "additionalProperties": true
       }
     }
   },
@@ -6818,6 +6852,246 @@
           }
         },
         "description": "Path, tokenIds query and optional source field are not confirmed by a real call yet."
+      }
+    },
+    "/v1/balance/confidential/withdraw/quote": {
+      "post": {
+        "operationId": "confidentialWithdrawQuote",
+        "summary": "Quote a withdrawal from the confidential balance",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfidentialWithdrawQuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "1Click unshield quote.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialWithdrawQuote"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off or bad request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/balance/confidential/withdraw/intent": {
+      "post": {
+        "operationId": "confidentialWithdrawIntent",
+        "summary": "Generate the NEP-413 intent to sign",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["deposit_address"],
+                "properties": {
+                  "deposit_address": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Intent payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialWithdrawIntent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off or malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/balance/confidential/withdraw/submit": {
+      "post": {
+        "operationId": "confidentialWithdrawSubmit",
+        "summary": "Submit the signed intent",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["signed_data"],
+                "properties": {
+                  "signed_data": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Submitted intent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialWithdrawSubmit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off or malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/balance/confidential/withdraw/status": {
+      "get": {
+        "operationId": "confidentialWithdrawStatus",
+        "summary": "Status of a confidential withdrawal",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "deposit_address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialWithdrawStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off or missing address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

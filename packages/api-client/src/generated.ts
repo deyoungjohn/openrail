@@ -855,6 +855,21 @@ export interface SyncMeta {
   boost_active: boolean;
 }
 
+export interface ConfidentialWithdrawQuoteRequest {
+  amount: string;
+  source_asset: string;
+  destination_chain: string;
+  address: string;
+}
+
+export type ConfidentialWithdrawQuote = Record<string, unknown>;
+
+export type ConfidentialWithdrawIntent = Record<string, unknown>;
+
+export type ConfidentialWithdrawSubmit = Record<string, unknown>;
+
+export type ConfidentialWithdrawStatus = Record<string, unknown>;
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -1509,6 +1524,46 @@ export interface operations {
       "400": Error;
       "401": Error;
       "409": Error;
+    };
+  };
+  confidentialWithdrawQuote: {
+    requestBody: ConfidentialWithdrawQuoteRequest;
+    responses: {
+      "200": ConfidentialWithdrawQuote;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  confidentialWithdrawIntent: {
+    requestBody: {
+      deposit_address: string;
+    };
+    responses: {
+      "200": ConfidentialWithdrawIntent;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  confidentialWithdrawSubmit: {
+    requestBody: {
+      signed_data: Record<string, unknown>;
+    };
+    responses: {
+      "200": ConfidentialWithdrawSubmit;
+      "400": Error;
+      "401": Error;
+    };
+  };
+  confidentialWithdrawStatus: {
+    parameters: {
+      query: {
+        deposit_address: string;
+      };
+    };
+    responses: {
+      "200": ConfidentialWithdrawStatus;
+      "400": Error;
+      "401": Error;
     };
   };
 }

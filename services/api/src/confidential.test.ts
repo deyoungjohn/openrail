@@ -67,6 +67,12 @@ function harness() {
     confidential: {
       authenticate: vi.fn(async () => ({ accessToken: "user-token", expiresIn: 300 })),
       balances: vi.fn(async () => [{ tokenId: USDC, available: "2500000", source: "private" }]),
+      withdrawQuote: vi.fn(async () => ({ quote: { depositAddress: "withdraw-deposit" } })),
+      generateIntent: vi.fn(async () => ({
+        intent: { standard: "nep413", payload: { message: "{}" } },
+      })),
+      submitIntent: vi.fn(async () => ({ intentHash: "intent-1" })),
+      withdrawStatus: vi.fn(async () => ({ status: "SUCCESS" })),
     },
     clock: () => new Date("2026-11-10T10:00:00Z"),
   };
@@ -95,5 +101,37 @@ describe("confidential balance", () => {
       source: "private",
       balances: [{ token_id: USDC, available: "2500000", source: "private" }],
     });
+  });
+});
+
+describe("confidential withdraw", () => {
+  it("quotes, generates the intent, submits the signature and reports status", async () => {
+    const { app, request } = harness();
+    const quote = await app.handle(
+      request("POST", "/v1/balance/confidential/withdraw/quote", {
+        amount: "500000",
+        source_asset: USDC,
+        destination_chain: "base",
+        address: "0x" + "e".repeat(40),
+      }),
+    );
+    expect(quote.status).toBe(200);
+    expect(quote.body).toMatchObject({ quote: { depositAddress: "withdraw-deposit" } });
+
+    const intent = await app.handle(
+      request("POST", "/v1/balance/confidential/withdraw/intent", {
+        deposit_address: "withdraw-deposit",
+      }),
+    );
+    expect(intent.status).toBe(200);
+    expect(intent.body).toMatchObject({ intent: { standard: "nep413" } });
+
+    const submitted = await app.handle(
+      request("POST", "/v1/balance/confidential/withdraw/submit", {
+        signed_data: { standard: "nep413" },
+      }),
+    );
+    expect(submitted.status).toBe(200);
+    expect(submitted.body).toMatchObject({ intentHash: "intent-1" });
   });
 });

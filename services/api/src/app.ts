@@ -155,6 +155,16 @@ export interface ConfidentialBalancePort {
     userToken: string,
     tokenIds: string[],
   ): Promise<{ tokenId: string; available: string; source?: string }[]>;
+  withdrawQuote(request: {
+    amount: string;
+    sourceAsset: string;
+    destinationChain: string;
+    address: string;
+    refundTo: string;
+  }): Promise<Record<string, unknown>>;
+  generateIntent(depositAddress: string, signerId: string): Promise<Record<string, unknown>>;
+  submitIntent(signedData: Record<string, unknown>): Promise<Record<string, unknown>>;
+  withdrawStatus(depositAddress: string): Promise<Record<string, unknown>>;
 }
 
 export interface PayoutEstimatorPort {
@@ -1596,6 +1606,84 @@ export class ApiApp {
       }
     }
 
+    if (path === "/v1/balance/confidential/withdraw/quote" && method === "POST") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const body = (request.body ?? {}) as {
+        amount?: unknown;
+        source_asset?: unknown;
+        destination_chain?: unknown;
+        address?: unknown;
+      };
+      if (
+        typeof body.amount !== "string" ||
+        typeof body.source_asset !== "string" ||
+        typeof body.destination_chain !== "string" ||
+        typeof body.address !== "string"
+      )
+        throw new ApiError(
+          400,
+          "invalid_request",
+          "amount, source_asset, destination_chain and address required",
+        );
+      if (!this.routes.settlementAssets.includes(body.source_asset))
+        throw new ApiError(400, "unsupported_source_asset");
+      return {
+        status: 200,
+        body: await this.deps.confidential.withdrawQuote({
+          amount: body.amount,
+          sourceAsset: body.source_asset,
+          destinationChain: body.destination_chain,
+          address: body.address,
+          refundTo: context.accountId,
+        }),
+      };
+    }
+    if (path === "/v1/balance/confidential/withdraw/intent" && method === "POST") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const body = (request.body ?? {}) as { deposit_address?: unknown };
+      if (typeof body.deposit_address !== "string" || body.deposit_address === "")
+        throw new ApiError(400, "invalid_request", "deposit_address required");
+      return {
+        status: 200,
+        body: await this.deps.confidential.generateIntent(body.deposit_address, context.accountId),
+      };
+    }
+    if (path === "/v1/balance/confidential/withdraw/submit" && method === "POST") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
+      this.requireScope(this.requireAuth(request), "payments:read");
+      const body = (request.body ?? {}) as { signed_data?: unknown };
+      if (body.signed_data === null || typeof body.signed_data !== "object")
+        throw new ApiError(400, "invalid_request", "signed_data required");
+      return {
+        status: 200,
+        body: await this.deps.confidential.submitIntent(
+          body.signed_data as Record<string, unknown>,
+        ),
+      };
+    }
+    if (path === "/v1/balance/confidential/withdraw/status" && method === "GET") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
+      this.requireScope(this.requireAuth(request), "payments:read");
+      const depositAddress = request.query.get("deposit_address") ?? "";
+      if (depositAddress === "")
+        throw new ApiError(400, "invalid_request", "deposit_address required");
+      return {
+        status: 200,
+        body: await this.deps.confidential.withdrawStatus(depositAddress),
+      };
+    }
     if (path === "/v1/balance/confidential/session" && method === "POST") {
       if (this.deps.config.confidentialIntents !== true)
         throw new ApiError(400, "confidential_intents_disabled");
