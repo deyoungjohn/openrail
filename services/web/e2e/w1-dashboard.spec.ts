@@ -614,3 +614,33 @@ test.describe("issue form", () => {
     });
   }
 });
+
+test.describe("dashboard module sources", () => {
+  test("shows a paid checkout from the checkout module", async ({ page }) => {
+    const paid = {
+      id: "evt_checkout_paid",
+      type: "checkout.paid",
+      created: Math.floor(Date.now() / 1000) - 60,
+      data: {
+        token_id: "belmonte-abc",
+        order_ref: "ORD-77",
+        booking_tx: "0xcheckout",
+        received: "2000000",
+        asset: "nep141:base-usdc",
+      },
+    };
+    await mockApi(page, {
+      "GET /v1/invoices": { body: LIST },
+      "GET /v1/invoices/{id}/receipts": { body: RECEIPTS },
+      "GET /v1/events": { body: { data: [paid], next_cursor: null } },
+    });
+    await page.goto("/app");
+    const main = page.getByRole("main");
+    await expect(main.getByRole("img", { name: /Checkout: \$2\.00/ })).toBeVisible();
+    const activity = main.getByRole("region", { name: "Inflow" });
+    await expect(activity.getByRole("row", { name: /Checkout ORD-77/ })).toBeVisible();
+    await expect(
+      activity.getByRole("link", { name: /Receipt for Checkout ORD-77/ }),
+    ).toHaveAttribute("href", "/r/0xcheckout");
+  });
+});
