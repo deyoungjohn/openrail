@@ -186,7 +186,6 @@ function CheckoutCard({
   );
 }
 
-
 /** An open checkout whose time has passed reads as expired at once, before the server says so. */
 function effective(c: PublicCheckoutPayload, nowMs: number): PublicCheckout {
   return nowMs >= countdownTargetMs({ expires_at: c.expires_at }) && c.status === "pending"
@@ -237,7 +236,8 @@ const checkoutSource = (id: string): PayScreenSource => ({
       throw e;
     }
   },
-  listSessions: async (_tokenId, claim) => (claim as unknown as PublicCheckoutPayload).sessions ?? [],
+  listSessions: async (_tokenId, claim) =>
+    (claim as unknown as PublicCheckoutPayload).sessions ?? [],
   isOpen: (claim) => {
     const c = claim as unknown as PublicCheckoutPayload;
     const now = Date.now();
