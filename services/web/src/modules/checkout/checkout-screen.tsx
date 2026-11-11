@@ -53,7 +53,9 @@ function CheckoutCard({
   banner,
   returnHref,
   cancelHref,
+  received,
 }: {
+  received?: boolean;
   checkout: PublicCheckoutPayload;
   effectiveCheckout: PublicCheckout;
   expiryMs: number;
@@ -62,7 +64,12 @@ function CheckoutCard({
   cancelHref?: string | null;
 }) {
   const p = copy.pay;
-  const paid = effectiveCheckout.status === "paid" || effectiveCheckout.status === "accepted";
+  // `received`: the whole amount has arrived but is not booked on chain yet; the tag already says Paid (it said
+  // "Waiting for payment" next to ticked steps).
+  const paid =
+    received === true ||
+    effectiveCheckout.status === "paid" ||
+    effectiveCheckout.status === "accepted";
   const partial = effectiveCheckout.status === "partial";
   const chip: Status | null = paid
     ? { kind: "paid" }
@@ -202,7 +209,7 @@ function effective(c: PublicCheckoutPayload, nowMs: number): PublicCheckout {
     : c;
 }
 
-function summaryOf(c: PublicCheckoutPayload, topStage: PayStage | null) {
+function summaryOf(c: PublicCheckoutPayload, topStage: PayStage | null, received = false) {
   const now = Date.now();
   const eff = effective(c, now);
   return (
@@ -211,6 +218,7 @@ function summaryOf(c: PublicCheckoutPayload, topStage: PayStage | null) {
       effectiveCheckout={eff}
       expiryMs={countdownTargetMs({ expires_at: c.expires_at })}
       banner={checkoutLiveBanner(eff, topStage)}
+      received={received}
       returnHref={safeReturnUrl(c.return_url)}
       cancelHref={safeReturnUrl(c.cancel_url)}
     />
@@ -256,7 +264,8 @@ const checkoutSource = (id: string): PayScreenSource => ({
     const status = (claim as unknown as PublicCheckoutPayload).status;
     return status === "paid" || status === "accepted";
   },
-  summary: (claim, { topStage }) => summaryOf(claim as unknown as PublicCheckoutPayload, topStage),
+  summary: (claim, { topStage, received }) =>
+    summaryOf(claim as unknown as PublicCheckoutPayload, topStage, received),
   closed: (claim) => {
     const c = claim as unknown as PublicCheckoutPayload;
     return (
