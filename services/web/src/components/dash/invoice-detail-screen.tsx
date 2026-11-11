@@ -7,7 +7,7 @@ import { useMemo } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { formatUsdc, formatUsdcExact } from "@/lib/format";
-import { chipFor, claimRows } from "@/lib/invoice-model";
+import { chipFor, claimRows, hasCounters, type Counters } from "@/lib/invoice-model";
 import { chainOfRoute, formatDueDate } from "@/lib/pay";
 import { useAsync } from "@/lib/use-async";
 import { AddressChip } from "../ui/address-chip";
@@ -156,6 +156,14 @@ export function InvoiceDetailScreen({ id }: { id: string }) {
   }
 
   const { invoice, claim } = r.data;
+  // The chain could not be read just now (the API has no claim to give): say so and let the merchant try again.
+  if (!hasCounters(claim as unknown as Partial<Counters>)) {
+    return (
+      <div className="surface-card">
+        <ErrorState body={t.loadError} onRetry={retry} />
+      </div>
+    );
+  }
   const chip = chipFor(invoice, nowSec, claim.ack !== null);
   const rows = claimRows(claim);
   const outstanding = rows.find((x) => x.key === "outstanding")!.value;

@@ -96,6 +96,23 @@ export interface Counters {
   credit_total: string;
 }
 
+/**
+ * The claim comes from the chain. When the chain could not be read, the API has nothing to show and the counters are
+ * missing: a page must say so, not stop with "this page couldn't load" because `BigInt(undefined)` throws.
+ */
+export function hasCounters(c: Partial<Counters> | null | undefined): c is Counters {
+  if (c === null || c === undefined) return false;
+  const keys: (keyof Counters)[] = [
+    "amount_due",
+    "booked_total",
+    "distributed_total",
+    "fee_total",
+    "surplus",
+    "credit_total",
+  ];
+  return keys.every((k) => typeof c[k] === "string" && /^\d+$/.test(c[k] as string));
+}
+
 /** Blueprint 2.3: amount_due - (booked_total - surplus) - credit_total. */
 export const outstandingUnits = (c: Counters): bigint =>
   BigInt(c.amount_due) - (BigInt(c.booked_total) - BigInt(c.surplus)) - BigInt(c.credit_total);
