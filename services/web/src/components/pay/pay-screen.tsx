@@ -324,7 +324,6 @@ function SessionView({
       off = true;
       clearInterval(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, session.id]);
 
   if (stage === "expired")
@@ -585,7 +584,6 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
       })
       .catch(() => undefined)
       .finally(() => setRestoring(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routes, tokenId, claim, source]);
 
   // Never wait for ever: if the server does not answer, show the page as it is after a few seconds.
