@@ -592,14 +592,15 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
     return () => clearInterval(id);
   }, [anyPaid, settledNow]);
 
-  // A source that changes by itself (a checkout: partial, late, expired) is read again while it is open.
-  const openNow = claim ? source.isOpen(claim) : false;
+  // A source that changes by itself (a checkout: partial, late, refunded, expired) is read again until it is settled,
+  // also while nothing can be paid any more (a late payment is refunded while the page is open).
+  const loadedNow = claim !== null;
   const refreshMs = source.refreshMs;
   useEffect(() => {
-    if (!refreshMs || !openNow) return;
+    if (!refreshMs || !loadedNow || settledNow) return;
     const id = setInterval(() => setTick((t) => t + 1), refreshMs);
     return () => clearInterval(id);
-  }, [refreshMs, openNow]);
+  }, [refreshMs, loadedNow, settledNow]);
 
   const route = routes.find((r) => r.id === routeId) ?? null;
   const outstanding = claim?.outstanding ?? "0";
