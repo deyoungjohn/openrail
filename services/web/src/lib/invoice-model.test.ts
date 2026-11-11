@@ -291,3 +291,22 @@ describe("payments by chain and by month (incoming only)", () => {
     expect(paymentsByMonth([])).toEqual([]);
   });
 });
+
+describe("hasCounters", () => {
+  const full = {
+    amount_due: "3990000",
+    booked_total: "0",
+    distributed_total: "0",
+    fee_total: "0",
+    surplus: "0",
+    credit_total: "0",
+  };
+  it("is true for a claim read from the chain and false for one that could not be read", async () => {
+    const { hasCounters } = await import("./invoice-model");
+    expect(hasCounters(full)).toBe(true);
+    expect(hasCounters({})).toBe(false);
+    expect(hasCounters(null)).toBe(false);
+    expect(hasCounters({ ...full, booked_total: undefined })).toBe(false);
+    expect(hasCounters({ ...full, surplus: "x" })).toBe(false);
+  });
+});
