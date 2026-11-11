@@ -101,3 +101,60 @@ describe("budget governor", () => {
     second.close();
   });
 });
+
+describe("budget governor with several NearBlocks keys (11 Nov: one key's day was spent by lunchtime)", () => {
+  const make = () => {
+    const now = Date.parse("2026-11-11T10:00:00Z");
+    return new BudgetGovernor({
+      store: memoryStore(),
+      dailyBudget: 3,
+      keyCount: 2,
+      minSpacingMs: 0,
+      sleep: async () => undefined,
+      now: () => now,
+    });
+  };
+
+  it("uses the first key until its own budget is spent, then the next, and refuses when all are spent", async () => {
+    const g = make();
+    const seen: number[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      await g.beforeCall();
+      seen.push(g.keyIndex());
+      g.recordCall();
+    }
+    expect(seen).toEqual([0, 0, 0, 1, 1, 1]);
+    await expect(g.beforeCall()).rejects.toBeInstanceOf(BudgetExhaustedError);
+    expect(g.health().daily_budget).toBe(6);
+  });
+
+  it("a 429 spends only the key that answered it", async () => {
+    const g = make();
+    await g.beforeCall();
+    expect(g.keyIndex()).toBe(0);
+    g.recordCall();
+    g.on429();
+    await g.beforeCall();
+    expect(g.keyIndex()).toBe(1);
+    g.recordCall();
+    g.on429();
+    await expect(g.beforeCall()).rejects.toBeInstanceOf(BudgetExhaustedError);
+  });
+
+  it("one key behaves as before", async () => {
+    const now = Date.parse("2026-11-11T10:00:00Z");
+    const g = new BudgetGovernor({
+      store: memoryStore(),
+      dailyBudget: 2,
+      minSpacingMs: 0,
+      sleep: async () => undefined,
+      now: () => now,
+    });
+    for (let i = 0; i < 2; i += 1) {
+      await g.beforeCall();
+      expect(g.keyIndex()).toBe(0);
+      g.recordCall();
+    }
+    await expect(g.beforeCall()).rejects.toBeInstanceOf(BudgetExhaustedError);
+  });
+});
