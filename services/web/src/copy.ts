@@ -518,7 +518,6 @@ export const copy = {
       count: "Count",
       type: "Type",
       event: "Event ID",
-      token: "Invoice",
       time: "Time",
     },
     rotateShort: "Rotate",

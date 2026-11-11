@@ -27,6 +27,7 @@ import { createPortal } from "react-dom";
 import { EASE_OUT, SPRING_GLIDE, SPRING_PRESS } from "@/lib/ease";
 import { TOUCH_GESTURE_CLASS, capturePointer } from "@/lib/touch";
 import { cn } from "@/lib/cn";
+import { fillTabWidth } from "./tab-layout";
 
 export type MorphingTabsItem = {
   id: string;
@@ -99,10 +100,6 @@ type SpringTabProps = {
 };
 
 const DRAG_THRESHOLD = 5;
-// The design width of a tab, and the narrowest it may shrink to before the
-// label stops reading. See `tabWidth` in MorphingTabs.
-const MAX_TAB_WIDTH = 176;
-const MIN_TAB_WIDTH = 96;
 const TAB_HEIGHT = 56;
 const TAB_TOP = 24;
 const TAB_RADIUS = 24;
@@ -294,7 +291,6 @@ export function MorphingTabs({
   const dragAnimationRef = useRef<ReturnType<typeof animateValue> | null>(null);
   const surfaceAnimationRef = useRef<ReturnType<typeof animateValue> | null>(null);
   const [surfaceWidth, setSurfaceWidth] = useState(0);
-  const [tabGap, setTabGap] = useState(12);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragTargetIndex, setDragTargetIndex] = useState(-1);
   const dragLeft = useMotionValue(SURFACE_INSET);
@@ -327,35 +323,11 @@ export function MorphingTabs({
       : firstEnabledItem;
   const activeId = activeItem?.id ?? null;
 
-  // The rail cannot scroll: the liquid surface is one continuous shape spanning
-  // the panel, so its notch has to stay over the tab that cut it. Slots narrow
-  // to fit the panel instead, in that order of sacrifice:
-  //   1. the design width, down to a floor where a truncated label still reads;
-  //   2. the gap between slots, so the floor survives one panel narrower;
-  //   3. the floor itself — a cramped tab is still tappable, a clipped one is
-  //      not reachable at all.
-  // Every tier fits inside the panel by construction, so no tab is ever cut off
-  // and the notch never has to be clamped away from the tab that cut it.
-  const { tabWidth, slotGap } = useMemo(() => {
-    const count = order.length;
-    if (!surfaceWidth || count === 0) {
-      return { tabWidth: MAX_TAB_WIDTH, slotGap: tabGap };
-    }
-    const inner = surfaceWidth - SURFACE_INSET * 2;
-    const widthAt = (gap: number) => Math.floor((inner - gap * (count - 1)) / count);
-
-    if (widthAt(tabGap) >= MIN_TAB_WIDTH) {
-      return {
-        tabWidth: Math.min(MAX_TAB_WIDTH, widthAt(tabGap)),
-        slotGap: tabGap,
-      };
-    }
-    if (count > 1 && widthAt(0) >= MIN_TAB_WIDTH) {
-      const gap = Math.floor((inner - MIN_TAB_WIDTH * count) / (count - 1));
-      return { tabWidth: MIN_TAB_WIDTH, slotGap: Math.max(0, gap) };
-    }
-    return { tabWidth: Math.max(0, widthAt(0)), slotGap: 0 };
-  }, [order.length, surfaceWidth, tabGap]);
+  // The rail cannot scroll: the liquid surface is one continuous shape spanning the panel, so its notch has to stay
+  // over the tab that cut it. The tab switches therefore fill the panel exactly and equally, with no gaps: every tab
+  // is inside the panel by construction and none is ever cut off.
+  const tabWidth = fillTabWidth(surfaceWidth, order.length);
+  const slotGap = 0;
 
   const slotLefts = useMemo(
     () => order.map((_, index) => SURFACE_INSET + index * (tabWidth + slotGap)),
@@ -387,8 +359,6 @@ export function MorphingTabs({
 
     const measure = () => {
       setSurfaceWidth(root.clientWidth);
-      const nextGap = Number.parseFloat(getComputedStyle(rail).columnGap);
-      if (Number.isFinite(nextGap)) setTabGap(nextGap);
     };
 
     measure();

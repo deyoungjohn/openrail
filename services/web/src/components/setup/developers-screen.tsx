@@ -630,7 +630,7 @@ function EventsPanel() {
       id: "type",
       header: t.cols.type,
       sortable: true,
-      width: "30%",
+      width: "36%",
       value: (e) => e.type,
       cell: (e) => (
         <code className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono text-[12px]">
@@ -643,7 +643,7 @@ function EventsPanel() {
       header: t.cols.count,
       sortable: true,
       align: "center",
-      width: "14%",
+      width: "16%",
       value: (e) => perType.get(e.type) ?? 0,
       className: "tabular",
     },
@@ -653,23 +653,15 @@ function EventsPanel() {
       hideBelow: "sm",
       sortable: true,
       align: "center",
-      width: "14%",
+      width: "18%",
       value: (e) => (/^\d+$/.test(e.id) ? Number(e.id) : e.id),
       cell: (e) => <code className="font-mono text-[13px]">{e.id}</code>,
-    },
-    {
-      id: "token",
-      header: t.cols.token,
-      hideBelow: "md",
-      sortable: true,
-      width: "16%",
-      value: (e) => String((e.data as { token_id?: unknown } | undefined)?.token_id ?? ""),
     },
     {
       id: "time",
       header: t.cols.time,
       sortable: true,
-      width: "26%",
+      width: "30%",
       value: (e) => e.created,
       // A time before 2001 cannot be real: say so instead of showing 1 January 1970.
       cell: (e) =>

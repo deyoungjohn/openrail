@@ -12,7 +12,7 @@ export interface TabItem {
 
 /**
  * Tabs on the morphing-tabs block (beui): the chosen tab grows into the panel under it. Tabs cannot be closed.
- * Keep labels short: a tab is at most 176 px wide and a longer label is cut with an ellipsis.
+ * The tab switches share the width equally (two: half each; three: a third each); a long label is cut with an ellipsis.
  */
 export function Tabs({
   items,
