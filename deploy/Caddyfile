@@ -31,3 +31,6 @@ shopify.openrail.incepture.dev {
 		-Server
 	}
 }
+
+# Site blocks that live on the server only (for example a test store), one file each; the apply script leaves this folder alone.
+import /etc/caddy/sites/*.caddy
