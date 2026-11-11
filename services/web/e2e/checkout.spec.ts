@@ -132,6 +132,53 @@ test("checkout page shows order ref, amount, route picker, quote, QR, countdown 
   await expect(page.getByRole("button", { name: "Copy address" })).toBeVisible();
 });
 
+test("checkout_desktop_two_columns_one_screen: the summary and the payment card sit side by side and fit without scrolling", async ({
+  page,
+}, testInfo) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 720],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await mockCheckout(page);
+    await page.goto("/c/c-101");
+    const summary = page.getByRole("region", { name: "Checkout", exact: true });
+    const pay = page.getByRole("region", { name: "Pay this order" });
+    await expect(summary).toBeVisible();
+    await expect(pay).toBeVisible();
+    const a = (await summary.boundingBox())!;
+    const b = (await pay.boundingBox())!;
+    // side by side, level with each other
+    expect(b.x).toBeGreaterThan(a.x + a.width - 4);
+    expect(Math.abs(a.y - b.y)).toBeLessThan(4);
+    // nothing to scroll to: the payment card ends inside the viewport
+    expect(b.y + b.height).toBeLessThanOrEqual(height);
+    expect(a.y + a.height).toBeLessThanOrEqual(height);
+    await page.screenshot({ path: testInfo.outputPath(`two-column-${width}x${height}.png`) });
+  }
+});
+
+test("checkout_desktop_form_open: with a route chosen and the refund field showing, the payment card still fits 1440x900", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockCheckout(page);
+  await page.goto("/c/c-101");
+  await pickRoute(page, "USDC on Base");
+  await expect(page.getByLabel("Refund address")).toBeVisible();
+  const pay = page.getByRole("region", { name: "Pay this order" });
+  const box = (await pay.boundingBox())!;
+  await page.screenshot({ path: testInfo.outputPath("form-open-1440x900.png") });
+  expect(box.y + box.height).toBeLessThanOrEqual(900);
+});
+
+test("checkout_page_says_order_not_invoice", async ({ page }) => {
+  await mockCheckout(page);
+  await page.goto("/c/c-101");
+  await expect(page.getByText("Pay this order")).toBeVisible();
+  await expect(page.getByText(/invoice/i)).toHaveCount(0);
+});
+
 test("checkout page shows fee breakdown when fee_mode is pass_to_customer", async ({ page }) => {
   await mockCheckout(page, {
     checkout: {
@@ -580,7 +627,7 @@ for (const scheme of ["light", "dark"] as const) {
     });
     await page.goto("/c/c-101");
     await expect(page.getByText("Checking payment status").first()).toBeVisible();
-    await expect(page.getByText("Pay this invoice")).toBeVisible();
+    await expect(page.getByText("Pay this order")).toBeVisible();
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
@@ -644,4 +691,3 @@ test("checkout title shows business display name when provided, and breaks long 
   );
   expect(overflow).toBeLessThanOrEqual(0);
 });
-
