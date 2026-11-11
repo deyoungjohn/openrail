@@ -1,4 +1,8 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { copy } from "../../copy";
 import {
   canQuoteCheckout,
   checkoutCopy,
@@ -112,5 +116,37 @@ describe("checkout hosted page rules", () => {
     expect(checkoutCopy.feeBreakdown("12.00", "0.03", "12.03")).toBe(
       "Order $12.00 + Processing fee (0.25%) $0.03 = $12.03",
     );
+  });
+});
+
+describe("a checkout is not an invoice: the hosted page never says invoice", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const screen = readFileSync(join(here, "checkout-screen.tsx"), "utf8");
+
+  const text = (value: unknown): string[] =>
+    typeof value === "string"
+      ? [value]
+      : typeof value === "function"
+        ? [String((value as (...a: string[]) => unknown)("x", "y", "z", "w"))]
+        : value !== null && typeof value === "object"
+          ? Object.values(value as Record<string, unknown>).flatMap(text)
+          : [];
+
+  it("checkout_copy_has_no_invoice_word", () => {
+    expect(text(checkoutCopy).filter((t) => /invoice/i.test(t))).toEqual([]);
+  });
+
+  it("checkout_screen_uses_no_shared_string_that_says_invoice", () => {
+    const keys = [...new Set([...screen.matchAll(/\bp\.([A-Za-z]+)/g)].map((m) => m[1] as string))];
+    const pay = copy.pay as unknown as Record<string, unknown>;
+    const offenders = keys.filter((k) => text(pay[k]).some((t) => /invoice/i.test(t)));
+    expect(offenders).toEqual([]);
+  });
+
+  it("checkout_screen_source_has_no_invoice_word_in_its_own_text", () => {
+    const literal = [...screen.matchAll(/"([^"\n]*)"|>([^<>{}\n]+)</g)]
+      .map((m) => m[1] ?? m[2] ?? "")
+      .filter((t) => /invoice/i.test(t));
+    expect(literal).toEqual([]);
   });
 });

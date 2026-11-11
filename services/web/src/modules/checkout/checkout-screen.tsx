@@ -137,7 +137,7 @@ function QuoteNote({
           </dd>
         </div>
         <div>
-          <dt className="caption">{p.invoiceGets}</dt>
+          <dt className="caption">{checkoutCopy.receives}</dt>
           <dd className="tabular text-[18px] font-semibold">
             ${formatToken(session.amount_out, 6)}
           </dd>
@@ -149,7 +149,7 @@ function QuoteNote({
           </div>
         ) : null}
       </dl>
-      {upto ? <p className="caption">{p.marginNote}</p> : null}
+      {upto ? <p className="caption">{checkoutCopy.marginNote}</p> : null}
       <p className="text-[14px] leading-5">{p.locked(timeOf(deadlineMs))}</p>
     </section>
   );
@@ -380,7 +380,7 @@ function usdcToUsd(units: string): string {
   return `$${formatToken(units, 6)}`;
 }
 
-/** An invoice-style card on top of the checkout: merchant, order reference, amount, expiry countdown, and live status. */
+/** A summary card on top of the checkout: merchant, order reference, amount, expiry countdown, and live status. */
 function CheckoutCard({
   checkout: c,
   effectiveCheckout,
@@ -476,7 +476,7 @@ function CheckoutCard({
 
       <dl className="grid gap-x-6 gap-y-4 px-5 py-4 text-[14px] sm:grid-cols-2 sm:px-6">
         <div className="min-w-0 space-y-1">
-          <dt className="caption">{p.claimAccountLabel}</dt>
+          <dt className="caption">{checkoutCopy.claimAccountLabel}</dt>
           <dd className="break-all">
             <AddressChip value={c.claim_account} />
           </dd>
@@ -823,38 +823,53 @@ export function CheckoutScreen({ id }: { id: string }) {
     (BigInt(c.amount_due || "0") > 0n && BigInt(c.outstanding || "0") === 0n);
 
   return (
-    <div className="mx-auto w-full max-w-[640px] space-y-6">
-      <CheckoutCard
-        checkout={c}
-        effectiveCheckout={effectiveCheckout}
-        expiryMs={expiryMs}
-        banner={banner}
-        returnHref={returnHref}
-        cancelHref={cancelHref}
-      />
+    // Desktop: the summary and the payment card side by side, level with each other, so the whole flow is in view
+    // without scrolling (the standard pay page has the same shape); what happens next runs across both.
+    <div
+      className={
+        quotable
+          ? "grid w-full gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-8"
+          : "mx-auto w-full max-w-[640px] space-y-6"
+      }
+    >
+      <div className="flex min-w-0 flex-col [&>*]:flex-1">
+        <CheckoutCard
+          checkout={c}
+          effectiveCheckout={effectiveCheckout}
+          expiryMs={expiryMs}
+          banner={banner}
+          returnHref={returnHref}
+          cancelHref={cancelHref}
+        />
+      </div>
 
-      <div className="min-w-0 space-y-6">
+      <div className={quotable ? "contents" : "min-w-0 space-y-6"}>
         {!quotable ? null : routes.length === 0 ? (
-          <div className="surface-card">
-            <EmptyState title={p.noRoutes} />
+          <div className="flex min-w-0 flex-col [&>*]:flex-1">
+            <div className="surface-card">
+              <EmptyState title={p.noRoutes} />
+            </div>
           </div>
         ) : (
-          <Card title={p.pickTitle}>
-            <p className="caption mb-4">{p.pickHelp}</p>
-            <Tabs
-              fill
-              label={p.tabsLabel}
-              value={mode}
-              onValueChange={(next) => setMode(next as Mode)}
-              items={[
-                { id: "wallet", label: p.tabWallet, panel: form("wallet") },
-                { id: "paste", label: p.tabPaste, panel: form("paste") },
-              ]}
-            />
-            {split || legs.length === 0 ? <p className="caption mt-4">{p.mixSplitHelp}</p> : null}
-          </Card>
+          <div className="flex min-w-0 flex-col [&>*]:flex-1">
+            <Card title={checkoutCopy.pickTitle}>
+              <p className="caption mb-4">{p.pickHelp}</p>
+              <Tabs
+                fill
+                label={p.tabsLabel}
+                value={mode}
+                onValueChange={(next) => setMode(next as Mode)}
+                items={[
+                  { id: "wallet", label: p.tabWallet, panel: form("wallet") },
+                  { id: "paste", label: p.tabPaste, panel: form("paste") },
+                ]}
+              />
+              {split || legs.length === 0 ? <p className="caption mt-4">{p.mixSplitHelp}</p> : null}
+            </Card>
+          </div>
         )}
-
+      </div>
+      <div className="min-w-0 space-y-6 lg:col-span-2">
         {!isPaid && quotable
           ? legs.map((l, i) => (
               <SessionView

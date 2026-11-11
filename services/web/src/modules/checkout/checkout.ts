@@ -43,6 +43,12 @@ export const checkoutCopy = {
   feeBreakdown: (subtotal: string, fee: string, total: string) =>
     `Order $${subtotal} + Processing fee (0.25%) $${fee} = $${total}`,
   expiresIn: "Order expires in",
+  // Strings the shared pay components say about an invoice; a checkout says order (11 Nov, human).
+  pickTitle: "Pay this order",
+  claimAccountLabel: "This order's payment account",
+  receives: "The merchant receives",
+  marginNote:
+    "ETH and SOL move in price. The margin keeps the order whole if the price moves before your payment lands. It is already inside the amount above.",
   expiredTitle: "This checkout has expired",
   expiredBody:
     "No new price can be created for an expired checkout. Ask the merchant for a new checkout link.",
