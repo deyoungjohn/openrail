@@ -124,7 +124,7 @@ export function CashoutHistory({
             <dt className="caption">{t.tx}</dt>
             <dd className="space-y-1">
               {r.tx_hash ? (
-                <AddressChip value={r.tx_hash} chain="near" />
+                <AddressChip value={r.tx_hash} chain="near" tx />
               ) : (
                 <span className="caption">–</span>
               )}
@@ -132,6 +132,7 @@ export function CashoutHistory({
                 <AddressChip
                   value={r.destination_tx_hashes[0]}
                   chain={r.destination_chain as ChainId}
+                  tx
                 />
               ) : null}
             </dd>

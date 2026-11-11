@@ -1567,6 +1567,10 @@
                 "tx_hash": {
                   "type": "string"
                 },
+                "chain": {
+                  "type": "string",
+                  "description": "The chain of an origin transaction (base, arbitrum, solana ...). Absent for NEAR transactions."
+                },
                 "near": {
                   "type": "boolean"
                 }
@@ -1711,6 +1715,10 @@
               "properties": {
                 "tx_hash": {
                   "type": "string"
+                },
+                "chain": {
+                  "type": "string",
+                  "description": "The chain of an origin transaction (base, arbitrum, solana ...). Absent for NEAR transactions."
                 },
                 "near": {
                   "type": "boolean"

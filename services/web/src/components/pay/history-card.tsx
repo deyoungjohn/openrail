@@ -1,5 +1,6 @@
 import { copy } from "@/copy";
 import { AddressChip } from "../ui/address-chip";
+import type { ChainId } from "../ui/chain-badge";
 import { Card } from "../ui/card";
 import type { PayClaim } from "./invoice-card";
 
@@ -39,7 +40,7 @@ export function HistoryCard({ claim: c }: { claim: PayClaim }) {
           <div className="space-y-1">
             <dt className="caption">{p.issueTx}</dt>
             <dd>
-              <AddressChip value={c.issue_tx} chain="near" />
+              <AddressChip value={c.issue_tx} chain="near" tx />
             </dd>
           </div>
         ) : null}
@@ -47,7 +48,13 @@ export function HistoryCard({ claim: c }: { claim: PayClaim }) {
           <div key={pay.tx_hash} className="space-y-1">
             <dt className="caption">{pay.near ? p.payoutTx : p.originTx}</dt>
             <dd>
-              <AddressChip value={pay.tx_hash} chain={pay.near ? "near" : undefined} />
+              <AddressChip
+                value={pay.tx_hash}
+                chain={
+                  pay.near ? "near" : ((pay as { chain?: string }).chain as ChainId | undefined)
+                }
+                tx
+              />
             </dd>
           </div>
         ))}

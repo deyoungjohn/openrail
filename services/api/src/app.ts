@@ -177,7 +177,7 @@ export interface PublicHistory {
   issued_at: string;
   issue_tx: string | null;
   paid_at: string | null;
-  payments: { tx_hash: string; near: boolean }[];
+  payments: { tx_hash: string; near: boolean; chain?: string }[];
 }
 
 /** What is kept for good about an invoice that can no longer change. */
@@ -682,11 +682,17 @@ export class ApiApp {
     } catch {
       // The history is extra: a failing lookup never takes the pay page down.
     }
-    const payments: { tx_hash: string; near: boolean }[] = [];
+    const payments: { tx_hash: string; near: boolean; chain?: string }[] = [];
     let paidAt: string | null = null;
     for (const r of receipts) {
-      const origin = (r.origin_tx as { hash?: unknown } | null | undefined)?.hash;
-      if (typeof origin === "string") payments.push({ tx_hash: origin, near: false });
+      const originTx = r.origin_tx as { hash?: unknown; chain?: unknown } | null | undefined;
+      const origin = originTx?.hash;
+      if (typeof origin === "string")
+        payments.push({
+          tx_hash: origin,
+          near: false,
+          ...(typeof originTx?.chain === "string" ? { chain: originTx.chain } : {}),
+        });
       if (Array.isArray(r.near_tx_hashes))
         for (const h of r.near_tx_hashes)
           if (typeof h === "string") payments.push({ tx_hash: h, near: true });

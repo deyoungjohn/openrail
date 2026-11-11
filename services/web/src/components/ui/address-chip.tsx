@@ -4,6 +4,7 @@ import { Check, Copy, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { copy } from "@/copy";
 import { middleTruncate } from "@/lib/format";
+import { explorerTxUrl } from "@/lib/w5";
 import { ChainIcon, type ChainId } from "./chain-badge";
 import { Tooltip } from "./tooltip";
 
@@ -11,6 +12,7 @@ export function AddressChip({
   value,
   chain,
   href,
+  tx,
   head,
   tail,
 }: {
@@ -18,10 +20,14 @@ export function AddressChip({
   chain?: ChainId;
   /** Explorer link. Omit when none is known. */
   href?: string;
+  /** The value is a transaction hash: with a chain, the shortened hash itself is the link to its explorer. */
+  tx?: boolean;
   head?: number;
   tail?: number;
 }) {
   const [copied, setCopied] = useState(false);
+  const explorer = href ?? (tx && chain ? explorerTxUrl(chain, value) : null);
+  const asLink = tx === true && explorer !== null;
 
   const onCopy = async () => {
     try {
@@ -44,7 +50,19 @@ export function AddressChip({
         data-full={value}
         className="font-mono text-[13px] leading-5 font-normal break-all print:text-[0px] print:before:text-[11px] print:before:leading-4 print:before:content-[attr(data-full)]"
       >
-        {middleTruncate(value, head, tail)}
+        {asLink ? (
+          <a
+            href={explorer}
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-label={`${copy.address.view}: ${middleTruncate(value)}`}
+            className="text-accent-text underline-offset-2 hover:underline focus-visible:underline"
+          >
+            {middleTruncate(value, head, tail)}
+          </a>
+        ) : (
+          middleTruncate(value, head, tail)
+        )}
       </code>
       {/* On paper there is no hover and no copy button, so the whole value is written out. */}
       <Tooltip label={copied ? copy.address.copied : copy.address.copy} side="top">
@@ -63,10 +81,10 @@ export function AddressChip({
           )}
         </button>
       </Tooltip>
-      {href ? (
+      {explorer && !asLink ? (
         <Tooltip label={copy.address.view} side="top">
           <a
-            href={href}
+            href={explorer ?? undefined}
             target="_blank"
             rel="noreferrer noopener"
             aria-label={`${copy.address.view}: ${middleTruncate(value)}`}
@@ -82,5 +100,5 @@ export function AddressChip({
 
 /** A transaction hash: an AddressChip with an explorer link. */
 export function TxLink(props: Omit<Parameters<typeof AddressChip>[0], "head" | "tail">) {
-  return <AddressChip head={6} tail={4} {...props} />;
+  return <AddressChip head={6} tail={4} tx {...props} />;
 }

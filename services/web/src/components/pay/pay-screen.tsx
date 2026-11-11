@@ -354,13 +354,13 @@ function SessionView({
               {hashes.origin.map((h) => (
                 <li key={h}>
                   <p className="caption">{p.originTx}</p>
-                  <AddressChip value={h} chain={chain ?? undefined} />
+                  <AddressChip value={h} chain={chain ?? undefined} tx />
                 </li>
               ))}
               {hashes.near.map((h) => (
                 <li key={h}>
                   <p className="caption">{p.payoutTx}</p>
-                  <AddressChip value={h} chain="near" />
+                  <AddressChip value={h} chain="near" tx />
                 </li>
               ))}
             </ul>

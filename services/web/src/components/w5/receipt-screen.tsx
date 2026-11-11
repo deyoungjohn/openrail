@@ -70,9 +70,8 @@ export function ReceiptScreen({ hash }: { hash: string }) {
             <AddressChip
               value={hash}
               chain="near"
-              head={64}
-              tail={0}
               href={explorerTxUrl("near", hash) ?? undefined}
+              tx
             />
           </Row>
           <Row label={t.agreed}>{receipt.payment_instruction_v1}</Row>
@@ -93,6 +92,7 @@ export function ReceiptScreen({ hash }: { hash: string }) {
                 value={origin.hash}
                 chain={chain ?? undefined}
                 href={explorerTxUrl(origin.chain, origin.hash) ?? undefined}
+                tx
               />
             </Row>
           </dl>
@@ -104,7 +104,12 @@ export function ReceiptScreen({ hash }: { hash: string }) {
           <ul className="space-y-3">
             {receipt.near_tx_hashes.map((h) => (
               <li key={h}>
-                <AddressChip value={h} chain="near" href={explorerTxUrl("near", h) ?? undefined} />
+                <AddressChip
+                  value={h}
+                  chain="near"
+                  href={explorerTxUrl("near", h) ?? undefined}
+                  tx
+                />
               </li>
             ))}
           </ul>

@@ -52,7 +52,7 @@ function Payments({ invoiceId }: { invoiceId: string }) {
               {origin ? (
                 <>
                   <p className="caption">{t.yourTx}</p>
-                  <AddressChip value={origin.hash} chain={chain ?? undefined} />
+                  <AddressChip value={origin.hash} chain={chain ?? undefined} tx />
                 </>
               ) : null}
               {p.booking_tx_hash ? (
@@ -68,7 +68,7 @@ function Payments({ invoiceId }: { invoiceId: string }) {
               {p.near_tx_hashes.map((h) => (
                 <div key={h}>
                   <p className="caption">{t.payoutTx}</p>
-                  <AddressChip value={h} chain="near" />
+                  <AddressChip value={h} chain="near" tx />
                 </div>
               ))}
             </li>
