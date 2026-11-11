@@ -323,12 +323,32 @@ sudo chmod +x /usr/local/bin/openrail-apply
 
 After that it updates itself on every run. If a setting changed only (no code), `./deploy/upload.sh --env-only` then `sudo openrail-apply --restart-only` applies it. Settings that start with `NEXT_PUBLIC_` need a new build as well.
 
+## Stopping the app for a moment (a contract deploy, maintenance)
+
+Stop only the services, then start them again. **Do not stop everything that matches `openrail-*`**: that also stops the daily backup timer, a restart by glob does not bring a stopped timer back, and the next `openrail-apply` then rolls the release back with `FAIL openrail-backup.timer is not active`.
+
+```bash
+# stop (Caddy keeps running: visitors see a 502 until you start again)
+sudo systemctl stop openrail-{api,web,watcher,issuer,indexer}.service
+sudo systemctl stop openrail-payout.service openrail-shopify.service 2>/dev/null   # private build only
+
+# start again
+sudo systemctl start openrail-{indexer,issuer,watcher,api,web}.service
+sudo systemctl start openrail-payout.service openrail-shopify.service 2>/dev/null  # private build only
+
+# check: services and timers
+systemctl is-active openrail-{api,web,watcher,issuer,indexer}.service openrail-backup.timer
+```
+
+A contract deploy only needs the watcher (and the payout worker, if installed) stopped so no transaction races the new code: `sudo systemctl stop openrail-watcher.service`, deploy, then `sudo systemctl start openrail-watcher.service`. If a stop went wider than that, start the timer too: `sudo systemctl start openrail-backup.timer`.
+
 ## If something goes wrong
 
 | Symptom                                                                   | Do this                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `uname -m` is `aarch64`                                                   | Stop. The pack is for x86 servers.                                                                                                                                                                                      |
 | WalletConnect shows no QR; console says the WebSocket to the relay failed | In the Reown dashboard, allow the **root** domain (`incepture.dev`) as well as `openrail.incepture.dev`. Only wallets that support NEAR can use it; EVM-only wallets such as MetaMask say the network is not supported. |
+| `FAIL openrail-backup.timer is not active`                                | A timer was stopped by hand (for example with `systemctl stop 'openrail-*'`). `sudo systemctl start openrail-backup.timer`, then run the apply again.                                                                   |
 | `FAIL openrail-api.service`                                               | `sudo journalctl -u openrail-api -n 60 --no-pager`; a line starting `MISSING_ENV:` names the missing setting; add it to the combined file and redo Step 12.                                                             |
 | HTTPS does not work                                                       | DNS records must be "DNS only" (grey cloud) in Cloudflare; ports 80 and 443 must be open in the AWS security group and `ufw`.                                                                                           |
 | Pay page says it cannot start a payment                                   | The publishable key was not registered (Step 15) or the web pack was built without it (Step 3).                                                                                                                         |
