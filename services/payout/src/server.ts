@@ -30,6 +30,8 @@ function settleEnabled(): boolean {
   }
 }
 
+class SkipBalance extends Error {}
+
 async function main(): Promise<void> {
   if (!settleEnabled()) return;
   const rootAccount = requireEnv("NEAR_ROOT_ACCOUNT");
@@ -65,6 +67,8 @@ async function main(): Promise<void> {
   const minBalance = numberEnv("PAYOUT_MIN_BALANCE_NEAR", 0.5);
   const alertUrl = getEnv("ALERT_WEBHOOK_URL");
   let lowAlerted = false;
+  let lastBalanceAt = 0;
+  const balanceEveryMs = numberEnv("PAYOUT_BALANCE_CHECK_MS", 600_000);
 
   const health = await startPayoutHealthServer(numberEnv("PAYOUT_HEALTH_PORT", 8081), () => ({
     ok: lastError === null,
@@ -84,6 +88,9 @@ async function main(): Promise<void> {
       // The balance is read apart from the tick: when no RPC can answer, say so and keep the last known value; a failed
       // read is never a zero balance and never raises the low-balance alert (11 Nov: "balance is low 0" with 1 NEAR in it).
       try {
+        if (balanceNear !== null && Date.now() - lastBalanceAt < balanceEveryMs)
+          throw new SkipBalance();
+        lastBalanceAt = Date.now();
         const yocto = await chain.balanceYocto();
         balanceNear = Number(yocto) / 1e24;
         if (balanceNear >= minBalance) lowAlerted = false;
@@ -106,10 +113,13 @@ async function main(): Promise<void> {
           logger.warn("payout relayer balance is low", balanceNear);
         }
       } catch (error) {
-        logger.warn(
-          "payout relayer balance could not be read",
-          error instanceof Error ? error.message : String(error),
-        );
+        if (error instanceof SkipBalance) {
+          // read less than ten minutes ago
+        } else
+          logger.warn(
+            "payout relayer balance could not be read",
+            error instanceof Error ? error.message : String(error),
+          );
       }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);

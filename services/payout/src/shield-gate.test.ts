@@ -28,20 +28,19 @@ import type {
   HeldEntry,
   PayoutOutcome,
   PayoutRecord,
-  Quote,
   QuotePort,
   StatusPort,
 } from "./types.js";
 import { PayoutWorker } from "./worker.js";
 
-const CUSTOM_USDC = "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
 const CUSTOM_DAI = "nep141:dai.omft.near";
 const OWNER = "merchant.near";
 
 class TestChain implements ChainPort {
   readonly entries = new Map<string, HeldEntry[]>();
   readonly sent: { tokenId: string; index: number; deposit: string; amount: string }[] = [];
-  readonly reports: { tokenId: string; index: number; payoutId: number; outcome: PayoutOutcome }[] = [];
+  readonly reports: { tokenId: string; index: number; payoutId: number; outcome: PayoutOutcome }[] =
+    [];
   readonly payouts = new Map<number, PayoutRecord>();
   failSend = false;
   private nextId = 1;
@@ -154,9 +153,12 @@ function createTestHarness(options: TestSetupOptions = {}) {
 
   const loggedLines: string[] = [];
   const logger = {
-    info: (msg: string, ...args: unknown[]) => loggedLines.push(`INFO: ${msg} ${JSON.stringify(args)}`),
-    warn: (msg: string, ...args: unknown[]) => loggedLines.push(`WARN: ${msg} ${JSON.stringify(args)}`),
-    error: (msg: string, ...args: unknown[]) => loggedLines.push(`ERROR: ${msg} ${JSON.stringify(args)}`),
+    info: (msg: string, ...args: unknown[]) =>
+      loggedLines.push(`INFO: ${msg} ${JSON.stringify(args)}`),
+    warn: (msg: string, ...args: unknown[]) =>
+      loggedLines.push(`WARN: ${msg} ${JSON.stringify(args)}`),
+    error: (msg: string, ...args: unknown[]) =>
+      loggedLines.push(`ERROR: ${msg} ${JSON.stringify(args)}`),
   };
 
   const worker = new PayoutWorker({
@@ -203,7 +205,16 @@ describe("Payout Worker Shield Path (Update 59 Independent Gate)", () => {
     });
 
     expect(rawOneClickQuote).toHaveBeenCalledTimes(1);
-    const params = rawOneClickQuote.mock.calls[0][0];
+    const params = (
+      rawOneClickQuote.mock.calls[0] as unknown as [
+        Record<string, unknown> & {
+          swapType: string;
+          depositType: string;
+          recipientType: string;
+          refundType: string;
+        },
+      ]
+    )[0];
 
     // Assert exact required parameters from prompt update 59:
     expect(params.swapType).toBe("EXACT_INPUT");
@@ -334,7 +345,7 @@ describe("Payout Worker Shield Path (Update 59 Independent Gate)", () => {
 
   it("preserves non-confidential Base destinations unchanged", async () => {
     const baseAddr = "0x" + "b".repeat(40);
-    const { worker, quoteCalls, chain } = createTestHarness({
+    const { worker, quoteCalls } = createTestHarness({
       chainType: "base",
       destAddress: baseAddr,
     });

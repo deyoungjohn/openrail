@@ -268,6 +268,8 @@ export class PayoutChain implements ChainPort {
   async balanceYocto(): Promise<bigint> {
     const account = getEnv("PAYOUT_RELAYER_ACCOUNT_ID") ?? "";
     if (account === "") throw new Error("MISSING_ENV: PAYOUT_RELAYER_ACCOUNT_ID");
-    return this.guarded(() => this.near.accountBalanceYocto(account));
+    // Not counted in the settle call budget: it is read every ten minutes, and counting it would spend the day's calls
+    // (11 Nov: the budget ran out and the held entry could not be paid).
+    return this.near.accountBalanceYocto(account);
   }
 }
