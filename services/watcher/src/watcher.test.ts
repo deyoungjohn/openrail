@@ -1,9 +1,13 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createLogger } from "@openrail/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { LowBalanceAlert } from "./alerts.js";
 import type { WatcherConfig } from "./config.js";
 import type { ChainStatus, ClaimView, ConfigView, NearClientLike, Quote } from "./types.js";
 import { Watcher } from "./watcher.js";
+import { WatcherStore, type StoredClaim } from "./store.js";
 
 const ASSETS = ["nep141:a", "nep141:b", "nep141:c", "nep141:d"];
 const NOW = 1_800_000_000_000;
@@ -125,6 +129,7 @@ function setup(
   state: FakeState,
   indexer?: { poke(): Promise<void>; registerTx(hash: string): Promise<void> },
   config: WatcherConfig = CONFIG,
+  store?: WatcherStore,
 ): {
   watcher: Watcher;
   near: FakeNear;
@@ -152,6 +157,7 @@ function setup(
     now: () => now,
     sleep: async () => {},
     ...(indexer === undefined ? {} : { indexer }),
+    ...(store === undefined ? {} : { store }),
   });
   return {
     watcher,
@@ -170,6 +176,61 @@ function setup(
 function openQuote(): Record<string, Quote[]> {
   return { "c-1": [makeQuote(NOW / 1000)] };
 }
+
+describe("watcher store", () => {
+  it("does not re-read a decided claim after a restart", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "watcher-store-")), "watcher.db");
+    const firstStore = new WatcherStore(path);
+    const state = {
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1", { status: "Paid", issuer_id: "business.near" })],
+      quotes: {},
+      balances: {},
+    };
+    const first = setup(state, undefined, CONFIG, firstStore);
+    await first.watcher.tick();
+    firstStore.close();
+
+    const secondStore = new WatcherStore(path);
+    const secondState = {
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1", { status: "Paid", issuer_id: "business.near" })],
+      quotes: {},
+      balances: {},
+    };
+    const second = setup(secondState, undefined, CONFIG, secondStore);
+    await second.watcher.tick();
+    expect(second.near.views.filter((v) => v.methodName === "claim")).toHaveLength(0);
+    expect(second.near.views.filter((v) => v.methodName === "payment_log")).toHaveLength(0);
+    secondStore.close();
+  });
+
+  it("reads an overdue claim once after a restart", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "watcher-store-")), "watcher.db");
+    const store = new WatcherStore(path);
+    const view = makeClaim("c-1", { issuer_id: "business.near" });
+    const row: StoredClaim = {
+      token_id: "c-1",
+      kind: 0,
+      status: "Issued",
+      last_quote_at: null,
+      due_at: NOW - 1_000,
+      last_view: view,
+      decided: false,
+    };
+    store.save([row]);
+    const state = {
+      config: CONFIG_VIEW,
+      claims: [view],
+      quotes: {},
+      balances: {},
+    };
+    const fixture = setup(state, undefined, CONFIG, store);
+    await fixture.watcher.tick();
+    expect(fixture.near.views.filter((v) => v.methodName === "claim")).toHaveLength(1);
+    store.close();
+  });
+});
 
 describe("watcher discovery", () => {
   it("finds a claim issued for a business that is not in config.issuers", async () => {
@@ -526,6 +587,61 @@ describe("watcher health and alerts", () => {
     expect(snapshot.claims_tracked).toBe(1);
     expect(snapshot.fast_claims).toBe(1);
     expect(snapshot.last_tick_at).not.toBeNull();
+  });
+});
+
+describe("watcher store", () => {
+  it("does not re-read a decided claim after a restart", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "watcher-store-")), "watcher.db");
+    const firstStore = new WatcherStore(path);
+    const state = {
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1", { status: "Paid", issuer_id: "business.near" })],
+      quotes: {},
+      balances: {},
+    };
+    const first = setup(state, undefined, CONFIG, firstStore);
+    await first.watcher.tick();
+    firstStore.close();
+
+    const secondStore = new WatcherStore(path);
+    const secondState = {
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1", { status: "Paid", issuer_id: "business.near" })],
+      quotes: {},
+      balances: {},
+    };
+    const second = setup(secondState, undefined, CONFIG, secondStore);
+    await second.watcher.tick();
+    expect(second.near.views.filter((v) => v.methodName === "claim")).toHaveLength(0);
+    expect(second.near.views.filter((v) => v.methodName === "payment_log")).toHaveLength(0);
+    secondStore.close();
+  });
+
+  it("reads an overdue claim once after a restart", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "watcher-store-")), "watcher.db");
+    const store = new WatcherStore(path);
+    const view = makeClaim("c-1", { issuer_id: "business.near" });
+    const row: StoredClaim = {
+      token_id: "c-1",
+      kind: 0,
+      status: "Issued",
+      last_quote_at: null,
+      due_at: NOW - 1_000,
+      last_view: view,
+      decided: false,
+    };
+    store.save([row]);
+    const state = {
+      config: CONFIG_VIEW,
+      claims: [view],
+      quotes: {},
+      balances: {},
+    };
+    const fixture = setup(state, undefined, CONFIG, store);
+    await fixture.watcher.tick();
+    expect(fixture.near.views.filter((v) => v.methodName === "claim")).toHaveLength(1);
+    store.close();
   });
 });
 

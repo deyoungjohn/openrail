@@ -33,6 +33,8 @@ export interface WatcherConfig {
   /** Optional extra token ids (claims issued permissionlessly by non-allow-listed issuers). */
   extraClaims: string[];
   healthPort: number;
+  /** SQLite path for the watcher's claim state; empty/absent keeps it in memory. */
+  dbPath?: string;
   /**
    * Cadence tuning (11 Nov: the 15 s loop read every open claim three times a tick and used 7.6M QuickNode credits in
    * three days). Optional: the defaults above apply when a field is missing.
@@ -71,6 +73,7 @@ export function watcherConfigFromEnv(): WatcherConfig {
       .map((id) => id.trim())
       .filter((id) => id !== ""),
     healthPort: numberEnv("WATCHER_HEALTH_PORT", DEFAULT_HEALTH_PORT),
+    dbPath: getEnv("WATCHER_DB_PATH") ?? "/var/lib/openrail/watcher.sqlite",
     hotWindowMs: numberEnv("WATCHER_HOT_WINDOW_MS", DEFAULT_HOT_WINDOW_MS),
     warmWindowMs: numberEnv("WATCHER_WARM_WINDOW_MS", DEFAULT_WARM_WINDOW_MS),
     warmIntervalMs: numberEnv("WATCHER_WARM_INTERVAL_MS", DEFAULT_WARM_INTERVAL_MS),

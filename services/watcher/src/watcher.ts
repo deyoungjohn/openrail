@@ -26,6 +26,7 @@ import {
   type WatcherConfig,
 } from "./config.js";
 import type { HealthSnapshot } from "./health.js";
+import type { StoredClaim, WatcherStore } from "./store.js";
 import { WATCHER_GAS, WATCHER_METHODS, type WatcherMethod } from "./methods.js";
 import type {
   ChainStatus,
@@ -41,6 +42,7 @@ const RECONCILING_BLOCKS = 100;
 /** After sending `clear_stale_lock` for a claim, wait this long before sending it again. */
 const CLEAR_BACKOFF_MS = 120_000;
 const YOCTO_PER_NEAR = 1_000_000_000_000_000_000_000_000n;
+const DUE_FINAL = Number.MAX_SAFE_INTEGER;
 
 const TERMINAL_STATUSES = new Set(["Paid", "Cancelled", "Closed"]);
 
@@ -65,6 +67,7 @@ export interface WatcherOptions {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   indexer?: IndexerControl;
+  store?: WatcherStore;
 }
 
 function isNonTerminal(status: string): boolean {
@@ -106,6 +109,7 @@ export class Watcher {
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly indexer: IndexerControl | undefined;
+  private readonly store: WatcherStore | undefined;
 
   private readonly lastChecked = new Map<string, number>();
   /** Finished claims and when they were last looked at: late payments to them are booked as surplus for the business. */
@@ -117,6 +121,10 @@ export class Watcher {
   private readonly knownClaims = new Map<string, ClaimView>();
   private readonly knownAt = new Map<string, number>();
   private readonly lastInterval = new Map<string, number>();
+  private readonly restored = new Set<string>();
+  private readonly lastQuote = new Map<string, number | null>();
+  private readonly writeRows = new Map<string, StoredClaim>();
+  private storeWriteFailures = 0;
   private lastDiscoverAt = 0;
   private lastClaims: ClaimView[] = [];
   private lastBlockAt = 0;
@@ -142,6 +150,18 @@ export class Watcher {
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.indexer = options.indexer;
+    this.store = options.store;
+    const restored = options.store?.load() ?? [];
+    const now = this.now();
+    restored.forEach((row, index) => {
+      this.knownClaims.set(row.token_id, row.last_view);
+      this.knownAt.set(row.token_id, 0);
+      const due = row.due_at > now ? row.due_at : now + (index % 60) * 1000;
+      this.dueAt.set(row.token_id, row.decided ? DUE_FINAL : due);
+      this.lastQuote.set(row.token_id, row.last_quote_at);
+      if (row.decided) this.finished.set(row.token_id, now);
+      this.restored.add(row.token_id);
+    });
   }
 
   snapshot(): HealthSnapshot {
@@ -156,6 +176,7 @@ export class Watcher {
       slow_claims: this.slowClaims,
       last_tick_at: this.lastTickAt === null ? null : new Date(this.lastTickAt).toISOString(),
       last_error: this.lastError,
+      store_write_failures: this.store?.writeFailures() ?? this.storeWriteFailures,
       rpc_calls: {
         ...(this.near.callCounts?.() ?? {}),
         ...(this.chain.callCounts?.() ?? {}),
@@ -509,13 +530,19 @@ export class Watcher {
       let lastQuote: number | null = null;
       let quoteKnown = true;
       if (!finished) {
-        try {
-          lastQuote = await this.lastQuoteDeadline(claim.token_id);
-        } catch (error) {
-          // Unknown quote age must not hide a payment: keep the hot cadence and process it.
-          this.noteError(error);
-          quoteKnown = false;
-        }
+        const kept = this.lastQuote.get(claim.token_id);
+        if (kept !== undefined && this.restored.has(claim.token_id)) {
+          lastQuote = kept;
+          this.restored.delete(claim.token_id);
+        } else
+          try {
+            lastQuote = await this.lastQuoteDeadline(claim.token_id);
+            this.lastQuote.set(claim.token_id, lastQuote);
+          } catch (error) {
+            // Unknown quote age must not hide a payment: keep the hot cadence and process it.
+            this.noteError(error);
+            quoteKnown = false;
+          }
       }
       const interval = quoteKnown
         ? this.intervalFor(lastQuote, nowMs, finished, claim.kind === undefined || claim.kind === 0)
@@ -533,10 +560,19 @@ export class Watcher {
 
       // A claim that is Paid, Cancelled or Closed is decided for good (the human's rule, 11 Nov): looked at once, then
       // never again. Money that reaches its account later stays there until someone calls the permissionless `reconcile`.
-      this.dueAt.set(claim.token_id, finished ? Number.POSITIVE_INFINITY : nowMs + interval);
+      this.dueAt.set(claim.token_id, finished ? DUE_FINAL : nowMs + interval);
       this.knownClaims.set(claim.token_id, claim);
       this.knownAt.set(claim.token_id, nowMs);
       this.lastInterval.set(claim.token_id, interval);
+      this.writeRows.set(claim.token_id, {
+        token_id: claim.token_id,
+        kind: claim.kind ?? 0,
+        status: claim.status,
+        last_quote_at: lastQuote,
+        due_at: finished ? DUE_FINAL : nowMs + interval,
+        last_view: claim,
+        decided: finished,
+      });
       if (!hasWork) continue;
       if (interval > this.config.fastIntervalMs) summary.slow += 1;
       else summary.fast += 1;
@@ -549,6 +585,10 @@ export class Watcher {
       }
     }
 
+    if (this.store !== undefined && this.writeRows.size > 0) {
+      this.store.save([...this.writeRows.values()]);
+      this.writeRows.clear();
+    }
     this.fastClaims = summary.fast;
     this.slowClaims = summary.slow;
     this.lastTickAt = nowMs;

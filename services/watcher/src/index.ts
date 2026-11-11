@@ -22,6 +22,7 @@ import { webhookAlertSink } from "./alerts.js";
 import { RpcChainStatus, nearRpcUrls } from "./chain.js";
 import { watcherConfigFromEnv } from "./config.js";
 import { startHealthServer } from "./health.js";
+import { WatcherStore } from "./store.js";
 import { Watcher } from "./watcher.js";
 
 async function main(): Promise<void> {
@@ -38,6 +39,7 @@ async function main(): Promise<void> {
   });
   const chain = new RpcChainStatus(nearRpcUrls());
   const alert = webhookAlertSink(getEnv("ALERT_WEBHOOK_URL"));
+  const store = config.dbPath === undefined ? undefined : new WatcherStore(config.dbPath);
 
   const network = getEnv("NEAR_ENV") === "testnet" ? "testnet" : "mainnet";
   const watcher = new Watcher({
@@ -46,6 +48,7 @@ async function main(): Promise<void> {
     config,
     logger,
     alert,
+    ...(store === undefined ? {} : { store }),
     indexer:
       getEnv("INDEXER_URL") === undefined
         ? undefined
@@ -94,6 +97,7 @@ async function main(): Promise<void> {
     await watcher.run(controller.signal);
   } finally {
     await health.close();
+    store?.close();
   }
 }
 
