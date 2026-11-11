@@ -54,6 +54,13 @@ import { ErrorNote } from "@/components/ui/error-note";
 
 type Session = PaySession;
 
+/** The pay page's words with plain `string` where the copy file has a literal, so a source can say them differently. */
+export type PayWords = {
+  -readonly [K in keyof typeof copy.pay]: (typeof copy.pay)[K] extends string
+    ? string
+    : (typeof copy.pay)[K];
+};
+
 /** What the pay flow needs of whatever is being paid: an invoice's claim, or a checkout. */
 export interface PayFlowClaim {
   status: string;
@@ -81,14 +88,14 @@ export interface PayScreenSource {
   /** The page when nothing is left to pay (paid, closed, expired). */
   closed: (claim: PayFlowClaim) => ReactNode;
   /** Words that differ from the invoice page (a checkout says order, not invoice). */
-  words?: Partial<typeof copy.pay>;
+  words?: Partial<PayWords>;
   /** A plain-words reason a price could not be asked, when the source knows one (an expired checkout). */
   sessionNote?: (error: unknown) => string | null;
   /** The flow reads the source again at this interval while it is open and not settled. */
   refreshMs?: number;
 }
 
-const PayWordsContext = createContext<typeof copy.pay>(copy.pay);
+const PayWordsContext = createContext<PayWords>(copy.pay);
 const usePayWords = () => useContext(PayWordsContext);
 
 type Load =
@@ -449,7 +456,7 @@ type Mode = "paste" | "wallet" | "split";
 
 export function PayScreen({ tokenId, source }: { tokenId: string; source?: PayScreenSource }) {
   const flow = source ?? invoiceSource;
-  const words = useMemo(() => ({ ...copy.pay, ...(flow.words ?? {}) }), [flow]);
+  const words = useMemo<PayWords>(() => ({ ...copy.pay, ...(flow.words ?? {}) }), [flow]);
   return (
     <PayWordsContext.Provider value={words}>
       <PayFlow tokenId={tokenId} source={flow} />
