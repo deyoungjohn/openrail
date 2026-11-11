@@ -36,6 +36,20 @@ export interface PublicCheckout {
   total_usd?: string;
 }
 
+/** What the shared pay flow says that is different for a checkout (an order, not an invoice). */
+export const checkoutPayWords = {
+  pickTitle: "Pay this order",
+  invoiceGets: "The merchant receives",
+  marginNote:
+    "ETH and SOL move in price. The margin keeps the order whole if the price moves before your payment lands. It is already inside the amount above.",
+  notFoundTitle: "We can't find this checkout",
+  notFoundBody: "The link may be wrong or incomplete. Ask the merchant for a fresh link.",
+  loadError: "We couldn't load this checkout. Check your connection and try again.",
+  earlierTitle: "Earlier prices for this order",
+  alreadyPaid: "This order is already paid. Nothing more to do.",
+  closed: "This checkout is closed and can't be paid.",
+};
+
 export const checkoutCopy = {
   order: (ref: string) => `Order ${ref}`,
   title: (merchant: string, merchantName?: string) =>

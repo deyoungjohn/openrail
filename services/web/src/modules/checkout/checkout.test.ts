@@ -7,6 +7,7 @@ import {
   canQuoteCheckout,
   checkoutCopy,
   checkoutLiveBanner,
+  checkoutPayWords,
   checkoutStatusLabel,
   countdownTargetMs,
   safeReturnUrl,
@@ -136,10 +137,11 @@ describe("a checkout is not an invoice: the hosted page never says invoice", () 
     expect(text(checkoutCopy).filter((t) => /invoice/i.test(t))).toEqual([]);
   });
 
-  it("checkout_screen_uses_no_shared_string_that_says_invoice", () => {
-    const keys = [...new Set([...screen.matchAll(/\bp\.([A-Za-z]+)/g)].map((m) => m[1] as string))];
-    const pay = copy.pay as unknown as Record<string, unknown>;
-    const offenders = keys.filter((k) => text(pay[k]).some((t) => /invoice/i.test(t)));
+  it("checkout_pay_flow_says_no_invoice: every shared string the flow uses is either free of the word or overridden", () => {
+    const flow = readFileSync(join(here, "../../components/pay/pay-screen.tsx"), "utf8");
+    const keys = [...new Set([...flow.matchAll(/\bp\.([A-Za-z]+)/g)].map((m) => m[1] as string))];
+    const words = { ...copy.pay, ...checkoutPayWords } as unknown as Record<string, unknown>;
+    const offenders = keys.filter((k) => text(words[k]).some((t) => /invoice/i.test(t)));
     expect(offenders).toEqual([]);
   });
 
