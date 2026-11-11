@@ -4,7 +4,7 @@
 
 const RPC_URLS = (
   process.env.NEXT_PUBLIC_NEAR_RPC_URL ??
-  "https://free.rpc.fastnear.com,https://rpc.mainnet.near.org"
+  "https://free.rpc.fastnear.com"
 )
   .split(",")
   .map((u) => u.trim())
