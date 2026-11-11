@@ -231,7 +231,9 @@ function drawTop(builder: PageBuilder, terms: Terms, issuedAt?: string): void {
   label(builder, "BILLED TO", MARGIN, blockTop);
   builder.y = blockTop - 16;
   wrapped(builder, terms.debtor_legal_name, MARGIN, 240, 11, "/F2", INK);
-  wrapped(builder, terms.debtor_key, MARGIN, 240, 9, "/F1", GRAY);
+  // `anyone.<root>` stands in for "no client account was given" (the invoice form no longer asks for one): not an account.
+  if (!/^anyone\./.test(terms.debtor_key))
+    wrapped(builder, terms.debtor_key, MARGIN, 240, 9, "/F1", GRAY);
 
   const detailsX = 360;
   let detailY = blockTop;
@@ -242,7 +244,14 @@ function drawTop(builder: PageBuilder, terms: Terms, issuedAt?: string): void {
   ];
   for (const [caption, value] of details) {
     label(builder, caption, detailsX, detailY);
-    text(builder, RIGHT, detailY, 9, "/F1", INK, value, "right");
+    // A long value (the claim account) would run back over its own label: it goes on the line below, right-aligned.
+    const room = RIGHT - detailsX - measureTextWidth("/F2", caption.toUpperCase(), 7) - 12;
+    if (measureTextWidth("/F1", value, 9) > room) {
+      detailY -= 13;
+      text(builder, RIGHT, detailY, 8, "/F1", INK, value, "right");
+    } else {
+      text(builder, RIGHT, detailY, 9, "/F1", INK, value, "right");
+    }
     detailY -= 16;
   }
   builder.y = Math.min(builder.y, detailY) - 8;

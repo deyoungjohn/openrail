@@ -361,3 +361,42 @@ describe("receipt PDF", () => {
     expect(typeof renderReceiptPdfBase64(receipt)).toBe("string");
   });
 });
+
+describe("invoice PDF header details (11 Nov, live)", () => {
+  const draw = (t: typeof terms) =>
+    Buffer.from(renderInvoicePdf(t, termsHash(t), "2026-11-11T00:00:00Z")).toString("latin1");
+  /** Every text run: its x, y and the string. */
+  const runs = (pdf: string) =>
+    [...pdf.matchAll(/1 0 0 1 ([\d.]+) ([\d.]+) Tm\n\((.*)\) Tj/g)].map((m) => ({
+      x: Number(m[1]),
+      y: Number(m[2]),
+      s: String(m[3]),
+    }));
+
+  it("pdf_long_claim_account_does_not_run_over_its_label", () => {
+    const long = {
+      ...terms,
+      claim_account: "iamyoungjohn-near-89357a7d3075.openrail.near",
+    };
+    const all = runs(draw(long));
+    const label = all.find((r) => r.s === "CLAIM ACCOUNT")!;
+    const value = all.find((r) => r.s === long.claim_account)!;
+    // The value is on its own line, below the label, so the two never share a line.
+    expect(value.y).toBeLessThan(label.y - 6);
+    // Its left edge stays right of the details column.
+    expect(value.x).toBeGreaterThanOrEqual(360);
+  });
+
+  it("pdf_short_claim_account_stays_on_the_label_line", () => {
+    const all = runs(draw(terms));
+    const label = all.find((r) => r.s === "CLAIM ACCOUNT")!;
+    const value = all.find((r) => r.s === terms.claim_account)!;
+    expect(value.y).toBe(label.y);
+  });
+
+  it("pdf_placeholder_client_account_is_not_printed", () => {
+    const anon = { ...terms, debtor_key: "anyone.openrail.near" };
+    expect(draw(anon)).not.toContain("anyone.openrail.near");
+    expect(draw(terms)).toContain("debtor.openrail.near");
+  });
+});
