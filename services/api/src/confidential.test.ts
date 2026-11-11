@@ -159,6 +159,17 @@ describe("confidential withdraw", () => {
     });
     expect(response.status).toBe(403);
     expect(response.body).toMatchObject({ error: { code: "session_required" } });
+    for (const [path, body] of [
+      ["/v1/balance/confidential/withdraw/intent", { deposit_address: "withdraw-deposit" }],
+      ["/v1/balance/confidential/withdraw/submit", { signed_data: { standard: "nep413" } }],
+    ] as const) {
+      const refused = await app.handle({
+        ...request("POST", path, body),
+        headers: { authorization: `Bearer ${apiKey}` },
+      });
+      expect(refused.status, path).toBe(403);
+      expect(refused.body).toMatchObject({ error: { code: "session_required" } });
+    }
   });
 
   it("validates the destination address and amount before quoting", async () => {
