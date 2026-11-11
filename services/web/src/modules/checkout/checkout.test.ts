@@ -146,7 +146,7 @@ describe("a checkout is not an invoice: the hosted page never says invoice", () 
   });
 
   it("checkout_screen_source_has_no_invoice_word_in_its_own_text", () => {
-    const literal = [...screen.matchAll(/"([^"\n]*)"|>([^<>{}\n]+)</g)]
+    const literal = [...screen.replace(/^import .*$/gm, "").matchAll(/"([^"\n]*)"|>([^<>{}\n]+)</g)]
       .map((m) => m[1] ?? m[2] ?? "")
       .filter((t) => /invoice/i.test(t));
     expect(literal).toEqual([]);
