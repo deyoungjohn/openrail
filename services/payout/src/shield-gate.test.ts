@@ -131,7 +131,7 @@ function createTestHarness(options: TestSetupOptions = {}) {
     },
   ]);
 
-  const quoteCalls: any[] = [];
+  const quoteCalls: unknown[] = [];
   const quote: QuotePort = {
     quote: vi.fn(async (req) => {
       quoteCalls.push(req);
