@@ -432,6 +432,7 @@ export const copy = {
   },
   settings: {
     title: "Settings",
+    generalTab: "General",
     profileTitle: "Business profile",
     save: "Save changes",
     saving: "Saving",
