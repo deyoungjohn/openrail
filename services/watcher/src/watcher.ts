@@ -14,7 +14,17 @@
  */
 import { redactString, type IndexerControl, type Logger } from "@openrail/shared";
 import type { AlertSink, LowBalanceAlert } from "./alerts.js";
-import type { WatcherConfig } from "./config.js";
+import {
+  DEFAULT_BALANCE_CHECK_MS,
+  DEFAULT_BLOCK_CACHE_MS,
+  DEFAULT_COOL_INTERVAL_MS,
+  DEFAULT_DISCOVER_CACHE_MS,
+  DEFAULT_HOT_WINDOW_MS,
+  DEFAULT_IDLE_PROBE_MS,
+  DEFAULT_WARM_INTERVAL_MS,
+  DEFAULT_WARM_WINDOW_MS,
+  type WatcherConfig,
+} from "./config.js";
 import type { HealthSnapshot } from "./health.js";
 import { WATCHER_GAS, WATCHER_METHODS, type WatcherMethod } from "./methods.js";
 import type {
@@ -28,8 +38,6 @@ import type {
 
 const PAGE_SIZE = 100;
 const RECONCILING_BLOCKS = 100;
-/** How often a finished claim is read again (its quotes and balance are then checked by the loop's own cadence). */
-const FINISHED_RECHECK_MS = 30_000;
 /** After sending `clear_stale_lock` for a claim, wait this long before sending it again. */
 const CLEAR_BACKOFF_MS = 120_000;
 const YOCTO_PER_NEAR = 1_000_000_000_000_000_000_000_000n;
@@ -104,6 +112,13 @@ export class Watcher {
   private readonly finished = new Map<string, number>();
   /** When `clear_stale_lock` was last sent for a claim: a module may refuse it (a payout still out), so do not repeat it every tick. */
   private readonly clearedAt = new Map<string, number>();
+  /** When each claim is next due, and the last view of it (so an idle claim costs no call until it is due). */
+  private readonly dueAt = new Map<string, number>();
+  private readonly knownClaims = new Map<string, ClaimView>();
+  private lastDiscoverAt = 0;
+  private lastClaims: ClaimView[] = [];
+  private lastBlockAt = 0;
+  private lastBalanceAt = 0;
   private lowAlerted = false;
   private belowThreshold = false;
   private lastBlockHeight: number | null = null;
@@ -139,6 +154,10 @@ export class Watcher {
       slow_claims: this.slowClaims,
       last_tick_at: this.lastTickAt === null ? null : new Date(this.lastTickAt).toISOString(),
       last_error: this.lastError,
+      rpc_calls: {
+        ...(this.near.callCounts?.() ?? {}),
+        ...(this.chain.callCounts?.() ?? {}),
+      },
     };
   }
 
@@ -191,10 +210,13 @@ export class Watcher {
         for (const token of tokens) {
           const id = token?.token_id;
           if (typeof id !== "string" || claims.has(id)) continue;
-          const seenAt = this.finished.get(id);
-          // A finished claim is looked at again soon: a late payment on a fresh quote must not wait for the
-          // slow cadence (the loop below still reads its balance only when a quote is open or the slow cadence is due).
-          if (seenAt !== undefined && this.now() - seenAt < FINISHED_RECHECK_MS) continue;
+          // A claim that is not due again yet is not read again: the view of it from the last time stays in the list.
+          const known = this.knownClaims.get(id);
+          const dueAt = this.dueAt.get(id);
+          if (known !== undefined && dueAt !== undefined && this.now() < dueAt) {
+            claims.set(id, known);
+            continue;
+          }
           const claim = await this.near.view<ClaimView | null>({
             contractId: this.config.rootAccount,
             methodName: "claim",
@@ -297,6 +319,25 @@ export class Watcher {
     this.logger.info("sent", method, tokenId);
   }
 
+  /**
+   * How long until a claim is looked at again, from its last quote (seconds since the epoch, `null` for none).
+   * Hot (the quote is open or at most an hour past): the fast cadence. Then a read a minute until 24 h past, every
+   * five minutes until the quote TTL, and the slow cadence after. A claim nobody has priced is probed once a minute
+   * for its first quote. (The blueprint's 72 h of 15 s polling read every priced claim 5,760 times a day.)
+   */
+  private intervalFor(lastQuoteSec: number | null, nowMs: number, finished: boolean): number {
+    const c = this.config;
+    if (lastQuoteSec === null)
+      return finished ? c.slowIntervalMs : (c.idleProbeMs ?? DEFAULT_IDLE_PROBE_MS);
+    const age = nowMs - lastQuoteSec * 1000;
+    if (age <= (c.hotWindowMs ?? DEFAULT_HOT_WINDOW_MS)) return c.fastIntervalMs;
+    if (age <= (c.warmWindowMs ?? DEFAULT_WARM_WINDOW_MS)) {
+      return c.warmIntervalMs ?? DEFAULT_WARM_INTERVAL_MS;
+    }
+    if (age <= c.quoteTtlMs) return c.coolIntervalMs ?? DEFAULT_COOL_INTERVAL_MS;
+    return c.slowIntervalMs;
+  }
+
   private async processClaim(
     claim: ClaimView,
     blockHeight: number | null,
@@ -381,16 +422,42 @@ export class Watcher {
       cleared: [],
     };
 
-    try {
-      this.lastBlockHeight = await this.chain.blockHeight();
-    } catch (error) {
-      this.noteError(error);
+    // The block height is only needed to judge a lock: read it once a minute, or each tick while a claim holds one.
+    const lockHeld = this.lastClaims.some((claim) => !isNoneLock(claim.lock));
+    if (
+      this.lastBlockHeight === null ||
+      lockHeld ||
+      nowMs - this.lastBlockAt >= (this.config.blockCacheMs ?? DEFAULT_BLOCK_CACHE_MS)
+    ) {
+      try {
+        this.lastBlockHeight = await this.chain.blockHeight();
+        this.lastBlockAt = nowMs;
+      } catch (error) {
+        this.noteError(error);
+      }
     }
-    await this.checkBalance(nowMs);
+    if (
+      this.lastBalanceYocto === null ||
+      nowMs - this.lastBalanceAt >= (this.config.balanceCheckMs ?? DEFAULT_BALANCE_CHECK_MS)
+    ) {
+      await this.checkBalance(nowMs);
+      this.lastBalanceAt = nowMs;
+    }
 
     let claims: ClaimView[];
     try {
-      claims = await this.discoverClaims();
+      // With nothing hot the list of claims is read once a minute: a claim that gets its first quote is seen by the
+      // probe below, and the listing itself (config, issuers, every token) costs several calls.
+      const configured = this.config.discoverCacheMs ?? DEFAULT_DISCOVER_CACHE_MS;
+      // Half a minute while a claim is hot (a new quote is seen sooner), a minute otherwise.
+      const cacheMs = this.fastClaims > 0 ? Math.min(configured, 30_000) : configured;
+      if (this.lastClaims.length > 0 && nowMs - this.lastDiscoverAt < cacheMs) {
+        claims = this.lastClaims;
+      } else {
+        claims = await this.discoverClaims();
+        this.lastClaims = claims;
+        this.lastDiscoverAt = nowMs;
+      }
     } catch (error) {
       this.noteError(error);
       this.lastTickAt = nowMs;
@@ -401,21 +468,28 @@ export class Watcher {
     this.claimsTracked = claims.length;
 
     for (const claim of claims) {
+      // Not due yet: no call at all for this claim (its last view stays in the list).
+      const due = this.dueAt.get(claim.token_id);
+      if (due !== undefined && nowMs < due) {
+        summary.skipped += 1;
+        continue;
+      }
       let lastQuote: number | null = null;
+      let quoteKnown = true;
       try {
         lastQuote = await this.lastQuoteDeadline(claim.token_id);
       } catch (error) {
         // Unknown quote age must not hide a payment: keep the hot cadence and process it.
         this.noteError(error);
+        quoteKnown = false;
       }
 
+      const finished = !isNonTerminal(claim.status);
+      const interval = quoteKnown
+        ? this.intervalFor(lastQuote, nowMs, finished)
+        : this.config.fastIntervalMs;
       const quoteExpiryMs = lastQuote === null ? null : lastQuote * 1000 + this.config.quoteTtlMs;
       const openQuote = quoteExpiryMs !== null && nowMs <= quoteExpiryMs;
-      // A finished claim is still watched, on the slow cadence: money that arrives after payment is
-      // booked as surplus for the business and the debtor is never charged again.
-      const finished = !isNonTerminal(claim.status);
-      const slowClaim =
-        (quoteExpiryMs !== null && nowMs > quoteExpiryMs) || (finished && !openQuote);
       const blockHeight = this.lastBlockHeight;
       const lockExpired = this.lockExpired(claim.lock, blockHeight);
       const hasWork =
@@ -425,15 +499,11 @@ export class Watcher {
         (Array.isArray(claim.undistributed) && claim.undistributed.length > 0) ||
         lockExpired;
 
+      this.dueAt.set(claim.token_id, nowMs + interval);
+      this.knownClaims.set(claim.token_id, claim);
       if (!hasWork) continue;
-      if (slowClaim) summary.slow += 1;
+      if (interval > this.config.fastIntervalMs) summary.slow += 1;
       else summary.fast += 1;
-
-      const last = this.lastChecked.get(claim.token_id) ?? 0;
-      if (slowClaim && last !== 0 && nowMs - last < this.config.slowIntervalMs) {
-        summary.skipped += 1;
-        continue;
-      }
       this.lastChecked.set(claim.token_id, nowMs);
 
       try {

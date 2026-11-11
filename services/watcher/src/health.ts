@@ -11,6 +11,8 @@ export interface HealthSnapshot {
   slow_claims: number;
   last_tick_at: string | null;
   last_error: string | null;
+  /** RPC requests since the start, per feature: where the provider's credits go. */
+  rpc_calls?: Record<string, number>;
 }
 
 export interface HealthServer {

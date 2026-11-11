@@ -43,6 +43,8 @@ export interface NearClientLike {
   view<T>(request: ViewRequest): Promise<T>;
   batchBalanceOf(request: BatchBalanceRequest): Promise<string[]>;
   sendFunctionCall(request: FunctionCallRequest): Promise<unknown>;
+  /** RPC requests made since the start, per feature (the shared client counts them). */
+  callCounts?(): Record<string, number>;
 }
 
 export interface ChainStatus {
@@ -50,4 +52,6 @@ export interface ChainStatus {
   blockHeight(): Promise<number>;
   /** The watcher account's NEAR balance in yoctoNEAR. */
   accountBalanceYocto(accountId: string): Promise<bigint>;
+  /** Status requests made since the start, per kind. */
+  callCounts?(): Record<string, number>;
 }
