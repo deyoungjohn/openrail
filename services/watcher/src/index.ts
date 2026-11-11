@@ -68,7 +68,12 @@ async function main(): Promise<void> {
     },
   });
 
-  const health = await startHealthServer(config.healthPort, () => watcher.snapshot());
+  const health = await startHealthServer(
+    config.healthPort,
+    () => watcher.snapshot(),
+    "127.0.0.1",
+    (tokenId) => watcher.poke(tokenId),
+  );
   logger.info("watcher started", {
     root: config.rootAccount,
     account: config.watcherAccount,

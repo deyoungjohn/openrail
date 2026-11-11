@@ -25,8 +25,26 @@ export async function startHealthServer(
   port: number,
   snapshot: () => HealthSnapshot,
   host = "127.0.0.1",
+  onPoke?: (tokenId: string) => void,
 ): Promise<HealthServer> {
   const server: Server = createServer((request, response) => {
+    // `POST /poke?token_id=<id>`: the API just asked a price for this claim (localhost only).
+    if (
+      request.method === "POST" &&
+      request.url?.split("?")[0] === "/poke" &&
+      onPoke !== undefined
+    ) {
+      const tokenId = new URL(request.url, "http://localhost").searchParams.get("token_id") ?? "";
+      if (/^[A-Za-z0-9._-]{1,128}$/.test(tokenId)) {
+        onPoke(tokenId);
+        response.writeHead(202, { "content-type": "application/json" });
+        response.end('{"ok":true}\n');
+      } else {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end('{"error":"invalid_token_id"}\n');
+      }
+      return;
+    }
     if (request.method === "GET" && request.url?.split("?")[0] === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(`${JSON.stringify(snapshot())}\n`);

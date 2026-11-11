@@ -567,6 +567,18 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     pokeIndexer: async () => {
       await fetch(`${indexerUrl.replace(/\/+$/, "")}/poke`, { method: "POST" });
     },
+    // The watcher listens on localhost (WATCHER_HEALTH_PORT, 8080); WATCHER_URL=off turns this off.
+    ...(getEnv("WATCHER_URL") === "off"
+      ? {}
+      : {
+          pokeWatcher: async (tokenId: string) => {
+            const base = (getEnv("WATCHER_URL") ?? "http://127.0.0.1:8080").replace(/\/+$/, "");
+            await fetch(`${base}/poke?token_id=${encodeURIComponent(tokenId)}`, {
+              method: "POST",
+              signal: AbortSignal.timeout(2_000),
+            });
+          },
+        }),
     quoteProvider: createQuoteProvider(),
     spec: loadSpec(),
   });

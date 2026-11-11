@@ -64,10 +64,12 @@ function harness() {
     })),
   };
   const pokeIndexer = vi.fn(async () => undefined);
+  const pokeWatcher = vi.fn(async (_tokenId: string) => undefined);
   const deps: ApiDeps = {
     config,
     auth,
     pokeIndexer,
+    pokeWatcher,
     issuer,
     contract,
     accessKey: { has: async () => true },
@@ -90,6 +92,7 @@ function harness() {
     quoteProvider,
     cashout,
     pokeIndexer,
+    pokeWatcher,
   };
 }
 
@@ -348,6 +351,18 @@ describe("invoice route", () => {
     );
     expect(denied.status).toBe(403);
     expect((denied.body as { error: { code: string } }).error.code).toBe("insufficient_scope");
+  });
+
+  it("asking a price tells the watcher which claim to look at now, and a watcher that is down does not stop the price", async () => {
+    const { app, secret, pokeWatcher } = harness();
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    const body = { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) };
+    const first = await app.handle(request("POST", "/v1/pay/sessions", body, secret));
+    expect(first.status).toBe(201);
+    expect(pokeWatcher).toHaveBeenCalledWith("c-1");
+    pokeWatcher.mockRejectedValueOnce(new Error("connection refused"));
+    const second = await app.handle(request("POST", "/v1/pay/sessions", body, secret));
+    expect(second.status).toBe(201);
   });
 
   it("lists every price given for an invoice so a reload can show the same address", async () => {

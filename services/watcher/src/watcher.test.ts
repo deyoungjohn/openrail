@@ -197,7 +197,7 @@ describe("watcher discovery", () => {
 });
 
 describe("late payments", () => {
-  it("books a payment on a fresh quote of a finished claim within a minute, not on the slow cadence", async () => {
+  it("a Paid claim is decided for good: looked at once, then never again (the human's rule, 11 Nov)", async () => {
     const state = {
       config: CONFIG_VIEW,
       claims: [makeClaim("c-1", { status: "Paid", issuer_id: "business.near" })],
@@ -206,11 +206,48 @@ describe("late payments", () => {
     };
     const fixture = setup(state);
     await fixture.watcher.tick();
-    expect(fixture.near.calls).toHaveLength(0);
+    const claimCalls = () => fixture.near.views.filter((v) => v.methodName === "claim").length;
+    const batches = fixture.near.batches.length;
+    const quoteReads = () =>
+      fixture.near.views.filter((v) => v.methodName === "payment_log").length;
+    expect(quoteReads()).toBe(0);
+    // a later quote and a later deposit change nothing: no read of the claim, no reconcile
     state.balances["c-1.openrail.near"] = ["0", "1000000", "0", "0"];
-    fixture.advance(35_000);
+    const claimsBefore = claimCalls();
+    for (let tick = 0; tick < 6; tick += 1) {
+      fixture.advance(35_000);
+      const summary = await fixture.watcher.tick();
+      expect(summary.reconciled).toEqual([]);
+    }
+    expect(fixture.near.batches.length).toBe(batches);
+    expect(claimCalls()).toBe(claimsBefore);
+    expect(quoteReads()).toBe(0);
+    expect(fixture.near.calls).toHaveLength(0);
+  });
+
+  it("poke makes an idle open claim due on the next tick, and leaves a decided claim alone", async () => {
+    const state = {
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1"), makeClaim("c-2", { status: "Paid" })],
+      quotes: {} as Record<string, Quote[]>,
+      balances: {} as Record<string, string[]>,
+    };
+    const fixture = setup(state);
+    await fixture.watcher.tick();
+    fixture.advance(15_000);
+    await fixture.watcher.tick(); // nothing due yet (idle probe is a minute)
+    const reads = fixture.near.views.filter((v) => v.methodName === "payment_log").length;
+    // the API asks a price for c-1: it is hot at once
+    state.quotes["c-1"] = [makeQuote(NOW / 1000 + 600)];
+    state.balances["c-1.openrail.near"] = ["0", "1000000", "0", "0"];
+    fixture.watcher.poke("c-1");
+    fixture.watcher.poke("c-2");
+    fixture.advance(15_000);
     const summary = await fixture.watcher.tick();
     expect(summary.reconciled).toEqual(["c-1"]);
+    expect(fixture.near.views.filter((v) => v.methodName === "payment_log").length).toBeGreaterThan(
+      reads,
+    );
   });
 
   it("books money that arrives on a paid claim (it becomes surplus for the business)", async () => {
