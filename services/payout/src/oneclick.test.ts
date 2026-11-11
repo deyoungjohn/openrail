@@ -33,4 +33,15 @@ describe("payout 1Click adapter", () => {
     );
     expect(result).toMatchObject({ amountIn: "2000000", depositAddress: "shield-deposit" });
   });
+
+  it("reads the NEAR transactions of a swap from the status", async () => {
+    const status = vi.fn(async () => ({
+      status: "SUCCESS",
+      swapDetails: { destinationChainTxHashes: [], nearTxHashes: ["near-tx-1"] },
+    }));
+    const adapter = new OneClickInPayout({ status } as never);
+    const result = await adapter.status("deposit");
+    expect(result.nearTxHashes).toEqual(["near-tx-1"]);
+    expect(result.destinationTxHashes).toEqual([]);
+  });
 });

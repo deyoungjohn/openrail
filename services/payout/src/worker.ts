@@ -343,7 +343,7 @@ export class PayoutWorker {
         return;
       }
       if (status === "SUCCESS") {
-        const hash = current.destinationTxHashes[0]?.hash;
+        const hash = current.destinationTxHashes[0]?.hash ?? current.nearTxHashes?.[0];
         if (hash === undefined || hash === "") {
           summary.errors.push(`${key}: SUCCESS without destination tx`);
           return;

@@ -110,6 +110,8 @@ export interface QuotePort {
 export interface StatusRecord {
   status: string;
   destinationTxHashes: { hash: string; explorerUrl?: string }[];
+  /** NEAR transactions of the swap. A shield into the private balance has no destination-chain tx; these are its proof. */
+  nearTxHashes?: string[];
   refundedAmount?: string;
 }
 

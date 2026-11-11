@@ -61,6 +61,7 @@ export class OneClickInPayout implements QuotePort, StatusPort {
     return {
       status: response.status ?? "PENDING_DEPOSIT",
       destinationTxHashes: hashList(details.destinationChainTxHashes),
+      nearTxHashes: hashList(details.nearTxHashes).map((entry) => entry.hash),
       ...(typeof details.amountOut === "string" && response.status === "REFUNDED"
         ? { refundedAmount: details.amountOut }
         : {}),

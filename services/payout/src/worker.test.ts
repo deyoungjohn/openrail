@@ -215,6 +215,29 @@ describe("settle payout worker", () => {
     expect(summary.skipped.some((entry) => entry.includes("INCOMPLETE_DEPOSIT"))).toBe(true);
   });
 
+  it("a SUCCESS with no destination tx is settled with the first NEAR tx (a private shield has no destination chain)", async () => {
+    const { chain, worker, status } = fixture();
+    await worker.tick();
+    vi.mocked(status.status).mockResolvedValueOnce({
+      status: "SUCCESS",
+      destinationTxHashes: [],
+      nearTxHashes: ["near-tx-1", "near-tx-2"],
+    });
+    const summary = await worker.tick();
+    expect(summary.errors).toEqual([]);
+    expect(chain.reports).toHaveLength(1);
+    expect(JSON.stringify(chain.reports[0])).toContain("near-tx-1");
+  });
+
+  it("a SUCCESS with no transaction at all is still an error, never settled", async () => {
+    const { chain, worker, status } = fixture();
+    await worker.tick();
+    vi.mocked(status.status).mockResolvedValueOnce({ status: "SUCCESS", destinationTxHashes: [] });
+    const summary = await worker.tick();
+    expect(chain.reports).toHaveLength(0);
+    expect(summary.errors.some((e) => e.includes("SUCCESS without destination tx"))).toBe(true);
+  });
+
   it("does not guess a refund amount and alerts", async () => {
     const alert = vi.fn();
     const { chain, worker, status } = fixture(undefined, alert);
