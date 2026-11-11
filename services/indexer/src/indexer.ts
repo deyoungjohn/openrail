@@ -49,6 +49,7 @@ export class Indexer {
   private readonly rootAccount?: string;
   private readonly txStatus?: TxStatusReader;
   private lastHead: number | null = null;
+  private lastPolledAt: string | null = null;
   private boostUntil = 0;
 
   constructor(options: IndexerOptions) {
@@ -139,6 +140,7 @@ export class Indexer {
     }
 
     this.lastHead = latestBlock;
+    this.lastPolledAt = new Date(this.now()).toISOString();
     const calls = this.source.callCounts?.() ?? {};
     this.logger.info("indexed", { latestBlock, blocks, events, pages, calls });
     return { latest_block: latestBlock, blocks, events, pages, calls };
@@ -215,6 +217,7 @@ export class Indexer {
   health(): {
     cursor: ReturnType<IndexerStore["cursor"]>;
     last_head: number | null;
+    last_polled_at: string | null;
     events: number;
     claims: number;
     bookings: number;
@@ -231,6 +234,7 @@ export class Indexer {
     return {
       ...this.store.health(),
       last_head: this.lastHead,
+      last_polled_at: this.lastPolledAt,
       calls: this.source.callCounts?.() ?? {},
       poll_interval_ms: this.pollIntervalMs,
       boost_until: this.boostUntil,
