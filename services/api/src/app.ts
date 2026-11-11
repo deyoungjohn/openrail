@@ -320,6 +320,13 @@ export class ApiError extends Error {
   }
 }
 
+/** `QUOTE_MARGIN_BPS`: default 10 (0.1 %). A provider fee of about 1 bp came out of a Solana payment and left an order partial. */
+function quoteMarginFromEnv(): number {
+  const raw = process.env.QUOTE_MARGIN_BPS;
+  const n = raw === undefined || raw === "" ? 10 : Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.floor(n) : 10;
+}
+
 export interface ApiDeps {
   config: ApiConfig;
   store?: ApiStore;
@@ -347,6 +354,8 @@ export interface ApiDeps {
   pokeIndexer?: () => Promise<void>;
   /** Tell the watcher a price was just asked for this claim, so it looks at it at once (best effort). */
   pokeWatcher?: (tokenId: string) => Promise<void>;
+  /** Extra, in basis points, the payer is asked to send so the provider's fee does not leave a dust shortfall. */
+  quoteMarginBps?: number;
 }
 
 /** The provider's status word as the API's payment status. A short deposit stays pending: it waits for the rest. */
@@ -496,6 +505,7 @@ export class ApiApp {
       },
       logger: deps.issuer,
       clock: this.clock,
+      marginBps: deps.quoteMarginBps ?? quoteMarginFromEnv(),
     });
   }
 

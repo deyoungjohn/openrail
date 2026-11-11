@@ -127,6 +127,39 @@ describe("quote service", () => {
     expect(flex?.[0].amount).toBe("12500000");
   });
 
+  it("asks a FLEX_INPUT payer for the margin on top, rounded up, and leaves EXACT_OUTPUT alone", async () => {
+    const { instance, quote } = service({ marginBps: 10 });
+    await instance.createSession({
+      tokenId: "c-1",
+      routeId: "R1",
+      amountUsd: "10.00",
+      refundTo: "0x" + "e".repeat(40),
+    });
+    await instance.createSession({
+      tokenId: "c-1",
+      routeId: "R9",
+      amountUsd: "10.00",
+      refundTo: "0x" + "e".repeat(40),
+    });
+    const [flex, exact] = quote.mock.calls;
+    expect(flex?.[0].amount).toBe("10010000"); // 10.00 + 0.1 %
+    expect(exact?.[0].amount).toBe("10000000");
+  });
+
+  it("the margin rounds up, never down", async () => {
+    const { instance, quote } = service({
+      marginBps: 10,
+      claim: async () => ({ ...claim, outstanding: "1234567" }),
+    });
+    await instance.createSession({
+      tokenId: "c-1",
+      routeId: "R1",
+      refundTo: "0x" + "e".repeat(40),
+    });
+    // 1234567 * 1.001 = 1235801.567 -> 1235802
+    expect(quote.mock.calls[0]?.[0].amount).toBe("1235802");
+  });
+
   it("never reuses an expired quote", () => {
     expect(isQuoteExpired("2026-11-02T09:59:59Z", clock())).toBe(true);
     expect(isQuoteExpired("2026-11-02T10:00:01Z", clock())).toBe(false);
