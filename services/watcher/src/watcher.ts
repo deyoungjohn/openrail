@@ -42,6 +42,7 @@ const RECONCILING_BLOCKS = 100;
 /** After sending `clear_stale_lock` for a claim, wait this long before sending it again. */
 const CLEAR_BACKOFF_MS = 120_000;
 const YOCTO_PER_NEAR = 1_000_000_000_000_000_000_000_000n;
+const DUE_FINAL = Number.MAX_SAFE_INTEGER;
 
 const TERMINAL_STATUSES = new Set(["Paid", "Cancelled", "Closed"]);
 
@@ -156,7 +157,7 @@ export class Watcher {
       this.knownClaims.set(row.token_id, row.last_view);
       this.knownAt.set(row.token_id, 0);
       const due = row.due_at > now ? row.due_at : now + (index % 60) * 1000;
-      this.dueAt.set(row.token_id, row.decided ? Number.POSITIVE_INFINITY : due);
+      this.dueAt.set(row.token_id, row.decided ? DUE_FINAL : due);
       this.lastQuote.set(row.token_id, row.last_quote_at);
       if (row.decided) this.finished.set(row.token_id, now);
       this.restored.add(row.token_id);
@@ -559,7 +560,7 @@ export class Watcher {
 
       // A claim that is Paid, Cancelled or Closed is decided for good (the human's rule, 11 Nov): looked at once, then
       // never again. Money that reaches its account later stays there until someone calls the permissionless `reconcile`.
-      this.dueAt.set(claim.token_id, finished ? Number.POSITIVE_INFINITY : nowMs + interval);
+      this.dueAt.set(claim.token_id, finished ? DUE_FINAL : nowMs + interval);
       this.knownClaims.set(claim.token_id, claim);
       this.knownAt.set(claim.token_id, nowMs);
       this.lastInterval.set(claim.token_id, interval);
@@ -568,7 +569,7 @@ export class Watcher {
         kind: claim.kind ?? 0,
         status: claim.status,
         last_quote_at: lastQuote,
-        due_at: finished ? Number.MAX_SAFE_INTEGER : nowMs + interval,
+        due_at: finished ? DUE_FINAL : nowMs + interval,
         last_view: claim,
         decided: finished,
       });

@@ -2,7 +2,10 @@
 // `intents.near` (a multi-token contract), not as a token in its NEAR wallet, so a wallet shows nothing: this
 // reads the balance there, straight from the chain.
 
-const RPC_URLS = (process.env.NEXT_PUBLIC_NEAR_RPC_URL ?? "https://free.rpc.fastnear.com")
+const RPC_URLS = (
+  process.env.NEXT_PUBLIC_NEAR_RPC_URL ??
+  "https://free.rpc.fastnear.com"
+)
   .split(",")
   .map((u) => u.trim())
   .filter(Boolean);
