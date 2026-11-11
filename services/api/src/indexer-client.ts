@@ -16,6 +16,18 @@ export function createHttpIndexer(baseUrl: string, fetchImpl: FetchLike = fetch)
   const base = baseUrl.replace(/\/+$/, "");
   const get = async (path: string): Promise<Response> => fetchImpl(`${base}${path}`);
   return {
+    async status() {
+      const response = await get("/health");
+      if (!response.ok) throw new Error(`INDEXER_HTTP_${response.status}`);
+      const body = (await response.json()) as {
+        last_polled_at?: unknown;
+        boost_active?: unknown;
+      };
+      return {
+        last_polled_at: typeof body.last_polled_at === "string" ? body.last_polled_at : null,
+        boost_active: body.boost_active === true,
+      };
+    },
     async issueTx(tokenId) {
       const response = await get(`/events?token_id=${encodeURIComponent(tokenId)}&limit=200`);
       if (!response.ok) return undefined;

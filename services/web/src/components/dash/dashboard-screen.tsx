@@ -2,7 +2,7 @@
 
 import { Receipt } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Cell, Pie, PieChart } from "recharts";
 import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
@@ -45,6 +45,16 @@ const when = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
   minute: "2-digit",
 });
+
+function updatedAgo(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  if (!Number.isFinite(seconds)) return "—";
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} h ago`;
+}
 
 function StreamChip({ stream }: { stream: Stream }) {
   return (
@@ -366,6 +376,15 @@ function Streams({ earnings }: { earnings: readonly Earning[] }) {
 export function DashboardScreen() {
   const d = copy.dash;
   const [load, retry] = useEarnings();
+  // When the indexer says it is boosting, refetch once after a minute so a payment just booked appears.
+  const refetchedForBoost = useRef(false);
+  const boostActive = load.state === "ready" ? load.data.meta?.boost_active === true : false;
+  useEffect(() => {
+    if (!boostActive || refetchedForBoost.current) return;
+    refetchedForBoost.current = true;
+    const timer = setTimeout(retry, 60_000);
+    return () => clearTimeout(timer);
+  }, [boostActive, retry]);
   const nowMs = useMemo(() => Date.now(), [load.state]);
   const earnings = load.state === "ready" ? load.data.earnings : [];
   const loading = load.state === "loading";
@@ -377,7 +396,16 @@ export function DashboardScreen() {
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[32px] leading-10 font-bold">{d.title}</h1>
+        <div>
+          <h1 className="text-[32px] leading-10 font-bold">{d.title}</h1>
+          {load.state === "ready" ? (
+            <p className="text-[12px] text-muted">
+              {load.data.meta?.last_polled_at
+                ? `Updated ${updatedAgo(load.data.meta.last_polled_at)}`
+                : "Updated —"}
+            </p>
+          ) : null}
+        </div>
         <BalanceButton />
       </header>
 

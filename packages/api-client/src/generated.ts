@@ -159,6 +159,7 @@ export interface Invoice {
 export interface InvoiceList {
   data: Invoice[];
   next_cursor?: string | null;
+  meta?: SyncMeta;
 }
 
 export interface InvoiceDetail {
@@ -280,6 +281,7 @@ export interface WebhookEvent {
 export interface WebhookEventList {
   data: WebhookEvent[];
   next_cursor?: string | null;
+  meta?: SyncMeta;
 }
 
 export interface Route {
@@ -653,6 +655,7 @@ export interface PaymentListItem {
 
 export interface PaymentList {
   data: PaymentListItem[];
+  meta?: SyncMeta;
 }
 
 export type ApiKeyScope =
@@ -759,6 +762,7 @@ export interface Analytics {
   };
   paid_out_total: U128;
   held_total: U128;
+  meta?: SyncMeta;
 }
 
 export interface PaySessionList {
@@ -844,6 +848,11 @@ export interface ConfidentialBalance {
     available: string;
     source?: string;
   }>;
+}
+
+export interface SyncMeta {
+  last_polled_at: string | null;
+  boost_active: boolean;
 }
 
 export interface operations {

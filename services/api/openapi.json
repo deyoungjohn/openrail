@@ -913,6 +913,9 @@
                 "type": "null"
               }
             ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/SyncMeta"
           }
         }
       },
@@ -1318,6 +1321,9 @@
                 "type": "null"
               }
             ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/SyncMeta"
           }
         }
       },
@@ -2641,6 +2647,9 @@
             "items": {
               "$ref": "#/components/schemas/PaymentListItem"
             }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/SyncMeta"
           }
         }
       },
@@ -3108,6 +3117,9 @@
           },
           "held_total": {
             "$ref": "#/components/schemas/U128"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/SyncMeta"
           }
         }
       },
@@ -3363,6 +3375,19 @@
                 }
               }
             }
+          }
+        }
+      },
+      "SyncMeta": {
+        "type": "object",
+        "required": ["last_polled_at", "boost_active"],
+        "properties": {
+          "last_polled_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "boost_active": {
+            "type": "boolean"
           }
         }
       }

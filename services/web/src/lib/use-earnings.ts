@@ -8,6 +8,7 @@ import { useAsync, type Async } from "./use-async";
 export interface EarningsData {
   invoices: Invoice[];
   earnings: Earning[];
+  meta?: { last_polled_at: string | null; boost_active: boolean };
 }
 
 /** Invoices plus the receipts of every invoice that took money: the one source of the dashboard's money-in figures. */
@@ -27,6 +28,10 @@ export function useEarnings(): [Async<EarningsData>, () => void] {
       const inv = paying[index];
       if (inv && r.status === "fulfilled") byInvoice[inv.id] = r.value.data as ReceiptLike[];
     });
-    return { invoices, earnings: earningsFrom(invoices, byInvoice) };
+    return {
+      invoices,
+      earnings: earningsFrom(invoices, byInvoice),
+      ...(list.meta === undefined ? {} : { meta: list.meta }),
+    };
   }, []);
 }
