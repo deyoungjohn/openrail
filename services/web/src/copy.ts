@@ -533,6 +533,8 @@ export const copy = {
     testOk: (code: number) => `Delivered: your endpoint answered ${code}`,
     testFail: (code: number) =>
       `Not delivered: your endpoint answered ${code}. Check the address and try again.`,
+    testUnreachable: (why: string) =>
+      `Not delivered: ${why}. Use a public https address that answers, then try again. The attempt is in the delivery log.`,
     testError: "We couldn't send the test event. Try again.",
     deliveryLog: "Delivery log",
     deliveryTitle: "Delivery log",

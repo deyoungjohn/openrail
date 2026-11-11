@@ -12,7 +12,7 @@ const config = {
   payBaseUrl: "https://pay.openrail.near",
 };
 
-function harness() {
+function harness(overrides: Partial<ApiDeps> = {}) {
   const auth = new AuthStore(() => clock().getTime());
   const { secret } = auth.createApiKey("acme.openrail.near", "Production", "secret", [
     "invoices:read",
@@ -82,6 +82,7 @@ function harness() {
     webhookUrlValidator: async (url: string) => {
       if (!url.startsWith("https://")) throw new UnsafeWebhookUrl("webhook URL must use https");
     },
+    ...overrides,
   };
   return {
     app: new ApiApp(deps),
@@ -620,6 +621,73 @@ describe("webhooks route", () => {
       request("GET", `/v1/webhook_endpoints/${endpoint.id}/deliveries`, undefined, secret),
     );
     expect(deliveries.status).toBe(200);
+  });
+});
+
+describe("webhook test event", () => {
+  const create = async (app: ApiApp, secret: string) => {
+    const created = await app.handle(
+      request(
+        "POST",
+        "/v1/webhook_endpoints",
+        { url: "https://example.com/hook", events: ["invoice.paid"] },
+        secret,
+      ),
+    );
+    return (created.body as { id: string }).id;
+  };
+  const deliveries = async (app: ApiApp, secret: string, id: string) =>
+    (
+      (
+        await app.handle(
+          request("GET", `/v1/webhook_endpoints/${id}/deliveries`, undefined, secret),
+        )
+      ).body as { data: Record<string, unknown>[] }
+    ).data;
+
+  it("a delivered test is in the delivery log", async () => {
+    const { app, secret } = harness();
+    const id = await create(app, secret);
+    const tested = await app.handle(
+      request("POST", `/v1/webhook_endpoints/${id}/test`, {}, secret),
+    );
+    expect(tested.body).toMatchObject({ delivered: true, status_code: 200 });
+    const log = await deliveries(app, secret, id);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ status_code: 200, error: null });
+  });
+
+  it("an address that cannot be reached answers 200 with the reason, and the attempt is logged", async () => {
+    // The address passes when the endpoint is saved and stops resolving to a public one later (DNS can change).
+    let calls = 0;
+    const { app, secret } = harness({
+      webhookUrlValidator: async () => {
+        calls += 1;
+        if (calls > 1) throw new UnsafeWebhookUrl("webhook URL resolves to a private address");
+      },
+    });
+    const id = await create(app, secret);
+    const tested = await app.handle(
+      request("POST", `/v1/webhook_endpoints/${id}/test`, {}, secret),
+    );
+    expect(tested.status).toBe(200);
+    expect(tested.body).toMatchObject({ delivered: false, status_code: 0 });
+    expect((tested.body as { error: string }).error).toContain("private address");
+    const log = await deliveries(app, secret, id);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ status_code: 0, delivered_at: null });
+  });
+
+  it("a failing endpoint is reported with its status and logged", async () => {
+    const { app, secret } = harness({
+      webhookFetch: async () => new Response("boom", { status: 500 }),
+    });
+    const id = await create(app, secret);
+    const tested = await app.handle(
+      request("POST", `/v1/webhook_endpoints/${id}/test`, {}, secret),
+    );
+    expect(tested.body).toMatchObject({ delivered: false, status_code: 500, error: "boom" });
+    expect(await deliveries(app, secret, id)).toHaveLength(1);
   });
 });
 

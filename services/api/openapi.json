@@ -2042,6 +2042,10 @@
           },
           "event_id": {
             "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "description": "Why the test was not delivered (blocked address, no answer, a non-2xx answer). Absent when delivered."
           }
         }
       },

@@ -485,7 +485,11 @@ function HooksPanel() {
                       const r = await dashClient.webhookEndpoints.test(h.id);
                       setTestResult({
                         id: h.id,
-                        text: r.delivered ? t.testOk(r.status_code) : t.testFail(r.status_code),
+                        text: r.delivered
+                          ? t.testOk(r.status_code)
+                          : r.status_code === 0 && r.error
+                            ? t.testUnreachable(r.error)
+                            : t.testFail(r.status_code),
                       });
                     } catch {
                       setTestResult({ id: h.id, text: t.testError });

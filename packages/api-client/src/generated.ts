@@ -479,6 +479,7 @@ export interface WebhookTestResult {
   delivered: boolean;
   status_code: number;
   event_id: string;
+  error?: string;
 }
 
 export interface Business {

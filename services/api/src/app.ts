@@ -1865,29 +1865,50 @@ export class ApiApp {
       }
       if (method === "POST" && action === "test") {
         return this.withIdempotency(request, async () => {
-          const result = await deliverTestWebhook(
-            endpoint,
-            {
-              id: id("evt"),
-              type: endpoint.events[0] ?? "invoice.paid",
-              created: Math.floor(this.clock().getTime() / 1000),
-              data: { test: true },
-            },
-            {
+          const eventId = id("evt");
+          const event = {
+            id: eventId,
+            type: endpoint.events[0] ?? "invoice.paid",
+            created: Math.floor(this.clock().getTime() / 1000),
+            data: { test: true },
+          };
+          // A test that cannot be delivered (blocked address, no answer, a failing endpoint) is a normal answer,
+          // not a server error: the page says why, and the attempt is in the delivery log either way.
+          let statusCode = 0;
+          let failure: string | null = null;
+          try {
+            const result = await deliverTestWebhook(endpoint, event, {
               ...(this.deps.webhookFetch === undefined
                 ? {}
                 : { fetchImpl: this.deps.webhookFetch }),
               ...(this.deps.webhookUrlValidator === undefined
                 ? {}
                 : { validateUrl: this.deps.webhookUrlValidator }),
-            },
-          );
+            });
+            statusCode = result.statusCode;
+            if (statusCode < 200 || statusCode >= 300)
+              failure = result.body.slice(0, 200) || "not_2xx";
+          } catch (error) {
+            failure = error instanceof Error ? error.message.slice(0, 200) : "delivery_failed";
+          }
+          const delivered = failure === null;
+          this.store.addDelivery(endpoint.id, {
+            id: id("whd"),
+            endpoint_id: endpoint.id,
+            event_id: eventId,
+            type: event.type,
+            attempt: 1,
+            status_code: statusCode,
+            delivered_at: delivered ? this.clock().toISOString() : null,
+            error: failure,
+          });
           return {
             status: 200,
             body: {
-              delivered: result.statusCode >= 200 && result.statusCode < 300,
-              status_code: result.statusCode,
-              event_id: id("evt"),
+              delivered,
+              status_code: statusCode,
+              event_id: eventId,
+              ...(failure === null ? {} : { error: failure }),
             },
           };
         });
