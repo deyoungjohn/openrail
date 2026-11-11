@@ -22,6 +22,8 @@ describe("payout 1Click adapter", () => {
         destinationAsset: USDC,
         amount: "2000000",
         swapType: "EXACT_INPUT",
+        dry: false,
+        slippageTolerance: 0,
         depositType: "INTENTS",
         recipientType: "CONFIDENTIAL_INTENTS",
         refundType: "INTENTS",

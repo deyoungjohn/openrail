@@ -34,6 +34,10 @@ export class OneClickInPayout implements QuotePort, StatusPort {
       destinationAsset,
       amount: request.amount,
       swapType: "EXACT_INPUT",
+      // 1Click rejects a quote without both (HTTP 400, 11 Nov). Not a dry run: the deposit address is needed.
+      dry: false,
+      // Same asset into the private balance moves no price; a swap to another chain gets 0.5 %.
+      slippageTolerance: shield ? 0 : 50,
       depositType: "INTENTS",
       refundTo: request.refundTo,
       recipient: request.destination.address,
