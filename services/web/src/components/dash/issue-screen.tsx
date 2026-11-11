@@ -81,9 +81,14 @@ function Preview({
   );
 }
 
-function StorageCredit() {
+function StorageCredit({
+  credit,
+  watchDeposit,
+}: {
+  credit: ReturnType<typeof useStorageCredit>[0];
+  watchDeposit: () => void;
+}) {
   const t = copy.issue;
-  const [credit, , watchDeposit] = useStorageCredit();
   const [sent, setSent] = useState(false);
   const balance = credit.state === "ready" ? BigInt(credit.data.balance) : null;
   const low = balance !== null && storageCreditLow(balance);
@@ -102,11 +107,6 @@ function StorageCredit() {
             {credit.data.sponsor && credit.data.sponsor.remaining > 0 ? (
               <p role="status" className="text-[14px]">
                 {t.sponsored(credit.data.sponsor.remaining)}
-              </p>
-            ) : null}
-            {low ? (
-              <p role="status" className="text-warning text-[14px]">
-                {t.creditLow}
               </p>
             ) : null}
             {low || sent ? (
@@ -179,6 +179,8 @@ function DoneSheet({ invoice, onClose }: { invoice: Invoice; onClose: () => void
 export function IssueScreen() {
   const t = copy.issue;
   const [biz] = useAsync(() => dashClient.business.get(), []);
+  const [credit, , watchDeposit] = useStorageCredit();
+  const creditLow = credit.state === "ready" && storageCreditLow(BigInt(credit.data.balance));
   const [issuerEdit, setIssuerEdit] = useState<string | null>(null);
   const issuer = issuerEdit ?? (biz.state === "ready" ? biz.data.legal_name : "");
 
@@ -249,6 +251,8 @@ export function IssueScreen() {
       <header className="space-y-1">
         <h1 className="text-[32px] leading-10 font-bold">{t.title}</h1>
         <p className="text-[15px]">{t.intro}</p>
+        {/* The space is always there, so the line appearing never pushes the page down. */}
+        <ErrorNote>{creditLow ? t.creditLow : null}</ErrorNote>
       </header>
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -372,8 +376,8 @@ export function IssueScreen() {
         </form>
 
         <div className="space-y-6">
-          <StorageCredit />
           <Preview form={form} issuer={issuer} total={total} />
+          <StorageCredit credit={credit} watchDeposit={watchDeposit} />
         </div>
       </div>
 

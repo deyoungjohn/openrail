@@ -32,6 +32,8 @@ import { fillTabWidth } from "./tab-layout";
 export type MorphingTabsItem = {
   id: string;
   label: string;
+  /** A number shown after the label as a small badge (it reads as a count, not as part of the name). */
+  count?: number;
   icon?: ReactNode;
   content: ReactNode;
   disabled?: boolean;
@@ -750,6 +752,14 @@ export function MorphingTabs({
                     >
                       {item.label}
                     </span>
+                    {item.count !== undefined ? (
+                      <>
+                        {" "}
+                        <span className="tabular ml-1.5 grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-accent-soft px-1.5 text-[12px] leading-none font-semibold text-accent-text">
+                          {item.count}
+                        </span>
+                      </>
+                    ) : null}
                   </button>
 
                   {onClose ? (

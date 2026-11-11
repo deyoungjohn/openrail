@@ -99,7 +99,7 @@ export function PaymentDialog({
     <div
       hidden={!visible}
       className={cn(
-        "fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[var(--scrim)] p-2 [backdrop-filter:var(--scrim-blur)] sm:items-center sm:p-4",
+        "fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-2 sm:items-center sm:p-4",
         "transition-opacity duration-[var(--dur-slow)] ease-[var(--ease)]",
         shown ? "opacity-100" : "opacity-0",
       )}
@@ -108,15 +108,21 @@ export function PaymentDialog({
       }}
       onKeyDown={onKeyDown}
     >
+      {/* The dim and blur are their own layer behind the panel. A backdrop-filter on the parent makes it the
+          "backdrop root", and the panel's own glass then has nothing to blur: it rendered as a flat sheet. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 bg-[var(--scrim)] [backdrop-filter:var(--scrim-blur)]"
+      />
       <div
         ref={panel}
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={cn(
-          // Liquid glass like the other pop-ups; the fill is the surface at 82% so the prices and steps stay easy to
+          // Liquid glass like the other pop-ups; the fill is the surface at 68% so the prices and steps stay easy to
           // read over the dimmed page (the token is changed here, not the background of the component).
-          "glass relative my-auto w-full max-w-4xl p-4 sm:p-6 [--pop-bg:color-mix(in_srgb,var(--surface)_82%,transparent)]",
+          "glass relative z-10 my-auto w-full max-w-4xl p-4 sm:p-6 [--pop-bg:color-mix(in_srgb,var(--surface)_68%,transparent)]",
           "transition-[opacity,transform] duration-[var(--dur-slow)] ease-[var(--ease)]",
           shown ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-[0.97] opacity-0",
         )}

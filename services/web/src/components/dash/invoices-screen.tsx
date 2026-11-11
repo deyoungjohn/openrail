@@ -68,7 +68,7 @@ export function InvoicesScreen() {
         </Link>
       </header>
 
-      <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MonthlyRevenueCard
           cents={rev.currentCents}
           deltaPct={rev.deltaPct}
@@ -80,11 +80,11 @@ export function InvoicesScreen() {
         <TopClientsCard clients={clients} state={cards} />
       </div>
 
-      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiTile label={d.outstanding} cents={s.outstandingCents} state={tile} />
         <KpiTile label={d.collected} cents={s.paidCents} state={tile} />
         <KpiTile label={d.overdue} cents={s.overdueCents} state={tile} />
-        <div className="surface-card p-5">
+        <div className="surface-card h-full min-h-[128px] p-5">
           <p className="text-[14px] leading-5 font-medium text-muted">{d.invoices}</p>
           <p className="tabular mt-2 text-[32px] leading-[1.1] font-bold">
             {list.state === "ready" ? s.counts.all : "–"}

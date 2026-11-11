@@ -40,15 +40,21 @@ function Payments({ invoiceId }: { invoiceId: string }) {
     >
       <ul className="divide-y divide-border">
         {rows.map((p) => {
-          const chain = chainOfRoute({ origin_chain: p.origin_tx.chain });
+          // A payment can have no origin transaction (a direct or pay-link payment booked on NEAR): the API sends null.
+          const origin = p.origin_tx as Receipt["origin_tx"] | null;
+          const chain = origin ? chainOfRoute({ origin_chain: origin.chain }) : null;
           return (
             <li key={p.id} className="space-y-1.5 py-3">
               <p className="text-[14px] font-medium">
                 {t.paidIn} <span className="tabular">{formatUsdc(BigInt(p.amount))}</span>
                 <span className="caption"> · {when(p.time)}</span>
               </p>
-              <p className="caption">{t.yourTx}</p>
-              <AddressChip value={p.origin_tx.hash} chain={chain ?? undefined} />
+              {origin ? (
+                <>
+                  <p className="caption">{t.yourTx}</p>
+                  <AddressChip value={origin.hash} chain={chain ?? undefined} />
+                </>
+              ) : null}
               {p.booking_tx_hash ? (
                 <p>
                   <Link

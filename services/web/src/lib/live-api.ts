@@ -7,10 +7,7 @@ import type { OpenrailApi } from "./api";
  * `claim` and `payment_log` views are public and answer without a key, so a visitor who only holds the
  * link needs nothing but the page. (The API's public `GET /v1/ack/{token}` adds the names and the terms.)
  */
-const RPC_URLS = (
-  process.env.NEXT_PUBLIC_NEAR_RPC_URL ??
-  "https://free.rpc.fastnear.com"
-)
+const RPC_URLS = (process.env.NEXT_PUBLIC_NEAR_RPC_URL ?? "https://free.rpc.fastnear.com")
   .split(",")
   .map((u) => u.trim())
   .filter(Boolean);

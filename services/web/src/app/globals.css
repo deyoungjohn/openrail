@@ -373,3 +373,22 @@ dialog.overlay::backdrop {
     text-decoration: none;
   }
 }
+
+/* Spinner: compositor-driven, so it never freezes with the main thread. */
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes loader-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+.loader-spin {
+  animation: loader-spin 1s linear infinite;
+  will-change: transform;
+}
+.loader-pulse {
+  animation: loader-pulse 1.4s ease-in-out infinite;
+}

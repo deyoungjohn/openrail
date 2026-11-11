@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Search } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { copy } from "@/copy";
+import { clampPageSize } from "@/lib/table-rows";
 import { Pagination } from "./pagination";
 import { EmptyState, ErrorState, Skeleton } from "./state";
 
@@ -62,6 +63,8 @@ export interface DataTableProps<T> {
   error?: { body?: string; onRetry?: () => void } | null;
   totals?: readonly string[];
   rowActions?: (row: T, helpers: { remove: () => void }) => ReactNode;
+  /** The rest of a row's information. A chevron at the end of the row opens it below the row. */
+  expandedRow?: (row: T) => ReactNode;
   onDelete?: (ids: string[]) => void;
   onRowClick?: (row: T) => void;
   className?: string;
@@ -96,19 +99,23 @@ export function DataTable<T>({
   searchText,
   filters = [],
   defaultSort,
-  pageSize = 10,
+  pageSize: askedPageSize,
   loading,
   skeletonRows = 5,
   emptyState,
   error,
   totals = [],
   rowActions,
+  expandedRow,
   onDelete,
   onRowClick,
   className,
   fixed,
 }: DataTableProps<T>) {
   const t = copy.table;
+  // Hard rule: never more than ten rows at once, whatever a screen asks for.
+  const pageSize = clampPageSize(askedPageSize);
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [sort, setSort] = useState(defaultSort ?? null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -159,6 +166,8 @@ export function DataTable<T>({
   }, [rows, totals, columns]);
 
   const hasActions = Boolean(rowActions);
+  const hasExpand = Boolean(expandedRow);
+  const span = columns.length + (hasActions ? 1 : 0) + (hasExpand ? 1 : 0);
   const shell =
     variant === "panel" ? "surface-card overflow-hidden" : "overflow-hidden border-y border-border";
   const showBar = Boolean(title) || searchable || filters.length > 0 || toolbar || leading;
@@ -328,54 +337,90 @@ export function DataTable<T>({
                   {hasActions ? (
                     <th scope="col" className="w-12 px-4 py-2.5" aria-label={t.actions} />
                   ) : null}
+                  {hasExpand ? (
+                    <th scope="col" className="w-12 px-2 py-2.5" aria-label={t.details} />
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
                 {visible.map((row) => {
                   const id = rowId(row);
+                  const isOpen = open.has(id);
                   return (
-                    <tr
-                      key={id}
-                      aria-label={rowLabel?.(row)}
-                      onClick={onRowClick ? () => onRowClick(row) : undefined}
-                      className={cn(
-                        "border-b border-border last:border-b-0 hover:bg-row",
-                        onRowClick && "cursor-pointer",
-                      )}
-                    >
-                      {columns.map((c) => {
-                        const align =
-                          c.numeric || c.align === "right"
-                            ? "text-right tabular"
-                            : c.align === "center"
-                              ? "text-center"
-                              : "";
-                        return (
-                          <td
-                            key={c.id}
-                            className={cn(
-                              "px-4 first:sm:pl-6",
-                              PAD[density],
-                              align,
-                              c.hideBelow && HIDE[c.hideBelow],
-                              c.className,
-                            )}
-                          >
-                            {c.cell ? c.cell(row) : c.value ? String(c.value(row)) : null}
+                    <Fragment key={id}>
+                      <tr
+                        aria-label={rowLabel?.(row)}
+                        onClick={onRowClick ? () => onRowClick(row) : undefined}
+                        className={cn(
+                          "border-b border-border last:border-b-0 hover:bg-row",
+                          onRowClick && "cursor-pointer",
+                        )}
+                      >
+                        {columns.map((c) => {
+                          const align =
+                            c.numeric || c.align === "right"
+                              ? "text-right tabular"
+                              : c.align === "center"
+                                ? "text-center"
+                                : "";
+                          return (
+                            <td
+                              key={c.id}
+                              className={cn(
+                                "px-4 first:sm:pl-6",
+                                PAD[density],
+                                align,
+                                c.hideBelow && HIDE[c.hideBelow],
+                                c.className,
+                              )}
+                            >
+                              {c.cell ? c.cell(row) : c.value ? String(c.value(row)) : null}
+                            </td>
+                          );
+                        })}
+                        {hasActions ? (
+                          <td className={cn("px-4 text-right", PAD[density])}>
+                            {rowActions?.(row, {
+                              remove: () => {
+                                setRemoved((s) => new Set(s).add(id));
+                                onDelete?.([id]);
+                              },
+                            })}
                           </td>
-                        );
-                      })}
-                      {hasActions ? (
-                        <td className={cn("px-4 text-right", PAD[density])}>
-                          {rowActions?.(row, {
-                            remove: () => {
-                              setRemoved((s) => new Set(s).add(id));
-                              onDelete?.([id]);
-                            },
-                          })}
-                        </td>
+                        ) : null}
+                        {hasExpand ? (
+                          <td className={cn("px-2 text-right", PAD[density])}>
+                            <button
+                              type="button"
+                              aria-expanded={isOpen}
+                              aria-label={isOpen ? t.hideDetails : t.showDetails}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpen((prev) => {
+                                  const next = new Set(prev);
+                                  if (!next.delete(id)) next.add(id);
+                                  return next;
+                                });
+                              }}
+                              className="text-text-muted hover:text-text inline-flex size-8 items-center justify-center rounded-full"
+                            >
+                              <ChevronDown
+                                aria-hidden
+                                size={16}
+                                className={cn("transition-transform", isOpen && "rotate-180")}
+                              />
+                            </button>
+                          </td>
+                        ) : null}
+                      </tr>
+                      {hasExpand && isOpen ? (
+                        <tr className="border-b border-border bg-row/50 last:border-b-0">
+                          <td colSpan={span} className="px-4 py-3 first:sm:pl-6">
+                            {expandedRow?.(row)}
+                          </td>
+                        </tr>
                       ) : null}
-                    </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>
