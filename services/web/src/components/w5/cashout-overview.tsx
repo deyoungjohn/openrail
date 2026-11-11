@@ -11,7 +11,7 @@ import { Skeleton } from "../ui/state";
 type Range = "30" | "90" | "year";
 const DAY = 86_400_000;
 
-const shell = "surface-card min-w-0 p-5 sm:p-6";
+const shell = "surface-card h-full min-h-[232px] min-w-0 p-5 sm:p-6";
 
 /** The last months as a small line, zero or more, drawn the way the dashboard's revenue card draws its trend. */
 function Spark({ series, color, id }: { series: readonly number[]; color: string; id: string }) {
@@ -127,7 +127,7 @@ export function CashoutOverview({
           ))}
         </div>
       </div>
-      <div className="grid items-start gap-4 sm:grid-cols-3">
+      <div className="grid items-stretch gap-4 sm:grid-cols-3">
         <Stat
           label={t.revenue}
           cents={loading ? null : f.revenueCents}

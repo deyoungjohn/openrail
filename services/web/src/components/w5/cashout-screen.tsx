@@ -170,7 +170,7 @@ export function CashoutScreen() {
   const busy = phase === "asking" || phase === "signing";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <header className="space-y-1">
         <h1 className="text-[32px] leading-10 font-bold">{t.title}</h1>
         <p className="text-[15px]">{t.intro}</p>

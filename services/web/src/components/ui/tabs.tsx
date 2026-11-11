@@ -37,7 +37,8 @@ export function Tabs({
       }}
       items={items.map((t) => ({
         id: t.id,
-        label: t.count === undefined ? t.label : `${t.label} ${t.count}`,
+        label: t.label,
+        ...(t.count === undefined ? {} : { count: t.count }),
         content: <div className="p-4 sm:p-6">{t.panel}</div>,
       }))}
       classNames={{ root: "bg-surface-2", content: "mb-4" }}

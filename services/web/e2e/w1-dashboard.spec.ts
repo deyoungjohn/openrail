@@ -431,12 +431,15 @@ test.describe("issue form", () => {
     await page.goto("/app/invoices/new");
     const credit = page.getByRole("region", { name: "Storage credit" });
     await expect(credit).toContainText("0 NEAR");
-    await expect(credit).toContainText("don't have enough storage credit");
+    // The warning sits under the page intro (its space is always reserved), not in the card.
+    const warning = page.getByText("don't have enough storage credit");
+    await expect(warning).toBeVisible();
+    await expect(credit).not.toContainText("don't have enough storage credit");
     balance = fixture("business.storage_credit").amount;
     await credit.getByRole("button", { name: "Deposit storage credit" }).click();
     await expect(credit.getByText("Deposit sent")).toBeVisible();
     await expect(credit).toContainText("1 NEAR");
-    await expect(credit).not.toContainText("don't have enough storage credit");
+    await expect(warning).toHaveCount(0);
   });
 
   test("an unreadable credit does not block the form", async ({ page }) => {

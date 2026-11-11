@@ -8,7 +8,8 @@ import { copy } from "@/copy";
 import { Skeleton } from "./state";
 import type { ViewState } from "./card";
 
-const shell = "surface-card min-w-0 p-5 sm:p-6";
+// Every stat card has the same height, filled or empty (the grid stretches them to the tallest of the row).
+const shell = "surface-card h-full min-h-[232px] min-w-0 p-5 sm:p-6";
 
 function Delta({ pct }: { pct: number | null }) {
   if (pct === null) return <span className="text-[12px] text-muted">–</span>;

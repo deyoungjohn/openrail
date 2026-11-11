@@ -42,8 +42,10 @@ export function ReceiptScreen({ hash }: { hash: string }) {
   const symbol = assetSymbol(receipt.asset);
   const amount =
     symbol === "USDC" ? `${formatToken(receipt.amount, 6)} USDC` : `${receipt.amount} ${symbol}`;
-  const chain = chainOfRoute({ origin_chain: receipt.origin_tx.chain });
-  const chainName = chain ? CHAINS[chain] : receipt.origin_tx.chain;
+  // No origin transaction for a payment booked directly on NEAR: the API sends null.
+  const origin = receipt.origin_tx as typeof receipt.origin_tx | null;
+  const chain = origin ? chainOfRoute({ origin_chain: origin.chain }) : null;
+  const chainName = origin ? (chain ? CHAINS[chain] : origin.chain) : null;
 
   return (
     <div className="space-y-6">
@@ -77,23 +79,25 @@ export function ReceiptScreen({ hash }: { hash: string }) {
         </dl>
       </Card>
 
-      <Card title={t.origin}>
-        <dl>
-          <Row label={t.chain}>{chainName}</Row>
-          {receipt.origin_tx.sender ? (
-            <Row label={t.sender}>
-              <AddressChip value={receipt.origin_tx.sender} chain={chain ?? undefined} />
+      {origin ? (
+        <Card title={t.origin}>
+          <dl>
+            <Row label={t.chain}>{chainName}</Row>
+            {origin.sender ? (
+              <Row label={t.sender}>
+                <AddressChip value={origin.sender} chain={chain ?? undefined} />
+              </Row>
+            ) : null}
+            <Row label={t.transaction}>
+              <AddressChip
+                value={origin.hash}
+                chain={chain ?? undefined}
+                href={explorerTxUrl(origin.chain, origin.hash) ?? undefined}
+              />
             </Row>
-          ) : null}
-          <Row label={t.transaction}>
-            <AddressChip
-              value={receipt.origin_tx.hash}
-              chain={chain ?? undefined}
-              href={explorerTxUrl(receipt.origin_tx.chain, receipt.origin_tx.hash) ?? undefined}
-            />
-          </Row>
-        </dl>
-      </Card>
+          </dl>
+        </Card>
+      ) : null}
 
       {receipt.near_tx_hashes.length > 0 ? (
         <Card title={t.payout}>

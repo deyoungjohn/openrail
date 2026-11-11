@@ -19,7 +19,7 @@ export function KpiTile({
 }) {
   const parts = cents === undefined ? null : usdParts(cents);
   return (
-    <div className="surface-card p-5">
+    <div className="surface-card h-full min-h-[128px] p-5">
       <p className="text-[14px] leading-5 font-medium text-muted">{label}</p>
       {state === "loading" ? (
         <div role="status" aria-busy className="mt-2 space-y-2">
