@@ -115,6 +115,8 @@ export class Watcher {
   /** When each claim is next due, and the last view of it (so an idle claim costs no call until it is due). */
   private readonly dueAt = new Map<string, number>();
   private readonly knownClaims = new Map<string, ClaimView>();
+  private readonly knownAt = new Map<string, number>();
+  private readonly lastInterval = new Map<string, number>();
   private lastDiscoverAt = 0;
   private lastClaims: ClaimView[] = [];
   private lastBlockAt = 0;
@@ -213,7 +215,15 @@ export class Watcher {
           // A claim that is not due again yet is not read again: the view of it from the last time stays in the list.
           const known = this.knownClaims.get(id);
           const dueAt = this.dueAt.get(id);
-          if (known !== undefined && dueAt !== undefined && this.now() < dueAt) {
+          const readAt = this.knownAt.get(id) ?? 0;
+          const interval = this.lastInterval.get(id) ?? 0;
+          // Not due yet, or not hot and its view is under ten minutes old: the last view stands (a claim's status
+          // does not change by itself, and a hot one is read every tick).
+          if (
+            known !== undefined &&
+            ((dueAt !== undefined && this.now() < dueAt) ||
+              (interval > this.config.fastIntervalMs && this.now() - readAt < 600_000))
+          ) {
             claims.set(id, known);
             continue;
           }
@@ -409,6 +419,18 @@ export class Watcher {
     }
   }
 
+  /**
+   * The API says a price was just asked for this claim: look at it on the next tick, whatever its cadence, and list
+   * the claims again (a claim issued a moment ago is not in the cached list). A decided claim stays decided.
+   */
+  poke(tokenId: string): void {
+    const claim = this.knownClaims.get(tokenId);
+    if (claim !== undefined && !isNonTerminal(claim.status)) return;
+    this.dueAt.delete(tokenId);
+    this.lastInterval.delete(tokenId);
+    this.lastDiscoverAt = 0;
+  }
+
   /** One poll. Exposed so tests (and operators) can run a single tick. */
   async tick(): Promise<TickSummary> {
     const nowMs = this.now();
@@ -474,17 +496,18 @@ export class Watcher {
         summary.skipped += 1;
         continue;
       }
+      const finished = !isNonTerminal(claim.status);
       let lastQuote: number | null = null;
       let quoteKnown = true;
-      try {
-        lastQuote = await this.lastQuoteDeadline(claim.token_id);
-      } catch (error) {
-        // Unknown quote age must not hide a payment: keep the hot cadence and process it.
-        this.noteError(error);
-        quoteKnown = false;
+      if (!finished) {
+        try {
+          lastQuote = await this.lastQuoteDeadline(claim.token_id);
+        } catch (error) {
+          // Unknown quote age must not hide a payment: keep the hot cadence and process it.
+          this.noteError(error);
+          quoteKnown = false;
+        }
       }
-
-      const finished = !isNonTerminal(claim.status);
       const interval = quoteKnown
         ? this.intervalFor(lastQuote, nowMs, finished)
         : this.config.fastIntervalMs;
@@ -499,8 +522,12 @@ export class Watcher {
         (Array.isArray(claim.undistributed) && claim.undistributed.length > 0) ||
         lockExpired;
 
-      this.dueAt.set(claim.token_id, nowMs + interval);
+      // A claim that is Paid, Cancelled or Closed is decided for good (the human's rule, 11 Nov): looked at once, then
+      // never again. Money that reaches its account later stays there until someone calls the permissionless `reconcile`.
+      this.dueAt.set(claim.token_id, finished ? Number.POSITIVE_INFINITY : nowMs + interval);
       this.knownClaims.set(claim.token_id, claim);
+      this.knownAt.set(claim.token_id, nowMs);
+      this.lastInterval.set(claim.token_id, interval);
       if (!hasWork) continue;
       if (interval > this.config.fastIntervalMs) summary.slow += 1;
       else summary.fast += 1;

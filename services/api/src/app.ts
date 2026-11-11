@@ -333,6 +333,8 @@ export interface ApiDeps {
   webhookFetch?: (input: string, init?: RequestInit) => Promise<Response>;
   webhookUrlValidator?: (url: string) => Promise<unknown>;
   pokeIndexer?: () => Promise<void>;
+  /** Tell the watcher a price was just asked for this claim, so it looks at it at once (best effort). */
+  pokeWatcher?: (tokenId: string) => Promise<void>;
 }
 
 /** The provider's status word as the API's payment status. A short deposit stays pending: it waits for the rest. */
@@ -1441,6 +1443,7 @@ export class ApiApp {
         });
         this.store.saveOpenQuotes(session.token_id, quotes);
         await this.deps.pokeIndexer?.().catch(() => undefined);
+        await this.deps.pokeWatcher?.(session.token_id).catch(() => undefined);
         return { status: 201, body: session };
       });
     }
