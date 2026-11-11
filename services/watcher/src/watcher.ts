@@ -345,7 +345,9 @@ export class Watcher {
       return c.warmIntervalMs ?? DEFAULT_WARM_INTERVAL_MS;
     }
     if (age <= c.quoteTtlMs) return c.coolIntervalMs ?? DEFAULT_COOL_INTERVAL_MS;
-    return c.slowIntervalMs;
+    // Past the quote TTL the deposit address is inactive (1Click `timeWhenInactive` = deadline + 72 h): nothing can arrive
+    // through that quote any more. Not looked at again until the API says a new price was asked (`poke`).
+    return Number.POSITIVE_INFINITY;
   }
 
   private async processClaim(

@@ -401,7 +401,7 @@ describe("watcher decisions", () => {
     expect(live.near.calls).toHaveLength(0);
   });
 
-  it("drops to a 10-minute cadence after the last quote +72 h", async () => {
+  it("stops looking after the last quote +72 h", async () => {
     const expiredDeadline = NOW / 1000 - 73 * 60 * 60;
     const fixture = setup({
       config: CONFIG_VIEW,
@@ -419,10 +419,11 @@ describe("watcher decisions", () => {
     expect(second.skipped).toBe(1);
     expect(fixture.near.batches).toHaveLength(1);
 
-    fixture.advance(CONFIG.slowIntervalMs);
+    // the deposit address is inactive: no more reads, however long we wait
+    fixture.advance(30 * 24 * 60 * 60 * 1000);
     const third = await fixture.watcher.tick();
-    expect(third.skipped).toBe(0);
-    expect(fixture.near.batches).toHaveLength(2);
+    expect(third.skipped).toBe(1);
+    expect(fixture.near.batches).toHaveLength(1);
   });
 
   it("keeps a hot claim on the 15-second cadence", async () => {
@@ -553,7 +554,7 @@ describe("watcher call volume (11 Nov: the 15 s loop used 7.6M QuickNode credits
     expect(callsOf(fixture.near)).toBeLessThan(150);
   });
 
-  it("a claim idles by the age of its last quote: hot, a minute, five minutes, then the slow cadence", async () => {
+  it("a claim idles by the age of its last quote: hot, a minute, five minutes, then nothing after 72 h", async () => {
     const hours = (h: number) => NOW / 1000 - h * 60 * 60;
     const fixture = setup({
       config: CONFIG_VIEW,
@@ -579,9 +580,9 @@ describe("watcher call volume (11 Nov: the 15 s loop used 7.6M QuickNode credits
     fixture.advance(240_000);
     await fixture.watcher.tick();
     expect(["hot", "warm", "cool", "old"].map(seen)).toEqual([4, 3, 2, 1]);
-    fixture.advance(CONFIG.slowIntervalMs);
+    fixture.advance(7 * 24 * 60 * 60 * 1000);
     await fixture.watcher.tick();
-    expect(seen("old")).toBe(2);
+    expect(seen("old")).toBe(1);
   });
 
   it("a payment on a hot claim is still reconciled on the next tick", async () => {
