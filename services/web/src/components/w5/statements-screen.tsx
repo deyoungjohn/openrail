@@ -12,12 +12,11 @@ import { Card } from "../ui/card";
 import { DateRangeField } from "../ui/date-range-field";
 import { Select } from "../ui/input";
 import { EmptyState } from "../ui/state";
-import { Table, type Column } from "../ui/table";
+import { DataTable, type DataTableColumn } from "../ui/data-table";
 import { ErrorNote } from "@/components/ui/error-note";
 
 type Statement = Awaited<ReturnType<typeof dashClient.statements.get>>;
 
-const PREVIEW_ROWS = 20;
 const monthStart = () => new Date().toISOString().slice(0, 8) + "01";
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -42,11 +41,20 @@ function Result({ s, from, to }: { s: Statement; from: string; to: string }) {
 
   const name = statementFilename(s, from, to);
   const table = s.format === "csv" ? csvToTable(new TextDecoder().decode(bytes)) : null;
-  const columns: Column<string[]>[] = (table?.header ?? []).map((h, i) => ({
-    key: String(i),
-    header: h,
-    render: (row) => row[i] ?? "",
-  }));
+  // Every row is previewed, ten at a time (hard rule); a wide file scrolls sideways instead of cutting its last column.
+  const rows = useMemo(
+    () => (table?.rows ?? []).map((cells, index) => ({ index, cells })),
+    [table],
+  );
+  const columns: DataTableColumn<{ index: number; cells: string[] }>[] = (table?.header ?? []).map(
+    (h, i) => ({
+      id: String(i),
+      header: h,
+      cell: (row) => row.cells[i] ?? "",
+      className: "whitespace-nowrap",
+      headerClassName: "whitespace-nowrap",
+    }),
+  );
 
   return (
     <div className="space-y-4">
@@ -76,17 +84,13 @@ function Result({ s, from, to }: { s: Statement; from: string; to: string }) {
             <EmptyState title={t.emptyTitle} body={t.emptyBody} />
           </div>
         ) : (
-          <>
-            <Table
-              caption={t.previewCaption}
-              columns={columns}
-              rows={table.rows.slice(0, PREVIEW_ROWS)}
-              rowKey={(r) => r.join("|")}
-            />
-            {table.rows.length > PREVIEW_ROWS ? (
-              <p className="caption">{t.previewMore(PREVIEW_ROWS, table.rows.length)}</p>
-            ) : null}
-          </>
+          <DataTable
+            caption={t.previewCaption}
+            columns={columns}
+            data={rows}
+            rowId={(r) => String(r.index)}
+            pageSize={10}
+          />
         )
       ) : (
         <section aria-label={t.previewCaption} className="space-y-2">

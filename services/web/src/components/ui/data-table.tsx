@@ -286,7 +286,8 @@ export function DataTable<T>({
         />
       ) : (
         <>
-          <div className="overflow-x-auto">
+          {/* Focusable so a keyboard can scroll a wide table sideways. */}
+          <div className="overflow-x-auto" tabIndex={0}>
             <table
               className={cn(
                 "w-full min-w-[480px] border-collapse text-left text-[14px]",
