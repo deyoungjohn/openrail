@@ -146,6 +146,7 @@ export class NearClient {
   private readonly cacheMs: number;
   private readonly endpointState = new Map<string, EndpointState>();
   private readonly readCache = new Map<string, { at: number; value: unknown }>();
+  private readonly pendingReads = new Map<string, Promise<unknown>>();
   /** Where the next call starts: the RPC that answered last. */
   private cursor = 0;
   private inFlight = 0;
@@ -507,10 +508,22 @@ export class NearClient {
     const now = Date.now();
     const cached = this.readCache.get(key);
     if (cached !== undefined && now - cached.at < this.cacheMs) return cached.value as T;
-    const result = await this.rpc<{ result: number[] }>("query", params, feature);
-    const bytes = Uint8Array.from(result.result);
-    const value = JSON.parse(new TextDecoder().decode(bytes)) as T;
-    this.readCache.set(key, { at: now, value });
+    const pending = this.pendingReads.get(key);
+    if (pending !== undefined) return pending as Promise<T>;
+    const promise = (async () => {
+      const result = await this.rpc<{ result: number[] }>("query", params, feature);
+      const bytes = Uint8Array.from(result.result);
+      const value = JSON.parse(new TextDecoder().decode(bytes)) as T;
+      this.readCache.set(key, { at: Date.now(), value });
+      return value;
+    })();
+    this.pendingReads.set(key, promise);
+    let value: T;
+    try {
+      value = (await promise) as T;
+    } finally {
+      this.pendingReads.delete(key);
+    }
     if (this.readCache.size > 100) {
       for (const [entry, hit] of this.readCache) {
         if (now - hit.at >= this.cacheMs) this.readCache.delete(entry);

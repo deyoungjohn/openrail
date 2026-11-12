@@ -319,8 +319,7 @@ describe("near client RPC pool health", () => {
     });
     const view = () =>
       client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" });
-    await view();
-    await view();
+    await Promise.all([view(), view(), view(), view(), view()]);
     expect(calls).toBe(1);
   });
 
