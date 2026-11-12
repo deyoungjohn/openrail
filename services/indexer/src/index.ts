@@ -155,6 +155,9 @@ async function main(): Promise<void> {
     logger,
     budget,
     ...(from === undefined ? {} : { from: from.label }),
+    fromSeconds: from?.seconds ?? 0,
+    ...(eventPaths[0] === undefined ? {} : { watcherDbPath: eventPaths[0] }),
+    sourceLabel: eventPaths.length > 0 ? "watcher" : "scan",
   });
   const app = createIndexerApp({
     store,

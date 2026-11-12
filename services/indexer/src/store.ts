@@ -626,6 +626,16 @@ export class IndexerStore {
       );
   }
 
+  /** Sum of booked rows for one claim, the value the watcher's cached view is compared with. */
+  bookedTotal(tokenId: string): bigint {
+    const row = this.db
+      .prepare(
+        "SELECT COALESCE(SUM(CAST(payment AS INTEGER) + CAST(surplus AS INTEGER) + CAST(credit AS INTEGER)), 0) AS total FROM bookings WHERE token_id = ?",
+      )
+      .get(tokenId) as unknown as { total: number | bigint } | undefined;
+    return BigInt(row?.total ?? 0);
+  }
+
   /** Claims and their indexed totals in [fromTs, toTs); one claim when tokenId is given. */
   statementRows(fromTs: number, toTs: number, tokenId?: string): StatementSourceRow[] {
     const claims = (tokenId === undefined
