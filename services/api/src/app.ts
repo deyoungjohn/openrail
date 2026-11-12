@@ -391,6 +391,28 @@ export function paymentStatusOf(
   }
 }
 
+export interface WithdrawPhase {
+  phase: "pending" | "processing" | "success" | "refunded" | "failed";
+  terminal: boolean;
+}
+
+/** Terminal words end the withdrawal; INCOMPLETE_DEPOSIT can still receive the rest. */
+export function withdrawPhaseOf(word: unknown): WithdrawPhase {
+  switch (word) {
+    case "SUCCESS":
+      return { phase: "success", terminal: true };
+    case "REFUNDED":
+      return { phase: "refunded", terminal: true };
+    case "FAILED":
+      return { phase: "failed", terminal: true };
+    case "PROCESSING":
+    case "KNOWN_DEPOSIT_TX":
+      return { phase: "processing", terminal: false };
+    default:
+      return { phase: "pending", terminal: false };
+  }
+}
+
 function nowIso(clock: () => Date): string {
   return clock().toISOString();
 }
@@ -1891,9 +1913,10 @@ export class ApiApp {
       const depositAddress = request.query.get("deposit_address") ?? "";
       if (depositAddress === "")
         throw new ApiError(400, "invalid_request", "deposit_address required");
+      const provider = await this.deps.confidential.withdrawStatus(depositAddress);
       return {
         status: 200,
-        body: await this.deps.confidential.withdrawStatus(depositAddress),
+        body: { ...provider, ...withdrawPhaseOf(provider.status) },
       };
     }
     if (path === "/v1/balance/confidential/session" && method === "POST") {
