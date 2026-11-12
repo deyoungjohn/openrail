@@ -75,7 +75,7 @@ function CheckoutCard({
   const chip: Status | null = paid
     ? { kind: "paid" }
     : partial
-      ? { kind: "partial", due: `$${formatToken(effectiveCheckout.outstanding, 6)}` }
+      ? { kind: "partial", due: `$${formatToken(effectiveCheckout.outstanding, 6, "up")}` }
       : effectiveCheckout.status === "late" || effectiveCheckout.status === "needs_attention"
         ? { kind: "late" }
         : effectiveCheckout.status === "expired"

@@ -132,7 +132,7 @@ export function checkoutStatusLabel(checkout: PublicCheckout): string {
     case "accepted":
       return checkoutCopy.paidTitle;
     case "partial":
-      return checkoutCopy.partialTitle(`$${formatToken(checkout.outstanding, 6)}`);
+      return checkoutCopy.partialTitle(`$${formatToken(checkout.outstanding, 6, "up")}`);
     case "late":
       return checkoutCopy.lateTitle;
     case "needs_attention":
@@ -184,7 +184,7 @@ export function checkoutLiveBanner(
     return { kind: "waiting", title: checkoutCopy.checkingTitle, body: checkoutCopy.checkingBody };
   }
   if (checkout.status === "partial") {
-    const due = `$${formatToken(checkout.outstanding, 6)}`;
+    const due = `$${formatToken(checkout.outstanding, 6, "up")}`;
     const paid = `$${formatToken(checkout.paid_total, 6)}`;
     return {
       kind: "partial",
