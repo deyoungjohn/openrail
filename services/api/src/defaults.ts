@@ -206,6 +206,9 @@ export function createContractPort(rootAccount: string): ContractPort {
     async txStatus(txHash, senderId) {
       return near.txStatus(txHash, senderId);
     },
+    rpcHealth() {
+      return near.rpcHealth();
+    },
     async intentsHasPublicKey(accountId, publicKey) {
       return (
         (await near.view<boolean>({

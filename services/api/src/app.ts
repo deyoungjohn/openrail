@@ -88,6 +88,13 @@ export interface ContractPort {
   txStatus?(txHash: string, senderId: string): Promise<"success" | "failed" | "pending">;
   /** `has_public_key` on intents.near: a withdrawal signed by an unregistered key ends FAILED. */
   intentsHasPublicKey?(accountId: string, publicKey: string): Promise<boolean>;
+  /** RPC pool visibility for /health. */
+  rpcHealth?(): {
+    host: string;
+    state: "ok" | "cooling";
+    last_error: string | null;
+    calls_last_hour: number;
+  }[];
 }
 
 export interface IssuerPort {
@@ -1153,7 +1160,16 @@ export class ApiApp {
   private async route(request: ApiRequest): Promise<ApiResponse> {
     const { method, path } = request;
     if (method === "GET" && path === "/v1/health") {
-      return { status: 200, body: { ok: true, mock: false } };
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          mock: false,
+          ...(this.deps.contract.rpcHealth === undefined
+            ? {}
+            : { rpc_endpoints: this.deps.contract.rpcHealth() }),
+        },
+      };
     }
     if (method === "GET" && path === "/v1/openapi.json") {
       return { status: 200, body: this.deps.spec ?? {} };

@@ -89,6 +89,7 @@ describe("statement PDF", () => {
     expect((raw.match(/\(PAYMENTS\) Tj/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(raw.split("DATE \\(UTC\\)").length - 1).toBeGreaterThanOrEqual(2);
     expect((raw.match(/\(Powered by\) Tj/g) ?? []).length).toBe(pages);
+    expect(raw).not.toContain("(continued)");
     expect((raw.match(/\(Total received\) Tj/g) ?? []).length).toBe(1);
   });
 
