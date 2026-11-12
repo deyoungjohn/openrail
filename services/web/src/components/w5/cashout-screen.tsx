@@ -18,7 +18,7 @@ import { useNear } from "@/wallet/near";
 import { useAuth } from "../auth/auth-provider";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
-import { CHAINS, type ChainId } from "../ui/chain-badge";
+import { CHAINS, ChainIcon, CoinIcon, PairIcon, WithIcon, type ChainId } from "../ui/chain-badge";
 import { Countdown } from "../ui/countdown";
 import { Input, Select } from "../ui/input";
 import { RangeSlider } from "../ui/range-slider";
@@ -312,7 +312,17 @@ export function CashoutScreen() {
                         disabled={busy}
                       >
                         {DESTINATIONS.map((c) => (
-                          <option key={c} value={c}>
+                          <option
+                            key={c}
+                            value={c}
+                            data-icon={
+                              c === "confidential" ? (
+                                <CoinIcon asset="USDC" />
+                              ) : (
+                                <ChainIcon chain={c as ChainId} />
+                              )
+                            }
+                          >
                             {c === "confidential" ? t.privateBalance : CHAINS[c]}
                           </option>
                         ))}
@@ -374,10 +384,19 @@ export function CashoutScreen() {
                           <div>
                             <dt className="caption">{t.youReceive}</dt>
                             <dd className="tabular text-[18px] font-semibold">
-                              {formatToken(quote.amount_out, 6)} USDC{" "}
-                              <span className="text-[15px] font-normal text-muted">
-                                {isPrivate ? t.onPrivate : t.on(CHAINS[chain as ChainId])}
-                              </span>
+                              <WithIcon
+                                icon={
+                                  <PairIcon
+                                    asset="USDC"
+                                    chain={isPrivate ? "near" : (chain as ChainId)}
+                                  />
+                                }
+                              >
+                                {formatToken(quote.amount_out, 6)} USDC{" "}
+                                <span className="text-[15px] font-normal text-muted">
+                                  {isPrivate ? t.onPrivate : t.on(CHAINS[chain as ChainId])}
+                                </span>
+                              </WithIcon>
                             </dd>
                           </div>
                           <div className="sm:col-span-2">

@@ -165,6 +165,7 @@ export function Select({
   const options = Children.toArray(children).filter(isValidElement) as ReactElement<{
     value?: string;
     children?: ReactNode;
+    "data-icon"?: ReactNode;
   }>[];
   return (
     <Frame id={id} floated {...{ label, helper, error, icon, loading }}>
@@ -184,7 +185,11 @@ export function Select({
         </SelectTrigger>
         <SelectContent>
           {options.map((o) => (
-            <SelectItem key={o.props.value ?? ""} value={o.props.value ?? ""}>
+            <SelectItem
+              key={o.props.value ?? ""}
+              value={o.props.value ?? ""}
+              icon={o.props["data-icon"]}
+            >
               {o.props.children as string}
             </SelectItem>
           ))}

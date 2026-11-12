@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 import { tokenLabel, unitsToCents, type CashoutRow } from "@/lib/cashout";
 import { formatUsd } from "@/lib/format";
 import { AddressChip } from "../ui/address-chip";
-import type { ChainId } from "../ui/chain-badge";
+import { ChainIcon, CoinIcon, WithIcon, type ChainId } from "../ui/chain-badge";
 import { DataTable, type DataTableColumn } from "../ui/data-table";
 
 const day = (iso: string): string => {
@@ -104,7 +104,17 @@ export function CashoutHistory({
           <div>
             <dt className="caption">{t.chain}</dt>
             <dd>
-              {r.destination_chain === "confidential" ? t.privateBalance : r.destination_chain}
+              <WithIcon
+                icon={
+                  r.destination_chain === "confidential" ? (
+                    <CoinIcon asset="USDC" />
+                  ) : (
+                    <ChainIcon chain={r.destination_chain as ChainId} />
+                  )
+                }
+              >
+                {r.destination_chain === "confidential" ? t.privateBalance : r.destination_chain}
+              </WithIcon>
             </dd>
           </div>
           <div>

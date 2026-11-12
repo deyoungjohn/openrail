@@ -4,7 +4,7 @@ import type { Route } from "@openrail/api-client";
 import { useEffect, useState } from "react";
 import { copy } from "@/copy";
 import { chainOfRoute } from "@/lib/pay";
-import { CHAINS } from "../ui/chain-badge";
+import { CHAINS, ChainIcon, CoinIcon } from "../ui/chain-badge";
 import { Select } from "../ui/input";
 
 /**
@@ -44,7 +44,7 @@ export function RouteSelects({
         }}
       >
         {assets.map((a) => (
-          <option key={a} value={a}>
+          <option key={a} value={a} data-icon={<CoinIcon asset={a} />}>
             {a}
           </option>
         ))}
@@ -56,7 +56,11 @@ export function RouteSelects({
           onValueChange={onPick}
         >
           {chains.map((r) => (
-            <option key={r.id} value={r.id}>
+            <option
+              key={r.id}
+              value={r.id}
+              data-icon={<ChainIcon chain={chainOfRoute(r) ?? "base"} />}
+            >
               {CHAINS[chainOfRoute(r) ?? "base"]}
             </option>
           ))}

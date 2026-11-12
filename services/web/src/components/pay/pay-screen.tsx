@@ -41,7 +41,7 @@ import { Button } from "../ui/button";
 import dynamic from "next/dynamic";
 import { PageSkeleton } from "../ui/page-skeleton";
 import { Card } from "../ui/card";
-import { CHAINS } from "../ui/chain-badge";
+import { CHAINS, PairIcon, WithIcon } from "../ui/chain-badge";
 import { HistoryCard } from "./history-card";
 import { InvoiceCard } from "./invoice-card";
 import { PaymentDialog } from "./payment-dialog";
@@ -192,8 +192,12 @@ function QuoteNote({
         <div>
           <dt className="caption">{upto ? p.youSendUpTo : p.youSendExact}</dt>
           <dd className="tabular text-[28px] leading-[1.1] font-bold">
-            {amountOf(session, route)} {route.payer_asset}{" "}
-            <span className="text-[15px] font-normal text-muted">{p.on(chainName)}</span>
+            <WithIcon
+              icon={<PairIcon asset={route.payer_asset} chain={chain ?? "near"} size={32} />}
+            >
+              {amountOf(session, route)} {route.payer_asset}{" "}
+              <span className="text-[15px] font-normal text-muted">{p.on(chainName)}</span>
+            </WithIcon>
           </dd>
         </div>
         <div>

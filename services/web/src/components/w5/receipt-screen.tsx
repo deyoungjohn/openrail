@@ -13,7 +13,7 @@ import { ErrorNote } from "../ui/error-note";
 import { AddressChip } from "../ui/address-chip";
 import { Card } from "../ui/card";
 import { PageSkeleton } from "../ui/page-skeleton";
-import { CHAINS } from "../ui/chain-badge";
+import { CHAINS, ChainIcon, WithIcon } from "../ui/chain-badge";
 import { EmptyState, ErrorState } from "../ui/state";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -124,7 +124,13 @@ export function ReceiptScreen({ hash }: { hash: string }) {
       {origin ? (
         <Card title={t.origin}>
           <dl>
-            <Row label={t.chain}>{chainName}</Row>
+            <Row label={t.chain}>
+              {chain ? (
+                <WithIcon icon={<ChainIcon chain={chain} />}>{chainName}</WithIcon>
+              ) : (
+                chainName
+              )}
+            </Row>
             {origin.sender ? (
               <Row label={t.sender}>
                 <AddressChip value={origin.sender} chain={chain ?? undefined} />

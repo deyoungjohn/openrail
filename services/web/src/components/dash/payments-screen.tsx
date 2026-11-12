@@ -1,7 +1,7 @@
 "use client";
 
 import { copy } from "@/copy";
-import { CHAINS, type ChainId } from "@/components/ui/chain-badge";
+import { CHAINS, ChainIcon, WithIcon, type ChainId } from "@/components/ui/chain-badge";
 import { AddressChip } from "@/components/ui/address-chip";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { Earning } from "@/lib/earnings";
@@ -72,7 +72,15 @@ export function PaymentsScreen() {
             </div>
             <div>
               <dt className="caption">{t.network}</dt>
-              <dd>{CHAINS[e.chain as ChainId] ?? e.chain}</dd>
+              <dd>
+                {CHAINS[e.chain as ChainId] ? (
+                  <WithIcon icon={<ChainIcon chain={e.chain as ChainId} />}>
+                    {CHAINS[e.chain as ChainId]}
+                  </WithIcon>
+                ) : (
+                  e.chain
+                )}
+              </dd>
             </div>
             <div>
               <dt className="caption">{t.invoice}</dt>
