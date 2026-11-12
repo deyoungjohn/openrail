@@ -58,11 +58,12 @@ describe("formatUsdc rounds a sub-cent amount up to the next cent (summaries)", 
   });
 });
 
-describe("formatUsdcExact keeps every digit (what a person signs, and claim counters)", () => {
-  it("shows whole cents as dollars and sub-cent USDC with all 6 decimals", () => {
+describe("formatUsdcExact: two decimals, rounded half up (hard rule, 12 Nov)", () => {
+  it("shows dollars and cents, never six decimals", () => {
     expect(formatUsdcExact(1_250_000_000n)).toBe("$1,250.00");
-    expect(formatUsdcExact(1_000_137n)).toBe("$1.000137");
-    expect(formatUsdcExact(4_987_500n)).toBe("$4.987500");
+    expect(formatUsdcExact(1_000_137n)).toBe("$1.00");
+    expect(formatUsdcExact(4_987_500n)).toBe("$4.99");
+    expect(formatUsdcExact(999_999n)).toBe("$1.00");
   });
 });
 

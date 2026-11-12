@@ -61,7 +61,7 @@ function Delta({ pct }: { pct: number }) {
       <Icon size={14} strokeWidth={1.5} aria-hidden />
       <span className="tabular">
         {up ? "+" : ""}
-        {pct.toFixed(1)}%
+        {pct.toFixed(2)}%
       </span>
     </span>
   );

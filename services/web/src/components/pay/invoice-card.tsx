@@ -69,7 +69,7 @@ export function InvoiceCard({
       <div className="border-y border-border bg-surface-2/40 px-5 py-5 sm:px-6">
         <p className="caption">{partial ? p.stillDue : paid ? p.amountPaid : p.amountDue}</p>
         <p className="tabular text-[40px] leading-[1.1] font-bold">
-          {paid ? `$${c.amount_usd}` : `$${formatToken(c.outstanding, 6)}`}
+          {paid ? `$${c.amount_usd}` : `$${formatToken(c.outstanding, 6, "up")}`}
         </p>
         {partial ? (
           <p className="caption mt-1">
