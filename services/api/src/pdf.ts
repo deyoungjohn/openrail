@@ -798,13 +798,10 @@ function drawStatementTableHeader(builder: StatementBuilder, kind: "payments" | 
   line(builder, SMARGIN, builder.y, SRIGHT, builder.y, 0.6, "0.82 0.82 0.82");
 }
 
-function ensureStatementSpace(
-  builder: StatementBuilder,
-  needed: number,
-  continuation: string,
-): void {
-  if (builder.y - needed >= SMARGIN + 64) return;
-  sBeginPage(builder, continuation);
+function ensureStatementSpace(builder: StatementBuilder, needed: number): boolean {
+  if (builder.y - needed >= SMARGIN + 64) return false;
+  sBeginPage(builder, null);
+  return true;
 }
 
 function drawStatementTable(
@@ -814,19 +811,16 @@ function drawStatementTable(
   totalLabel: string,
   emptyText: string,
 ): void {
-  const continuation =
-    kind === "payments" ? "Settled Payments (continued)" : "Cash-outs (continued)";
-  ensureStatementSpace(builder, 80, continuation);
+  ensureStatementSpace(builder, 80);
   drawStatementTableHeader(builder, kind);
   if (rows.length === 0) {
-    ensureStatementSpace(builder, SROW_H + 18, continuation);
+    if (ensureStatementSpace(builder, SROW_H + 18)) drawStatementTableHeader(builder, kind);
     text(builder, SMARGIN + 8, builder.y - 13, 9, "/F1", GRAY, emptyText);
     builder.y -= SROW_H;
     line(builder, SMARGIN, builder.y, SRIGHT, builder.y, 0.35, "0.82 0.82 0.82");
   }
   for (const [index, row] of rows.entries()) {
-    ensureStatementSpace(builder, SROW_H + 12, continuation);
-    if (builder.y === SPAGE_HEIGHT - SMARGIN - 22) drawStatementTableHeader(builder, kind);
+    if (ensureStatementSpace(builder, SROW_H + 12)) drawStatementTableHeader(builder, kind);
     const y = builder.y - 13;
     text(builder, SMARGIN + 8, y, 8, "/F1", INK, String(index + 1));
     text(builder, SMARGIN + 40, y, 8, "/F1", INK, statementDate(row.date));
@@ -843,7 +837,7 @@ function drawStatementTable(
     builder.y -= SROW_H;
     line(builder, SMARGIN, builder.y, SRIGHT, builder.y, 0.35, "0.88 0.88 0.88");
   }
-  ensureStatementSpace(builder, 26, continuation);
+  if (ensureStatementSpace(builder, 26)) drawStatementTableHeader(builder, kind);
   const y = builder.y - 13;
   text(builder, SMARGIN + 8, y, 9, "/F2", INK, totalLabel);
   text(builder, SRIGHT - 8, y, 9, "/F2", ACCENT, totalText(rows), "right");
@@ -856,7 +850,12 @@ function drawStatementFooter(builder: StatementBuilder, page: number, total: num
   const baseline = SFOOTER_Y + 8;
   text(builder, SMARGIN, baseline, 7, "/F1", GRAY, "Powered by");
   // The wordmark sits on the text baseline and stays above the rule.
-  drawWordmark(builder, SMARGIN + 50, baseline - 3, 0.035);
+  drawWordmark(
+    builder,
+    SMARGIN + measureTextWidth("/F1", "Powered by", 7) + 4,
+    baseline - 3,
+    0.035,
+  );
   text(builder, SRIGHT - 40, baseline, 8, "/F1", GRAY, `${page} / ${total}`, "right");
   line(builder, SMARGIN, SFOOTER_Y - 4, SRIGHT, SFOOTER_Y - 4, 0.35, "0.86 0.86 0.86");
 }
@@ -971,7 +970,7 @@ export function renderStatementPdf(document: StatementDocument): Uint8Array {
     "Total cashed out",
     "None in this period",
   );
-  ensureStatementSpace(builder, 32, "Statement (continued)");
+  ensureStatementSpace(builder, 32);
   let receivedUnits = 0n;
   for (const row of document.payments) receivedUnits += baseUnits(row.amount);
   let cashedUnits = 0n;
@@ -980,7 +979,7 @@ export function renderStatementPdf(document: StatementDocument): Uint8Array {
   text(builder, SMARGIN, builder.y, 12, "/F2", INK, "Left in balance:");
   text(builder, SRIGHT, builder.y, 12, "/F2", ACCENT, usdText(leftUnits.toString()), "right");
   builder.y -= 46;
-  ensureStatementSpace(builder, 66, "Statement (continued)");
+  ensureStatementSpace(builder, 66);
   text(builder, SMARGIN, builder.y, 7, "/F1", GRAY, `Fingerprint: ${document.fingerprint}`);
   builder.y -= 12;
   text(
