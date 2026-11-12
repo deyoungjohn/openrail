@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { copy } from "@/copy";
 import { AddressChip } from "../ui/address-chip";
 import type { ChainId } from "../ui/chain-badge";
@@ -55,6 +56,14 @@ export function HistoryCard({ claim: c }: { claim: PayClaim }) {
                 }
                 tx
               />
+              {(pay as { receipt?: boolean }).receipt ? (
+                <Link
+                  href={`/r/${encodeURIComponent(pay.tx_hash)}`}
+                  className="text-accent-text mt-1 inline-block text-[14px] hover:underline"
+                >
+                  {p.viewReceipt}
+                </Link>
+              ) : null}
             </dd>
           </div>
         ))}

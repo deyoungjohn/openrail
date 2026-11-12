@@ -107,8 +107,7 @@ test.describe("loading: a skeleton while the answer is on its way, never a blank
       } as never,
     });
     await page.goto("/app/statements");
-    await page.getByLabel("From", { exact: true }).fill("2026-11-01");
-    await page.getByLabel("To", { exact: true }).fill("2026-11-30");
+    // The period has a default (this month): no need to pick one.
     await page.getByRole("button", { name: /Get statement|Preparing/ }).click();
     await expect(page.getByRole("button", { name: "Preparing your statement" })).toHaveAttribute(
       "aria-busy",

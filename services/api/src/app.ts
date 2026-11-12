@@ -189,7 +189,7 @@ export interface PublicHistory {
   issued_at: string;
   issue_tx: string | null;
   paid_at: string | null;
-  payments: { tx_hash: string; near: boolean; chain?: string }[];
+  payments: { tx_hash: string; near: boolean; chain?: string; receipt?: boolean }[];
 }
 
 /** What is kept for good about an invoice that can no longer change. */
@@ -704,7 +704,7 @@ export class ApiApp {
     } catch {
       // The history is extra: a failing lookup never takes the pay page down.
     }
-    const payments: { tx_hash: string; near: boolean; chain?: string }[] = [];
+    const payments: { tx_hash: string; near: boolean; chain?: string; receipt?: boolean }[] = [];
     let paidAt: string | null = null;
     for (const r of receipts) {
       const originTx = r.origin_tx as { hash?: unknown; chain?: unknown } | null | undefined;
@@ -717,10 +717,16 @@ export class ApiApp {
         });
       if (Array.isArray(r.near_tx_hashes))
         for (const h of r.near_tx_hashes)
-          if (typeof h === "string") payments.push({ tx_hash: h, near: true });
+          if (typeof h === "string")
+            payments.push({
+              tx_hash: h,
+              near: true,
+              // the booking transaction is the one the receipt is found by
+              ...(h === r.booking_tx ? { receipt: true } : {}),
+            });
       // The booking transaction on NEAR is always there, whatever the provider's evidence says.
       if (typeof r.booking_tx === "string" && !payments.some((x) => x.tx_hash === r.booking_tx))
-        payments.push({ tx_hash: r.booking_tx, near: true });
+        payments.push({ tx_hash: r.booking_tx, near: true, receipt: true });
       if (typeof r.time === "string" && (paidAt === null || r.time > paidAt)) paidAt = r.time;
     }
     let issueTx = invoice.issue_tx ?? null;

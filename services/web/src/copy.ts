@@ -353,6 +353,7 @@ export const copy = {
     sendOnly: (asset: string, chain: string) =>
       `Send only ${asset} on ${chain}. Anything else may be lost.`,
     timeLeft: "Time left",
+    viewReceipt: "View receipt",
     walletPay: (amount: string) => `Pay ${amount} from my wallet`,
     walletConnect: "Connect a wallet to pay from it",
     walletSent: "Sent. Waiting for it to arrive:",
@@ -761,6 +762,8 @@ export const copy = {
   },
   receipt: {
     title: "Payment receipt",
+    downloadPdf: "Download PDF",
+    pdfFailed: "We couldn't make the PDF. Try again.",
     paid: "Paid",
     at: "Paid at",
     invoice: "Invoice",

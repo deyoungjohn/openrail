@@ -307,17 +307,20 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
         },
       ]}
       emptyState={{ title: d.activityEmpty, body: d.activityEmptyBody }}
-      rowActions={(r) => (
-        <Tooltip label="Receipt" side="left">
-          <Link
-            href={`/r/${encodeURIComponent(r.txHash)}`}
-            aria-label={`Receipt for ${r.product}`}
-            className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text"
-          >
-            <Receipt aria-hidden size={16} />
-          </Link>
-        </Tooltip>
-      )}
+      rowActions={(r) =>
+        // A payment without a booking transaction has no receipt page: no link (it led to /r/undefined).
+        !r.txHash || r.txHash === "undefined" ? null : (
+          <Tooltip label="Receipt" side="left">
+            <Link
+              href={`/r/${encodeURIComponent(r.txHash)}`}
+              aria-label={`Receipt for ${r.product}`}
+              className="grid size-8 place-items-center rounded-xl text-muted transition-colors hover:bg-row hover:text-text"
+            >
+              <Receipt aria-hidden size={16} />
+            </Link>
+          </Tooltip>
+        )
+      }
     />
   );
 }

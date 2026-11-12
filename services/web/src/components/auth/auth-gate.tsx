@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { copy } from "@/copy";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
+import { PageSkeleton } from "../ui/page-skeleton";
 import { ErrorState } from "../ui/state";
 import { useAuth } from "./auth-provider";
 import { ErrorNote } from "@/components/ui/error-note";
@@ -13,7 +13,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const { state, signIn, hint, cancelSignIn, retry } = useAuth();
   const [busy, setBusy] = useState(false);
 
-  if (state.status === "loading") return <Card state="loading" />;
+  if (state.status === "loading") return <PageSkeleton />;
   if (state.status === "error")
     return (
       <div className="surface-card">

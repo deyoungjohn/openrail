@@ -1571,6 +1571,10 @@
                   "type": "string",
                   "description": "The chain of an origin transaction (base, arbitrum, solana ...). Absent for NEAR transactions."
                 },
+                "receipt": {
+                  "type": "boolean",
+                  "description": "True for the booking transaction: the receipt is found by this hash."
+                },
                 "near": {
                   "type": "boolean"
                 }
@@ -1719,6 +1723,10 @@
                 "chain": {
                   "type": "string",
                   "description": "The chain of an origin transaction (base, arbitrum, solana ...). Absent for NEAR transactions."
+                },
+                "receipt": {
+                  "type": "boolean",
+                  "description": "True for the booking transaction: the receipt is found by this hash."
                 },
                 "near": {
                   "type": "boolean"
