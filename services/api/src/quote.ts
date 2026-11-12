@@ -90,7 +90,7 @@ export interface PaySession {
   spread_bps: number;
   claim_account: string;
   terms_hash: string;
-  status: "pending_deposit";
+  status: "pending_deposit" | "processing" | "success" | "refunded" | "failed" | "expired";
   created_at: string;
 }
 

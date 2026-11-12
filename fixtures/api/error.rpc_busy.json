@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "rpc_busy",
+    "message": "The NEAR RPC is busy; retry shortly",
+    "retry_after": 60
+  }
+}
