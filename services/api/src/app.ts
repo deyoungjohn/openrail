@@ -1512,6 +1512,22 @@ export class ApiApp {
       const invoice = this.invoiceBy(paySessionsOfMatch[1] ?? "");
       return { status: 200, body: { data: this.store.listPaySessions(invoice.token_id) } };
     }
+    // The payer's wallet sent the deposit: pass its hash on to the provider so it is seen at once. Best effort, and
+    // the hash is only ever passed with this session's own deposit address.
+    const depositNudgeMatch = /^\/v1\/pay\/sessions\/([^/]+)\/deposit$/.exec(path);
+    if (depositNudgeMatch !== null && method === "POST") {
+      const session = this.store.getPaySession(depositNudgeMatch[1] ?? "");
+      if (session === undefined) throw new ApiError(404, "pay_session_not_found");
+      const txHash = (request.body as { tx_hash?: unknown } | undefined)?.tx_hash;
+      if (typeof txHash !== "string" || !/^[0-9A-Za-z]{20,128}$/.test(txHash.replace(/^0x/, "")))
+        throw new ApiError(400, "invalid_request", "tx_hash required");
+      try {
+        await this.quotes.submitDeposit(txHash, session.deposit_address);
+      } catch {
+        /* the provider will find it by itself, a little later */
+      }
+      return { status: 200, body: { ok: true } };
+    }
     const paySessionMatch = /^\/v1\/pay\/sessions\/([^/]+)$/.exec(path);
     if (paySessionMatch !== null && method === "GET") {
       const session = this.store.getPaySession(paySessionMatch[1] ?? "");

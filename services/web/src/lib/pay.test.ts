@@ -213,6 +213,19 @@ describe("hashStrings", () => {
   });
 });
 
+describe("payUnits for an 18-decimal stablecoin (USDT on BNB Chain)", () => {
+  it("rounds UP to six decimals, never shows 18, never sends less than the price", () => {
+    const price = "2008958170371703903"; // 2.008958170371703903
+    const sent = payUnits(price, 18, "USDT");
+    expect(sent).toBe("2008959000000000000");
+    expect(formatToken(sent, 18)).toBe("2.008959");
+    expect(BigInt(sent)).toBeGreaterThanOrEqual(BigInt(price));
+  });
+  it("a 6-decimal stablecoin is unchanged", () => {
+    expect(payUnits("10042765", 6, "USDT")).toBe("10042765");
+  });
+});
+
 describe("payUnits", () => {
   it("rounds an ETH quote up to six decimals, so a wallet can enter it and it never falls short", () => {
     expect(payUnits("1348354311809600", 18, "ETH")).toBe("1349000000000000");

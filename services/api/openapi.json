@@ -2711,7 +2711,7 @@
           "invoice_number_prefix": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{1,32}$",
-            "description": "Invoices are numbered <prefix>-001, <prefix>-002, …"
+            "description": "Invoices are numbered <prefix>-001, <prefix>-002, \u2026"
           },
           "issuer_legal_name": {
             "type": "string"
@@ -3444,6 +3444,15 @@
       "ConfidentialWithdrawStatus": {
         "type": "object",
         "additionalProperties": true
+      },
+      "PayDepositNudge": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        }
       }
     }
   },
@@ -6196,7 +6205,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "Recurring template id (rec_…).",
+            "description": "Recurring template id (rec_\u2026).",
             "schema": {
               "type": "string"
             }
@@ -6263,7 +6272,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "Recurring template id (rec_…).",
+            "description": "Recurring template id (rec_\u2026).",
             "schema": {
               "type": "string"
             }
@@ -7124,6 +7133,74 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pay/sessions/{id}/deposit": {
+      "post": {
+        "operationId": "nudgePayDeposit",
+        "summary": "Tell the provider about the deposit transaction",
+        "description": "The payer's wallet sent the deposit; the hash is passed to the provider so the page's status ticks sooner. Best effort.",
+        "tags": ["Pay"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Pay session id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tx_hash"],
+                "properties": {
+                  "tx_hash": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Passed on (or the provider will find it itself).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayDepositNudge"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
             "content": {
               "application/json": {
                 "schema": {
