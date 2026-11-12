@@ -100,7 +100,10 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
       const generated = (await dashClient.confidential.withdrawIntent(quote.depositAddress)) as {
         intent: WithdrawIntent;
       };
-      checkIntent(generated.intent);
+      checkIntent(generated.intent, {
+        depositAddress: quote.depositAddress,
+        accountId: near.accountId,
+      });
       const p = generated.intent.payload;
       const signed = await near.signMessage({
         message: p.message,

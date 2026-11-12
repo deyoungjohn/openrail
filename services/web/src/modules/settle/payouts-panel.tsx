@@ -179,3 +179,16 @@ export function PayoutsPanel() {
     </div>
   );
 }
+
+/** The Payouts tab of Settings: just the two settings (the private balance on or off, and the schedule). */
+export function PayoutSettingsPanel() {
+  const auth = useAuth();
+  return (
+    <div className="space-y-6">
+      {auth.state.status === "signedIn" ? (
+        <PrivateBalanceCard accountId={auth.state.accountId} />
+      ) : null}
+      <ScheduleCard />
+    </div>
+  );
+}

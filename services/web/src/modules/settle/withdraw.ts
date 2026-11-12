@@ -50,8 +50,52 @@ export function signedIntent(
   };
 }
 
-/** What the merchant is shown before signing: refuse a payload that is not for the intents contract. */
-export function checkIntent(intent: WithdrawIntent): void {
-  if (intent.standard !== "nep413") throw new Error("UNEXPECTED_INTENT_STANDARD");
-  if (intent.payload.recipient !== "intents.near") throw new Error("UNEXPECTED_INTENT_RECIPIENT");
+/** The contracts a withdraw intent may be addressed to: the public intents contract and the confidential one. */
+const INTENT_CONTRACTS = new Set(["intents.near", "intents.far"]);
+
+/** Every `receiver_id` / `receiver` value anywhere in the signed message (its shape is the provider's). */
+export function receiversOf(message: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(message);
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (v !== null && typeof v === "object")
+      for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+        if ((k === "receiver_id" || k === "receiver") && typeof x === "string") out.push(x);
+        else walk(x);
+      }
+  };
+  walk(parsed);
+  return out;
+}
+
+/**
+ * Before the wallet signs: the payload must be a NEP-413 message for an intents contract, signed by this merchant, and
+ * every receiver inside it must be the deposit address of the quote just shown. A payload that sends the money anywhere
+ * else is refused. The error names the value that failed, so a surprise (the 12 Nov one was a recipient) is readable.
+ */
+export function checkIntent(
+  intent: WithdrawIntent,
+  expect?: { depositAddress: string; accountId?: string | null },
+): void {
+  if (intent.standard !== "nep413")
+    throw new Error(`UNEXPECTED_INTENT_STANDARD:${intent.standard}`);
+  if (!INTENT_CONTRACTS.has(intent.payload.recipient))
+    throw new Error(`UNEXPECTED_INTENT_RECIPIENT:${intent.payload.recipient}`);
+  if (expect === undefined) return;
+  for (const receiver of receiversOf(intent.payload.message))
+    if (receiver.toLowerCase() !== expect.depositAddress.toLowerCase())
+      throw new Error(`UNEXPECTED_INTENT_RECEIVER:${receiver.slice(0, 20)}`);
+  try {
+    const signer = (JSON.parse(intent.payload.message) as { signer_id?: unknown }).signer_id;
+    if (typeof signer === "string" && expect.accountId && signer !== expect.accountId)
+      throw new Error(`UNEXPECTED_INTENT_SIGNER:${signer.slice(0, 20)}`);
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("UNEXPECTED_")) throw e;
+  }
 }

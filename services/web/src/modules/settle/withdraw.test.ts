@@ -38,13 +38,35 @@ describe("the intent", () => {
       signature: "ed25519:sig",
     });
   });
-  it("refuses an intent for another contract or standard", () => {
+  it("accepts the public and the confidential intents contract, refuses any other, and names the value", () => {
+    expect(() => checkIntent(intent)).not.toThrow();
+    expect(() =>
+      checkIntent({ ...intent, payload: { ...intent.payload, recipient: "intents.far" } }),
+    ).not.toThrow();
     expect(() =>
       checkIntent({ ...intent, payload: { ...intent.payload, recipient: "evil.near" } }),
-    ).toThrow("UNEXPECTED_INTENT_RECIPIENT");
+    ).toThrow("UNEXPECTED_INTENT_RECIPIENT:evil.near");
     expect(() => checkIntent({ ...intent, standard: "erc191" })).toThrow(
-      "UNEXPECTED_INTENT_STANDARD",
+      "UNEXPECTED_INTENT_STANDARD:erc191",
     );
-    expect(() => checkIntent(intent)).not.toThrow();
+  });
+
+  it("refuses a message that sends the money anywhere but the deposit address of the quote", () => {
+    const message = JSON.stringify({
+      signer_id: "me.near",
+      intents: [{ intent: "transfer", receiver_id: "dep123" }],
+    });
+    const ok = { ...intent, payload: { ...intent.payload, message } };
+    expect(() => checkIntent(ok, { depositAddress: "dep123", accountId: "me.near" })).not.toThrow();
+    const stolen = {
+      ...intent,
+      payload: { ...intent.payload, message: message.replace("dep123", "thief.near") },
+    };
+    expect(() => checkIntent(stolen, { depositAddress: "dep123" })).toThrow(
+      "UNEXPECTED_INTENT_RECEIVER:thief.near",
+    );
+    expect(() => checkIntent(ok, { depositAddress: "dep123", accountId: "someone.near" })).toThrow(
+      "UNEXPECTED_INTENT_SIGNER:me.near",
+    );
   });
 });
