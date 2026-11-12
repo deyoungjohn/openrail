@@ -854,10 +854,12 @@ function drawStatementTable(
 }
 
 function drawStatementFooter(builder: StatementBuilder, page: number, total: number): void {
-  text(builder, SMARGIN, SFOOTER_Y + 16, 7, "/F1", GRAY, "Powered by");
-  drawWordmark(builder, SMARGIN + 48, SFOOTER_Y + 10, 0.075);
-  text(builder, SRIGHT, SFOOTER_Y + 36, 8, "/F1", GRAY, `${page} / ${total}`, "right");
-  line(builder, SMARGIN, SFOOTER_Y + 25, SRIGHT, SFOOTER_Y + 25, 0.35, "0.86 0.86 0.86");
+  const baseline = SFOOTER_Y + 8;
+  text(builder, SMARGIN, baseline, 7, "/F1", GRAY, "Powered by");
+  // The wordmark sits on the text baseline and stays above the rule.
+  drawWordmark(builder, SMARGIN + 50, baseline - 3, 0.035);
+  text(builder, SRIGHT - 40, baseline, 8, "/F1", GRAY, `${page} / ${total}`, "right");
+  line(builder, SMARGIN, SFOOTER_Y - 4, SRIGHT, SFOOTER_Y - 4, 0.35, "0.86 0.86 0.86");
 }
 
 function drawWordmarkPath(

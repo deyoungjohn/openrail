@@ -335,6 +335,51 @@ describe("near client retry and failover", () => {
 });
 
 describe("near client signing", () => {
+  it("reads the outcome when the send response timed out", async () => {
+    const keyPair = KeyPair.fromRandom("ed25519");
+    process.env.OPENRAIL_NEAR_TEST_ACCOUNT = "issuer.test.near";
+    process.env.OPENRAIL_NEAR_TEST_KEY = keyPair.toString();
+    const methods: string[] = [];
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        method: string;
+        params: { request_type?: string };
+      };
+      methods.push(body.method);
+      if (body.method === "block") return rpcResult({ header: { hash: BLOCK_HASH } });
+      if (body.params.request_type === "view_access_key") {
+        return rpcResult({ nonce: 7, block_hash: BLOCK_HASH, block_height: 1 });
+      }
+      if (body.method === "broadcast_tx_commit") {
+        return jsonResponse({ error: { message: "timeout" } }, 504);
+      }
+      return rpcResult({
+        status: { SuccessValue: "" },
+        receipts_outcome: [{ id: "R1", outcome: { logs: ["EVENT_JSON:{}"] } }],
+      });
+    });
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.primary"],
+      fetchImpl,
+      maxRetries: 0,
+      signer: {
+        accountIdEnv: "OPENRAIL_NEAR_TEST_ACCOUNT",
+        privateKeyEnv: "OPENRAIL_NEAR_TEST_KEY",
+      },
+    });
+
+    const outcome = (await client.sendFunctionCall({
+      receiverId: "openrail.near",
+      methodName: "reconcile",
+      args: { token_id: "c-1" },
+      feature: "watcher",
+    })) as { receipts_outcome?: unknown[] };
+
+    expect(outcome.receipts_outcome).toHaveLength(1);
+    expect(methods).toContain("EXPERIMENTAL_tx_status");
+    expect(client.callCounts()).toMatchObject({ watcher: 3, tx_status_outcome: 1 });
+  });
+
   it("signs a function-call transaction with the key from env", async () => {
     const keyPair = KeyPair.fromRandom("ed25519");
     process.env.OPENRAIL_NEAR_TEST_ACCOUNT = "issuer.test.near";

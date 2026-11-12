@@ -4,6 +4,7 @@ import type { IndexerStore } from "./store.js";
 
 export interface Gap {
   token_id: string;
+  claim_account: string;
   expected: string;
   seen: string;
   age_seconds: number;
@@ -37,9 +38,12 @@ export class WatcherViews {
     const gaps: Gap[] = [];
     for (const claim of this.cached()) {
       if (fromSeconds > 0 && (claim.last_quote_at ?? 0) < fromSeconds) continue;
-      let view: { booked_total?: unknown };
+      let view: { booked_total?: unknown; claim_account?: unknown };
       try {
-        view = JSON.parse(claim.last_view) as { booked_total?: unknown };
+        view = JSON.parse(claim.last_view) as {
+          booked_total?: unknown;
+          claim_account?: unknown;
+        };
       } catch {
         continue;
       }
@@ -57,6 +61,7 @@ export class WatcherViews {
       since.set(claim.token_id, first);
       gaps.push({
         token_id: claim.token_id,
+        claim_account: typeof view.claim_account === "string" ? view.claim_account : "",
         expected: expected.toString(),
         seen: seen.toString(),
         age_seconds: Math.max(0, Math.floor((nowMs - first) / 1000)),

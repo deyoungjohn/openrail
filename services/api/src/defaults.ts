@@ -12,6 +12,7 @@ import {
   nearRpcUrlsFromEnv,
   rpcOrder,
   rpcWorked,
+  NearQuotaError,
 } from "@openrail/shared";
 import {
   ApiError,
@@ -134,17 +135,45 @@ export function createAccessKeyPort(
  * The business's prepaid storage credit, read from the contract on every call (`storage_credit_of`), so a deposit
  * shows as soon as it is on chain. `amount` is the deposit the page suggests (an env default).
  */
+export function issuerUnavailableError(status?: number, code?: string): ApiError {
+  console.error(
+    `issuer unavailable: ${status === undefined ? "network" : `status=${status}`}${code === undefined || code === "" ? "" : ` code=${code}`}`,
+  );
+  return new ApiError(
+    503,
+    "issuer_unavailable",
+    `The issuer service is unavailable${status === undefined ? "" : ` (HTTP ${status}`}${code === undefined || code === "" ? "" : ` ${code}`}${status === undefined ? "" : ")"}; retry shortly`,
+    undefined,
+    { retry_after: 60 },
+  );
+}
+
+export function rpcBusyError(): ApiError {
+  return new ApiError(503, "rpc_busy", "The NEAR RPC is busy; retry shortly", undefined, {
+    retry_after: 60,
+  });
+}
+
 export async function storageCreditOf(
   near: Pick<NearClient, "view">,
   rootAccount: string,
   accountId: string,
 ): Promise<{ balance: string; amount: string }> {
-  const value = await near.view<unknown>({
-    contractId: rootAccount,
-    methodName: "storage_credit_of",
-    args: { account_id: accountId },
-    feature: "api.storage_credit",
-  });
+  let value: unknown;
+  try {
+    value = await near.view<unknown>({
+      contractId: rootAccount,
+      methodName: "storage_credit_of",
+      args: { account_id: accountId },
+      feature: "api.storage_credit",
+    });
+  } catch (error) {
+    if (error instanceof NearQuotaError) {
+      console.warn("storage_credit_of unavailable; every RPC is over quota");
+      throw rpcBusyError();
+    }
+    throw error;
+  }
   if (typeof value !== "string" || !/^\d+$/.test(value))
     throw new ApiError(502, "storage_credit_unreadable");
   return {
@@ -207,6 +236,10 @@ export function createContractPort(rootAccount: string): ContractPort {
 
 /** The issuer's own error code reaches the caller as an ApiError instead of a bare 500. */
 export function issuerFailure(status: number, text: string): ApiError {
+  if (/RPC_QUOTA|quota/i.test(text)) {
+    console.warn("issuer RPC quota exhausted");
+    return rpcBusyError();
+  }
   let code = "";
   let message = "";
   try {
@@ -216,6 +249,7 @@ export function issuerFailure(status: number, text: string): ApiError {
   } catch {
     // not JSON: the status alone
   }
+  if (status >= 500) return issuerUnavailableError(status, code);
   if (status === 409 && code === "TOKEN_ID_MISMATCH") {
     return new ApiError(409, "token_id_mismatch", message || "the claim id changed while issuing");
   }
@@ -241,14 +275,19 @@ export function createHttpIssuer(baseUrl: string): IssuerPort {
   const url = baseUrl.replace(/\/+$/, "");
   const key = getEnv("ISSUER_SERVICE_KEY");
   const post = async <T>(path: string, body: unknown): Promise<T> => {
-    const response = await fetch(`${url}${path}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(key === undefined ? {} : { authorization: `Bearer ${key}`, "x-issuer-key": key }),
-      },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${url}${path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(key === undefined ? {} : { authorization: `Bearer ${key}`, "x-issuer-key": key }),
+        },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw issuerUnavailableError();
+    }
     const text = await response.text();
     if (!response.ok) throw issuerFailure(response.status, text);
     return JSON.parse(text) as T;

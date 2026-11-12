@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiApp, type ApiDeps } from "./app.js";
+import { ApiApp, withdrawPhaseOf, type ApiDeps } from "./app.js";
 import { AuthStore } from "./auth.js";
 import { createCashoutPort } from "./defaults.js";
 import { createMemoryStores } from "./stores.js";
@@ -236,5 +236,34 @@ describe("confidential withdraw address validation", () => {
       expect(response.status, chain).toBe(400);
       expect((response.body as { error: { code: string } }).error.code).toBe("invalid_address");
     }
+  });
+});
+
+describe("confidential withdraw status words", () => {
+  it("ends only on SUCCESS, REFUNDED or FAILED", () => {
+    expect(withdrawPhaseOf("SUCCESS")).toEqual({ phase: "success", terminal: true });
+    expect(withdrawPhaseOf("REFUNDED")).toEqual({ phase: "refunded", terminal: true });
+    expect(withdrawPhaseOf("FAILED")).toEqual({ phase: "failed", terminal: true });
+    for (const word of [
+      "PENDING_DEPOSIT",
+      "INCOMPLETE_DEPOSIT",
+      "KNOWN_DEPOSIT_TX",
+      "PROCESSING",
+      "NEW_WORD",
+    ]) {
+      expect(withdrawPhaseOf(word), word).toMatchObject({ terminal: false });
+    }
+    expect(withdrawPhaseOf("PROCESSING")).toEqual({ phase: "processing", terminal: false });
+    expect(withdrawPhaseOf("INCOMPLETE_DEPOSIT")).toEqual({ phase: "pending", terminal: false });
+  });
+
+  it("keeps the provider word and adds phase/terminal to the status response", async () => {
+    const { app, request } = await harness();
+    const response = await app.handle({
+      ...request("GET", "/v1/balance/confidential/withdraw/status"),
+      query: new URLSearchParams("deposit_address=withdraw-deposit"),
+    });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ status: "SUCCESS", phase: "success", terminal: true });
   });
 });
