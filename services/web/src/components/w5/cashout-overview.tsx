@@ -11,7 +11,7 @@ import { Skeleton } from "../ui/state";
 type Range = "30" | "90" | "year";
 const DAY = 86_400_000;
 
-const shell = "surface-card h-full min-h-[232px] min-w-0 p-5 sm:p-6";
+const shell = "surface-card flex h-full min-h-[232px] min-w-0 flex-col p-5 sm:p-6";
 
 /** The last months as a small line, zero or more, drawn the way the dashboard's revenue card draws its trend. */
 function Spark({ series, color, id }: { series: readonly number[]; color: string; id: string }) {
@@ -24,7 +24,7 @@ function Spark({ series, color, id }: { series: readonly number[]; color: string
     <svg
       viewBox="0 0 100 28"
       preserveAspectRatio="none"
-      className="mt-4 h-10 w-full overflow-visible"
+      className="mt-auto h-16 w-full overflow-visible"
       aria-hidden
     >
       <defs>
@@ -82,7 +82,7 @@ function Stat({
           {formatUsd(cents)}
         </p>
       )}
-      <p className="caption mt-1">{hint}</p>
+      <p className="caption mb-4 mt-1">{hint}</p>
       {series && color && id && cents !== null ? (
         <Spark series={series} color={color} id={id} />
       ) : null}
