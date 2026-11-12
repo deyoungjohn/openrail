@@ -61,9 +61,10 @@ interface SelectContextValue {
   open: boolean;
   setOpen: (open: boolean) => void;
   select: (value: string) => void;
-  register: (value: string, label: string, disabled: boolean) => void;
+  register: (value: string, label: string, disabled: boolean, icon?: ReactNode) => void;
   unregister: (value: string) => void;
   labelFor: (value: string | undefined) => string | undefined;
+  iconFor: (value: string | undefined) => ReactNode;
   rows: ListboxRow[];
   /** Closes the panel; focus inside it returns to the trigger. */
   close: () => void;
@@ -125,9 +126,9 @@ export function Select({
   const rootRef = useRef<HTMLDivElement>(null);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [internal, setInternal] = useState(defaultValue);
-  const [labels, setLabels] = useState<Map<string, { label: string; disabled: boolean }>>(
-    new Map(),
-  );
+  const [labels, setLabels] = useState<
+    Map<string, { label: string; disabled: boolean; icon?: ReactNode }>
+  >(new Map());
   const [placement, setPlacement] = useState<Placement>("bottom");
 
   const controlled = value !== undefined;
@@ -164,11 +165,11 @@ export function Select({
     [controlled, onValueChange, close],
   );
 
-  const register = useCallback((v: string, label: string, disabled: boolean) => {
+  const register = useCallback((v: string, label: string, disabled: boolean, icon?: ReactNode) => {
     setLabels((m) => {
       const entry = m.get(v);
-      if (entry?.label === label && entry.disabled === disabled) return m;
-      return new Map(m).set(v, { label, disabled });
+      if (entry?.label === label && entry.disabled === disabled && entry.icon === icon) return m;
+      return new Map(m).set(v, { label, disabled, icon });
     });
   }, []);
   const unregister = useCallback((v: string) => {
@@ -227,6 +228,7 @@ export function Select({
       register,
       unregister,
       labelFor: (v) => (v === undefined ? undefined : labels.get(v)?.label),
+      iconFor: (v) => (v === undefined ? null : (labels.get(v)?.icon ?? null)),
       rows,
       close,
       reduce,
@@ -333,7 +335,14 @@ export function SelectValue({ placeholder, className }: SelectValueProps) {
   const ctx = useSelectContext("SelectValue");
   const label = ctx.labelFor(ctx.value);
   return (
-    <span className={cn(label ? "text-text" : "text-muted", className)}>
+    <span
+      className={cn(
+        label ? "text-text" : "text-muted",
+        "inline-flex items-center gap-2",
+        className,
+      )}
+    >
+      {ctx.iconFor(ctx.value)}
       {label ?? placeholder ?? "Select"}
     </span>
   );
@@ -528,20 +537,28 @@ export function SelectContent({ className, children }: SelectContentProps) {
 
 export interface SelectItemProps {
   value: string;
+  /** A small mark shown before the words, in the list and on the closed select. */
+  icon?: ReactNode;
   disabled?: boolean;
   className?: string;
   children: ReactNode;
 }
 
-export function SelectItem({ value, disabled = false, className, children }: SelectItemProps) {
+export function SelectItem({
+  value,
+  icon,
+  disabled = false,
+  className,
+  children,
+}: SelectItemProps) {
   const ctx = useSelectContext("SelectItem");
   const activeId = useContext(ActiveOptionContext);
   const selected = ctx.value === value;
   const label = typeof children === "string" ? children : value;
 
   useLayoutEffect(() => {
-    ctx.register(value, label, disabled);
-  }, [ctx.register, value, label, disabled]);
+    ctx.register(value, label, disabled, icon);
+  }, [ctx.register, value, label, disabled, icon]);
   useLayoutEffect(() => () => ctx.unregister(value), [ctx.unregister, value]);
 
   return (
@@ -564,7 +581,10 @@ export function SelectItem({ value, disabled = false, className, children }: Sel
           className,
         )}
       >
-        {children}
+        <span className="inline-flex items-center gap-2">
+          {icon}
+          {children}
+        </span>
         {selected ? <Check aria-hidden className="h-3.5 w-3.5 shrink-0" /> : null}
       </button>
     </motion.div>

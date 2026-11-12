@@ -21,7 +21,7 @@ import {
 import { formatUsd } from "@/lib/format";
 import { useEarnings } from "@/lib/use-earnings";
 import { Card } from "../ui/card";
-import { CHAINS } from "../ui/chain-badge";
+import { CHAINS, ChainIcon, WithIcon } from "../ui/chain-badge";
 import { DataTable, type DataTableColumn } from "../ui/data-table";
 import { DateRangeField, rangePresets, type DateRange } from "../ui/date-range-field";
 import {
@@ -141,6 +141,14 @@ function Collections({ earnings }: { earnings: readonly Earning[] }) {
       header: d.network,
       sortable: true,
       value: (r) => CHAINS[r.chain as keyof typeof CHAINS] ?? r.chain,
+      cell: (r) =>
+        r.chain in CHAINS ? (
+          <WithIcon icon={<ChainIcon chain={r.chain as keyof typeof CHAINS} />}>
+            {CHAINS[r.chain as keyof typeof CHAINS]}
+          </WithIcon>
+        ) : (
+          r.chain
+        ),
     },
     {
       id: "count",
@@ -236,6 +244,14 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
       header: d.network,
       hideBelow: "lg",
       value: (r) => CHAINS[r.chain as keyof typeof CHAINS] ?? r.chain,
+      cell: (r) =>
+        r.chain in CHAINS ? (
+          <WithIcon icon={<ChainIcon chain={r.chain as keyof typeof CHAINS} />}>
+            {CHAINS[r.chain as keyof typeof CHAINS]}
+          </WithIcon>
+        ) : (
+          r.chain
+        ),
     },
     {
       id: "time",
