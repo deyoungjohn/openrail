@@ -361,8 +361,8 @@ describe("Service-level invariant tests (Blueprint 2.8 & 2.11)", () => {
         "pay_sessions:create",
       ]);
 
-      // R1 through R13 are all allowlisted
-      for (let i = 1; i <= 13; i++) {
+      // R1 through R18 are all allowlisted
+      for (let i = 1; i <= 18; i++) {
         const routeId = `R${i}`;
         const found = routes.routes.find((r) => r.id === routeId);
         expect(found).toBeDefined();
@@ -433,8 +433,10 @@ describe("Service-level invariant tests (Blueprint 2.8 & 2.11)", () => {
         logger: { logQuote: async () => ({ txHash: "tx_1" }) },
       });
 
-      // Volatile routes: R9-R12 (ETH) and R13 (SOL) must use EXACT_OUTPUT with 30 bps slippage
+      // Volatile routes: R9-R12 (ETH), R13 (SOL) and R14-R18 (USDT) must use EXACT_OUTPUT with 30 bps slippage
       const volatileRoutes = ["R9", "R10", "R11", "R12", "R13"];
+      // R14-R18 (USDT) swap into the USDC settlement asset: EXACT_OUTPUT with 30 bps, like the other swaps.
+      volatileRoutes.push("R14", "R15", "R16", "R17", "R18");
       for (const routeId of volatileRoutes) {
         const route = routes.routes.find((r) => r.id === routeId)!;
         expect(route.swapType).toBe("EXACT_OUTPUT");
