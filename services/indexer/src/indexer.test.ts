@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BOOST_POLL_INTERVAL_MS, DEFAULT_POLL_INTERVAL_MS, Indexer } from "./indexer.js";
+import {
+  BOOST_POLL_INTERVAL_MS,
+  DEFAULT_POLL_INTERVAL_MS,
+  Indexer,
+  LOCAL_SOURCE_POLL_INTERVAL_MS,
+} from "./indexer.js";
 import {
   FakeEnricher,
   FakeSource,
@@ -248,5 +253,32 @@ describe("indexer fixture coverage", () => {
     expect(events.every((event) => event.block_hash.startsWith("BlockHash"))).toBe(true);
     expect(events.map((event) => event.event)).not.toContain("not-json");
     expect(ROOT).toBe("openrail.near");
+  });
+});
+
+describe("local source polling", () => {
+  it("reads the watcher's file every few seconds, whatever the configured interval", () => {
+    const { store, source } = fixture();
+    const indexer = new Indexer({
+      source,
+      store,
+      pollIntervalMs: 1_800_000,
+      sourceLabel: "watcher",
+      logger: silentLogger(),
+      now: () => 1_800_000_000_000,
+    });
+    expect(indexer.health().poll_interval_ms).toBe(LOCAL_SOURCE_POLL_INTERVAL_MS);
+  });
+
+  it("keeps the configured interval for the NearBlocks scan", () => {
+    const { store, source } = fixture();
+    const indexer = new Indexer({
+      source,
+      store,
+      pollIntervalMs: 1_800_000,
+      logger: silentLogger(),
+      now: () => 1_800_000_000_000,
+    });
+    expect(indexer.health().poll_interval_ms).toBe(1_800_000);
   });
 });
