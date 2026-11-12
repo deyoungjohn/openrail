@@ -196,9 +196,7 @@ export interface CheckoutApiPort {
     req: CreateCheckoutRequest,
     idempotencyKey: string,
   ): Promise<{ status: number; checkout: CheckoutCreatedResponse }>;
-  getCheckoutByOrderRef?(
-    orderRef: string,
-  ): Promise<CheckoutCreatedResponse | null>;
+  getCheckoutByOrderRef?(orderRef: string): Promise<CheckoutCreatedResponse | null>;
 }
 
 export function createHttpCheckoutApiPort(
@@ -307,10 +305,7 @@ interface OrderBinding {
   currency?: string;
 }
 
-function getHeader(
-  headers: Record<string, string | undefined>,
-  name: string,
-): string | undefined {
+function getHeader(headers: Record<string, string | undefined>, name: string): string | undefined {
   const lower = name.toLowerCase();
   for (const [k, v] of Object.entries(headers)) {
     if (k.toLowerCase() === lower) return v;
@@ -346,7 +341,6 @@ export function parseAndNormalizeOrderId(raw: string | null | undefined): Normal
 
   return null;
 }
-
 
 function extractNumericOrderId(orderGid: string): string {
   const parsed = parseAndNormalizeOrderId(orderGid);
@@ -387,10 +381,7 @@ async function appendOrderNote(
   await adminClient.updateOrderNote(order.id, updated);
 }
 
-function matchesOrderConfirmation(
-  order: ShopifyOrder,
-  confirmation?: string,
-): boolean {
+function matchesOrderConfirmation(order: ShopifyOrder, confirmation?: string): boolean {
   if (!confirmation || typeof confirmation !== "string") return false;
   const trimmed = confirmation.trim();
   if (!trimmed) return false;
@@ -407,26 +398,17 @@ function matchesOrderConfirmation(
   ) {
     return true;
   }
-  if (
-    order.statusPageUrl &&
-    order.statusPageUrl.toLowerCase().includes(trimmed.toLowerCase())
-  ) {
+  if (order.statusPageUrl && order.statusPageUrl.toLowerCase().includes(trimmed.toLowerCase())) {
     return true;
   }
   return false;
 }
 
-function matchesBindingConfirmation(
-  binding: OrderBinding,
-  confirmation?: string,
-): boolean {
+function matchesBindingConfirmation(binding: OrderBinding, confirmation?: string): boolean {
   if (!confirmation || typeof confirmation !== "string") return false;
   const trimmed = confirmation.trim().toLowerCase();
   if (!trimmed) return false;
-  if (
-    binding.confirmationNumber &&
-    binding.confirmationNumber.trim().toLowerCase() === trimmed
-  ) {
+  if (binding.confirmationNumber && binding.confirmationNumber.trim().toLowerCase() === trimmed) {
     return true;
   }
   if (
@@ -566,8 +548,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
     const orderGid = parsedOrder.orderGid;
     const numericId = parsedOrder.numericId;
     const orderName = typeof payload.name === "string" ? payload.name : orderGid;
-    const shopDomain =
-      getHeader(req.headers, "x-shopify-shop-domain") ?? env.SHOPIFY_SHOP_DOMAIN;
+    const shopDomain = getHeader(req.headers, "x-shopify-shop-domain") ?? env.SHOPIFY_SHOP_DOMAIN;
 
     const gateways = Array.isArray(payload.payment_gateway_names)
       ? (payload.payment_gateway_names as unknown[]).map(String)
@@ -583,9 +564,11 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       typeof payload.currency === "string"
         ? payload.currency
         : typeof payload.presentment_currency === "string"
-        ? payload.presentment_currency
-        : "USD"
-    ).trim().toUpperCase();
+          ? payload.presentment_currency
+          : "USD"
+    )
+      .trim()
+      .toUpperCase();
 
     if (currency !== "USD") {
       return {
@@ -600,9 +583,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
     }
 
     const rawTotal =
-      payload.current_total_price ??
-      payload.total_price ??
-      payload.total_outstanding;
+      payload.current_total_price ?? payload.total_price ?? payload.total_outstanding;
     let totalUsd: string | undefined;
     if (rawTotal !== undefined) {
       const totalAmount = Number(rawTotal);
@@ -620,9 +601,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       totalUsd = totalAmount.toFixed(2);
     }
     let confirmationNumber =
-      typeof payload.confirmation_number === "string"
-        ? payload.confirmation_number
-        : undefined;
+      typeof payload.confirmation_number === "string" ? payload.confirmation_number : undefined;
 
     if (!totalUsd || !confirmationNumber) {
       try {
@@ -658,13 +637,14 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           const paidUsd = isPaid
             ? expectedTotal
             : isPartial
-            ? recovered.paid_usd ?? "0.00"
-            : "0.00";
+              ? (recovered.paid_usd ?? "0.00")
+              : "0.00";
           const remainingUsd = isPaid
             ? "0.00"
             : isPartial
-            ? recovered.remaining_usd ?? ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2)
-            : expectedTotal;
+              ? (recovered.remaining_usd ??
+                ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2))
+              : expectedTotal;
 
           matchedBinding = {
             orderGid,
@@ -718,13 +698,14 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           const paidUsd = isPaid
             ? expectedTotal
             : isPartial
-            ? recovered.paid_usd ?? "0.00"
-            : "0.00";
+              ? (recovered.paid_usd ?? "0.00")
+              : "0.00";
           const remainingUsd = isPaid
             ? "0.00"
             : isPartial
-            ? recovered.remaining_usd ?? ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2)
-            : expectedTotal;
+              ? (recovered.remaining_usd ??
+                ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2))
+              : expectedTotal;
 
           matchedBinding = {
             orderGid,
@@ -776,7 +757,10 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       if (confirmationNumber) matchedBinding.confirmationNumber = confirmationNumber;
       matchedBinding.gateways = gateways;
       matchedBinding.currency = "USD";
-      if (totalUsd && (!matchedBinding.expectedTotalUsd || matchedBinding.expectedTotalUsd === "0.00")) {
+      if (
+        totalUsd &&
+        (!matchedBinding.expectedTotalUsd || matchedBinding.expectedTotalUsd === "0.00")
+      ) {
         matchedBinding.expectedTotalUsd = totalUsd;
       }
     }
@@ -1210,6 +1194,13 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       };
     }
 
+    // The test button of the dashboard, and every event that is not a checkout's (a merchant's invoices send
+    // `invoice.created` to the same endpoint): answered 200 and ignored. A 404 here made the test look broken and
+    // made the sender retry events that were never ours.
+    if (event.data.test === true || !event.type.startsWith("checkout.")) {
+      return { status: 200, body: { ok: true, ignored: true, event_id: event.id } };
+    }
+
     const data = event.data;
     const tokenId = typeof data.token_id === "string" ? data.token_id : undefined;
     const orderRef = typeof data.order_ref === "string" ? data.order_ref : undefined;
@@ -1383,8 +1374,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
       // Verify full payment including any pass_to_customer fee line (shopify_mark_paid_only_on_full_payment)
       const requiredUsd =
         typeof data.total_usd === "string" ? data.total_usd : binding.expectedTotalUsd;
-      const paidUsd =
-        typeof data.amount_usd === "string" ? data.amount_usd : requiredUsd;
+      const paidUsd = typeof data.amount_usd === "string" ? data.amount_usd : requiredUsd;
 
       if (toCents(paidUsd) < toCents(requiredUsd)) {
         return {
@@ -1443,13 +1433,9 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
         }
       }
 
-      const bookingTx =
-        typeof data.booking_tx === "string" ? data.booking_tx : undefined;
+      const bookingTx = typeof data.booking_tx === "string" ? data.booking_tx : undefined;
       if (binding.paymentSessionGid && paymentsAppClient) {
-        await paymentsAppClient.paymentSessionResolve(
-          binding.paymentSessionGid,
-          bookingTx,
-        );
+        await paymentsAppClient.paymentSessionResolve(binding.paymentSessionGid, bookingTx);
       }
 
       binding.paid = true;
@@ -1563,7 +1549,11 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   clock(),
                 );
           if (!checked.ok) {
-            logSessionTokenRefusal(checked.reason, clock(), "detail" in checked ? checked.detail : undefined);
+            logSessionTokenRefusal(
+              checked.reason,
+              clock(),
+              "detail" in checked ? checked.detail : undefined,
+            );
             return {
               status: 401,
               headers: cors,
@@ -1581,8 +1571,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           }
           const { numericId, orderGid } = parsedOrder;
 
-          const nonOpenrail =
-            nonOpenrailOrders.get(orderGid) ?? nonOpenrailOrders.get(numericId);
+          const nonOpenrail = nonOpenrailOrders.get(orderGid) ?? nonOpenrailOrders.get(numericId);
           if (nonOpenrail) {
             return {
               status: 404,
@@ -1611,13 +1600,14 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
               const paidUsd = isPaid
                 ? expectedTotal
                 : isPartial
-                ? recovered.paid_usd ?? "0.00"
-                : "0.00";
+                  ? (recovered.paid_usd ?? "0.00")
+                  : "0.00";
               const remainingUsd = isPaid
                 ? "0.00"
                 : isPartial
-                ? recovered.remaining_usd ?? ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2)
-                : expectedTotal;
+                  ? (recovered.remaining_usd ??
+                    ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2))
+                  : expectedTotal;
 
               binding = {
                 orderGid,
@@ -1703,8 +1693,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             const shopMoney = order.totalOutstandingSet?.shopMoney;
             const orderTotalAmount = Number(
               order.currentTotalPriceSet?.shopMoney?.amount ??
-              order.totalOutstandingSet?.shopMoney?.amount ??
-              "0",
+                order.totalOutstandingSet?.shopMoney?.amount ??
+                "0",
             );
             if (!Number.isFinite(orderTotalAmount) || orderTotalAmount <= 0) {
               return {
@@ -1771,8 +1761,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             const shopMoney = order!.totalOutstandingSet?.shopMoney;
             const orderTotalAmount = Number(
               order!.currentTotalPriceSet?.shopMoney?.amount ??
-              order!.totalOutstandingSet?.shopMoney?.amount ??
-              "0",
+                order!.totalOutstandingSet?.shopMoney?.amount ??
+                "0",
             );
             const amountUsd = Number(shopMoney?.amount ?? orderTotalAmount).toFixed(2);
             const idempotencyKey = `shopify-order-${numericId}-${amountUsd}`;
@@ -1804,7 +1794,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
               expectedTotalUsd: checkout.total_usd ?? checkout.amount_usd,
               payUrl: checkout.pay_url,
               paid: order!.fullyPaid || order!.displayFinancialStatus === "PAID",
-              status: order!.fullyPaid || order!.displayFinancialStatus === "PAID" ? "paid" : "unpaid",
+              status:
+                order!.fullyPaid || order!.displayFinancialStatus === "PAID" ? "paid" : "unpaid",
               gateways: order!.paymentGatewayNames ?? [],
               currency: "USD",
               confirmationNumber: order!.confirmationNumber ?? undefined,
@@ -1856,7 +1847,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             body: {
               ok: true,
               pay_url: `${base}/shopify/pay/${encodeURIComponent(orderToken)}`,
-              checkout_pay_url: binding.payUrl ?? `${base}/shopify/pay/${encodeURIComponent(orderToken)}`,
+              checkout_pay_url:
+                binding.payUrl ?? `${base}/shopify/pay/${encodeURIComponent(orderToken)}`,
               checkout_id: binding.checkoutId,
             },
           };
@@ -1899,7 +1891,11 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   clock(),
                 );
           if (!checked.ok) {
-            logSessionTokenRefusal(checked.reason, clock(), "detail" in checked ? checked.detail : undefined);
+            logSessionTokenRefusal(
+              checked.reason,
+              clock(),
+              "detail" in checked ? checked.detail : undefined,
+            );
             return {
               status: 401,
               headers: cors,
@@ -2069,7 +2065,11 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                   clock(),
                 );
           if (!checked.ok) {
-            logSessionTokenRefusal(checked.reason, clock(), "detail" in checked ? checked.detail : undefined);
+            logSessionTokenRefusal(
+              checked.reason,
+              clock(),
+              "detail" in checked ? checked.detail : undefined,
+            );
             return {
               status: 401,
               headers: cors,
@@ -2157,13 +2157,14 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                 const paidUsd = isPaid
                   ? expectedTotal
                   : isPartial
-                  ? recovered.paid_usd ?? "0.00"
-                  : "0.00";
+                    ? (recovered.paid_usd ?? "0.00")
+                    : "0.00";
                 const remainingUsd = isPaid
                   ? "0.00"
                   : isPartial
-                  ? recovered.remaining_usd ?? ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2)
-                  : expectedTotal;
+                    ? (recovered.remaining_usd ??
+                      ((toCents(expectedTotal) - toCents(paidUsd)) / 100).toFixed(2))
+                    : expectedTotal;
 
                 binding = {
                   orderGid,
@@ -2262,8 +2263,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             const shopMoney = order.totalOutstandingSet?.shopMoney;
             const orderTotalAmount = Number(
               order.currentTotalPriceSet?.shopMoney?.amount ??
-              order.totalOutstandingSet?.shopMoney?.amount ??
-              "0",
+                order.totalOutstandingSet?.shopMoney?.amount ??
+                "0",
             );
             if (!Number.isFinite(orderTotalAmount) || orderTotalAmount <= 0) {
               return {
@@ -2371,8 +2372,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
               status === "paid"
                 ? "Payment confirmed on NEAR"
                 : status === "partial"
-                ? "Partial payment received"
-                : "Payment pending";
+                  ? "Partial payment received"
+                  : "Payment pending";
             return {
               status: 200,
               headers: cors,
@@ -2386,17 +2387,18 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
 
           const paidUsd =
             status === "paid"
-              ? binding.paidUsd ?? totalUsd
+              ? (binding.paidUsd ?? totalUsd)
               : status === "partial"
-              ? binding.paidUsd ?? "0.00"
-              : "0.00";
+                ? (binding.paidUsd ?? "0.00")
+                : "0.00";
 
           const remainingUsd =
             status === "paid"
               ? "0.00"
               : status === "partial"
-              ? binding.remainingUsd ?? ((toCents(totalUsd) - toCents(paidUsd)) / 100).toFixed(2)
-              : totalUsd;
+                ? (binding.remainingUsd ??
+                  ((toCents(totalUsd) - toCents(paidUsd)) / 100).toFixed(2))
+                : totalUsd;
 
           let payUrl = binding.payUrl;
           if (!payUrl && binding.orderGid) {
@@ -2418,8 +2420,8 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             status === "paid"
               ? `Payment of $${totalUsd} USD confirmed on NEAR`
               : status === "partial"
-              ? `Partial payment of $${paidUsd} of $${totalUsd} USD received`
-              : `Payment of $${totalUsd} USD pending`;
+                ? `Partial payment of $${paidUsd} of $${totalUsd} USD received`
+                : `Payment of $${totalUsd} USD pending`;
 
           return {
             status: 200,

@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   const alertUrl = getEnv("ALERT_WEBHOOK_URL");
   let lowAlerted = false;
   let lastBalanceAt = 0;
-  const balanceEveryMs = numberEnv("PAYOUT_BALANCE_CHECK_MS", 600_000);
+  const balanceEveryMs = numberEnv("PAYOUT_BALANCE_CHECK_MS", 3_600_000);
 
   const health = await startPayoutHealthServer(numberEnv("PAYOUT_HEALTH_PORT", 8081), () => ({
     ok: lastError === null,

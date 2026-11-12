@@ -13,11 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import {
-  ShopifyAdminClient,
-  type ShopifyOrder,
-  type ShopifyShop,
-} from "../src/admin-client.js";
+import { ShopifyAdminClient, type ShopifyOrder, type ShopifyShop } from "../src/admin-client.js";
 import {
   createHttpCheckoutApiPort,
   createShopifyApp,
@@ -72,7 +68,8 @@ function makeUsdShop(overrides: Partial<ShopifyShop> = {}): ShopifyShop {
 
 function makeOrder(overrides: Partial<ShopifyOrder> = {}): ShopifyOrder {
   const defaultAmount = overrides.totalOutstandingSet?.shopMoney?.amount ?? "2.00";
-  const defaultCurrency = overrides.totalOutstandingSet?.shopMoney?.currencyCode ?? overrides.currencyCode ?? "USD";
+  const defaultCurrency =
+    overrides.totalOutstandingSet?.shopMoney?.currencyCode ?? overrides.currencyCode ?? "USD";
   return {
     id: "gid://shopify/Order/6001002003",
     name: "#1001",
@@ -113,14 +110,16 @@ function makeOrder(overrides: Partial<ShopifyOrder> = {}): ShopifyOrder {
   };
 }
 
-function createTestHarness(options: {
-  shop?: ShopifyShop;
-  order?: ShopifyOrder;
-  feeMode?: "absorb" | "pass_to_customer";
-  nowSec?: number;
-  logger?: (msg: string) => void;
-  env?: Partial<ShopifyAppEnv>;
-} = {}) {
+function createTestHarness(
+  options: {
+    shop?: ShopifyShop;
+    order?: ShopifyOrder;
+    feeMode?: "absorb" | "pass_to_customer";
+    nowSec?: number;
+    logger?: (msg: string) => void;
+    env?: Partial<ShopifyAppEnv>;
+  } = {},
+) {
   let currentNowSec = options.nowSec ?? 1_762_700_000;
   const shop = options.shop ?? makeUsdShop();
   const orders = new Map<string, ShopifyOrder>();
@@ -137,7 +136,11 @@ function createTestHarness(options: {
     idempotencyKey: string;
   }> = [];
   const loggedLines: string[] = [];
-  const logger = options.logger ?? ((msg: string) => { loggedLines.push(msg); });
+  const logger =
+    options.logger ??
+    ((msg: string) => {
+      loggedLines.push(msg);
+    });
 
   const checkoutsByOrderRef = new Map<
     string,
@@ -209,12 +212,10 @@ function createTestHarness(options: {
       return { redirectUrl: initialOrder.statusPageUrl, userErrors: [] };
     }),
     paymentSessionPending: vi.fn(async () => ({ userErrors: [] })),
-    paymentSessionReject: vi.fn(
-      async (id: string, code: string, merchantMessage?: string) => {
-        rejectedSessions.push({ id, code, ...(merchantMessage ? { merchantMessage } : {}) });
-        return { redirectUrl: initialOrder.statusPageUrl, userErrors: [] };
-      },
-    ),
+    paymentSessionReject: vi.fn(async (id: string, code: string, merchantMessage?: string) => {
+      rejectedSessions.push({ id, code, ...(merchantMessage ? { merchantMessage } : {}) });
+      return { redirectUrl: initialOrder.statusPageUrl, userErrors: [] };
+    }),
     paymentsAppConfigure: vi.fn(async () => ({ Ready: true, userErrors: [] })),
   };
 
@@ -250,10 +251,7 @@ function createTestHarness(options: {
       checkoutCounter += 1;
       const mode = req.fee_mode ?? options.feeMode ?? "absorb";
       const subtotalCents = Math.round(Number(req.amount_usd) * 100);
-      const feeCents =
-        mode === "pass_to_customer"
-          ? Math.ceil((subtotalCents * 25) / 10000)
-          : 0;
+      const feeCents = mode === "pass_to_customer" ? Math.ceil((subtotalCents * 25) / 10000) : 0;
       const totalCents = subtotalCents + feeCents;
       const subtotalUsd = (subtotalCents / 100).toFixed(2);
       const feeUsd = (feeCents / 100).toFixed(2);
@@ -640,11 +638,7 @@ describe("Shopify module — Blueprint required tests", () => {
         status: "paid",
       },
     });
-    const sig = signOpenrailWebhook(
-      TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
-      h.nowSec(),
-      paidBody,
-    );
+    const sig = signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), paidBody);
 
     // First delivery marks the order paid
     const first = await h.app.handle({
@@ -788,9 +782,9 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
     expect(
       verifyShopifyWebhookHmac(rawBody, validShopifyHmac, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
     ).toBe(true);
-    expect(
-      verifyShopifyWebhookHmac(rawBody, "bad_hmac", TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
-    ).toBe(false);
+    expect(verifyShopifyWebhookHmac(rawBody, "bad_hmac", TEST_ENV.SHOPIFY_WEBHOOK_SECRET)).toBe(
+      false,
+    );
     expect(
       verifyShopifyWebhookHmac(`${rawBody} `, validShopifyHmac, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
     ).toBe(false);
@@ -1187,7 +1181,11 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
   });
 
   it("sends verified GraphQL queries and mutations in ShopifyAdminClient and ShopifyPaymentsAppClient", async () => {
-    const calls: Array<{ url: string; headers: Record<string, string>; body: { query: string; variables?: Record<string, unknown> } }> = [];
+    const calls: Array<{
+      url: string;
+      headers: Record<string, string>;
+      body: { query: string; variables?: Record<string, unknown> };
+    }> = [];
     const mockFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       const headers = (init?.headers ?? {}) as Record<string, string>;
@@ -1244,9 +1242,7 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
     });
     const resPaid = await admin.markOrderAsPaid("gid://shopify/Order/6001002003");
     expect(resPaid.order?.fullyPaid).toBe(true);
-    expect(calls[0]?.url).toBe(
-      "https://openrail-dev.myshopify.com/admin/api/2025-10/graphql.json",
-    );
+    expect(calls[0]?.url).toBe("https://openrail-dev.myshopify.com/admin/api/2025-10/graphql.json");
     expect(calls[0]?.headers["X-Shopify-Access-Token"]).toBe("shpat_test_123");
     expect(calls[0]?.body.variables).toEqual({
       input: { id: "gid://shopify/Order/6001002003" },
@@ -1305,7 +1301,10 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
                   name: "My Store",
                   currencyCode: "USD",
                   myshopifyDomain: "openrail-dev.myshopify.com",
-                  primaryDomain: { url: "https://openrail-dev.myshopify.com", host: "openrail-dev.myshopify.com" },
+                  primaryDomain: {
+                    url: "https://openrail-dev.myshopify.com",
+                    host: "openrail-dev.myshopify.com",
+                  },
                 },
               },
             }),
@@ -1360,7 +1359,10 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
                 name: "Store",
                 currencyCode: "USD",
                 myshopifyDomain: "openrail-dev.myshopify.com",
-                primaryDomain: { url: "https://openrail-dev.myshopify.com", host: "openrail-dev.myshopify.com" },
+                primaryDomain: {
+                  url: "https://openrail-dev.myshopify.com",
+                  host: "openrail-dev.myshopify.com",
+                },
               },
             },
           }),
@@ -1423,7 +1425,10 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
                   name: "Store",
                   currencyCode: "USD",
                   myshopifyDomain: "openrail-dev.myshopify.com",
-                  primaryDomain: { url: "https://openrail-dev.myshopify.com", host: "openrail-dev.myshopify.com" },
+                  primaryDomain: {
+                    url: "https://openrail-dev.myshopify.com",
+                    host: "openrail-dev.myshopify.com",
+                  },
                 },
               },
             }),
@@ -1494,7 +1499,10 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
                 name: "Legacy Store",
                 currencyCode: "USD",
                 myshopifyDomain: "openrail-dev.myshopify.com",
-                primaryDomain: { url: "https://openrail-dev.myshopify.com", host: "openrail-dev.myshopify.com" },
+                primaryDomain: {
+                  url: "https://openrail-dev.myshopify.com",
+                  host: "openrail-dev.myshopify.com",
+                },
               },
             },
           }),
@@ -1580,9 +1588,8 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
     });
 
     it("shopify_server_pack_includes_service_and_unit", () => {
-      const currentDir = typeof __dirname !== "undefined"
-        ? __dirname
-        : dirname(fileURLToPath(import.meta.url));
+      const currentDir =
+        typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
 
       // 1. Verify package.json specifies @openrail/shopify
       const pkgPath = resolve(currentDir, "../package.json");
@@ -1617,7 +1624,9 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
       ]);
       expect(existsSync(unitPath)).toBe(true);
       const unit = readFileSync(unitPath, "utf8");
-      expect(unit).toContain("ConditionPathExists=/opt/openrail/current/services/shopify/src/server.ts");
+      expect(unit).toContain(
+        "ConditionPathExists=/opt/openrail/current/services/shopify/src/server.ts",
+      );
       expect(unit).toContain("WorkingDirectory=/opt/openrail/current/services/shopify");
       expect(unit).toContain("ExecStart=/opt/openrail/current/node_modules/.bin/tsx src/server.ts");
 
@@ -1649,14 +1658,7 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
         copyFileSync(envPath, join(envDir, "shopify.env.example"));
 
         const packArchive = join(tempDir, "openrail-server-test.tar.gz");
-        execFileSync("tar", [
-          "-czf",
-          packArchive,
-          "-C",
-          tempDir,
-          "services",
-          "deploy",
-        ]);
+        execFileSync("tar", ["-czf", packArchive, "-C", tempDir, "services", "deploy"]);
 
         const listing = execFileSync("tar", ["-tzf", packArchive], { encoding: "utf8" });
         expect(listing).toContain("services/shopify/src/server.ts");
@@ -1738,7 +1740,10 @@ describe("the checkout block gets its pay link with the buyer's session token", 
   // app's client secret, HS256, claims exp, aud = client id, dest = the shop). A thank-you page has no other way to
   // learn the single-use pay link: the orders/create webhook answers Shopify, not the page (found 10 Nov).
   const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const sessionToken = (claims: Record<string, unknown>, secret = TEST_ENV.SHOPIFY_CLIENT_SECRET) => {
+  const sessionToken = (
+    claims: Record<string, unknown>,
+    secret = TEST_ENV.SHOPIFY_CLIENT_SECRET,
+  ) => {
     const head = b64({ alg: "HS256", typ: "JWT" });
     const body = b64(claims);
     const sig = createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
@@ -1750,7 +1755,11 @@ describe("the checkout block gets its pay link with the buyer's session token", 
     aud: TEST_ENV.SHOPIFY_CLIENT_ID,
     exp: h.nowSec() + 300,
   });
-  const ask = (h: ReturnType<typeof createTestHarness>, token: string | undefined, order = "gid://shopify/Order/6001002003") =>
+  const ask = (
+    h: ReturnType<typeof createTestHarness>,
+    token: string | undefined,
+    order = "gid://shopify/Order/6001002003",
+  ) =>
     h.app.handle({
       method: "GET",
       path: "/shopify/extension/pay-link",
@@ -1763,7 +1772,9 @@ describe("the checkout block gets its pay link with the buyer's session token", 
     const h = createTestHarness({ order: makeOrder({ id: "gid://shopify/Order/6001002003" }) });
     const res = await ask(h, sessionToken(good(h)));
     expect(res.status).toBe(200);
-    expect(String(res.body.pay_url)).toMatch(/^https:\/\/shopify\.openrail\.incepture\.dev\/shopify\/pay\//);
+    expect(String(res.body.pay_url)).toMatch(
+      /^https:\/\/shopify\.openrail\.incepture\.dev\/shopify\/pay\//,
+    );
     expect(res.headers?.["access-control-allow-origin"]).toBe("*");
   });
 
@@ -1771,16 +1782,25 @@ describe("the checkout block gets its pay link with the buyer's session token", 
     const h = createTestHarness({ order: makeOrder({ id: "gid://shopify/Order/6001002003" }) });
     expect((await ask(h, sessionToken(good(h), "another-secret"))).status).toBe(401);
     expect((await ask(h, sessionToken({ ...good(h), exp: h.nowSec() - 5 }))).status).toBe(401);
-    expect((await ask(h, sessionToken({ ...good(h), dest: "https://other.myshopify.com" }))).status).toBe(401);
+    expect(
+      (await ask(h, sessionToken({ ...good(h), dest: "https://other.myshopify.com" }))).status,
+    ).toBe(401);
     expect((await ask(h, sessionToken({ ...good(h), aud: "someone-else" }))).status).toBe(401);
     expect((await ask(h, undefined)).status).toBe(401);
   });
 
   it("accepts a `dest` claim written as a bare host (what the live checkout token carries, found 10 Nov), and still refuses another shop", async () => {
     const h = createTestHarness({ order: makeOrder({ id: "gid://shopify/Order/6001002003" }) });
-    expect((await ask(h, sessionToken({ ...good(h), dest: "openrail-dev.myshopify.com" }))).status).toBe(200);
-    expect((await ask(h, sessionToken({ ...good(h), dest: "https://openrail-dev.myshopify.com/" }))).status).toBe(200);
-    expect((await ask(h, sessionToken({ ...good(h), dest: "other.myshopify.com" }))).status).toBe(401);
+    expect(
+      (await ask(h, sessionToken({ ...good(h), dest: "openrail-dev.myshopify.com" }))).status,
+    ).toBe(200);
+    expect(
+      (await ask(h, sessionToken({ ...good(h), dest: "https://openrail-dev.myshopify.com/" })))
+        .status,
+    ).toBe(200);
+    expect((await ask(h, sessionToken({ ...good(h), dest: "other.myshopify.com" }))).status).toBe(
+      401,
+    );
     expect((await ask(h, sessionToken({ ...good(h), dest: "" }))).status).toBe(401);
     expect((await ask(h, sessionToken({ ...good(h), dest: undefined }))).status).toBe(401);
   });
@@ -1802,7 +1822,10 @@ describe("the checkout block gets its pay link with the buyer's session token", 
 
 describe("Update 11: checkout-pay-link before order, matching on orders/create, and order-status", () => {
   const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const sessionToken = (claims: Record<string, unknown>, secret = TEST_ENV.SHOPIFY_CLIENT_SECRET) => {
+  const sessionToken = (
+    claims: Record<string, unknown>,
+    secret = TEST_ENV.SHOPIFY_CLIENT_SECRET,
+  ) => {
     const head = b64({ alg: "HS256", typ: "JWT" });
     const body = b64(claims);
     const sig = createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
@@ -1899,7 +1922,11 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
         (await askPayLink(h, sessionToken(good(h), "bad-secret"), { checkout: "tok" })).status,
       ).toBe(401);
       expect(
-        (await askPayLink(h, sessionToken({ ...good(h), exp: h.nowSec() - 10 }), { checkout: "tok" })).status,
+        (
+          await askPayLink(h, sessionToken({ ...good(h), exp: h.nowSec() - 10 }), {
+            checkout: "tok",
+          })
+        ).status,
       ).toBe(401);
     });
 
@@ -1914,7 +1941,9 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
       });
       expect(pre.status).toBe(204);
       expect(pre.headers?.["access-control-allow-origin"]).toBe("*");
-      expect(pre.headers?.["access-control-allow-headers"]?.toLowerCase()).toContain("authorization");
+      expect(pre.headers?.["access-control-allow-headers"]?.toLowerCase()).toContain(
+        "authorization",
+      );
     });
   });
 
@@ -1957,7 +1986,11 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
         path: "/shopify/openrail-webhook",
         query: {},
         headers: {
-          "openrail-signature": signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawEvent),
+          "openrail-signature": signOpenrailWebhook(
+            TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+            h.nowSec(),
+            rawEvent,
+          ),
         },
         rawBody: rawEvent,
       });
@@ -1965,7 +1998,9 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
 
       // Verify log line for invoice paid without matching Shopify order
       const waitingLog = h.loggedLines.find((l) =>
-        /invoice chk-1 for checkout_token tok_prepaid_999 was paid, but no matching Shopify order has arrived yet/i.test(l),
+        /invoice chk-1 for checkout_token tok_prepaid_999 was paid, but no matching Shopify order has arrived yet/i.test(
+          l,
+        ),
       );
       expect(waitingLog).toBeDefined();
 
@@ -1986,7 +2021,10 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
         path: "/shopify/webhooks",
         query: {},
         headers: {
-          "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+          "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+            rawOrder,
+            TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+          ),
           "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
         },
         rawBody: rawOrder,
@@ -1995,8 +2033,16 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
 
       // Order should now be marked as paid immediately!
       expect(h.markPaidCalls).toContain("gid://shopify/Order/7001");
-      expect(h.tagsAddCalls.some((t) => t.id === "gid://shopify/Order/7001" && t.tags.includes("openrail-paid"))).toBe(true);
-      expect(h.orderNoteUpdates.some((n) => n.id === "gid://shopify/Order/7001" && n.note.includes("tx_near_booking_999"))).toBe(true);
+      expect(
+        h.tagsAddCalls.some(
+          (t) => t.id === "gid://shopify/Order/7001" && t.tags.includes("openrail-paid"),
+        ),
+      ).toBe(true);
+      expect(
+        h.orderNoteUpdates.some(
+          (n) => n.id === "gid://shopify/Order/7001" && n.note.includes("tx_near_booking_999"),
+        ),
+      ).toBe(true);
     });
 
     it("order-first flow: orders/create arrives before checkout.paid, logs unpaid invoice, marks paid when checkout.paid arrives", async () => {
@@ -2032,7 +2078,10 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
         path: "/shopify/webhooks",
         query: {},
         headers: {
-          "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+          "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+            rawOrder,
+            TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+          ),
           "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
         },
         rawBody: rawOrder,
@@ -2041,7 +2090,9 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
 
       // Verify log line for unpaid invoice
       const unpaidLog = h.loggedLines.find((l) =>
-        /order gid:\/\/shopify\/Order\/7002 placed for checkout_token tok_orderfirst_888, but invoice chk-1 is unpaid/i.test(l),
+        /order gid:\/\/shopify\/Order\/7002 placed for checkout_token tok_orderfirst_888, but invoice chk-1 is unpaid/i.test(
+          l,
+        ),
       );
       expect(unpaidLog).toBeDefined();
       expect(h.markPaidCalls).not.toContain("gid://shopify/Order/7002");
@@ -2065,7 +2116,11 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
         path: "/shopify/openrail-webhook",
         query: {},
         headers: {
-          "openrail-signature": signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawEvent),
+          "openrail-signature": signOpenrailWebhook(
+            TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+            h.nowSec(),
+            rawEvent,
+          ),
         },
         rawBody: rawEvent,
       });
@@ -2073,7 +2128,11 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
 
       // Now order is marked as paid
       expect(h.markPaidCalls).toContain("gid://shopify/Order/7002");
-      expect(h.tagsAddCalls.some((t) => t.id === "gid://shopify/Order/7002" && t.tags.includes("openrail-paid"))).toBe(true);
+      expect(
+        h.tagsAddCalls.some(
+          (t) => t.id === "gid://shopify/Order/7002" && t.tags.includes("openrail-paid"),
+        ),
+      ).toBe(true);
     });
 
     it("unmatched paid invoice: invoice paid whose order never appears is logged", async () => {
@@ -2103,7 +2162,11 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
         path: "/shopify/openrail-webhook",
         query: {},
         headers: {
-          "openrail-signature": signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawEvent),
+          "openrail-signature": signOpenrailWebhook(
+            TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+            h.nowSec(),
+            rawEvent,
+          ),
         },
         rawBody: rawEvent,
       });
@@ -2112,7 +2175,9 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
       expect(paidRes.body.pending_order).toBe(true);
 
       const waitingLog = h.loggedLines.find((l) =>
-        /invoice chk-1 for checkout_token tok_ghost_order was paid, but no matching Shopify order has arrived yet/i.test(l),
+        /invoice chk-1 for checkout_token tok_ghost_order was paid, but no matching Shopify order has arrived yet/i.test(
+          l,
+        ),
       );
       expect(waitingLog).toBeDefined();
     });
@@ -2161,7 +2226,11 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
         path: "/shopify/openrail-webhook",
         query: {},
         headers: {
-          "openrail-signature": signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawEvent),
+          "openrail-signature": signOpenrailWebhook(
+            TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+            h.nowSec(),
+            rawEvent,
+          ),
         },
         rawBody: rawEvent,
       });
@@ -2179,7 +2248,10 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
         path: "/shopify/webhooks",
         query: {},
         headers: {
-          "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+          "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+            rawOrder,
+            TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+          ),
           "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
         },
         rawBody: rawOrder,
@@ -2195,6 +2267,66 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
       expect(paidRes.body.status).toBe("paid");
       expect(paidRes.body.tx_hash).toBe("tx_status_success_777");
       expect(String(paidRes.body.summary)).toContain("45.00 USD");
+    });
+
+    it("the dashboard's test event and events that are not a checkout's are answered 200 and ignored", async () => {
+      const h = createTestHarness();
+      for (const body of [
+        JSON.stringify({
+          id: "evt_t1",
+          type: "checkout.paid",
+          created: h.nowSec(),
+          data: { test: true },
+        }),
+        JSON.stringify({
+          id: "evt_t2",
+          type: "invoice.created",
+          created: h.nowSec(),
+          data: { token_id: "c-9" },
+        }),
+      ]) {
+        const res = await h.app.handle({
+          method: "POST",
+          path: "/shopify/webhooks/openrail",
+          query: {},
+          headers: {
+            "openrail-signature": signOpenrailWebhook(
+              TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+              h.nowSec(),
+              body,
+            ),
+          },
+          rawBody: body,
+        });
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({ ok: true, ignored: true });
+      }
+      expect(h.markPaidCalls).toHaveLength(0);
+    });
+
+    it("a checkout event with no order binding is still 404 (the sender retries it)", async () => {
+      const h = createTestHarness();
+      const body = JSON.stringify({
+        id: "evt_nb",
+        type: "checkout.paid",
+        created: h.nowSec(),
+        data: { token_id: "unknown-chk", order_ref: "unknown" },
+      });
+      const res = await h.app.handle({
+        method: "POST",
+        path: "/shopify/webhooks/openrail",
+        query: {},
+        headers: {
+          "openrail-signature": signOpenrailWebhook(
+            TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+            h.nowSec(),
+            body,
+          ),
+        },
+        rawBody: body,
+      });
+      expect(res.status).toBe(404);
+      expect(res.body.error?.code).toBe("order_binding_not_found");
     });
 
     it("refuses missing query params with 400", async () => {
@@ -2230,14 +2362,19 @@ describe("Update 11: checkout-pay-link before order, matching on orders/create, 
       });
       expect(pre.status).toBe(204);
       expect(pre.headers?.["access-control-allow-origin"]).toBe("*");
-      expect(pre.headers?.["access-control-allow-headers"]?.toLowerCase()).toContain("authorization");
+      expect(pre.headers?.["access-control-allow-headers"]?.toLowerCase()).toContain(
+        "authorization",
+      );
     });
   });
 });
 
 describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limiting, and persistence on miss)", () => {
   const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const sessionToken = (claims: Record<string, unknown>, secret = TEST_ENV.SHOPIFY_CLIENT_SECRET) => {
+  const sessionToken = (
+    claims: Record<string, unknown>,
+    secret = TEST_ENV.SHOPIFY_CLIENT_SECRET,
+  ) => {
     const head = b64({ alg: "HS256", typ: "JWT" });
     const body = b64(claims);
     const sig = createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
@@ -2272,15 +2409,24 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
       expect(resMissing.body.error?.code).toBe("invalid_request");
 
       // Non-numeric amount
-      const resNonNum = await askPayLink(h, sessionToken(good(h)), { checkout: "tok_val", amount: "abc" });
+      const resNonNum = await askPayLink(h, sessionToken(good(h)), {
+        checkout: "tok_val",
+        amount: "abc",
+      });
       expect(resNonNum.status).toBe(400);
 
       // Zero amount
-      const resZero = await askPayLink(h, sessionToken(good(h)), { checkout: "tok_val", amount: "0" });
+      const resZero = await askPayLink(h, sessionToken(good(h)), {
+        checkout: "tok_val",
+        amount: "0",
+      });
       expect(resZero.status).toBe(400);
 
       // Negative amount
-      const resNeg = await askPayLink(h, sessionToken(good(h)), { checkout: "tok_val", amount: "-5.00" });
+      const resNeg = await askPayLink(h, sessionToken(good(h)), {
+        checkout: "tok_val",
+        amount: "-5.00",
+      });
       expect(resNeg.status).toBe(400);
     });
 
@@ -2341,7 +2487,11 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         path: "/shopify/openrail-webhook",
         query: {},
         headers: {
-          "openrail-signature": signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawEvent),
+          "openrail-signature": signOpenrailWebhook(
+            TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+            h.nowSec(),
+            rawEvent,
+          ),
         },
         rawBody: rawEvent,
       });
@@ -2360,7 +2510,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         path: "/shopify/webhooks",
         query: {},
         headers: {
-          "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+          "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+            rawOrder,
+            TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+          ),
           "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
         },
         rawBody: rawOrder,
@@ -2369,8 +2522,16 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
 
       // Crucial: Must NEVER mark order as paid
       expect(h.markPaidCalls).not.toContain("gid://shopify/Order/8001");
-      expect(h.tagsAddCalls.some((t) => t.id === "gid://shopify/Order/8001" && t.tags.includes("openrail-partial"))).toBe(true);
-      expect(h.orderNoteUpdates.some((n) => n.id === "gid://shopify/Order/8001" && n.note.includes("partial payment"))).toBe(true);
+      expect(
+        h.tagsAddCalls.some(
+          (t) => t.id === "gid://shopify/Order/8001" && t.tags.includes("openrail-partial"),
+        ),
+      ).toBe(true);
+      expect(
+        h.orderNoteUpdates.some(
+          (n) => n.id === "gid://shopify/Order/8001" && n.note.includes("partial payment"),
+        ),
+      ).toBe(true);
 
       const underpaidLog = h.loggedLines.find((l) => /underpaid|partial/i.test(l));
       expect(underpaidLog).toBeDefined();
@@ -2408,7 +2569,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         path: "/shopify/webhooks",
         query: {},
         headers: {
-          "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+          "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+            rawOrder,
+            TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+          ),
           "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
         },
         rawBody: rawOrder,
@@ -2433,7 +2597,11 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         path: "/shopify/openrail-webhook",
         query: {},
         headers: {
-          "openrail-signature": signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawEvent),
+          "openrail-signature": signOpenrailWebhook(
+            TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+            h.nowSec(),
+            rawEvent,
+          ),
         },
         rawBody: rawEvent,
       });
@@ -2443,8 +2611,16 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
 
       // Crucial: Must NEVER mark order as paid
       expect(h.markPaidCalls).not.toContain("gid://shopify/Order/8001B");
-      expect(h.tagsAddCalls.some((t) => t.id === "gid://shopify/Order/8001B" && t.tags.includes("openrail-partial"))).toBe(true);
-      expect(h.orderNoteUpdates.some((n) => n.id === "gid://shopify/Order/8001B" && n.note.includes("partial payment"))).toBe(true);
+      expect(
+        h.tagsAddCalls.some(
+          (t) => t.id === "gid://shopify/Order/8001B" && t.tags.includes("openrail-partial"),
+        ),
+      ).toBe(true);
+      expect(
+        h.orderNoteUpdates.some(
+          (n) => n.id === "gid://shopify/Order/8001B" && n.note.includes("partial payment"),
+        ),
+      ).toBe(true);
 
       const underpaidLog = h.loggedLines.find((l) => /underpaid|partial/i.test(l));
       expect(underpaidLog).toBeDefined();
@@ -2522,7 +2698,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         path: "/shopify/webhooks",
         query: {},
         headers: {
-          "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+          "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+            rawOrder,
+            TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+          ),
           "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
         },
         rawBody: rawOrder,
@@ -2531,7 +2710,11 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
       expect(resOrder.status).toBe(200);
       // Reconstructed binding was paid and matched total $20.00 -> marks order as paid!
       expect(h.markPaidCalls).toContain("gid://shopify/Order/8002");
-      expect(h.tagsAddCalls.some((t) => t.id === "gid://shopify/Order/8002" && t.tags.includes("openrail-paid"))).toBe(true);
+      expect(
+        h.tagsAddCalls.some(
+          (t) => t.id === "gid://shopify/Order/8002" && t.tags.includes("openrail-paid"),
+        ),
+      ).toBe(true);
     });
   });
 
@@ -2726,7 +2909,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
 
     it("shopify.extension.toml declares openrail_payment_handle setting", () => {
       const tomlContent = readFileSync(
-        resolve(dirname(fileURLToPath(import.meta.url)), "../optional/openrail-checkout/shopify.extension.toml"),
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          "../optional/openrail-checkout/shopify.extension.toml",
+        ),
         "utf8",
       );
       expect(tomlContent).toContain('key = "openrail_payment_handle"');
@@ -2735,12 +2921,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
 
     it("CheckoutPay only renders when openrail_payment_handle is configured and matches selected option", () => {
       // 1. Unset configured handle -> returns false even if manualPayment selected
-      expect(
-        shouldRenderCheckoutPay([{ type: "manualPayment", handle: "c-o-d" }], ""),
-      ).toBe(false);
-      expect(
-        shouldRenderCheckoutPay([{ type: "manualPayment", handle: "c-o-d" }], undefined),
-      ).toBe(false);
+      expect(shouldRenderCheckoutPay([{ type: "manualPayment", handle: "c-o-d" }], "")).toBe(false);
+      expect(shouldRenderCheckoutPay([{ type: "manualPayment", handle: "c-o-d" }], undefined)).toBe(
+        false,
+      );
 
       // 2. Configured handle set, but different manual method selected -> returns false
       expect(
@@ -2766,7 +2950,11 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
       const res = await h.app.handle({
         method: "GET",
         path: "/",
-        query: { embedded: "1", shop: "openrail-dev.myshopify.com", host: "dGVzdC5teXNob3BpZnkuY29t" },
+        query: {
+          embedded: "1",
+          shop: "openrail-dev.myshopify.com",
+          host: "dGVzdC5teXNob3BpZnkuY29t",
+        },
         headers: {},
         rawBody: "",
       });
@@ -2864,7 +3052,9 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(vm.render).toBe(true);
         expect(vm.state).toBe("partial");
         expect(vm.heading).toBe("Partial payment received");
-        expect(vm.text).toBe("We received $4.00 of $10.00. Please send the remaining $6.00 to complete your order.");
+        expect(vm.text).toBe(
+          "We received $4.00 of $10.00. Please send the remaining $6.00 to complete your order.",
+        );
         expect(vm.actionLabel).toBe("Pay remaining balance");
         expect(vm.actionUrl).toBe("https://pay.openrail.incepture.dev/c/chk-123");
         expect(vm.summary).toContain("Paid: $4.00 USD");
@@ -2910,8 +3100,12 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(vm.state).toBe("error");
         expect(vm.tone).toBe("warning");
         expect(vm.heading).toBe("Payment status unavailable");
-        expect(vm.text).toBe("We could not load the payment status for this order. Reload the page, or contact the shop.");
-        expect(vm.bodyText).toBe("We could not load the payment status for this order. Reload the page, or contact the shop.");
+        expect(vm.text).toBe(
+          "We could not load the payment status for this order. Reload the page, or contact the shop.",
+        );
+        expect(vm.bodyText).toBe(
+          "We could not load the payment status for this order. Reload the page, or contact the shop.",
+        );
         expect(vm.actionLabel).toBeUndefined();
         expect(vm.ctaHref).toBeUndefined();
         expect(vm.txUrl).toBeUndefined();
@@ -3013,18 +3207,27 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
             throw new Error("JSON parse error");
           },
         };
-        expect(await parseOrderStatusResponse(resBadJson)).toEqual({ kind: "failure", status: "unparsable_body" });
+        expect(await parseOrderStatusResponse(resBadJson)).toEqual({
+          kind: "failure",
+          status: "unparsable_body",
+        });
 
         const resNonObject = {
           status: 200,
           ok: true,
           json: async () => null,
         };
-        expect(await parseOrderStatusResponse(resNonObject)).toEqual({ kind: "failure", status: "unparsable_body" });
+        expect(await parseOrderStatusResponse(resNonObject)).toEqual({
+          kind: "failure",
+          status: "unparsable_body",
+        });
       });
 
       it("parseOrderStatusResponse returns failure for network error (null response)", async () => {
-        expect(await parseOrderStatusResponse(null)).toEqual({ kind: "failure", status: "network_error" });
+        expect(await parseOrderStatusResponse(null)).toEqual({
+          kind: "failure",
+          status: "network_error",
+        });
       });
 
       it("stepPollState immediately shows error banner on initial failure when no good state exists", () => {
@@ -3058,10 +3261,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(t1.warnStatus).toBe(500);
 
         // Failure 2
-        const t2 = stepPollState(
-          t1.nextState,
-          { kind: "failure", status: "network_error" },
-        );
+        const t2 = stepPollState(t1.nextState, { kind: "failure", status: "network_error" });
         expect(t2.nextData).toBe(initialGood);
         expect(t2.nextState.consecutiveFailures).toBe(2);
         expect(t2.nextState.lastGoodData).toBe(initialGood);
@@ -3201,7 +3401,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           order: makeOrder({
             id: "gid://shopify/Order/path_a_order",
             name: "#PA100",
-            totalOutstandingSet: { shopMoney: { amount: "5.00", currencyCode: "USD" }, presentmentMoney: { amount: "5.00", currencyCode: "USD" } },
+            totalOutstandingSet: {
+              shopMoney: { amount: "5.00", currencyCode: "USD" },
+              presentmentMoney: { amount: "5.00", currencyCode: "USD" },
+            },
           }),
         });
 
@@ -3218,7 +3421,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           path: "/shopify/webhooks",
           query: {},
           headers: {
-            "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+              rawOrder,
+              TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+            ),
             "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
           },
           rawBody: rawOrder,
@@ -3254,7 +3460,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           order: makeOrder({
             id: "gid://shopify/Order/path_b_order",
             name: "#PB200",
-            totalOutstandingSet: { shopMoney: { amount: "8.00", currencyCode: "USD" }, presentmentMoney: { amount: "8.00", currencyCode: "USD" } },
+            totalOutstandingSet: {
+              shopMoney: { amount: "8.00", currencyCode: "USD" },
+              presentmentMoney: { amount: "8.00", currencyCode: "USD" },
+            },
           }),
         });
 
@@ -3283,7 +3492,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           path: "/shopify/webhooks",
           query: {},
           headers: {
-            "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+              rawOrder,
+              TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+            ),
             "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
           },
           rawBody: rawOrder,
@@ -3341,7 +3553,11 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           });
           expect(res.status).toBe(404);
           const lines = warnSpy.mock.calls.map((c) => c.join(" "));
-          expect(lines.some((l) => l.includes("not an Openrail order") && l.includes("manual_cash_on_delivery"))).toBe(true);
+          expect(
+            lines.some(
+              (l) => l.includes("not an Openrail order") && l.includes("manual_cash_on_delivery"),
+            ),
+          ).toBe(true);
           expect(lines.join("\n")).not.toMatch(/Bearer|shpss|token=/i);
         } finally {
           warnSpy.mockRestore();
@@ -3355,7 +3571,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
             name: "#UNSEEN",
             confirmationNumber: "CONF12345",
             paymentGatewayNames: ["Pay with stablecoins (Openrail)"],
-            totalOutstandingSet: { shopMoney: { amount: "12.00", currencyCode: "USD" }, presentmentMoney: { amount: "12.00", currencyCode: "USD" } },
+            totalOutstandingSet: {
+              shopMoney: { amount: "12.00", currencyCode: "USD" },
+              presentmentMoney: { amount: "12.00", currencyCode: "USD" },
+            },
           }),
         });
 
@@ -3385,7 +3604,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
             name: "#PAIDFLOW",
             confirmationNumber: "CONF12345",
             paymentGatewayNames: ["Pay with stablecoins (Openrail)"],
-            totalOutstandingSet: { shopMoney: { amount: "20.00", currencyCode: "USD" }, presentmentMoney: { amount: "20.00", currencyCode: "USD" } },
+            totalOutstandingSet: {
+              shopMoney: { amount: "20.00", currencyCode: "USD" },
+              presentmentMoney: { amount: "20.00", currencyCode: "USD" },
+            },
           }),
         });
 
@@ -3417,7 +3639,11 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           path: "/shopify/openrail-webhook",
           query: {},
           headers: {
-            "openrail-signature": signOpenrailWebhook(TEST_ENV.OPENRAIL_WEBHOOK_SECRET, h.nowSec(), rawEvent),
+            "openrail-signature": signOpenrailWebhook(
+              TEST_ENV.OPENRAIL_WEBHOOK_SECRET,
+              h.nowSec(),
+              rawEvent,
+            ),
           },
           rawBody: rawEvent,
         });
@@ -3608,7 +3834,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const res = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/order-status",
-          query: { order: "gid://shopify/Order/order_zero_total_status", confirmation: "CONF_ZERO2" },
+          query: {
+            order: "gid://shopify/Order/order_zero_total_status",
+            confirmation: "CONF_ZERO2",
+          },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3667,7 +3896,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const res = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/pay-link",
-          query: { order: "gid://shopify/Order/order_bind_test_match", confirmation: "SECRET_CONF_456" },
+          query: {
+            order: "gid://shopify/Order/order_bind_test_match",
+            confirmation: "SECRET_CONF_456",
+          },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3707,7 +3939,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const res = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/pay-link",
-          query: { order: "gid://shopify/Order/order_bind_status_url", confirmation: "tok_xyz_789" },
+          query: {
+            order: "gid://shopify/Order/order_bind_status_url",
+            confirmation: "tok_xyz_789",
+          },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3760,7 +3995,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const res = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/order-status",
-          query: { order: "gid://shopify/Order/order_leak_check_2", confirmation: "ATTACKER_GUESS" },
+          query: {
+            order: "gid://shopify/Order/order_leak_check_2",
+            confirmation: "ATTACKER_GUESS",
+          },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3791,7 +4029,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const res = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/order-status",
-          query: { order: "gid://shopify/Order/order_leak_check_3", confirmation: "CORRECT_CONF_123" },
+          query: {
+            order: "gid://shopify/Order/order_leak_check_3",
+            confirmation: "CORRECT_CONF_123",
+          },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -3899,7 +4140,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           path: "/shopify/webhooks",
           query: {},
           headers: {
-            "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+              rawOrder,
+              TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+            ),
             "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
           },
           rawBody: rawOrder,
@@ -3910,7 +4154,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const statusRes = await h.app.handle({
           method: "GET",
           path: "/shopify/extension/order-status",
-          query: { order: "gid://shopify/Order/webhook_restart_partial", confirmation: "CONF_WRP200" },
+          query: {
+            order: "gid://shopify/Order/webhook_restart_partial",
+            confirmation: "CONF_WRP200",
+          },
           headers: { authorization: `Bearer ${sessionToken(good(h))}` },
           rawBody: "",
         });
@@ -4072,7 +4319,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           path: "/shopify/webhooks",
           query: {},
           headers: {
-            "x-shopify-hmac-sha256": signShopifyWebhookHmac(rawOrder, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+              rawOrder,
+              TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+            ),
             "x-shopify-shop-domain": TEST_ENV.SHOPIFY_SHOP_DOMAIN,
           },
           rawBody: rawOrder,
@@ -4472,7 +4722,9 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
       it("marking paid logs protected customer data message, does not crash, and buyer sees paid", async () => {
         const logged: string[] = [];
         const h = createTestHarness({
-          logger: (msg: string) => { logged.push(msg); },
+          logger: (msg: string) => {
+            logged.push(msg);
+          },
         });
         h.adminClient.getOrder = vi.fn(async () => {
           throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
@@ -4507,7 +4759,13 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         expect(webhookRes.status).toBe(200);
 
         // 3. Clear operator log line was emitted
-        expect(logged.some((l) => l.includes("cannot mark order 6581666666666 paid") && l.includes("protected customer data"))).toBe(true);
+        expect(
+          logged.some(
+            (l) =>
+              l.includes("cannot mark order 6581666666666 paid") &&
+              l.includes("protected customer data"),
+          ),
+        ).toBe(true);
 
         // 4. Buyer sees paid state in order-status
         const statusRes = await h.app.handle({
@@ -4588,7 +4846,13 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
       });
 
       it("refuses an APP_BASE_URL that is not an absolute http(s) URL (found live 11 Nov: a bare host made the pay link relative)", () => {
-        for (const bad of ["belmonte-apparels.myshopify.com", "shopify.openrail.incepture.dev", "//shopify.openrail.incepture.dev", "ftp://x.example", "https://"]) {
+        for (const bad of [
+          "belmonte-apparels.myshopify.com",
+          "shopify.openrail.incepture.dev",
+          "//shopify.openrail.incepture.dev",
+          "ftp://x.example",
+          "https://",
+        ]) {
           expect(() => loadShopifyAppEnv(undefined, { ...TEST_ENV, APP_BASE_URL: bad })).toThrow(
             /^INVALID_ENV: APP_BASE_URL \(must start with https:\/\/\)$/,
           );
@@ -4647,14 +4911,19 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           path: "/shopify/webhooks/orders-create",
           query: {},
           headers: {
-            "x-shopify-hmac-sha256": signShopifyWebhookHmac(payload, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+              payload,
+              TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+            ),
             "x-shopify-shop-domain": "openrail-dev.myshopify.com",
           },
           rawBody: payload,
         });
 
         expect(res.status).toBe(200);
-        expect(h.loggedLines).toContain("[shopify] order 6581579383141 bound from webhook (total 42.00)");
+        expect(h.loggedLines).toContain(
+          "[shopify] order 6581579383141 bound from webhook (total 42.00)",
+        );
       });
     });
 
@@ -4667,7 +4936,9 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           total_usd: "2.00",
           pay_url: "https://pay.openrail.incepture.dev/c/chk-123",
         });
-        expect(vmUnpaid.bodyText).toBe("Complete your payment with stablecoins to confirm this order.");
+        expect(vmUnpaid.bodyText).toBe(
+          "Complete your payment with stablecoins to confirm this order.",
+        );
         expect(vmUnpaid.orderTotalText).toBe("Order total: $2.00 USD");
         expect(vmUnpaid.bodyText).not.toContain("Order total");
 
@@ -4705,7 +4976,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           path: "/shopify/webhooks/orders-create",
           query: {},
           headers: {
-            "x-shopify-hmac-sha256": signShopifyWebhookHmac(payload, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+              payload,
+              TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+            ),
             "x-shopify-shop-domain": "openrail-dev.myshopify.com",
           },
           rawBody: payload,
@@ -4713,7 +4987,9 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
 
         expect(res.status).toBe(200);
         // Finding (2): must say 'no invoice yet', not 'invoice  is unpaid'
-        const logLine = h.loggedLines.find((l) => l.includes("placed for checkout_token chk_tok_no_invoice"));
+        const logLine = h.loggedLines.find((l) =>
+          l.includes("placed for checkout_token chk_tok_no_invoice"),
+        );
         expect(logLine).toBeDefined();
         expect(logLine).toContain("no invoice yet");
         expect(logLine).not.toContain("invoice  is unpaid");
@@ -4787,7 +5063,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           path: "/shopify/webhooks/orders-create",
           query: {},
           headers: {
-            "x-shopify-hmac-sha256": signShopifyWebhookHmac(payload, TEST_ENV.SHOPIFY_WEBHOOK_SECRET),
+            "x-shopify-hmac-sha256": signShopifyWebhookHmac(
+              payload,
+              TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+            ),
             "x-shopify-shop-domain": "openrail-dev.myshopify.com",
           },
           rawBody: payload,
@@ -4795,7 +5074,9 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
 
         // 2. Admin API throws protected customer data error
         h.adminClient.getOrder = async () => {
-          throw new Error("Shopify Admin GraphQL error: This app is not approved to access the Order object.");
+          throw new Error(
+            "Shopify Admin GraphQL error: This app is not approved to access the Order object.",
+          );
         };
 
         const token = createOrderPayToken(
@@ -4826,5 +5107,3 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
     });
   });
 });
-
-
