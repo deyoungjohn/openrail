@@ -149,6 +149,22 @@ export async function validateWebhookUrl(
 
 const MAX_BODY = 4096;
 
+/**
+ * The DNS answer is pinned to the address that was checked. Node asks for `{ all: true }` when it tries several
+ * addresses (since Node 20): the answer must then be a list, and a single address there fails with
+ * "Invalid IP address: undefined" (the webhook test event did exactly that).
+ */
+export function pinnedLookup(address: string, family: number) {
+  return (_hostname: string, options: unknown, callback: (...args: unknown[]) => void): void => {
+    const all =
+      typeof options === "object" &&
+      options !== null &&
+      (options as { all?: boolean }).all === true;
+    if (all) callback(null, [{ address, family }]);
+    else callback(null, address, family);
+  };
+}
+
 /** HTTPS request with pinned DNS, no redirects, a 10 s timeout and a 4 KB body cap. */
 export async function safeWebhookFetch(
   input: string,
@@ -168,9 +184,7 @@ export async function safeWebhookFetch(
         headers: init.headers as Record<string, string> | undefined,
         servername: validated.url.hostname,
         timeout: 10_000,
-        lookup: ((_hostname: string, _options: unknown, callback: (...args: unknown[]) => void) => {
-          callback(null, validated.address, validated.family);
-        }) as never,
+        lookup: pinnedLookup(validated.address, validated.family) as never,
       },
       (response) => {
         const chunks: Buffer[] = [];

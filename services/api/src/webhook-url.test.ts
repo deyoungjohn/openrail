@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBlockedAddress, validateWebhookUrl } from "./webhook-url.js";
+import { isBlockedAddress, pinnedLookup, validateWebhookUrl } from "./webhook-url.js";
 
 const publicResolver = async () => [{ address: "93.184.216.34", family: 4 }];
 
@@ -69,5 +69,23 @@ describe("webhook URL validation", () => {
         { address: "10.0.0.1", family: 4 },
       ]),
     ).rejects.toThrow("not public");
+  });
+});
+
+describe("pinnedLookup", () => {
+  it("answers one address for a plain lookup", () => {
+    let got: unknown[] = [];
+    pinnedLookup("93.184.216.34", 4)("example.com", {}, (...args) => {
+      got = args;
+    });
+    expect(got).toEqual([null, "93.184.216.34", 4]);
+  });
+
+  it("answers a list when node asks for all addresses (the webhook test said 'Invalid IP address: undefined')", () => {
+    let got: unknown[] = [];
+    pinnedLookup("93.184.216.34", 4)("example.com", { all: true }, (...args) => {
+      got = args;
+    });
+    expect(got).toEqual([null, [{ address: "93.184.216.34", family: 4 }]]);
   });
 });
