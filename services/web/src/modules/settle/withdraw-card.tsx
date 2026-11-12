@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AddressChip } from "@/components/ui/address-chip";
-import type { ChainId } from "@/components/ui/chain-badge";
+import { ChainIcon, type ChainId } from "@/components/ui/chain-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorNote } from "@/components/ui/error-note";
@@ -22,7 +22,16 @@ const CHAINS: { id: string; label: string; chain: ChainId }[] = [
   { id: "solana", label: "Solana", chain: "solana" },
 ];
 
-type Step = "form" | "quoting" | "review" | "signing" | "following" | "done" | "failed";
+type Step =
+  | "form"
+  | "quoting"
+  | "review"
+  | "signing"
+  | "register"
+  | "registering"
+  | "following"
+  | "done"
+  | "failed";
 
 interface Quoted {
   depositAddress: string;
@@ -43,6 +52,8 @@ function problemText(code: string | undefined): string {
       return "That address is not valid for the chain you picked.";
     case "invalid_amount":
       return "That amount is not valid.";
+    case "intents_key_not_registered":
+      return "Your wallet key is not registered for private withdrawals yet.";
     case "confidential_intents_disabled":
       return "Private balance withdrawals are not switched on yet.";
     default:
@@ -61,6 +72,11 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quoted | null>(null);
   const [status, setStatus] = useState<string>("");
+  // The signed withdrawal waits here while the wallet's key is registered with the intents contract (one small transaction).
+  const [waiting, setWaiting] = useState<{
+    body: Record<string, unknown>;
+    publicKey: string;
+  } | null>(null);
 
   const units = parseUsdcInput(amount);
   const amountBad = units === null;
@@ -92,6 +108,76 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
     }
   };
 
+  /** Send the signed withdrawal and follow it to the end. A key the intents contract does not know stops here, before anything moves. */
+  const submitAndFollow = async (body: Record<string, unknown>, publicKey: string) => {
+    if (quote === null) return;
+    try {
+      await dashClient.confidential.withdrawSubmit(body);
+    } catch (e) {
+      if ((e as { code?: string }).code === "intents_key_not_registered") {
+        setWaiting({ body, publicKey });
+        setStep("register");
+        return;
+      }
+      throw e;
+    }
+    setStep("following");
+    // Follow it until the provider says it is over (about two minutes at most).
+    for (let i = 0; i < 60; i += 1) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const s = (await dashClient.confidential.withdrawStatus(quote.depositAddress)) as {
+        status?: string;
+      };
+      setStatus(String(s.status ?? ""));
+      if (s.status === "SUCCESS") return setStep("done");
+      if (s.status === "REFUNDED" || s.status === "FAILED") {
+        console.log("withdraw ended", quote.depositAddress, s);
+        setProblem(
+          `It did not complete (${s.status}). The money stays in your private balance. Deposit address: ${quote.depositAddress}`,
+        );
+        return setStep("failed");
+      }
+    }
+    setProblem("Still on its way. You can close this page; it will arrive.");
+    setStep("failed");
+  };
+
+  /** One small transaction that tells the intents contract this wallet key belongs to the account; then the waiting withdrawal goes out. */
+  const registerKey = async () => {
+    if (waiting === null) return;
+    setProblem(null);
+    setStep("registering");
+    try {
+      await near.call({
+        receiverId: "intents.near",
+        methodName: "add_public_key",
+        args: { public_key: waiting.publicKey },
+        gas: "30000000000000",
+        deposit: "1",
+      });
+      for (let i = 0; i < 15; i += 1) {
+        const k = (await dashClient.confidential.keyStatus(waiting.publicKey)) as {
+          registered?: boolean;
+        };
+        if (k.registered === true) {
+          await submitAndFollow(waiting.body, waiting.publicKey);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      setProblem("The key is not registered yet. Wait a moment and press the button again.");
+      setStep("register");
+    } catch (e) {
+      console.error("register key failed", e);
+      setProblem(
+        /reject|declin|cancel/i.test((e as Error).message ?? "")
+          ? "You declined it in your wallet. Nothing was moved."
+          : "We couldn't register the key. Nothing was moved.",
+      );
+      setStep("register");
+    }
+  };
+
   const signAndSend = async () => {
     if (quote === null) return;
     setProblem(null);
@@ -110,26 +196,8 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
         recipient: p.recipient,
         nonce: p.nonce,
       });
-      await dashClient.confidential.withdrawSubmit(signedIntent(generated.intent, signed));
-      setStep("following");
-      // Follow it until the provider says it is over (about two minutes at most).
-      for (let i = 0; i < 60; i += 1) {
-        await new Promise((r) => setTimeout(r, 3000));
-        const s = (await dashClient.confidential.withdrawStatus(quote.depositAddress)) as {
-          status?: string;
-        };
-        setStatus(String(s.status ?? ""));
-        if (s.status === "SUCCESS") return setStep("done");
-        if (s.status === "REFUNDED" || s.status === "FAILED") {
-          console.log("withdraw ended", quote.depositAddress, s);
-          setProblem(
-            `It did not complete (${s.status}). The money stays in your private balance. Deposit address: ${quote.depositAddress}`,
-          );
-          return setStep("failed");
-        }
-      }
-      setProblem("Still on its way. You can close this page; it will arrive.");
-      setStep("failed");
+      const body = signedIntent(generated.intent, signed);
+      await submitAndFollow(body, signed.publicKey);
     } catch (e) {
       const code = (e as { code?: string; message?: string }).code;
       const msg = (e as Error).message ?? "";
@@ -184,7 +252,7 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
           <>
             <Select label="Network" value={chain} onValueChange={setChain}>
               {CHAINS.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} data-icon={<ChainIcon chain={c.chain} />}>
                   {c.label}
                 </option>
               ))}
@@ -219,6 +287,12 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
             Done. The money is in your wallet.
           </p>
         ) : null}
+        {step === "register" || step === "registering" ? (
+          <p role="status" className="text-[14px]">
+            One step first: your wallet's key has to be registered once with the private balance
+            contract. It is a tiny transaction. Then your withdrawal is sent.
+          </p>
+        ) : null}
         <ErrorNote>{problem}</ErrorNote>
 
         <div className="flex items-center justify-center gap-3">
@@ -236,6 +310,11 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
                 {step === "signing" ? "Waiting for your wallet" : "Withdraw"}
               </Button>
             </>
+          ) : null}
+          {step === "register" || step === "registering" ? (
+            <Button loading={step === "registering"} onClick={() => void registerKey()}>
+              {step === "registering" ? "Waiting for your wallet" : "Register my key"}
+            </Button>
           ) : null}
           {step === "done" || step === "failed" ? (
             <Button
