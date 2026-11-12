@@ -8,6 +8,7 @@
  */
 import type { Terms } from "./terms.js";
 import type { LineItem } from "./line-items.js";
+import { WORDMARK_PATHS, WORDMARK_VIEWBOX } from "./statement-wordmark.js";
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -615,4 +616,429 @@ export function renderReceiptPdf(receipt: ReceiptDocument): Uint8Array {
 
 export function renderReceiptPdfBase64(receipt: ReceiptDocument): string {
   return Buffer.from(renderReceiptPdf(receipt)).toString("base64");
+}
+
+export interface StatementPaymentRow {
+  /** ISO timestamp of the booking. */
+  date: string;
+  /** Invoice number, order reference or a short claim label. */
+  from: string;
+  /** USDC base units (6 decimals). */
+  amount: string;
+}
+
+export interface StatementCashoutRow {
+  date: string;
+  /** Destination address, abbreviated for the sheet. */
+  to: string;
+  /** USDC base units (6 decimals). */
+  amount: string;
+}
+
+export interface StatementDocument {
+  businessName: string;
+  from: string;
+  to: string;
+  generatedAt: string;
+  /** Fingerprint of the statement data; the envelope hashes the final PDF bytes. */
+  fingerprint: string;
+  payments: readonly StatementPaymentRow[];
+  cashouts: readonly StatementCashoutRow[];
+}
+
+const SPAGE_WIDTH = 595.28;
+const SPAGE_HEIGHT = 841.89;
+const SMARGIN = 45;
+const SRIGHT = SPAGE_WIDTH - SMARGIN;
+const SWIDTH = SRIGHT - SMARGIN;
+const SFOOTER_Y = 34;
+const SROW_H = 18;
+const STABLE_HEADER_H = 22;
+
+interface StatementBuilder {
+  pages: string[];
+  content: string;
+  y: number;
+  page: number;
+}
+
+function sBeginPage(builder: StatementBuilder, continuation: string | null): void {
+  if (builder.content !== "") builder.pages.push(builder.content);
+  builder.page += 1;
+  builder.content = "";
+  builder.y = SPAGE_HEIGHT - SMARGIN;
+  drawCorners(builder);
+  if (continuation !== null) {
+    text(builder, 150, builder.y, 10, "/F2", GRAY, continuation);
+    builder.y -= 22;
+  }
+}
+
+function drawCorners(builder: StatementBuilder): void {
+  // Indigo corner shapes, deliberately vector paths rather than images.
+  builder.content += `0.247 0.275 0.996 rg\n0 ${(SPAGE_HEIGHT - 95).toFixed(2)} m 0 ${SPAGE_HEIGHT.toFixed(2)} l 128 ${SPAGE_HEIGHT.toFixed(2)} l f\n`;
+  builder.content += `0.93 0.94 1 rg\n0 ${(SPAGE_HEIGHT - 145).toFixed(2)} m 0 ${SPAGE_HEIGHT.toFixed(2)} l 74 ${SPAGE_HEIGHT.toFixed(2)} l f\n`;
+  builder.content += `0.247 0.275 0.996 rg\n${SPAGE_WIDTH.toFixed(2)} 0 m ${SPAGE_WIDTH.toFixed(2)} 96 l ${(SPAGE_WIDTH - 122).toFixed(2)} 0 l f\n`;
+  builder.content += `0.93 0.94 1 rg\n${SPAGE_WIDTH.toFixed(2)} 0 m ${SPAGE_WIDTH.toFixed(2)} 142 l ${(SPAGE_WIDTH - 72).toFixed(2)} 0 l f\n`;
+}
+
+function fillRect(
+  builder: StatementBuilder,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: string,
+): void {
+  builder.content += `${color} rg\n${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f\n`;
+}
+
+function fitText(value: string, maxWidth: number, size: number, font: Font): string {
+  if (measureTextWidth(font, value, size) <= maxWidth) return value;
+  let lo = 0;
+  let hi = value.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (measureTextWidth(font, `${value.slice(0, mid)}...`, size) <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return `${value.slice(0, lo)}...`;
+}
+
+const ST_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function statementDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (match === null) return value;
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return value;
+  return `${ST_MONTHS[month - 1]} ${day}, ${match[1]}`;
+}
+
+function statementPeriod(from: string, to: string): string {
+  const a = /^(\d{4})-(\d{2})-(\d{2})/.exec(from);
+  const b = /^(\d{4})-(\d{2})-(\d{2})/.exec(to);
+  if (a === null || b === null) return `${from} to ${to}`;
+  const aMonth = Number(a[2]);
+  const bMonth = Number(b[2]);
+  const aDay = Number(a[3]);
+  const bDay = Number(b[3]);
+  if (a[1] === b[1]) {
+    if (aMonth === bMonth)
+      return `${ST_MONTHS[aMonth - 1] ?? ""} ${aDay} to ${ST_MONTHS[bMonth - 1] ?? ""} ${bDay}, ${a[1]}`;
+    return `${ST_MONTHS[aMonth - 1] ?? ""} ${aDay} to ${ST_MONTHS[bMonth - 1] ?? ""} ${bDay}, ${a[1]}`;
+  }
+  return `${statementDate(from)} to ${statementDate(to)}`;
+}
+
+function baseUnits(value: string): bigint {
+  return /^\d+$/.test(value) ? BigInt(value) : 0n;
+}
+
+function usdText(value: string): string {
+  const units = baseUnits(value);
+  const whole = units / 1_000_000n;
+  let frac = (units % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
+  if (frac.length < 2) frac = frac.padEnd(2, "0");
+  return `$${whole.toString()}.${frac}`;
+}
+
+function totalText(rows: readonly { amount: string }[]): string {
+  let total = 0n;
+  for (const row of rows) total += baseUnits(row.amount);
+  return usdText(total.toString());
+}
+
+function drawStatementTableHeader(builder: StatementBuilder, kind: "payments" | "cashouts"): void {
+  const top = builder.y;
+  fillRect(builder, SMARGIN, top - STABLE_HEADER_H, SWIDTH, STABLE_HEADER_H, ACCENT);
+  const title = kind === "payments" ? "PAYMENTS" : "CASH-OUTS";
+  text(
+    builder,
+    SMARGIN + SWIDTH / 2 - measureTextWidth("/F2", title, 11) / 2,
+    top - 15,
+    11,
+    "/F2",
+    "1 1 1",
+    title,
+  );
+  builder.y = top - STABLE_HEADER_H;
+  const columns: Array<[string, number]> =
+    kind === "payments"
+      ? [
+          ["NO", SMARGIN + 8],
+          ["DATE (UTC)", SMARGIN + 40],
+          ["FROM", SMARGIN + 145],
+          ["AMOUNT", SRIGHT - 8],
+        ]
+      : [
+          ["NO", SMARGIN + 8],
+          ["DATE", SMARGIN + 40],
+          ["TO", SMARGIN + 145],
+          ["AMOUNT", SRIGHT - 8],
+        ];
+  for (const [label, x] of columns) {
+    const align = label === "AMOUNT" ? "right" : "left";
+    text(builder, Number(x), builder.y - 14, 7, "/F2", GRAY, label, align);
+  }
+  builder.y -= STABLE_HEADER_H;
+  line(builder, SMARGIN, builder.y, SRIGHT, builder.y, 0.6, "0.82 0.82 0.82");
+}
+
+function ensureStatementSpace(
+  builder: StatementBuilder,
+  needed: number,
+  continuation: string,
+): void {
+  if (builder.y - needed >= SMARGIN + 64) return;
+  sBeginPage(builder, continuation);
+}
+
+function drawStatementTable(
+  builder: StatementBuilder,
+  kind: "payments" | "cashouts",
+  rows: readonly { date: string; from?: string; to?: string; amount: string }[],
+  totalLabel: string,
+  emptyText: string,
+): void {
+  const continuation =
+    kind === "payments" ? "Payments received (continued)" : "Cash-outs (continued)";
+  ensureStatementSpace(builder, 80, continuation);
+  drawStatementTableHeader(builder, kind);
+  if (rows.length === 0) {
+    ensureStatementSpace(builder, SROW_H + 18, continuation);
+    text(builder, SMARGIN + 8, builder.y - 13, 9, "/F1", GRAY, emptyText);
+    builder.y -= SROW_H;
+    line(builder, SMARGIN, builder.y, SRIGHT, builder.y, 0.35, "0.82 0.82 0.82");
+  }
+  for (const [index, row] of rows.entries()) {
+    ensureStatementSpace(builder, SROW_H + 12, continuation);
+    if (builder.y === SPAGE_HEIGHT - SMARGIN - 22) drawStatementTableHeader(builder, kind);
+    const y = builder.y - 13;
+    text(builder, SMARGIN + 8, y, 8, "/F1", INK, String(index + 1));
+    text(builder, SMARGIN + 40, y, 8, "/F1", INK, statementDate(row.date));
+    text(
+      builder,
+      SMARGIN + 145,
+      y,
+      8,
+      "/F1",
+      INK,
+      fitText(row.from ?? row.to ?? "", SRIGHT - (SMARGIN + 145) - 82, 8, "/F1"),
+    );
+    text(builder, SRIGHT - 8, y, 8, "/F1", INK, usdText(row.amount), "right");
+    builder.y -= SROW_H;
+    line(builder, SMARGIN, builder.y, SRIGHT, builder.y, 0.35, "0.88 0.88 0.88");
+  }
+  ensureStatementSpace(builder, 26, continuation);
+  const y = builder.y - 13;
+  text(builder, SMARGIN + 8, y, 9, "/F2", INK, totalLabel);
+  text(builder, SRIGHT - 8, y, 9, "/F2", ACCENT, totalText(rows), "right");
+  builder.y -= 23;
+  line(builder, SMARGIN, builder.y, SRIGHT, builder.y, 0.8, ACCENT);
+  builder.y -= 18;
+}
+
+function drawStatementFooter(builder: StatementBuilder, page: number, total: number): void {
+  text(builder, SMARGIN, SFOOTER_Y + 16, 7, "/F1", GRAY, "Powered by");
+  drawWordmark(builder, SMARGIN + 48, SFOOTER_Y + 10, 0.075);
+  text(builder, SRIGHT, SFOOTER_Y + 36, 8, "/F1", GRAY, `${page} / ${total}`, "right");
+  line(builder, SMARGIN, SFOOTER_Y + 25, SRIGHT, SFOOTER_Y + 25, 0.35, "0.86 0.86 0.86");
+}
+
+function drawWordmarkPath(
+  builder: StatementBuilder,
+  path: string,
+  tx: number,
+  ty: number,
+  x: number,
+  y: number,
+  scale: number,
+): void {
+  const tokens = path.match(/[MLCZ]|-?\d*\.?\d+/g) ?? [];
+  let i = 0;
+  while (i < tokens.length) {
+    const command = tokens[i++] ?? "";
+    if (command === "M" || command === "L") {
+      const gx = Number(tokens[i++] ?? 0);
+      const gy = Number(tokens[i++] ?? 0);
+      const px = x + (tx + gx) * scale;
+      const py = y + (WORDMARK_VIEWBOX.height - (ty + gy)) * scale;
+      builder.content += `${px.toFixed(2)} ${py.toFixed(2)} ${command === "M" ? "m" : "l"}\n`;
+    } else if (command === "C") {
+      const points: string[] = [];
+      for (let n = 0; n < 6; n += 2) {
+        const gx = Number(tokens[i++] ?? 0);
+        const gy = Number(tokens[i++] ?? 0);
+        points.push(
+          `${(x + (tx + gx) * scale).toFixed(2)} ${(y + (WORDMARK_VIEWBOX.height - (ty + gy)) * scale).toFixed(2)}`,
+        );
+      }
+      builder.content += `${points.join(" ")} c\n`;
+    } else if (command === "Z") {
+      builder.content += "h\n";
+    }
+  }
+}
+
+function drawWordmark(builder: StatementBuilder, x: number, y: number, scale: number): void {
+  const transforms: Array<[number, number]> = [
+    [0, 0],
+    [290.32734, 248.512756],
+    [420.963874, 248.512756],
+    [544.485331, 248.512756],
+    [674.46653, 248.512756],
+    [763.44242, 248.512756],
+    [884.904249, 248.512756],
+    [947.85394, 248.512756],
+  ];
+  builder.content += `q\n${ACCENT} rg\nn\n`;
+  for (const [index, path] of WORDMARK_PATHS.entries()) {
+    const [tx, ty] = transforms[index] ?? [0, 0];
+    drawWordmarkPath(builder, path, tx, ty, x, y, scale);
+  }
+  builder.content += "f\nQ\n";
+}
+
+function drawWordmarkIcon(builder: StatementBuilder, x: number, y: number, scale: number): void {
+  builder.content += `q\n${ACCENT} rg\nn\n`;
+  drawWordmarkPath(builder, WORDMARK_PATHS[0] ?? "", 0, 0, x, y, scale);
+  builder.content += "f\nQ\n";
+}
+
+/** Deterministic financial statement, one page per table overflow. */
+export function renderStatementPdf(document: StatementDocument): Uint8Array {
+  const builder: StatementBuilder = { pages: [], content: "", y: SPAGE_HEIGHT - SMARGIN, page: 0 };
+  sBeginPage(builder, null);
+  drawWordmarkIcon(builder, SMARGIN + (SWIDTH - 18) / 2, SPAGE_HEIGHT - 82, 0.055);
+  const business = fitText(document.businessName, SWIDTH - 40, 18, "/F2");
+  text(
+    builder,
+    SMARGIN + (SWIDTH - measureTextWidth("/F2", business, 18)) / 2,
+    SPAGE_HEIGHT - 92,
+    18,
+    "/F2",
+    INK,
+    business,
+  );
+  const titleY = SPAGE_HEIGHT - 152;
+  text(
+    builder,
+    SMARGIN + (SWIDTH - measureTextWidth("/F2", "Payments", 34)) / 2,
+    titleY,
+    34,
+    "/F2",
+    INK,
+    "Payments",
+  );
+  text(
+    builder,
+    SMARGIN + (SWIDTH - measureTextWidth("/F2", "received", 34)) / 2,
+    titleY - 38,
+    34,
+    "/F2",
+    ACCENT,
+    "received",
+  );
+  const period = `Statement, ${statementPeriod(document.from, document.to)}`;
+  text(
+    builder,
+    SMARGIN + (SWIDTH - measureTextWidth("/F1", period, 10)) / 2,
+    titleY - 62,
+    10,
+    "/F1",
+    GRAY,
+    period,
+  );
+  builder.y = titleY - 100;
+
+  drawStatementTable(
+    builder,
+    "payments",
+    document.payments,
+    "Total received",
+    "None in this period",
+  );
+  drawStatementTable(
+    builder,
+    "cashouts",
+    document.cashouts,
+    "Total cashed out",
+    "None in this period",
+  );
+  ensureStatementSpace(builder, 32, "Statement (continued)");
+  let receivedUnits = 0n;
+  for (const row of document.payments) receivedUnits += baseUnits(row.amount);
+  let cashedUnits = 0n;
+  for (const row of document.cashouts) cashedUnits += baseUnits(row.amount);
+  const leftUnits = receivedUnits > cashedUnits ? receivedUnits - cashedUnits : 0n;
+  text(builder, SMARGIN, builder.y, 12, "/F2", INK, "Left in balance:");
+  text(builder, SRIGHT, builder.y, 12, "/F2", ACCENT, usdText(leftUnits.toString()), "right");
+  builder.y -= 46;
+  ensureStatementSpace(builder, 54, "Statement (continued)");
+  text(builder, SMARGIN, builder.y, 7, "/F1", GRAY, `Fingerprint: ${document.fingerprint}`);
+  builder.y -= 12;
+  text(
+    builder,
+    SMARGIN,
+    builder.y,
+    7,
+    "/F1",
+    GRAY,
+    `Generated ${formatDateTime(document.generatedAt)}`,
+  );
+  builder.y -= 12;
+  text(builder, SMARGIN, builder.y, 7, "/F1", GRAY, "Amounts are USDC settled on NEAR.");
+  finishPages(builder);
+  const totalPages = builder.pages.length;
+  builder.pages = builder.pages.map((page, index) => {
+    const pageBuilder: StatementBuilder = { pages: [], content: page, y: 0, page: index + 1 };
+    drawStatementFooter(pageBuilder, index + 1, totalPages);
+    return pageBuilder.content;
+  });
+
+  const objects: string[] = [];
+  objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objects.push(
+    `<< /Type /Pages /Kids [${builder.pages.map((_, index) => `${7 + index * 2} 0 R`).join(" ")}] /Count ${builder.pages.length} >>`,
+  );
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>");
+
+  builder.pages.forEach((content, index) => {
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${SPAGE_WIDTH} ${SPAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents ${8 + index * 2} 0 R >>`,
+    );
+    objects.push(
+      `<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}endstream`,
+    );
+  });
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf, "latin1"));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return new Uint8Array(Buffer.from(pdf, "latin1"));
 }

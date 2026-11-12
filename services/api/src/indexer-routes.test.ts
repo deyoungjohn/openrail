@@ -117,6 +117,57 @@ describe("receipt and statement routes use the indexer port", () => {
     expect(indexer.listEvents).toHaveBeenCalledWith({ after: "3", type: "booked", limit: 200 });
   });
 
+  it("includes a module-owned checkout booking in the statement", async () => {
+    const { app, indexer, secret } = appWithIndexer();
+    app.docs.put(
+      "checkout.checkouts",
+      "c-9",
+      { token_id: "c-9", order_ref: "wc_order_9" },
+      "acme.openrail.near",
+    );
+    vi.mocked(indexer.listEvents).mockResolvedValueOnce({
+      data: [
+        {
+          id: "9",
+          type: "booked",
+          created: Math.floor(Date.parse("2026-11-03T10:00:00Z") / 1000),
+          data: { token_id: "c-9", payment: "2000000", surplus: "0" },
+        },
+      ],
+      next_cursor: null,
+    });
+    const response = await app.handle(
+      request("GET", "/v1/statements", secret, "format=pdf&from=2026-11-01&to=2026-11-30"),
+    );
+    expect(response.status).toBe(200);
+    const pdf = Buffer.from(
+      (response.body as { content_base64: string }).content_base64,
+      "base64",
+    ).toString("latin1");
+    expect(pdf).toContain("Checkout wc_order_9");
+    expect(pdf).toContain("$2.00");
+  });
+
+  it("renders a statement PDF locally instead of returning the blank indexer PDF", async () => {
+    const { app, indexer, secret } = appWithIndexer();
+    const response = await app.handle(
+      request("GET", "/v1/statements", secret, "format=pdf&from=2026-11-01&to=2026-11-30"),
+    );
+    expect(response.status).toBe(200);
+    const body = response.body as {
+      filename: string;
+      content_base64: string;
+      content_type: string;
+    };
+    expect(body.filename).toBe("statement-2026-11-01-2026-11-30.pdf");
+    expect(body.content_type).toBe("application/pdf");
+    const pdf = Buffer.from(body.content_base64, "base64").toString("latin1");
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdf).toContain("Acme Ltd");
+    expect(pdf).toContain("Total received");
+    expect(indexer.getStatement).not.toHaveBeenCalled();
+  });
+
   it("returns the indexer statement envelope with the query", async () => {
     const { app, indexer, secret } = appWithIndexer();
     const response = await app.handle(

@@ -19,7 +19,13 @@ import {
 import { sha256Hex0x } from "./crypto.js";
 import { createMemoryStores, type ApiStore } from "./stores.js";
 import { IdempotencyConflict, IdempotencyStore } from "./idempotency.js";
-import { renderInvoicePdfBase64, renderReceiptPdfBase64, type ReceiptDocument } from "./pdf.js";
+import {
+  renderInvoicePdfBase64,
+  renderReceiptPdfBase64,
+  renderStatementPdf,
+  type ReceiptDocument,
+  type StatementDocument,
+} from "./pdf.js";
 import { PROCESSING_FEE_DESCRIPTION } from "./line-items.js";
 import { handleRecurring, type RecurringStore } from "./recurring.js";
 import { createMemoryRecurringStore } from "./recurring-store.js";
@@ -991,6 +997,110 @@ export class ApiApp {
     return { status: 500, body: { error: { code: "internal_error", message: "internal error" } } };
   }
 
+  /** The statement is a local rendering of records and receipts; it never reads the chain. */
+  private async statementDocument(
+    accountId: string,
+    query: URLSearchParams,
+    tokenId: string | undefined,
+  ): Promise<StatementDocument> {
+    const now = this.clock();
+    const to = query.get("to") ?? now.toISOString().slice(0, 10);
+    const from =
+      query.get("from") ??
+      new Date(Date.parse(`${to}T00:00:00Z`) - 30 * 86_400_000).toISOString().slice(0, 10);
+    const fromMs = Date.parse(`${from}T00:00:00Z`);
+    const toMs = Date.parse(`${to}T00:00:00Z`) + 86_400_000;
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+      throw new ApiError(400, "invalid_date", "from and to must be ISO dates");
+    }
+    if (toMs <= fromMs) throw new ApiError(400, "invalid_range", "to must be after from");
+    const business = this.store.getBusiness(accountId);
+    const invoices = this.store
+      .listInvoices(accountId)
+      .filter((invoice) => tokenId === undefined || invoice.token_id === tokenId);
+    const businessName = business?.legal_name || invoices[0]?.issuer_legal_name || accountId;
+    const payments: Array<{ date: string; from: string; amount: string }> = [];
+    const tokensWithReceipts = new Set<string>();
+    for (const invoice of invoices) {
+      let receipts = this.store.listReceipts(invoice.token_id);
+      if (receipts.length === 0 && this.deps.indexer !== undefined) {
+        try {
+          receipts = await this.deps.indexer.listReceipts(accountId, invoice.token_id);
+        } catch {
+          receipts = [];
+        }
+      }
+      for (const receipt of receipts) {
+        const time = typeof receipt.time === "string" ? receipt.time : "";
+        const at = Date.parse(time);
+        if (!Number.isFinite(at) || at < fromMs || at >= toMs) continue;
+        payments.push({
+          date: time,
+          from: invoice.invoice_number,
+          amount: typeof receipt.amount === "string" ? receipt.amount : "0",
+        });
+        tokensWithReceipts.add(invoice.token_id);
+      }
+    }
+    // Bookings of other claims (checkouts and payment links) come from the indexer's booked
+    // events; the API does not read a chain for a statement.
+    if (this.deps.indexer !== undefined) {
+      const own = new Set(invoices.map((invoice) => invoice.token_id));
+      const labels = new Map<string, string>();
+      for (const doc of this.docs.listOwned<Record<string, unknown>>(accountId)) {
+        const token = typeof doc.body.token_id === "string" ? doc.body.token_id : "";
+        const orderRef = typeof doc.body.order_ref === "string" ? doc.body.order_ref : "";
+        if (token === "" || orderRef === "") continue;
+        own.add(token);
+        labels.set(token, orderRef.startsWith("pl_") ? "Pay link" : `Checkout ${orderRef}`);
+      }
+      let after: string | undefined;
+      for (let page = 0; page < 10; page += 1) {
+        const batch = await this.deps.indexer.listEvents({
+          type: "booked",
+          limit: 200,
+          ...(after === undefined ? {} : { after }),
+        });
+        for (const event of batch.data) {
+          const data = (event.data ?? {}) as Record<string, unknown>;
+          const token = typeof data.token_id === "string" ? data.token_id : "";
+          if (token === "" || !own.has(token) || tokensWithReceipts.has(token)) continue;
+          const created = typeof event.created === "number" ? event.created : 0;
+          const at = created * 1000;
+          if (!Number.isFinite(at) || at < fromMs || at >= toMs) continue;
+          const payment = /^\d+$/.test(String(data.payment ?? ""))
+            ? BigInt(String(data.payment))
+            : 0n;
+          const surplus = /^\d+$/.test(String(data.surplus ?? ""))
+            ? BigInt(String(data.surplus))
+            : 0n;
+          payments.push({
+            date: new Date(at).toISOString(),
+            from: labels.get(token) ?? `Claim ${token}`,
+            amount: (payment + surplus).toString(),
+          });
+        }
+        after = batch.next_cursor ?? undefined;
+        if (after === undefined) break;
+      }
+    }
+    const cashouts: Array<{ date: string; to: string; amount: string }> = [];
+    for (const record of this.docs.list<CashoutRecord>("cashouts", accountId)) {
+      const at = Date.parse(record.created_at);
+      if (!Number.isFinite(at) || at < fromMs || at >= toMs) continue;
+      cashouts.push({
+        date: record.created_at,
+        to: record.destination_address,
+        amount: record.amount,
+      });
+    }
+    payments.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    cashouts.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    const generatedAt = now.toISOString();
+    const fingerprint = sha256Hex0x(JSON.stringify({ businessName, from, to, payments, cashouts }));
+    return { businessName, from, to, generatedAt, fingerprint, payments, cashouts };
+  }
+
   private async route(request: ApiRequest): Promise<ApiResponse> {
     const { method, path } = request;
     if (method === "GET" && path === "/v1/health") {
@@ -1933,6 +2043,28 @@ export class ApiApp {
       const context = this.requireAuth(request);
       const format = request.query.get("format") === "pdf" ? "pdf" : "csv";
       const tokenId = request.query.get("token_id") ?? undefined;
+      if (format === "pdf") {
+        const document = await this.statementDocument(context.accountId, request.query, tokenId);
+        const pdf = renderStatementPdf(document);
+        const base =
+          tokenId === undefined
+            ? `statement-${document.from}-${document.to}`
+            : `statement-${tokenId}-${document.from}-${document.to}`;
+        return {
+          status: 200,
+          body: {
+            format: "pdf",
+            filename: `${base}.pdf`,
+            content_type: "application/pdf",
+            content_base64: Buffer.from(pdf).toString("base64"),
+            sha256: sha256Hex0x(pdf),
+            generated_at: document.generatedAt,
+            from: document.from,
+            to: document.to,
+            ...(tokenId === undefined ? {} : { token_id: tokenId }),
+          },
+        };
+      }
       if (this.deps.indexer !== undefined) {
         return {
           status: 200,

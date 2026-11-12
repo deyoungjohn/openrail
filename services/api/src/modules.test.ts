@@ -112,6 +112,7 @@ describe("API module host", () => {
         expect(docs.get("links", "b")).toEqual({ n: 2 });
         expect(docs.list("links")).toEqual([{ n: 1 }, { n: 2 }]);
         expect(docs.list("links", "acme.near")).toEqual([{ n: 2 }]);
+        expect(docs.listOwned("acme.near")).toEqual([{ namespace: "links", body: { n: 2 } }]);
         docs.delete("links", "b");
         expect(docs.get("links", "b")).toBeUndefined();
       }

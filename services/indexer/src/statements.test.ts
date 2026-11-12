@@ -88,6 +88,8 @@ describe("indexer statements", () => {
     expect(pdf.content_type).toBe("application/pdf");
     const bytes = Buffer.from(pdf.content_base64, "base64");
     expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    expect(bytes.toString("latin1")).toContain("OPENRAIL STATEMENT");
+    expect(bytes.toString("latin1")).toContain("c-1");
     expect(pdf.sha256).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
