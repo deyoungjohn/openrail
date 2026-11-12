@@ -116,6 +116,8 @@ export function DataTable<T>({
   // Hard rule: never more than ten rows at once, whatever a screen asks for.
   const pageSize = clampPageSize(askedPageSize);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  // Rows opened at least once stay mounted (closed) so closing animates too; a row mounts closed and then opens.
+  const [everOpened, setEverOpened] = useState<ReadonlySet<string>>(new Set());
   const [sort, setSort] = useState(defaultSort ?? null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -396,6 +398,16 @@ export function DataTable<T>({
                               aria-label={isOpen ? t.hideDetails : t.showDetails}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (!everOpened.has(id)) {
+                                  // mounted closed, then opened on the next frame, so the growth is seen
+                                  setEverOpened((prev) => new Set(prev).add(id));
+                                  requestAnimationFrame(() =>
+                                    requestAnimationFrame(() =>
+                                      setOpen((prev) => new Set(prev).add(id)),
+                                    ),
+                                  );
+                                  return;
+                                }
                                 setOpen((prev) => {
                                   const next = new Set(prev);
                                   if (!next.delete(id)) next.add(id);
@@ -407,16 +419,32 @@ export function DataTable<T>({
                               <ChevronDown
                                 aria-hidden
                                 size={16}
-                                className={cn("transition-transform", isOpen && "rotate-180")}
+                                className={cn(
+                                  "transition-transform duration-300 ease-[var(--ease)]",
+                                  isOpen && "rotate-180",
+                                )}
                               />
                             </button>
                           </td>
                         ) : null}
                       </tr>
-                      {hasExpand && isOpen ? (
-                        <tr className="border-b border-border bg-row/50 last:border-b-0">
-                          <td colSpan={span} className="px-4 py-3 first:sm:pl-6">
-                            {expandedRow?.(row)}
+                      {hasExpand && (isOpen || everOpened.has(id)) ? (
+                        <tr
+                          className={cn(
+                            "bg-row/50",
+                            isOpen && "border-b border-border last:border-b-0",
+                          )}
+                        >
+                          <td colSpan={span} className="p-0">
+                            {/* Opens and closes by growing the row: grid rows go 0fr -> 1fr, the content fades. */}
+                            <div
+                              data-open={isOpen}
+                              className="grid [grid-template-rows:0fr] transition-[grid-template-rows,opacity] duration-300 ease-[var(--ease)] data-[open=true]:[grid-template-rows:1fr] opacity-0 data-[open=true]:opacity-100 motion-reduce:transition-none"
+                            >
+                              <div className="min-h-0 overflow-hidden">
+                                <div className="px-4 py-3 first:sm:pl-6">{expandedRow?.(row)}</div>
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       ) : null}

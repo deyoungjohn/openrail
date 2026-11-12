@@ -6,8 +6,13 @@ import { client } from "@/lib/client";
 import { formatToken, chainOfRoute } from "@/lib/pay";
 import { assetSymbol, explorerTxUrl, formatDateTimeUtc } from "@/lib/w5";
 import { useAsync } from "@/lib/use-async";
+import { useState } from "react";
+import { Download } from "lucide-react";
+import { Button } from "../ui/button";
+import { ErrorNote } from "../ui/error-note";
 import { AddressChip } from "../ui/address-chip";
 import { Card } from "../ui/card";
+import { PageSkeleton } from "../ui/page-skeleton";
 import { CHAINS } from "../ui/chain-badge";
 import { EmptyState, ErrorState } from "../ui/state";
 
@@ -20,11 +25,48 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+/** The receipt as a PDF: made by the API from the same data as this page, downloaded from here. */
+function PdfButton({ hash }: { hash: string }) {
+  const t = copy.receipt;
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="print:hidden">
+      <Button
+        variant="secondary"
+        loading={busy}
+        icon={<Download size={16} strokeWidth={1.5} aria-hidden />}
+        onClick={async () => {
+          setBusy(true);
+          setFailed(false);
+          try {
+            const file = await client.receipts.pdf(hash);
+            const bytes = Uint8Array.from(atob(file.content_base64), (c) => c.charCodeAt(0));
+            const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = file.filename;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 10_000);
+          } catch {
+            setFailed(true);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {t.downloadPdf}
+      </Button>
+      <ErrorNote>{failed ? t.pdfFailed : null}</ErrorNote>
+    </div>
+  );
+}
+
 export function ReceiptScreen({ hash }: { hash: string }) {
   const t = copy.receipt;
   const [r, retry] = useAsync(() => client.receipts.getPublic(hash), [hash]);
 
-  if (r.state === "loading") return <Card state="loading" />;
+  if (r.state === "loading") return <PageSkeleton variant="public" />;
   if (r.state === "error") {
     const none = r.error instanceof ApiError && r.error.status === 404;
     return (
@@ -52,6 +94,7 @@ export function ReceiptScreen({ hash }: { hash: string }) {
       <header className="space-y-1">
         <h1 className="text-[28px] leading-9 font-bold">{t.title}</h1>
         <p className="tabular text-[36px] leading-[1.1] font-bold">{amount}</p>
+        <PdfButton hash={hash} />
       </header>
 
       <Card>

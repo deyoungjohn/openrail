@@ -342,6 +342,7 @@ export interface PublicClaim {
   payments?: Array<{
     tx_hash: string;
     chain?: string;
+    receipt?: boolean;
     near: boolean;
   }>;
   token_id: string;
@@ -384,6 +385,7 @@ export interface AckData {
   payments?: Array<{
     tx_hash: string;
     chain?: string;
+    receipt?: boolean;
     near: boolean;
   }>;
   token_id: string;

@@ -175,6 +175,71 @@
       "evmChainId": null,
       "rpcVar": null,
       "partB": false
+    },
+    {
+      "id": "R14",
+      "originChain": "ethereum",
+      "payerAsset": "USDT",
+      "originAssetId": "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near",
+      "originDecimals": 6,
+      "originContract": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 1,
+      "rpcVar": "ETH_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R15",
+      "originChain": "solana",
+      "payerAsset": "USDT",
+      "originAssetId": "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near",
+      "originDecimals": 6,
+      "originContract": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": null,
+      "rpcVar": null,
+      "partB": false
+    },
+    {
+      "id": "R16",
+      "originChain": "polygon",
+      "payerAsset": "USDT",
+      "originAssetId": "nep141:pol-0xc2132d05d31c914a87c6611c10748aeb04b58e8f.omdep.near",
+      "originDecimals": 6,
+      "originContract": "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 137,
+      "rpcVar": "POLYGON_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R17",
+      "originChain": "bnb",
+      "payerAsset": "USDT",
+      "originAssetId": "nep141:bnb-0x55d398326f99059ff775485246999027b3197955.omdep.near",
+      "originDecimals": 18,
+      "originContract": "0x55d398326f99059ff775485246999027b3197955",
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": 56,
+      "rpcVar": "BNB_RPC_URL",
+      "partB": false
+    },
+    {
+      "id": "R18",
+      "originChain": "near",
+      "payerAsset": "USDT",
+      "originAssetId": "nep141:usdt.tether-token.near",
+      "originDecimals": 6,
+      "originContract": "usdt.tether-token.near",
+      "swapType": "EXACT_OUTPUT",
+      "destinationAssetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "evmChainId": null,
+      "rpcVar": null,
+      "partB": false
     }
   ],
   "railB": {

@@ -36,6 +36,7 @@ import { formatUsd } from "@/lib/format";
 import { usePayWallet } from "@/wallet/pay-wallet";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
+import { PageSkeleton } from "../ui/page-skeleton";
 import { Card } from "../ui/card";
 import { CHAINS } from "../ui/chain-badge";
 import { HistoryCard } from "./history-card";
@@ -718,7 +719,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
     [tokenId, outstanding, legs, source],
   );
 
-  if (load.state === "loading") return <Card state="loading" />;
+  if (load.state === "loading") return <PageSkeleton variant="public" />;
   if (load.state === "error")
     return (
       <div className="surface-card">
