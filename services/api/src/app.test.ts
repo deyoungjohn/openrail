@@ -1036,7 +1036,9 @@ describe("where the merchant is paid", () => {
         secret,
       ),
     );
-    const asked = quoteProvider.quote.mock.calls.at(-1)?.[0] as { destinationAsset: string };
+    const asked = quoteProvider.quote.mock.calls.at(-1)?.[0] as unknown as {
+      destinationAsset: string;
+    };
     expect(asked.destinationAsset).toBe(base);
   });
 });
