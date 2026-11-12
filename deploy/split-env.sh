@@ -163,6 +163,8 @@ for svc in "${services[@]}"; do
     mv "$merged" "$tmp"
     echo "$summary"
   fi
+  # Keep the file as it was, so a merge can always be undone: cp /etc/openrail/<svc>.env.bak.<time> back.
+  [[ -f "$out/$svc.env" ]] && cp -p "$out/$svc.env" "$out/$svc.env.bak.$(date +%Y%m%d-%H%M%S)"
   if [[ "$(id -u)" == 0 ]]; then
     install -m 0600 -o root -g root "$tmp" "$out/$svc.env"
   else
@@ -170,7 +172,15 @@ for svc in "${services[@]}"; do
   fi
   rm -f "$tmp"
   count="$(grep -cE "^[A-Z]" "$out/$svc.env" || true)"
-  echo "$svc.env: $count names${missing:+, not set: ${missing[*]}}"
+  # "Not set" is about the file now on the server (a name the server file already had is set), not about the combined file.
+  unset_now=()
+  for name in "${missing[@]}"; do
+    grep -qE "^$name=.+" "$out/$svc.env" || unset_now+=("$name")
+  done
+  echo "$svc.env: $count names${unset_now:+, not set anywhere (defaults apply): ${unset_now[*]}}"
+  if ((${#missing[@]} > ${#unset_now[@]})); then
+    echo "  kept from the server's file (not in the combined file): $((${#missing[@]} - ${#unset_now[@]})) name(s)"
+  fi
 done
 
 laptop_only=" SERVER_IP SSH_KEY_FILE RELAYER_ACCOUNT_ID WATCHER_PUBLIC_KEY ISSUER_PUBLIC_KEY RELAYER_PUBLIC_KEY "
