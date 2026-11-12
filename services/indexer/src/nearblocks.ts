@@ -109,6 +109,7 @@ export class NearBlocksEventSource implements EventSource {
     maxPages = 5,
     private readonly budget?: BudgetGovernor,
     private readonly fromSeconds = 0,
+    private readonly shouldRead: (txHash: string) => boolean = () => true,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKeys = (typeof apiKey === "string" ? [apiKey] : [...apiKey]).filter((k) => k !== "");
@@ -247,6 +248,8 @@ export class NearBlocksEventSource implements EventSource {
           continue;
         }
         latestBlock = Math.max(latestBlock, height);
+        if (typeof tx.transaction_hash === "string" && !this.shouldRead(tx.transaction_hash))
+          continue;
         const receipts = await this.rootLogs(tx);
         if (receipts.length === 0) continue;
         const hash = tx.receipt_block?.block_hash ?? tx.block?.block_hash ?? `h${height}`;

@@ -626,6 +626,14 @@ export class IndexerStore {
       );
   }
 
+  /** Whether a transaction was already ingested (the gap source skips its RPC read). */
+  hasTx(txHash: string): boolean {
+    const row = this.db
+      .prepare("SELECT 1 AS found FROM events WHERE tx_hash = ? LIMIT 1")
+      .get(txHash);
+    return row !== undefined;
+  }
+
   /** Sum of booked rows for one claim, the value the watcher's cached view is compared with. */
   bookedTotal(tokenId: string): bigint {
     const row = this.db

@@ -397,14 +397,41 @@ export class NearClient {
     };
   }
 
+  /** `EXPERIMENTAL_tx_status`: the full outcome, used when a broadcast timed out. */
+  async txStatusResult(txHash: string, senderId: string): Promise<unknown> {
+    return this.rpc<unknown>(
+      "EXPERIMENTAL_tx_status",
+      { tx_hash: txHash, sender_account_id: senderId, wait_until: "FINAL" },
+      "tx_status_outcome",
+    );
+  }
+
   /** Sign and broadcast a function call, waiting for the RPC result. */
   async sendFunctionCall(request: FunctionCallRequest): Promise<unknown> {
     const signed = await this.signFunctionCall(request);
-    return this.rpc<unknown>(
-      "broadcast_tx_commit",
-      [signed.signedTxBase64],
-      request.feature ?? "near",
-    );
+    const feature = request.feature ?? "near";
+    try {
+      return await this.rpc<unknown>("broadcast_tx_commit", [signed.signedTxBase64], feature);
+    } catch (error) {
+      // The send may have landed even when its response timed out. Only then read the outcome,
+      // so the normal path still costs one call.
+      if (this.signerEnv === undefined) throw error;
+      const senderId = requireEnv(this.signerEnv.accountIdEnv);
+      const outcome = await this.txStatusResult(signed.txHash, senderId);
+      const status =
+        outcome !== null && typeof outcome === "object"
+          ? (outcome as { status?: unknown }).status
+          : undefined;
+      if (
+        status !== undefined &&
+        typeof status === "object" &&
+        status !== null &&
+        "Failure" in status
+      )
+        throw error;
+      if (outcome === undefined || outcome === null) throw error;
+      return outcome;
+    }
   }
 }
 

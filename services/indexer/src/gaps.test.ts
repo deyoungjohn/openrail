@@ -4,9 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { WatcherViews } from "./gaps.js";
-import { loadBlocks, memoryStore } from "./test-support.js";
+import { FakeSource, loadBlocks, memoryStore, silentLogger } from "./test-support.js";
+import { Indexer } from "./indexer.js";
+import type { SourceBlock } from "./types.js";
 
-function cached(path: string, tokenId: string, bookedTotal: string, lastQuoteAt = 200): void {
+function cached(
+  path: string,
+  tokenId: string,
+  bookedTotal: string,
+  lastQuoteAt = 200,
+  claimAccount = "c-1.openrail.near",
+): void {
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE IF NOT EXISTS watched_claims (
     token_id TEXT PRIMARY KEY, kind INTEGER, status TEXT, last_quote_at INTEGER,
@@ -15,7 +23,7 @@ function cached(path: string, tokenId: string, bookedTotal: string, lastQuoteAt 
   db.prepare("INSERT OR REPLACE INTO watched_claims VALUES (?, 0, 'Issued', ?, 0, ?, 0)").run(
     tokenId,
     lastQuoteAt,
-    JSON.stringify({ booked_total: bookedTotal }),
+    JSON.stringify({ booked_total: bookedTotal, claim_account: claimAccount }),
   );
   db.close();
 }
@@ -39,6 +47,53 @@ describe("watcher gap detection", () => {
       cached(path, token, seen.toString());
       expect(views.gaps(store, 1_000_000, 0, since)).toEqual([]);
       expect(since.has(token)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("backfills the claim account once and clears the gap", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gaps-"));
+    const path = join(dir, "watcher.sqlite");
+    try {
+      const log = `EVENT_JSON:${JSON.stringify({
+        standard: "openrail",
+        version: "1.0.0",
+        event: "booked",
+        data: [
+          {
+            token_id: "c-1",
+            payment: "100",
+            asset: "USDC",
+            fee: "0",
+            surplus: "0",
+            credit: "0",
+            legs: [],
+          },
+        ],
+      })}`;
+      const block: SourceBlock = {
+        height: 10,
+        hash: "Block10",
+        timestamp: 100,
+        receipts: [
+          { receiptId: "R1", txHash: "BookTx", predecessorId: "", receiverId: "", logs: [log] },
+        ],
+      };
+      cached(path, "c-1", "100");
+      const store = memoryStore();
+      const indexer = new Indexer({
+        source: new FakeSource([]),
+        store,
+        watcherDbPath: path,
+        logger: silentLogger(),
+        gapSourceFactory: () => new FakeSource([block]),
+      });
+      expect(indexer.gaps()).toHaveLength(1);
+      const filled = await indexer.sweepGaps();
+      expect(filled).toBeGreaterThan(0);
+      expect(indexer.gaps()).toEqual([]);
+      expect(store.bookedTotal("c-1")).toBe(100n);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

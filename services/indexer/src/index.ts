@@ -158,6 +158,19 @@ async function main(): Promise<void> {
     fromSeconds: from?.seconds ?? 0,
     ...(eventPaths[0] === undefined ? {} : { watcherDbPath: eventPaths[0] }),
     sourceLabel: eventPaths.length > 0 ? "watcher" : "scan",
+    gapSourceFactory: (claimAccount) =>
+      new NearBlocksEventSource(
+        claimAccount,
+        getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
+        nearBlocksKeys,
+        rpcUrls,
+        undefined,
+        25,
+        5,
+        budget,
+        from?.seconds ?? 0,
+        (txHash) => !store.hasTx(txHash),
+      ),
   });
   const app = createIndexerApp({
     store,
