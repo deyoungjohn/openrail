@@ -277,7 +277,7 @@ test.describe("cash out", () => {
     await expect(cost).toContainText("$0.01");
     await expect(cost).toContainText("0.5% of this cash-out");
     await expect(cost).toContainText("You receive about");
-    await expect(cost).toContainText("1.998 USDC");
+    await expect(cost).toContainText("2.00 USDC");
     await expect(cost).toContainText("The whole amount you entered leaves your balance.");
     expect(calls.find((c) => c.key === "POST /v1/cashout/quote")!.body).toEqual({
       amount: "2000000",

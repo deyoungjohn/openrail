@@ -703,7 +703,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     void worker.runOnce().catch((error: unknown) => {
       logger.error("webhook poll failed", error instanceof Error ? error.message : String(error));
     });
-  }, 15_000);
+  }, 5_000);
   timer.unref();
   const recurringLogger = createLogger("api-recurring");
   const scheduler = new RecurringScheduler({
