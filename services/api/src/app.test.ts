@@ -366,6 +366,44 @@ describe("invoice route", () => {
     expect(second.status).toBe(201);
   });
 
+  it("the payer's wallet passes the deposit hash on, so the provider sees it at once (a deposit took over a minute to show)", async () => {
+    const submitDeposit = vi.fn(async () => undefined);
+    const base = harness();
+    const { app, secret } = harness({
+      quoteProvider: { ...base.quoteProvider, submitDeposit } as never,
+    });
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    const created = await app.handle(
+      request(
+        "POST",
+        "/v1/pay/sessions",
+        { token_id: "c-1", route_id: "R1", refund_to: "0x" + "e".repeat(40) },
+        secret,
+      ),
+    );
+    const session = created.body as { id: string; deposit_address: string };
+    const hash = "0x" + "ab".repeat(32);
+    const ok = await app.handle(
+      request("POST", `/v1/pay/sessions/${session.id}/deposit`, { tx_hash: hash }, ""),
+    );
+    expect(ok.status).toBe(200);
+    expect(submitDeposit).toHaveBeenCalledWith(hash, session.deposit_address);
+    const bad = await app.handle(
+      request("POST", `/v1/pay/sessions/${session.id}/deposit`, { tx_hash: "no" }, ""),
+    );
+    expect(bad.status).toBe(400);
+    const missing = await app.handle(
+      request("POST", "/v1/pay/sessions/ps_unknown/deposit", { tx_hash: hash }, ""),
+    );
+    expect(missing.status).toBe(404);
+    // a provider that is down never makes the nudge fail
+    submitDeposit.mockRejectedValueOnce(new Error("down"));
+    const down = await app.handle(
+      request("POST", `/v1/pay/sessions/${session.id}/deposit`, { tx_hash: hash }, ""),
+    );
+    expect(down.status).toBe(200);
+  });
+
   it("lists every price given for an invoice so a reload can show the same address", async () => {
     const { app, secret } = harness();
     await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));

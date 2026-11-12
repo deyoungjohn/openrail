@@ -51,6 +51,8 @@ export interface QuoteProvider {
   quote(request: QuoteProviderRequest): Promise<QuoteProviderResult>;
   /** What the provider says about a deposit address. Optional: without it the page shows the stored status. */
   status?(depositAddress: string): Promise<ProviderStatus>;
+  /** Tells the provider the deposit transaction, so it does not have to find it: the payer's page ticks sooner. */
+  submitDeposit?(txHash: string, depositAddress: string): Promise<void>;
 }
 
 export interface QuoteLogger {
@@ -159,6 +161,10 @@ export class QuoteService {
   /** The provider's word about a deposit address, or nothing when the provider cannot say. */
   async status(depositAddress: string): Promise<ProviderStatus | undefined> {
     return this.deps.provider.status?.(depositAddress);
+  }
+
+  async submitDeposit(txHash: string, depositAddress: string): Promise<void> {
+    await this.deps.provider.submitDeposit?.(txHash, depositAddress);
   }
 
   constructor(private readonly deps: QuoteServiceDeps) {

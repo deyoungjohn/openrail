@@ -173,6 +173,8 @@ function QuoteNote({
   const chain = chainOfRoute(route);
   const chainName = chain ? CHAINS[chain] : route.origin_chain;
   const upto = amountPrefix(route) === "upto";
+  // Price protection is for coins that move in price (ETH, SOL); a stablecoin swap has no such margin to explain.
+  const volatile = route.payer_asset === "ETH" || route.payer_asset === "SOL";
   return (
     <section
       aria-label={partLabel ? `${p.quoteTitle}, ${partLabel}` : p.quoteTitle}
@@ -193,14 +195,14 @@ function QuoteNote({
           <dt className="caption">{p.invoiceGets}</dt>
           <dd className="tabular text-[18px] font-semibold">{usdcToUsd(session.amount_out)}</dd>
         </div>
-        {upto ? (
+        {upto && volatile ? (
           <div>
             <dt className="caption">{p.margin}</dt>
             <dd className="tabular text-[15px] font-medium">{spreadLabel(session.spread_bps)}</dd>
           </div>
         ) : null}
       </dl>
-      {upto ? <p className="caption">{p.marginNote}</p> : null}
+      {upto && volatile ? <p className="caption">{p.marginNote}</p> : null}
       <p className="text-[14px] leading-5">{p.locked(timeOf(session.deadline))}</p>
     </section>
   );
@@ -224,6 +226,8 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
         BigInt(payUnits(session.amount_in, route.origin_decimals, route.payer_asset)),
       );
       setSent(hash);
+      // Tell the provider which transaction it is: the page ticks "You send" without waiting for it to look.
+      void client.pay.nudgeDeposit(session.id, hash).catch(() => undefined);
     } catch (e) {
       const code = (e as { code?: number } | null)?.code;
       setProblem(code === 4001 ? p.walletRejected : p.walletFailed);

@@ -875,6 +875,10 @@ export type ConfidentialWithdrawSubmit = Record<string, unknown>;
 
 export type ConfidentialWithdrawStatus = Record<string, unknown>;
 
+export interface PayDepositNudge {
+  ok: boolean;
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -1572,6 +1576,21 @@ export interface operations {
       "200": ConfidentialWithdrawStatus;
       "400": Error;
       "401": Error;
+    };
+  };
+  nudgePayDeposit: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    requestBody: {
+      tx_hash: string;
+    };
+    responses: {
+      "200": PayDepositNudge;
+      "400": Error;
+      "404": Error;
     };
   };
 }

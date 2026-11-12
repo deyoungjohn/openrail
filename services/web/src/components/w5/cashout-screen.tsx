@@ -2,7 +2,7 @@
 
 import type { CashoutQuote } from "@openrail/api-client";
 import { CheckCircle2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { copy } from "@/copy";
 import { dashClient } from "@/lib/client";
 import { MOCK_MODE } from "@/lib/auth";
@@ -22,6 +22,8 @@ import { CHAINS, type ChainId } from "../ui/chain-badge";
 import { Countdown } from "../ui/countdown";
 import { Input, Select } from "../ui/input";
 import { RangeSlider } from "../ui/range-slider";
+import { enabledModules } from "@/enabled";
+import { collectPayoutSections } from "@/lib/module-settings";
 import { Tabs } from "../ui/tabs";
 import { CashoutFlow } from "./cashout-flow";
 import { CashoutHistory } from "./cashout-history";
@@ -55,6 +57,8 @@ function highCost(share: string | null): boolean {
   const [w = "0", f = "0"] = share.replace("%", "").split(".");
   return BigInt(w) * 10n + BigInt(f) >= HIGH_COST_TENTHS;
 }
+
+const payoutSections = collectPayoutSections(enabledModules);
 
 export function CashoutScreen() {
   const t = copy.cashout;
@@ -169,6 +173,24 @@ export function CashoutScreen() {
 
   const busy = phase === "asking" || phase === "signing";
 
+  // Public and private: the public balance is this page; an enabled module adds its own tab (the private balance).
+  const withSections = (publicPanel: ReactNode) =>
+    payoutSections.length === 0 ? (
+      publicPanel
+    ) : (
+      <Tabs
+        label={t.tabsLabel}
+        items={[
+          {
+            id: "public",
+            label: t.tabPublic,
+            panel: <div className="space-y-6 py-1">{publicPanel}</div>,
+          },
+          ...payoutSections.map(({ id, label, Panel }) => ({ id, label, panel: <Panel /> })),
+        ]}
+      />
+    );
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="space-y-1">
@@ -176,254 +198,260 @@ export function CashoutScreen() {
         <p className="text-[15px]">{t.intro}</p>
       </header>
 
-      <Tabs
-        fill
-        label={t.tabsLabel}
-        items={[
-          {
-            id: "cash",
-            label: t.tabCashOut,
-            panel: (
-              <div className="space-y-6 py-1">
-                {phase === "sent" && quote ? (
-                  <div role="status" className="surface-card space-y-3 p-6">
-                    <p className="flex items-center gap-2 text-[20px] font-semibold">
-                      <CheckCircle2
-                        size={22}
-                        strokeWidth={1.5}
-                        className="text-success-text"
-                        aria-hidden
-                      />
-                      {t.sent}
-                    </p>
-                    <p className="text-[15px]">{t.sentBody}</p>
-                    <div className="flex justify-center">
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          setPhase("form");
-                          setQuote(null);
-                          setAmountText("");
-                          idem.current = crypto.randomUUID();
-                        }}
-                      >
-                        {t.again}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <form
-                    noValidate
-                    className="surface-card space-y-2 p-6"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void ask();
-                    }}
-                  >
-                    {availableCents !== null ? (
-                      <p className="text-[15px]" data-testid="cashout-available">
-                        {t.available}{" "}
-                        <span className="tabular font-semibold">{formatUsd(availableCents)}</span>
-                        {held ? <span className="caption"> {tokenLabel(held.tokenId)}</span> : null}
+      {withSections(
+        <Tabs
+          fill
+          label={t.tabsLabel}
+          items={[
+            {
+              id: "cash",
+              label: t.tabCashOut,
+              panel: (
+                <div className="space-y-6 py-1">
+                  {phase === "sent" && quote ? (
+                    <div role="status" className="surface-card space-y-3 p-6">
+                      <p className="flex items-center gap-2 text-[20px] font-semibold">
+                        <CheckCircle2
+                          size={22}
+                          strokeWidth={1.5}
+                          className="text-success-text"
+                          aria-hidden
+                        />
+                        {t.sent}
                       </p>
-                    ) : null}
-                    <Input
-                      label={t.amount}
-                      helper={t.amountHelp}
-                      inputMode="decimal"
-                      value={amountText}
-                      onChange={(e) => {
-                        setAmountText(e.target.value);
-                        setPhase("form");
-                        setQuote(null);
-                      }}
-                      error={shown && units === null ? t.badAmount : undefined}
-                      disabled={busy}
-                    />
-                    {availableCents !== null && availableCents > 0n ? (
-                      <RangeSlider
-                        aria-label={t.slider}
-                        value={percent}
-                        onChange={setPercent}
-                        snapPoints={[0, 25, 50, 75, 100]}
-                        marks={[
-                          { value: 25, label: "25%" },
-                          { value: 50, label: "50%" },
-                          { value: 75, label: "75%" },
-                          { value: 100, label: "100%" },
-                        ]}
-                        format={(p) => `${p}%`}
-                        disabled={busy}
-                      />
-                    ) : null}
-                    <Select
-                      label={t.sendTo}
-                      value={chain}
-                      onValueChange={(v) => {
-                        setChain(v as Destination);
-                        setPhase("form");
-                        setQuote(null);
-                      }}
-                      disabled={busy}
-                    >
-                      {DESTINATIONS.map((c) => (
-                        <option key={c} value={c}>
-                          {c === "confidential" ? t.privateBalance : CHAINS[c]}
-                        </option>
-                      ))}
-                    </Select>
-                    {isPrivate ? (
-                      <p className="caption">{t.privateHelp}</p>
-                    ) : (
-                      <Input
-                        label={t.address}
-                        helper={t.addressHelp}
-                        value={address}
-                        autoCapitalize="none"
-                        autoComplete="off"
-                        spellCheck={false}
-                        onChange={(e) => {
-                          setAddress(e.target.value.trim());
-                          setPhase("form");
-                          setQuote(null);
-                        }}
-                        error={(shown && addressProblem) || undefined}
-                        disabled={busy}
-                      />
-                    )}
-                    <ErrorNote>{error && phase === "form" ? error : null}</ErrorNote>
-                    <div className="flex justify-center">
-                      <Button type="submit" loading={phase === "asking"}>
-                        {phase === "asking" ? t.gettingQuote : t.getQuote}
-                      </Button>
-                    </div>
-                  </form>
-                )}
-
-                {quote && (phase === "quoted" || phase === "signing") ? (
-                  <>
-                    {/* The cost comes before anything that signs. */}
-                    <section aria-label={t.costTitle} className="surface-card space-y-4 p-6">
-                      <h2 className="text-[18px] leading-[26px] font-semibold">{t.costTitle}</h2>
-                      <dl className="space-y-3">
-                        <div>
-                          <dt className="caption">{t.cost}</dt>
-                          <dd className="tabular text-[28px] leading-[1.1] font-bold">
-                            ${quote.route_cost_usd}
-                          </dd>
-                          {share ? (
-                            <dd
-                              className={
-                                highCost(share) ? "text-warning text-[14px] font-medium" : "caption"
-                              }
-                            >
-                              {t.costShare(share)}
-                            </dd>
-                          ) : null}
-                        </div>
-                        <div>
-                          <dt className="caption">{t.youReceive}</dt>
-                          <dd className="tabular text-[18px] font-semibold">
-                            {formatToken(quote.amount_out, 6)} USDC{" "}
-                            <span className="text-[15px] font-normal text-muted">
-                              {isPrivate ? t.onPrivate : t.on(CHAINS[chain as ChainId])}
-                            </span>
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="caption">{t.to}</dt>
-                          <dd>
-                            <AddressChip
-                              value={quote.destination_address}
-                              chain={isPrivate ? undefined : (chain as ChainId)}
-                              head={10}
-                              tail={8}
-                            />
-                          </dd>
-                        </div>
-                      </dl>
-                      <p className="caption">{t.bufferNote}</p>
-                      {highCost(share) ? <p className="caption">{t.costHigh}</p> : null}
-                    </section>
-
-                    {expired ? (
-                      <div role="status" className="surface-card space-y-3 p-6">
-                        <h2 className="text-[18px] leading-[26px] font-semibold">
-                          {t.expiredTitle}
-                        </h2>
-                        <p className="text-[15px]">{t.expiredBody}</p>
-                        <Button onClick={() => void ask()}>{t.newQuote}</Button>
-                      </div>
-                    ) : (
-                      <div className="surface-card space-y-4 p-6">
-                        <p className="flex items-center justify-between text-[14px]">
-                          <span className="caption">{t.expiresIn}</span>
-                          <span onClick={undefined}>
-                            <Countdown
-                              target={Date.parse(quote.deadline)}
-                              units={
-                                Date.parse(quote.deadline) - Date.now() > 86_400_000
-                                  ? ["days", "hours", "minutes"]
-                                  : Date.parse(quote.deadline) - Date.now() > 3_600_000
-                                    ? ["hours", "minutes", "seconds"]
-                                    : ["minutes", "seconds"]
-                              }
-                              variant="compact"
-                            />
-                          </span>
-                        </p>
-                        {!canSign ? (
-                          <div className="space-y-2">
-                            <p className="text-[14px]">{t.signInFirst}</p>
-                            <NearWalletView {...near} />
-                          </div>
-                        ) : null}
-                        <ErrorNote>{error ? error : null}</ErrorNote>
+                      <p className="text-[15px]">{t.sentBody}</p>
+                      <div className="flex justify-center">
                         <Button
-                          onClick={() => void sign()}
-                          loading={phase === "signing"}
-                          disabled={!canSign}
+                          variant="secondary"
+                          onClick={() => {
+                            setPhase("form");
+                            setQuote(null);
+                            setAmountText("");
+                            idem.current = crypto.randomUUID();
+                          }}
                         >
-                          {phase === "signing" ? t.signing : t.sign}
+                          {t.again}
                         </Button>
                       </div>
-                    )}
-                  </>
-                ) : null}
+                    </div>
+                  ) : (
+                    <form
+                      noValidate
+                      className="surface-card space-y-2 p-6"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void ask();
+                      }}
+                    >
+                      {availableCents !== null ? (
+                        <p className="text-[15px]" data-testid="cashout-available">
+                          {t.available}{" "}
+                          <span className="tabular font-semibold">{formatUsd(availableCents)}</span>
+                          {held ? (
+                            <span className="caption"> {tokenLabel(held.tokenId)}</span>
+                          ) : null}
+                        </p>
+                      ) : null}
+                      <Input
+                        label={t.amount}
+                        helper={t.amountHelp}
+                        inputMode="decimal"
+                        value={amountText}
+                        onChange={(e) => {
+                          setAmountText(e.target.value);
+                          setPhase("form");
+                          setQuote(null);
+                        }}
+                        error={shown && units === null ? t.badAmount : undefined}
+                        disabled={busy}
+                      />
+                      {availableCents !== null && availableCents > 0n ? (
+                        <RangeSlider
+                          aria-label={t.slider}
+                          value={percent}
+                          onChange={setPercent}
+                          snapPoints={[0, 25, 50, 75, 100]}
+                          marks={[
+                            { value: 25, label: "25%" },
+                            { value: 50, label: "50%" },
+                            { value: 75, label: "75%" },
+                            { value: 100, label: "100%" },
+                          ]}
+                          format={(p) => `${p}%`}
+                          disabled={busy}
+                        />
+                      ) : null}
+                      <Select
+                        label={t.sendTo}
+                        value={chain}
+                        onValueChange={(v) => {
+                          setChain(v as Destination);
+                          setPhase("form");
+                          setQuote(null);
+                        }}
+                        disabled={busy}
+                      >
+                        {DESTINATIONS.map((c) => (
+                          <option key={c} value={c}>
+                            {c === "confidential" ? t.privateBalance : CHAINS[c]}
+                          </option>
+                        ))}
+                      </Select>
+                      {isPrivate ? (
+                        <p className="caption">{t.privateHelp}</p>
+                      ) : (
+                        <Input
+                          label={t.address}
+                          helper={t.addressHelp}
+                          value={address}
+                          autoCapitalize="none"
+                          autoComplete="off"
+                          spellCheck={false}
+                          onChange={(e) => {
+                            setAddress(e.target.value.trim());
+                            setPhase("form");
+                            setQuote(null);
+                          }}
+                          error={(shown && addressProblem) || undefined}
+                          disabled={busy}
+                        />
+                      )}
+                      <ErrorNote>{error && phase === "form" ? error : null}</ErrorNote>
+                      <div className="flex justify-center">
+                        <Button type="submit" loading={phase === "asking"}>
+                          {phase === "asking" ? t.gettingQuote : t.getQuote}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
 
-                {flow ? (
-                  <CashoutFlow
-                    initial={flow}
-                    onChange={(row) => {
-                      if (row.status !== flow.status) reloadList();
-                    }}
-                  />
-                ) : null}
-              </div>
-            ),
-          },
-          {
-            id: "stats",
-            label: t.tabStats,
-            panel: (
-              <div className="space-y-6 py-1">
-                <>
-                  <CashoutOverview
-                    earnings={earned.state === "ready" ? earned.data.earnings : []}
-                    cashouts={list.state === "ready" ? list.data : []}
-                    loading={earned.state === "loading" || list.state === "loading"}
-                  />
-                  <CashoutHistory
-                    rows={list.state === "ready" ? list.data : []}
-                    state={list.state}
-                    onRetry={reloadList}
-                  />
-                </>
-              </div>
-            ),
-          },
-        ]}
-      />
+                  {quote && (phase === "quoted" || phase === "signing") ? (
+                    <>
+                      {/* The cost comes before anything that signs. */}
+                      <section aria-label={t.costTitle} className="surface-card space-y-4 p-6">
+                        <h2 className="text-[18px] leading-[26px] font-semibold">{t.costTitle}</h2>
+                        <dl className="space-y-3">
+                          <div>
+                            <dt className="caption">{t.cost}</dt>
+                            <dd className="tabular text-[28px] leading-[1.1] font-bold">
+                              ${quote.route_cost_usd}
+                            </dd>
+                            {share ? (
+                              <dd
+                                className={
+                                  highCost(share)
+                                    ? "text-warning text-[14px] font-medium"
+                                    : "caption"
+                                }
+                              >
+                                {t.costShare(share)}
+                              </dd>
+                            ) : null}
+                          </div>
+                          <div>
+                            <dt className="caption">{t.youReceive}</dt>
+                            <dd className="tabular text-[18px] font-semibold">
+                              {formatToken(quote.amount_out, 6)} USDC{" "}
+                              <span className="text-[15px] font-normal text-muted">
+                                {isPrivate ? t.onPrivate : t.on(CHAINS[chain as ChainId])}
+                              </span>
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="caption">{t.to}</dt>
+                            <dd>
+                              <AddressChip
+                                value={quote.destination_address}
+                                chain={isPrivate ? undefined : (chain as ChainId)}
+                                head={10}
+                                tail={8}
+                              />
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className="caption">{t.bufferNote}</p>
+                        {highCost(share) ? <p className="caption">{t.costHigh}</p> : null}
+                      </section>
+
+                      {expired ? (
+                        <div role="status" className="surface-card space-y-3 p-6">
+                          <h2 className="text-[18px] leading-[26px] font-semibold">
+                            {t.expiredTitle}
+                          </h2>
+                          <p className="text-[15px]">{t.expiredBody}</p>
+                          <Button onClick={() => void ask()}>{t.newQuote}</Button>
+                        </div>
+                      ) : (
+                        <div className="surface-card space-y-4 p-6">
+                          <p className="flex items-center justify-between text-[14px]">
+                            <span className="caption">{t.expiresIn}</span>
+                            <span onClick={undefined}>
+                              <Countdown
+                                target={Date.parse(quote.deadline)}
+                                units={
+                                  Date.parse(quote.deadline) - Date.now() > 86_400_000
+                                    ? ["days", "hours", "minutes"]
+                                    : Date.parse(quote.deadline) - Date.now() > 3_600_000
+                                      ? ["hours", "minutes", "seconds"]
+                                      : ["minutes", "seconds"]
+                                }
+                                variant="compact"
+                              />
+                            </span>
+                          </p>
+                          {!canSign ? (
+                            <div className="space-y-2">
+                              <p className="text-[14px]">{t.signInFirst}</p>
+                              <NearWalletView {...near} />
+                            </div>
+                          ) : null}
+                          <ErrorNote>{error ? error : null}</ErrorNote>
+                          <Button
+                            onClick={() => void sign()}
+                            loading={phase === "signing"}
+                            disabled={!canSign}
+                          >
+                            {phase === "signing" ? t.signing : t.sign}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+
+                  {flow ? (
+                    <CashoutFlow
+                      initial={flow}
+                      onChange={(row) => {
+                        if (row.status !== flow.status) reloadList();
+                      }}
+                    />
+                  ) : null}
+                </div>
+              ),
+            },
+            {
+              id: "stats",
+              label: t.tabStats,
+              panel: (
+                <div className="space-y-6 py-1">
+                  <>
+                    <CashoutOverview
+                      earnings={earned.state === "ready" ? earned.data.earnings : []}
+                      cashouts={list.state === "ready" ? list.data : []}
+                      loading={earned.state === "loading" || list.state === "loading"}
+                    />
+                    <CashoutHistory
+                      rows={list.state === "ready" ? list.data : []}
+                      state={list.state}
+                      onRetry={reloadList}
+                    />
+                  </>
+                </div>
+              ),
+            },
+          ]}
+        />,
+      )}
     </div>
   );
 }

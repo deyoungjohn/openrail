@@ -40,9 +40,14 @@ export function formatToken(units: string, decimals: number): string {
   return `${whole}.${frac}`;
 }
 
-/** Decimals a payer can sensibly type into a wallet: ETH to 6, SOL to 5, every other asset in full. */
+/**
+ * Decimals a payer can sensibly type into a wallet: ETH to 6, SOL to 5, a stablecoin to 6 (BNB Chain's USDT has 18
+ * decimals: 2.00895817037170390 was shown), every other asset in full. The amount is rounded UP to this many decimals
+ * (`payUnits`), so a payer never sends less than the price.
+ */
 export function payDecimals(asset: string, decimals: number): number {
-  const keep = asset === "ETH" ? 6 : asset === "SOL" ? 5 : decimals;
+  const keep =
+    asset === "ETH" ? 6 : asset === "SOL" ? 5 : asset === "USDC" || asset === "USDT" ? 6 : decimals;
   return Math.min(keep, decimals);
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectSettingsSections } from "./module-settings";
+import { collectPayoutSections, collectSettingsSections } from "./module-settings";
 
 const Panel = () => null;
 
@@ -24,5 +24,16 @@ describe("collectSettingsSections", () => {
       { module: { settingsSections: "nope" } },
     ]);
     expect(sections.map((s) => s.id)).toEqual(["ok"]);
+  });
+});
+
+describe("collectPayoutSections: the tabs a module adds to the pay-out page", () => {
+  it("reads payoutSections, not settingsSections", () => {
+    const modules = [
+      { module: { payoutSections: [{ id: "private", label: "Private", Panel }] } },
+      { module: { settingsSections: [{ id: "other", label: "Other", Panel }] } },
+    ];
+    expect(collectPayoutSections(modules).map((s) => s.id)).toEqual(["private"]);
+    expect(collectSettingsSections(modules).map((s) => s.id)).toEqual(["other"]);
   });
 });

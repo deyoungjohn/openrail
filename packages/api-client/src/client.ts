@@ -195,6 +195,11 @@ export class OpenrailClient {
       options: { idempotencyKey?: string } = {},
     ): Promise<SuccessBody<"createPaySession">> =>
       this.call("POST", "/v1/pay/sessions", { body, idempotencyKey: options.idempotencyKey }),
+    /** The wallet sent the deposit: the provider is told its hash, so the status ticks sooner. */
+    nudgeDeposit: (id: string, txHash: string): Promise<SuccessBody<"nudgePayDeposit">> =>
+      this.call("POST", `/v1/pay/sessions/${encodeURIComponent(id)}/deposit`, {
+        body: { tx_hash: txHash },
+      }),
     getSession: (id: string): Promise<SuccessBody<"getPaySession">> =>
       this.call("GET", `/v1/pay/sessions/${encodeURIComponent(id)}`),
     listSessions: (tokenId: string): Promise<SuccessBody<"listPaySessions">> =>

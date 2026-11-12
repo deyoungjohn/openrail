@@ -305,6 +305,9 @@ export function createQuoteProvider(): QuoteProvider {
         spreadBps: 0,
       };
     },
+    async submitDeposit(txHash, depositAddress) {
+      await client.submitDeposit({ txHash, depositAddress });
+    },
     async status(depositAddress) {
       const result = await client.status(depositAddress);
       const d = result.swapDetails;
