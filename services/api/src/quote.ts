@@ -97,6 +97,12 @@ export interface QuoteServiceDeps {
   logger: QuoteLogger;
   clock?: () => Date;
   ids?: (prefix: string) => string;
+  /**
+   * Extra the payer is asked to send on a FLEX_INPUT route, in basis points of the amount. The provider's fee comes
+   * out of what is sent, so a payer who sends exactly the price delivers a little less than it (a $10 payment from
+   * Solana arrived as $9.999048 and left the order "partially paid" for $0.000952). Default 0: the amount is exact.
+   */
+  marginBps?: number;
 }
 
 function id(prefix: string): string {
@@ -188,10 +194,15 @@ export class QuoteService {
       input.amountUsd !== undefined
         ? formatUsdFromBaseUnits(parseUsdToBaseUnits(input.amountUsd, 6))
         : formatUsdFromBaseUnits(outstanding);
+    const margin = BigInt(Math.max(0, Math.floor(this.deps.marginBps ?? 0)));
+    const requested =
+      route.swapType === "FLEX_INPUT" && margin > 0n
+        ? (amountBaseUnits * (10_000n + margin) + 9_999n) / 10_000n
+        : amountBaseUnits;
     const provider = await this.deps.provider.quote({
       originAsset: route.originAssetId,
       destinationAsset: route.destinationAssetId,
-      amount: amountBaseUnits.toString(),
+      amount: requested.toString(),
       swapType: route.swapType,
       slippageTolerance: route.swapType === "EXACT_OUTPUT" ? 30 : 0,
       refundTo: input.refundTo,
