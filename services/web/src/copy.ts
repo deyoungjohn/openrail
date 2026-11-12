@@ -938,6 +938,7 @@ export const copy = {
     tabsLabel: "Pay out",
     tabCashOut: "Withdraw",
     tabPublic: "Public",
+    takeFrom: "Take it from",
     tabStats: "Stats",
     sentBody: "Your wallet signed it. The money arrives on the other network in a few minutes.",
     quoteFailed: "We couldn't get a quote. Nothing was charged. Try again.",

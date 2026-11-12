@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { copy } from "@/copy";
 import { enabledModules } from "@/enabled";
 import { cn } from "@/lib/cn";
@@ -51,8 +51,34 @@ const moduleNav: readonly NavItem[] = enabledModules.flatMap(({ module }) => {
   return nav ? [{ href: nav.href, label: nav.label, Icon: FileText }] : [];
 });
 
+/**
+ * A sidebar click that the router does not complete (its request for the next page never answers, or fails) left
+ * people on the old page until they reloaded. If the path has not changed 1.6 s after the click, go there the plain
+ * way: a full page load always works, and the loading skeleton covers it.
+ */
+const STUCK_MS = 1600;
+
 function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const path = usePathname();
+  const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // the path moved: the router did its work
+    if (watchdog.current !== null) clearTimeout(watchdog.current);
+    watchdog.current = null;
+  }, [path]);
+  useEffect(
+    () => () => {
+      if (watchdog.current !== null) clearTimeout(watchdog.current);
+    },
+    [],
+  );
+  const watch = (href: string) => {
+    if (watchdog.current !== null) clearTimeout(watchdog.current);
+    if (href === path) return;
+    watchdog.current = setTimeout(() => {
+      if (window.location.pathname !== href) window.location.assign(href);
+    }, STUCK_MS);
+  };
   return (
     <nav aria-label={copy.nav.label}>
       <ul className="space-y-1">
@@ -62,7 +88,11 @@ function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: (
             <li key={href}>
               <Link
                 href={href}
-                onClick={onNavigate}
+                onClick={(e) => {
+                  onNavigate?.();
+                  // a modified click (new tab) is the browser's own
+                  if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) watch(href);
+                }}
                 aria-current={active ? "page" : undefined}
                 title={collapsed ? label : undefined}
                 className={cn(
