@@ -22,10 +22,16 @@ export function createHttpIndexer(baseUrl: string, fetchImpl: FetchLike = fetch)
       const body = (await response.json()) as {
         last_polled_at?: unknown;
         boost_active?: unknown;
+        source?: unknown;
+        gaps?: unknown;
+        oldest_gap_age?: unknown;
       };
       return {
         last_polled_at: typeof body.last_polled_at === "string" ? body.last_polled_at : null,
         boost_active: body.boost_active === true,
+        source: body.source === "watcher" ? "watcher" : "scan",
+        gaps: Array.isArray(body.gaps) ? body.gaps : [],
+        oldest_gap_age: typeof body.oldest_gap_age === "number" ? body.oldest_gap_age : null,
       };
     },
     async issueTx(tokenId) {

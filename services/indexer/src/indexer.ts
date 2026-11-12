@@ -7,6 +7,7 @@ import type { EventSink, ReceiptEnricher, EventSource } from "./types.js";
 import type { IndexerStore } from "./store.js";
 import type { BudgetGovernor } from "./budget.js";
 import type { TxStatusReader } from "./tx-status.js";
+import { WatcherViews, type Gap } from "./gaps.js";
 
 export const DEFAULT_POLL_INTERVAL_MS = 30 * 60 * 1000;
 export const BOOST_POLL_INTERVAL_MS = 60_000;
@@ -25,6 +26,10 @@ export interface IndexerOptions {
   budget?: BudgetGovernor;
   rootAccount?: string;
   txStatus?: TxStatusReader;
+  from?: string;
+  fromSeconds?: number;
+  watcherDbPath?: string;
+  sourceLabel?: "watcher" | "scan";
 }
 
 export interface SyncResult {
@@ -48,6 +53,11 @@ export class Indexer {
   private readonly budget?: BudgetGovernor;
   private readonly rootAccount?: string;
   private readonly txStatus?: TxStatusReader;
+  private readonly from?: string;
+  private readonly fromSeconds: number;
+  private readonly watcherViews: WatcherViews;
+  private readonly sourceLabel: "watcher" | "scan";
+  private readonly gapSince = new Map<string, number>();
   private lastHead: number | null = null;
   private lastPolledAt: string | null = null;
   private boostUntil = 0;
@@ -65,6 +75,10 @@ export class Indexer {
     this.budget = options.budget;
     this.rootAccount = options.rootAccount;
     this.txStatus = options.txStatus;
+    this.from = options.from;
+    this.fromSeconds = options.fromSeconds ?? 0;
+    this.watcherViews = new WatcherViews(options.watcherDbPath);
+    this.sourceLabel = options.sourceLabel ?? "scan";
   }
 
   private async enrich(event: { event: string; eventKey: string }): Promise<void> {
@@ -214,6 +228,10 @@ export class Indexer {
     }
   }
 
+  gaps(): Gap[] {
+    return this.watcherViews.gaps(this.store, this.now(), this.fromSeconds, this.gapSince);
+  }
+
   health(): {
     cursor: ReturnType<IndexerStore["cursor"]>;
     last_head: number | null;
@@ -228,9 +246,15 @@ export class Indexer {
     poll_interval_ms: number;
     boost_until: number;
     boost_active: boolean;
+    from: string | null;
+    caught_up: boolean | null;
+    source: "watcher" | "scan";
+    gaps: Gap[];
+    oldest_gap_age: number | null;
     degraded: boolean;
     nearblocks_budget?: ReturnType<BudgetGovernor["health"]>;
   } {
+    const gaps = this.gaps();
     return {
       ...this.store.health(),
       last_head: this.lastHead,
@@ -239,7 +263,13 @@ export class Indexer {
       poll_interval_ms: this.pollIntervalMs,
       boost_until: this.boostUntil,
       boost_active: this.now() < this.boostUntil,
-      degraded: this.budget?.health().blocked ?? false,
+      from: this.from ?? null,
+      caught_up: this.source.caughtUp?.() ?? null,
+      source: this.sourceLabel,
+      gaps,
+      oldest_gap_age: gaps.length === 0 ? null : Math.max(...gaps.map((gap) => gap.age_seconds)),
+      degraded:
+        (this.budget?.health().blocked ?? false) || gaps.some((gap) => gap.age_seconds > 30 * 60),
       ...(this.budget === undefined ? {} : { nearblocks_budget: this.budget.health() }),
     };
   }

@@ -5,7 +5,7 @@ alternatives below are **exploring** and not switched on.
 
 ## Calls per action
 
-- **Quiet sweep**: one NearBlocks `/v1/account/<root>/txns` call per page, then one
+- **Quiet sweep**: one NearBlocks `/v3/accounts/<root>/txns` call per page, then one
   RPC `EXPERIMENTAL_tx_status` per new transaction. The default cadence is 30 minutes,
   one page per poll, so a quiet day costs about 48 NearBlocks calls; extra pages only
   follow new transactions. The 380/day budget remains the hard cap.
@@ -30,12 +30,12 @@ call it after their work.
 
 ## Observed limits (probed 4 Nov 2026)
 
-| Source     | Probe                                                                 | Observation                                                                                                               |
-| ---------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| NearBlocks | `GET https://api.nearblocks.io/v1/account/openrail.near/txns?limit=1` | `200` keyless JSON with `cursor`/`txns`; the account plan is 10/min, 420/day, 12,500/month (0 used at the start).         |
-| FastNEAR   | former `explorer.fastnear.com/api/v0/account/...`                     | `301` to `near.rocks`; the redirected paths returned the HTML app, not JSON. No keyless account-transaction API verified. |
-| neardata   | `GET https://mainnet.neardata.xyz/v0/block/24909407`                  | `302` to `a0.mainnet.neardata.xyz`; followed to `200` JSON block. Block-level only; no per-account transaction index.     |
-| Pikespeak  | `GET https://api.pikespeak.ai/account/txns/openrail.near?limit=1`     | `401 Missing x-api-key header`; requires an API key. Free-tier limits not verified.                                       |
+| Source     | Probe                                                                  | Observation                                                                                                                                                                                                      |
+| ---------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NearBlocks | `GET https://api.nearblocks.io/v3/accounts/openrail.near/txns?limit=2` | `200` keyless JSON wrapped in `data`/`meta`; `meta.next_page` is the opaque cursor. API v1/v2 stop on 22 Nov 2026; the client is on v3. The account plan is 10/min, 420/day, 12,500/month (0 used at the start). |
+| FastNEAR   | former `explorer.fastnear.com/api/v0/account/...`                      | `301` to `near.rocks`; the redirected paths returned the HTML app, not JSON. No keyless account-transaction API verified.                                                                                        |
+| neardata   | `GET https://mainnet.neardata.xyz/v0/block/24909407`                   | `302` to `a0.mainnet.neardata.xyz`; followed to `200` JSON block. Block-level only; no per-account transaction index.                                                                                            |
+| Pikespeak  | `GET https://api.pikespeak.ai/account/txns/openrail.near?limit=1`      | `401 Missing x-api-key header`; requires an API key. Free-tier limits not verified.                                                                                                                              |
 
 No source is switched. NearBlocks remains behind the same `EventSource` interface, so a
 future source is an adapter rather than a rewrite.

@@ -9,6 +9,8 @@
  *   NEARBLOCKS_DAILY_BUDGET (380), 7 s minimum spacing,
  *   INDEXER_POLL_INTERVAL_MS (1800000), INDEXER_MAX_PAGES (2), INDEXER_RETENTION_DAYS (30),
  *   INDEXER_PORT (8788), INDEXER_START_HEIGHT (0, RPC scanner only)
+ *   INDEXER_EVENT_SOURCES (optional comma list of single-writer SQLite files; read-only)
+ *   INDEXER_FROM (ISO time or "now"; nothing older is requested, rows already stored stay)
  *   INDEXER_WEBHOOK_URL / INDEXER_WEBHOOK_SECRET (optional; indexed events only)
  *   ONECLICK_API_URL / ONECLICK_JWT (optional; receipt origin/NEAR hashes)
  */
@@ -26,6 +28,7 @@ import { RpcTxStatusReader } from "./tx-status.js";
 import { createIndexerApp } from "./http.js";
 import { Indexer } from "./indexer.js";
 import { EvmOriginVerifier, OneClickReceiptEnricher, StatusAmountVerifier } from "./receipt.js";
+import { IndexerEventSource } from "./event-sources.js";
 import { FallbackEventSource } from "./fallback.js";
 import { NearBlocksEventSource } from "./nearblocks.js";
 import { repairTimes } from "./time-repair.js";
@@ -41,6 +44,14 @@ function numberEnv(name: string, fallback: number): number {
   return value;
 }
 
+function indexerFrom(): { label: string; seconds: number } | undefined {
+  const raw = getEnv("INDEXER_FROM");
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const time = raw.trim() === "now" ? Date.now() : Date.parse(raw);
+  if (!Number.isFinite(time)) throw new Error("ENV_INVALID: INDEXER_FROM");
+  return { label: new Date(time).toISOString(), seconds: Math.floor(time / 1000) };
+}
+
 function respond(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(`${JSON.stringify(body)}\n`);
@@ -51,6 +62,7 @@ async function main(): Promise<void> {
   const dbPath = requireEnv("INDEXER_DB_PATH");
   const logger = createLogger("indexer");
   const rpcUrls = nearRpcUrls();
+  const from = indexerFrom();
 
   const store = new IndexerStore(dbPath, rootAccount);
   // NEARBLOCKS_API_KEY, then NEARBLOCKS_API_KEY_2, _3 ...: each key has its own daily budget, used in order.
@@ -72,22 +84,27 @@ async function main(): Promise<void> {
     rpcUrls,
     Math.floor(numberEnv("INDEXER_START_HEIGHT", 0)),
   );
+  const nearBlocksSource = new NearBlocksEventSource(
+    rootAccount,
+    getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
+    nearBlocksKeys,
+    rpcUrls,
+    undefined,
+    25,
+    5,
+    budget,
+    from?.seconds ?? 0,
+  );
+  const eventPaths = (getEnv("INDEXER_EVENT_SOURCES") ?? "")
+    .split(",")
+    .map((path) => path.trim())
+    .filter((path) => path !== "");
   const source =
-    sourceKind === "rpc"
-      ? rpcSource
-      : new FallbackEventSource(
-          new NearBlocksEventSource(
-            rootAccount,
-            getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
-            nearBlocksKeys,
-            rpcUrls,
-            undefined,
-            100,
-            5,
-            budget,
-          ),
-          rpcSource,
-        );
+    eventPaths.length > 0
+      ? new FallbackEventSource(new IndexerEventSource(eventPaths), nearBlocksSource)
+      : sourceKind === "rpc"
+        ? rpcSource
+        : new FallbackEventSource(nearBlocksSource, rpcSource);
   // Rows written by the old time bug (1970) get their real block time, now and every ten minutes until none is left.
   const repairRound = (): void => {
     void repairTimes({
@@ -137,6 +154,10 @@ async function main(): Promise<void> {
     retentionDays: Math.floor(numberEnv("INDEXER_RETENTION_DAYS", 30)),
     logger,
     budget,
+    ...(from === undefined ? {} : { from: from.label }),
+    fromSeconds: from?.seconds ?? 0,
+    ...(eventPaths[0] === undefined ? {} : { watcherDbPath: eventPaths[0] }),
+    sourceLabel: eventPaths.length > 0 ? "watcher" : "scan",
   });
   const app = createIndexerApp({
     store,
