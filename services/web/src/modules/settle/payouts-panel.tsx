@@ -6,6 +6,7 @@ import { useAsync } from "@/lib/use-async";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Tabs } from "@/components/ui/tabs";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Select } from "@/components/ui/input";
 import { useNear } from "@/wallet/near";
@@ -141,18 +142,40 @@ function PrivateBalanceCard({ accountId }: { accountId: string }) {
   );
 }
 
+/** The private balance: how money moves (private balance on or off, schedule) and how to take it out, then where it is. */
 export function PayoutsPanel() {
   const auth = useAuth();
   const trail = useTrail();
   const inPrivate = trail[0].state === "ready" ? trailTotals(trail[0].data).private : 0n;
   return (
-    <div className="space-y-6">
-      <ScheduleCard />
-      {auth.state.status === "signedIn" ? (
-        <PrivateBalanceCard accountId={auth.state.accountId} />
-      ) : null}
-      {auth.state.status === "signedIn" ? <WithdrawCard approxUnits={inPrivate} /> : null}
-      <MoneyTrailCard trail={trail} />
+    <div className="space-y-6 py-1">
+      <Tabs
+        label="Private balance"
+        items={[
+          {
+            id: "withdraw",
+            label: "Withdraw",
+            panel: (
+              <div className="space-y-6 py-1">
+                {auth.state.status === "signedIn" ? (
+                  <PrivateBalanceCard accountId={auth.state.accountId} />
+                ) : null}
+                <ScheduleCard />
+                {auth.state.status === "signedIn" ? <WithdrawCard approxUnits={inPrivate} /> : null}
+              </div>
+            ),
+          },
+          {
+            id: "stats",
+            label: "Stats",
+            panel: (
+              <div className="space-y-6 py-1">
+                <MoneyTrailCard trail={trail} />
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

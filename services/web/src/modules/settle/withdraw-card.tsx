@@ -46,7 +46,7 @@ function problemText(code: string | undefined): string {
     case "confidential_intents_disabled":
       return "Private balance withdrawals are not switched on yet.";
     default:
-      return "We couldn't do that. Nothing was moved.";
+      return `We couldn't do that. Nothing was moved${code ? ` (${code})` : ""}.`;
   }
 }
 
@@ -127,12 +127,14 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
     } catch (e) {
       const code = (e as { code?: string; message?: string }).code;
       const msg = (e as Error).message ?? "";
+      // Say what failed: the code of the API's answer, or the error's own words (kept short), never just "couldn't".
+      console.error("withdraw failed", e);
       setProblem(
         msg === "WALLET_CANCELLED" || /reject|declin|cancel/i.test(msg)
           ? "You declined it in your wallet. Nothing was moved."
           : msg === "SIGNMESSAGE_UNSUPPORTED"
             ? "This wallet cannot sign this message. Use another NEAR wallet."
-            : problemText(code),
+            : problemText(code ?? (msg ? msg.slice(0, 60) : undefined)),
       );
       setStep("review");
     }
