@@ -812,6 +812,7 @@ export const copy = {
     previewMore: (shown: number, total: number) =>
       `Showing the first ${shown} of ${total} rows. The download has all of them.`,
     noPreview: "PDF statements have no preview. Download it to read it.",
+    previewFallback: "Nothing shows here on some phones. Download the file to read it.",
     emptyTitle: "No payments in this period",
     emptyBody: "Pick another period.",
   },

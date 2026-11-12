@@ -89,7 +89,16 @@ function Result({ s, from, to }: { s: Statement; from: string; to: string }) {
           </>
         )
       ) : (
-        <p className="caption">{t.noPreview}</p>
+        <section aria-label={t.previewCaption} className="space-y-2">
+          <h2 className="text-[18px] leading-[26px] font-semibold">{t.previewCaption}</h2>
+          {/* The browser's own PDF viewer. A phone that cannot show it still has the download above. */}
+          <iframe
+            title={t.previewCaption}
+            src={url}
+            className="border-border bg-surface h-[70vh] min-h-[420px] w-full rounded-[10px] border"
+          />
+          <p className="caption">{t.previewFallback}</p>
+        </section>
       )}
     </div>
   );
@@ -142,14 +151,15 @@ export function StatementsScreen() {
           void submit();
         }}
       >
-        <div className="grid items-end gap-6 sm:grid-cols-2">
-          <div className="space-y-1.5">
+        <div className="grid items-end gap-4 sm:grid-cols-2">
+          <div className="min-w-0 space-y-1.5">
             <p className="text-[14px] leading-5 font-medium">{t.period}</p>
             <DateRangeField
               label={t.period}
               value={{ from, to }}
               placeholder={t.missing}
               max={today()}
+              triggerClassName="w-full justify-between"
               onChange={(range) => {
                 if (range === null) return;
                 setFrom(range.from);
