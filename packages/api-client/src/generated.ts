@@ -496,6 +496,7 @@ export interface Business {
   updated_at: string;
   fee_mode: FeeMode;
   payout?: PayoutSettings;
+  settlement_asset?: string;
 }
 
 export interface UpdateBusinessRequest {
@@ -508,6 +509,7 @@ export interface UpdateBusinessRequest {
     schedule?: PayoutSchedule;
     destination?: string | null;
   };
+  settlement_asset?: string;
 }
 
 export interface StorageCredit {

@@ -9,7 +9,7 @@ User=openrail-issuer
 Group=openrail
 WorkingDirectory=/opt/openrail/current/services/issuer
 EnvironmentFile=/etc/openrail/issuer.env
-Environment=NODE_OPTIONS=--max-old-space-size=200
+Environment=NODE_OPTIONS="--max-old-space-size=200 --dns-result-order=ipv4first"
 Environment=NODE_ENV=production
 Environment=ISSUER_PORT=8787
 ExecStart=/opt/openrail/current/node_modules/.bin/tsx src/index.ts

@@ -2,7 +2,7 @@
 
 import type { Route } from "@openrail/api-client";
 import type { Address } from "viem";
-import { useConnector } from "./connector";
+import { useConnector } from "./connector-context";
 import { useEvm } from "./evm";
 import { walletKindOf, type PayWalletKind } from "./wallet-kind";
 

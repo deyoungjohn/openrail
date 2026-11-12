@@ -27,6 +27,7 @@ export function DateRangeField({
   presets,
   max,
   triggerClassName,
+  className,
 }: {
   label: string;
   value: DateRange | null;
@@ -36,6 +37,8 @@ export function DateRangeField({
   max?: string;
   /** Classes for the button, e.g. a fixed width so the label never resizes it. */
   triggerClassName?: string;
+  /** Classes of the field's root (a full-width field in a form). */
+  className?: string;
 }) {
   return (
     <DateRangePickerDropdown
@@ -45,6 +48,7 @@ export function DateRangeField({
       presets={presets ?? rangePresets()}
       placeholder={placeholder}
       closeOnSelect
+      {...(className === undefined ? {} : { className })}
       {...(triggerClassName === undefined ? {} : { triggerClassName })}
       {...(max === undefined ? {} : { max })}
     />

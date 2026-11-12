@@ -189,3 +189,10 @@ export function hashStrings(list: unknown): string[] {
     .map((h) => (typeof h === "string" ? h : (h as { hash?: unknown } | null)?.hash))
     .filter((h): h is string => typeof h === "string" && h !== "");
 }
+
+/** The units a countdown shows for the time that is left: hours appear when there is more than an hour (a price locked for 60 minutes showed nothing). */
+export function countdownUnits(msLeft: number): ("days" | "hours" | "minutes" | "seconds")[] {
+  if (msLeft > 86_400_000) return ["days", "hours", "minutes"];
+  if (msLeft > 3_600_000 - 1_000) return ["hours", "minutes", "seconds"];
+  return ["minutes", "seconds"];
+}

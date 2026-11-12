@@ -168,6 +168,21 @@ export function DataTable<T>({
   }, [rows, totals, columns]);
 
   const hasActions = Boolean(rowActions);
+  const toggle = (id: string) => {
+    if (!everOpened.has(id)) {
+      // mounted closed, then opened on the next frame, so the growth is seen
+      setEverOpened((prev) => new Set(prev).add(id));
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => setOpen((prev) => new Set(prev).add(id))),
+      );
+      return;
+    }
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  };
   const hasExpand = Boolean(expandedRow);
   const span = columns.length + (hasActions ? 1 : 0) + (hasExpand ? 1 : 0);
   const shell =
@@ -352,10 +367,20 @@ export function DataTable<T>({
                     <Fragment key={id}>
                       <tr
                         aria-label={rowLabel?.(row)}
-                        onClick={onRowClick ? () => onRowClick(row) : undefined}
+                        onClick={(e) => {
+                          onRowClick?.(row);
+                          // A row that opens opens from anywhere in it, except from a control inside it (a link, a button).
+                          if (
+                            hasExpand &&
+                            !(e.target as HTMLElement).closest(
+                              "a,button,input,select,textarea,[role=button]",
+                            )
+                          )
+                            toggle(rowId(row));
+                        }}
                         className={cn(
                           "border-b border-border last:border-b-0 hover:bg-row",
-                          onRowClick && "cursor-pointer",
+                          (onRowClick || hasExpand) && "cursor-pointer",
                         )}
                       >
                         {columns.map((c) => {
@@ -398,21 +423,7 @@ export function DataTable<T>({
                               aria-label={isOpen ? t.hideDetails : t.showDetails}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!everOpened.has(id)) {
-                                  // mounted closed, then opened on the next frame, so the growth is seen
-                                  setEverOpened((prev) => new Set(prev).add(id));
-                                  requestAnimationFrame(() =>
-                                    requestAnimationFrame(() =>
-                                      setOpen((prev) => new Set(prev).add(id)),
-                                    ),
-                                  );
-                                  return;
-                                }
-                                setOpen((prev) => {
-                                  const next = new Set(prev);
-                                  if (!next.delete(id)) next.add(id);
-                                  return next;
-                                });
+                                toggle(id);
                               }}
                               className="text-text-muted hover:text-text inline-flex size-8 items-center justify-center rounded-full"
                             >

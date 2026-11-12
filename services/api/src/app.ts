@@ -230,6 +230,8 @@ export interface BusinessRecord {
   payout_account: string;
   contact_email: string;
   fee_mode?: FeeMode;
+  /** Where the business wants to be paid: one of the settlement assets (default: USDC on NEAR). */
+  settlement_asset?: string;
   payout?: { schedule: PayoutSchedule; destination: string | null };
   created_at: string;
   updated_at: string;
@@ -512,6 +514,14 @@ export class ApiApp {
       logger: deps.issuer,
       clock: this.clock,
       marginBps: deps.quoteMarginBps ?? quoteMarginFromEnv(),
+      // Where the merchant chose to be paid (a route's own destination when they have not chosen).
+      destinationFor: (claim) => {
+        const issuer = claim.issuerId ? this.store.getBusiness(claim.issuerId) : undefined;
+        const chosen = issuer?.settlement_asset;
+        return chosen !== undefined && this.routes.settlementAssets.includes(chosen)
+          ? chosen
+          : undefined;
+      },
     });
   }
 
@@ -561,6 +571,7 @@ export class ApiApp {
       outstanding: typeof claim.amount_due === "string" ? outstandingOf(claim) : "0",
       amountDue: String(claim.amount_due ?? "0"),
       kindRules: kindRules(Number(claim.kind ?? 0)),
+      issuerId: String(claim.issuer_id ?? ""),
     };
   }
 
@@ -770,6 +781,7 @@ export class ApiApp {
       payout_account: record.payout_account,
       contact_email: record.contact_email,
       fee_mode: record.fee_mode ?? "absorb",
+      settlement_asset: record.settlement_asset ?? this.routes.settlementAssets[0] ?? "",
       payout: record.payout ?? { schedule: "manual", destination: null },
       created_at: record.created_at,
       updated_at: record.updated_at,
@@ -1157,6 +1169,7 @@ export class ApiApp {
           payout_account?: unknown;
           contact_email?: unknown;
           fee_mode?: unknown;
+          settlement_asset?: unknown;
           payout?: unknown;
         };
         if (body.username !== undefined) {
@@ -1218,6 +1231,14 @@ export class ApiApp {
           if (body.fee_mode !== "absorb" && body.fee_mode !== "pass_to_customer")
             throw new ApiError(400, "invalid_fee_mode");
           current.fee_mode = body.fee_mode;
+        }
+        if (body.settlement_asset !== undefined) {
+          if (
+            typeof body.settlement_asset !== "string" ||
+            !this.routes.settlementAssets.includes(body.settlement_asset)
+          )
+            throw new ApiError(400, "invalid_settlement_asset");
+          current.settlement_asset = body.settlement_asset;
         }
         if (body.payout !== undefined) {
           const payout = body.payout as { schedule?: unknown; destination?: unknown };

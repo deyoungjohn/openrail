@@ -151,15 +151,19 @@ export function StatementsScreen() {
           void submit();
         }}
       >
-        <div className="grid items-end gap-4 sm:grid-cols-2">
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-[14px] leading-5 font-medium">{t.period}</p>
+        <div className="grid items-start gap-4 sm:grid-cols-2">
+          {/* The two fields are one row of equal width (50/50, with a gap), the same height, the same floating label. */}
+          <div className="relative min-w-0">
+            <span className="pointer-events-none absolute top-0 left-3 z-10 -translate-y-1/2 bg-surface px-1 text-[12px] leading-5 font-medium text-muted dark:bg-surface-2">
+              {t.period}
+            </span>
             <DateRangeField
               label={t.period}
               value={{ from, to }}
               placeholder={t.missing}
               max={today()}
-              triggerClassName="w-full justify-between"
+              className="w-full"
+              triggerClassName="h-[52px] w-full justify-between rounded-[10px] border-border bg-surface-2 px-3.5 text-[15px] font-normal"
               onChange={(range) => {
                 if (range === null) return;
                 setFrom(range.from);

@@ -97,8 +97,10 @@ test("the payout account accepts a named or an implicit NEAR account and refuses
   await expect(
     page.getByRole("list", { name: "Setup steps" }).getByRole("listitem").nth(1),
   ).toContainText("Done");
+  // the payout account and where the business is paid (USDC on NEAR unless it chose another)
   expect(calls.find((c) => c.key === "PUT /v1/business")!.body).toEqual({
     payout_account: implicit,
+    settlement_asset: "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
   });
 });
 
