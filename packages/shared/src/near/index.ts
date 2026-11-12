@@ -38,6 +38,29 @@ export interface NearClientOptions {
   requestTimeoutMs?: number;
   /** The most requests in flight at once from this client (a provider's per-second limit is easy to burst past). */
   maxConcurrent?: number;
+  /** A read is sent to the next RPC after this long without an answer. */
+  hedgeDelayMs?: number;
+  /** Read timeout; a stuck host must not hold a service for the whole request budget. */
+  readTimeoutMs?: number;
+  /** How long a 429/network failure keeps an RPC out of rotation. */
+  cooldownMs?: number;
+  /** The same read within this window is shared. */
+  cacheMs?: number;
+}
+
+export interface RpcEndpointHealth {
+  host: string;
+  state: "ok" | "cooling";
+  last_error: string | null;
+  calls_last_hour: number;
+}
+
+interface EndpointState {
+  lastSuccess: number;
+  lastFailure: number;
+  cooldownUntil: number;
+  lastError: string | null;
+  calls: number[];
 }
 
 export interface ViewRequest {
@@ -117,6 +140,13 @@ export class NearClient {
   private readonly retryBackoffMs: number;
   private readonly requestTimeoutMs: number;
   private readonly maxConcurrent: number;
+  private readonly hedgeDelayMs: number;
+  private readonly readTimeoutMs: number;
+  private readonly cooldownMs: number;
+  private readonly cacheMs: number;
+  private readonly endpointState = new Map<string, EndpointState>();
+  private readonly readCache = new Map<string, { at: number; value: unknown }>();
+  private readonly pendingReads = new Map<string, Promise<unknown>>();
   /** Where the next call starts: the RPC that answered last. */
   private cursor = 0;
   private inFlight = 0;
@@ -137,6 +167,19 @@ export class NearClient {
     this.retryBackoffMs = options.retryBackoffMs ?? 100;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     this.maxConcurrent = Math.max(1, options.maxConcurrent ?? 6);
+    this.hedgeDelayMs = Math.max(0, options.hedgeDelayMs ?? 1_500);
+    this.readTimeoutMs = Math.max(100, options.readTimeoutMs ?? 4_000);
+    this.cooldownMs = Math.max(1_000, options.cooldownMs ?? 60_000);
+    this.cacheMs = Math.max(0, options.cacheMs ?? 2_000);
+    for (const url of this.rpcUrls) {
+      this.endpointState.set(url, {
+        lastSuccess: 0,
+        lastFailure: 0,
+        cooldownUntil: 0,
+        lastError: null,
+        calls: [],
+      });
+    }
     this.intentsContractId = options.intentsContractId ?? "intents.near";
     this.signerEnv = options.signer;
   }
@@ -197,62 +240,258 @@ export class NearClient {
     else this.inFlight -= 1;
   }
 
-  /** The RPCs in the order to try them: from the one that answered last, round through the others. */
+  /**
+   * Healthy RPCs first, starting from the one that answered last. Cooling RPCs are skipped; when
+   * every RPC is cooling, the one whose cooldown ends first is tried.
+   */
   private urlOrder(): number[] {
-    const n = this.rpcUrls.length;
-    return Array.from({ length: n }, (_, k) => (this.cursor + k) % n);
+    const now = Date.now();
+    const all = this.rpcUrls.map((url, index) => ({ url, index }));
+    const ready = all.filter(
+      (entry) => (this.endpointState.get(entry.url)?.cooldownUntil ?? 0) <= now,
+    );
+    const cooling = all
+      .filter((entry) => !ready.includes(entry))
+      .sort(
+        (a, b) =>
+          (this.endpointState.get(a.url)?.cooldownUntil ?? 0) -
+          (this.endpointState.get(b.url)?.cooldownUntil ?? 0),
+      );
+    // Cooling endpoints are only a last resort, after every ready endpoint has failed.
+    const pool = [...ready, ...cooling];
+    const start = pool.findIndex((entry) => entry.index === this.cursor);
+    return pool.map((_, k) => pool[((start < 0 ? 0 : start) + k) % pool.length]!.index);
+  }
+
+  private state(url: string): EndpointState {
+    let state = this.endpointState.get(url);
+    if (state === undefined) {
+      state = { lastSuccess: 0, lastFailure: 0, cooldownUntil: 0, lastError: null, calls: [] };
+      this.endpointState.set(url, state);
+    }
+    return state;
+  }
+
+  private noteCall(url: string): void {
+    const state = this.state(url);
+    state.calls.push(Date.now());
+  }
+
+  private noteOk(url: string, index: number): void {
+    const state = this.state(url);
+    state.lastSuccess = Date.now();
+    state.cooldownUntil = 0;
+    state.lastError = null;
+    this.cursor = index;
+  }
+
+  private noteFailure(url: string, message: string, cooldownMs: number): void {
+    const state = this.state(url);
+    state.lastFailure = Date.now();
+    state.lastError = message;
+    if (cooldownMs > 0) state.cooldownUntil = Date.now() + cooldownMs;
+  }
+
+  /** Endpoint hosts (no paths or keys), state, last error word and calls in the last hour. */
+  rpcHealth(now = Date.now()): RpcEndpointHealth[] {
+    const hourAgo = now - 3_600_000;
+    return this.rpcUrls.map((url) => {
+      const state = this.state(url);
+      state.calls = state.calls.filter((at) => at >= hourAgo);
+      let host = url;
+      try {
+        host = new URL(url).host;
+      } catch {
+        // keep the raw value when it is not a URL
+      }
+      return {
+        host,
+        state: state.cooldownUntil > now ? "cooling" : "ok",
+        last_error: state.lastError,
+        calls_last_hour: state.calls.length,
+      };
+    });
+  }
+
+  private async attempt<T>(
+    index: number,
+    method: string,
+    params: unknown,
+    feature: string,
+    timeoutMs: number,
+    settled: () => boolean,
+  ): Promise<T> {
+    const url = this.rpcUrls[index]!;
+    this.noteCall(url);
+    this.increment(feature);
+    await this.acquire();
+    try {
+      if (settled()) throw new NearRpcError("RPC_HEDGE_ABANDONED");
+      const response = await this.fetchImpl(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: (this.requestId += 1),
+          method,
+          params,
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const text = await response.text();
+      const outcome = this.interpret(response.status, text);
+      if (outcome.kind === "ok") {
+        this.noteOk(url, index);
+        return outcome.value as T;
+      }
+      if (outcome.kind === "quota") {
+        const retryAfter = Number(response.headers.get("retry-after"));
+        const cool =
+          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : this.cooldownMs;
+        this.noteFailure(url, outcome.error.message.split(":")[0] ?? "RPC_QUOTA", cool);
+      } else if (outcome.kind === "retryable") {
+        this.noteFailure(url, outcome.error.message, this.cooldownMs);
+      } else {
+        this.noteFailure(url, outcome.error.message, 0);
+      }
+      throw outcome.error;
+    } catch (error) {
+      if (error instanceof NearRpcError) throw error;
+      const message = `RPC_NETWORK: ${error instanceof Error ? error.message : String(error)}`;
+      this.noteFailure(url, message, this.cooldownMs);
+      throw new NearRpcError(message);
+    } finally {
+      this.release();
+    }
   }
 
   /**
-   * One call: each RPC is tried once, in turn (the next at once on any failure), starting from the one that answered
-   * last and coming back round to the first. Only with a single RPC is a transient failure repeated.
+   * A read: start at the best RPC; after `hedgeDelayMs` without an answer, start the next; after
+   * a definite failure, start the next at once; take the first good answer.
    */
-  private async rpc<T>(method: string, params: unknown, feature: string): Promise<T> {
+  private async rpcRead<T>(method: string, params: unknown, feature: string): Promise<T> {
+    if (this.rpcUrls.length === 1) return this.rpcReadOne<T>(method, params, feature);
+    const order = this.urlOrder();
+    return new Promise<T>((resolve, reject) => {
+      let next = 0;
+      let active = 0;
+      let done = false;
+      let lastError: NearRpcError | undefined;
+      const timers: ReturnType<typeof setTimeout>[] = [];
+
+      const finishError = (error: NearRpcError): void => {
+        if (done) return;
+        done = true;
+        for (const timer of timers) clearTimeout(timer);
+        reject(error);
+      };
+      const launch = (): void => {
+        if (done || next >= order.length) return;
+        const index = order[next] as number;
+        if (next > 0) this.fallbacks += 1;
+        next += 1;
+        active += 1;
+        const hedge = setTimeout(() => {
+          if (!done) launch();
+        }, this.hedgeDelayMs);
+        timers.push(hedge);
+        this.attempt<T>(index, method, params, feature, this.readTimeoutMs, () => done).then(
+          (value) => {
+            clearTimeout(hedge);
+            if (done) return;
+            done = true;
+            for (const timer of timers) clearTimeout(timer);
+            resolve(value);
+          },
+          (error: unknown) => {
+            clearTimeout(hedge);
+            active -= 1;
+            const rpcError =
+              error instanceof NearRpcError ? error : new NearRpcError(String(error));
+            if (!/RPC_HEDGE_ABANDONED/.test(rpcError.message)) lastError = rpcError;
+            if (
+              rpcError.status !== undefined &&
+              rpcError.status >= 400 &&
+              rpcError.status < 500 &&
+              !(rpcError instanceof NearQuotaError)
+            ) {
+              finishError(rpcError);
+              return;
+            }
+            if (/^RPC_ERROR/.test(rpcError.message)) {
+              finishError(rpcError);
+              return;
+            }
+            if (!done) launch();
+            if (!done && next >= order.length && active === 0) {
+              finishError(lastError ?? new NearRpcError("RPC_UNAVAILABLE"));
+            }
+          },
+        );
+      };
+      launch();
+    });
+  }
+
+  /** A single endpoint keeps the old retry/backoff for a transient failure. */
+  private async rpcReadOne<T>(method: string, params: unknown, feature: string): Promise<T> {
+    const index = this.urlOrder()[0] as number;
+    let lastError: NearRpcError | undefined;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
+      try {
+        return await this.attempt<T>(
+          index,
+          method,
+          params,
+          feature,
+          this.readTimeoutMs,
+          () => false,
+        );
+      } catch (error) {
+        const rpcError = error instanceof NearRpcError ? error : new NearRpcError(String(error));
+        lastError = rpcError;
+        if (rpcError.status !== undefined && rpcError.status >= 400 && rpcError.status < 500)
+          throw rpcError;
+        if (attempt < this.maxRetries) await this.sleep(this.retryBackoffMs * 2 ** attempt);
+      }
+    }
+    throw lastError ?? new NearRpcError("RPC_UNAVAILABLE");
+  }
+
+  /**
+   * A broadcast: one RPC; move on only after a definite rejection (429 or HTTP 5xx). A network
+   * error or timeout is not repeated here; `sendFunctionCall` reads the transaction status first.
+   */
+  private async rpcSend<T>(method: string, params: unknown, feature: string): Promise<T> {
     let lastError: NearRpcError | undefined;
     const order = this.urlOrder();
     const attempts = this.rpcUrls.length === 1 ? this.maxRetries + 1 : 1;
     for (let k = 0; k < order.length; k += 1) {
       const index = order[k] as number;
-      const url = this.rpcUrls[index];
-      if (url === undefined) continue;
       for (let attempt = 0; attempt < attempts; attempt += 1) {
-        this.increment(feature);
-        let outcome: Outcome;
-        await this.acquire();
         try {
-          const response = await this.fetchImpl(url, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: (this.requestId += 1),
-              method,
-              params,
-            }),
-            signal: AbortSignal.timeout(this.requestTimeoutMs),
-          });
-          outcome = this.interpret(response.status, await response.text());
+          return await this.attempt<T>(
+            index,
+            method,
+            params,
+            feature,
+            this.requestTimeoutMs,
+            () => false,
+          );
         } catch (error) {
-          outcome = {
-            kind: "retryable",
-            error: new NearRpcError(
-              `RPC_NETWORK: ${error instanceof Error ? error.message : String(error)}`,
-            ),
-          };
-        } finally {
-          this.release();
-        }
-
-        if (outcome.kind === "ok") {
-          this.cursor = index;
-          return outcome.value as T;
-        }
-        lastError = outcome.error;
-        // A definite answer from the chain (a bad request, a missing account) is the same on every RPC.
-        if (outcome.kind === "fatal") throw outcome.error;
-        if (attempt < attempts - 1) {
-          await this.sleep(this.retryBackoffMs * 2 ** attempt);
-          continue;
+          const rpcError = error instanceof NearRpcError ? error : new NearRpcError(String(error));
+          lastError = rpcError;
+          const definite =
+            rpcError instanceof NearQuotaError ||
+            (rpcError.status !== undefined &&
+              rpcError.status >= 500 &&
+              rpcError.status !== 504 &&
+              rpcError.status !== 408);
+          if (!definite) throw rpcError;
+          if (attempt < attempts - 1) {
+            await this.sleep(this.retryBackoffMs * 2 ** attempt);
+            continue;
+          }
         }
       }
       if (k < order.length - 1) this.fallbacks += 1;
@@ -260,10 +499,37 @@ export class NearClient {
     throw lastError ?? new NearRpcError("RPC_UNAVAILABLE");
   }
 
+  private async rpc<T>(method: string, params: unknown, feature: string): Promise<T> {
+    return this.rpcRead<T>(method, params, feature);
+  }
+
   private async query<T>(params: Record<string, unknown>, feature: string): Promise<T> {
-    const result = await this.rpc<{ result: number[] }>("query", params, feature);
-    const bytes = Uint8Array.from(result.result);
-    return JSON.parse(new TextDecoder().decode(bytes)) as T;
+    const key = JSON.stringify(params);
+    const now = Date.now();
+    const cached = this.readCache.get(key);
+    if (cached !== undefined && now - cached.at < this.cacheMs) return cached.value as T;
+    const pending = this.pendingReads.get(key);
+    if (pending !== undefined) return pending as Promise<T>;
+    const promise = (async () => {
+      const result = await this.rpc<{ result: number[] }>("query", params, feature);
+      const bytes = Uint8Array.from(result.result);
+      const value = JSON.parse(new TextDecoder().decode(bytes)) as T;
+      this.readCache.set(key, { at: Date.now(), value });
+      return value;
+    })();
+    this.pendingReads.set(key, promise);
+    let value: T;
+    try {
+      value = (await promise) as T;
+    } finally {
+      this.pendingReads.delete(key);
+    }
+    if (this.readCache.size > 100) {
+      for (const [entry, hit] of this.readCache) {
+        if (now - hit.at >= this.cacheMs) this.readCache.delete(entry);
+      }
+    }
+    return value;
   }
 
   /** The NEAR balance of an account in yoctoNEAR. Throws when no RPC can say: a failed read is not a zero balance. */
@@ -411,7 +677,7 @@ export class NearClient {
     const signed = await this.signFunctionCall(request);
     const feature = request.feature ?? "near";
     try {
-      return await this.rpc<unknown>("broadcast_tx_commit", [signed.signedTxBase64], feature);
+      return await this.rpcSend<unknown>("broadcast_tx_commit", [signed.signedTxBase64], feature);
     } catch (error) {
       // The send may have landed even when its response timed out. Only then read the outcome,
       // so the normal path still costs one call.

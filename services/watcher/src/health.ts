@@ -13,6 +13,13 @@ export interface HealthSnapshot {
   last_error: string | null;
   /** RPC requests since the start, per feature: where the provider's credits go. */
   rpc_calls?: Record<string, number>;
+  /** Endpoint hosts (no paths or keys), cooling state and calls in the last hour. */
+  rpc_endpoints?: {
+    host: string;
+    state: "ok" | "cooling";
+    last_error: string | null;
+    calls_last_hour: number;
+  }[];
   /** Failed batched writes to the watcher store (never fatal). */
   store_write_failures?: number;
   /** Failed claim processing attempts and claims waiting for the next backoff. */

@@ -158,6 +158,7 @@ async function main(): Promise<void> {
     fromSeconds: from?.seconds ?? 0,
     ...(eventPaths[0] === undefined ? {} : { watcherDbPath: eventPaths[0] }),
     sourceLabel: eventPaths.length > 0 ? "watcher" : "scan",
+    rpcEndpoints: () => near.rpcHealth(),
     gapSourceFactory: (claimAccount) =>
       new NearBlocksEventSource(
         claimAccount,

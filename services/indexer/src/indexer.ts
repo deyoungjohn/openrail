@@ -35,6 +35,12 @@ export interface IndexerOptions {
   /** Builds a source for one claim account's transactions; used only by the gap sweep. */
   gapSourceFactory?: (claimAccount: string) => EventSource;
   gapIntervalMs?: number;
+  rpcEndpoints?: () => {
+    host: string;
+    state: "ok" | "cooling";
+    last_error: string | null;
+    calls_last_hour: number;
+  }[];
 }
 
 export interface SyncResult {
@@ -64,6 +70,7 @@ export class Indexer {
   private readonly sourceLabel: "watcher" | "scan";
   private readonly gapSourceFactory: ((claimAccount: string) => EventSource) | undefined;
   private readonly gapIntervalMs: number;
+  private readonly rpcEndpoints: NonNullable<IndexerOptions["rpcEndpoints"]> | undefined;
   private lastGapSweep = 0;
   private readonly gapSince = new Map<string, number>();
   private lastHead: number | null = null;
@@ -91,6 +98,7 @@ export class Indexer {
     this.sourceLabel = options.sourceLabel ?? "scan";
     this.gapSourceFactory = options.gapSourceFactory;
     this.gapIntervalMs = Math.max(60_000, options.gapIntervalMs ?? 10 * 60_000);
+    this.rpcEndpoints = options.rpcEndpoints;
   }
 
   private async enrich(event: { event: string; eventKey: string }): Promise<void> {
@@ -297,6 +305,7 @@ export class Indexer {
     source: "watcher" | "scan";
     gaps: Gap[];
     oldest_gap_age: number | null;
+    rpc_endpoints?: ReturnType<NonNullable<IndexerOptions["rpcEndpoints"]>>;
     degraded: boolean;
     nearblocks_budget?: ReturnType<BudgetGovernor["health"]>;
   } {
@@ -314,6 +323,7 @@ export class Indexer {
       source: this.sourceLabel,
       gaps,
       oldest_gap_age: gaps.length === 0 ? null : Math.max(...gaps.map((gap) => gap.age_seconds)),
+      ...(this.rpcEndpoints === undefined ? {} : { rpc_endpoints: this.rpcEndpoints() }),
       degraded:
         (this.budget?.health().blocked ?? false) || gaps.some((gap) => gap.age_seconds > 30 * 60),
       ...(this.budget === undefined ? {} : { nearblocks_budget: this.budget.health() }),
