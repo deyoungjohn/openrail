@@ -1,0 +1,37 @@
+{
+  "data": [
+    {
+      "actions": [{ "action": "FUNCTION_CALL", "method": "clear_stale_lock" }],
+      "actions_agg": { "deposit": "0" },
+      "block": {
+        "block_hash": "FneyzZwWMN4hVnsh8T7iESMUuzfPZ2zpTpYAaKPDZinm",
+        "block_height": "224200330",
+        "block_timestamp": "1794478343182774725"
+      },
+      "block_timestamp": "1794478343182774725",
+      "index_in_chunk": 0,
+      "outcomes": { "status": false },
+      "receiver_account_id": "openrail.near",
+      "shard_id": 13,
+      "signer_account_id": "watcher.openrail.near",
+      "transaction_hash": "8vxZZpCUYiFWSg4MwVpCU3n5rzLBjYYwBmpvaiACc7VX"
+    },
+    {
+      "actions": [{ "action": "FUNCTION_CALL", "method": "clear_stale_lock" }],
+      "actions_agg": { "deposit": "0" },
+      "block": {
+        "block_hash": "HhmcayhwiE4uq6YkkXRAyUATxpBVCyMYfU3aePDWEg5x",
+        "block_height": "224200106",
+        "block_timestamp": "1794478215036064247"
+      },
+      "block_timestamp": "1794478215036064247",
+      "index_in_chunk": 0,
+      "outcomes": { "status": false },
+      "receiver_account_id": "openrail.near",
+      "shard_id": 13,
+      "signer_account_id": "watcher.openrail.near",
+      "transaction_hash": "4RrYmbs6QmUJArUZFuwrjupKvAKs24vUTfzp4tpogc3y"
+    }
+  ],
+  "meta": { "next_page": "eyJpbmRleCI6MCwic2hhcmQiOjEzLCJ0aW1lc3RhbXAiOiIxNzk0NDc4MjE1MDM2MDY0MjQ3In0=" }
+}

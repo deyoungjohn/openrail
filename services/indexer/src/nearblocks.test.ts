@@ -12,21 +12,20 @@ interface TxnRow {
   transaction_hash: string;
   signer_account_id: string;
   receiver_account_id: string;
-  included_in_block_hash: string;
-  block_timestamp: string;
-  block: { block_height: number };
+  block: { block_height: string; block_timestamp: string; block_hash: string };
 }
-const TXN = (
-  JSON.parse(
-    readFileSync(
-      fileURLToPath(new URL("./fixtures/txn.deploy-global.json", import.meta.url)),
-      "utf8",
-    ),
-  ) as { txns: TxnRow[] }
-).txns[0] as TxnRow;
+const FIXTURE = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL("./fixtures/nearblocks.v3.txns.json", import.meta.url)),
+    "utf8",
+  ),
+) as { data: TxnRow[]; meta: { next_page: string } };
+const TXN = FIXTURE.data[0] as TxnRow;
+const OLDER = FIXTURE.data[1] as TxnRow;
+const HEIGHT = Number(TXN.block.block_height);
 
-function nbResponse(txns: unknown[], cursor: string | null = null): Response {
-  return new Response(JSON.stringify({ cursor, txns }), {
+function nbResponse(txns: unknown[], nextPage: string | null = null): Response {
+  return new Response(JSON.stringify({ data: txns, meta: { next_page: nextPage } }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
@@ -46,13 +45,15 @@ function rpcResponse(logs: string[], executor = "openrail.near"): Response {
 }
 
 describe("NearBlocks account-scoped source", () => {
-  it("discovers root transactions and reads their logs with EXPERIMENTAL_tx_status", async () => {
+  it("parses a real v3 page and reads logs with EXPERIMENTAL_tx_status", async () => {
+    let url = "";
     let authorization = "";
     let statusCalls = 0;
-    const fetchImpl: FetchLike = async (url, init) => {
-      if (url.includes("/v1/account/")) {
+    const fetchImpl: FetchLike = async (input, init) => {
+      if (input.includes("/v3/accounts/")) {
+        url = input;
         authorization = String((init?.headers as Record<string, string>).authorization);
-        return nbResponse([TXN]);
+        return nbResponse([TXN], null);
       }
       statusCalls += 1;
       const body = JSON.parse(String(init?.body)) as {
@@ -62,7 +63,7 @@ describe("NearBlocks account-scoped source", () => {
       expect(body.method).toBe("EXPERIMENTAL_tx_status");
       expect(body.params).toMatchObject({
         tx_hash: TXN.transaction_hash,
-        sender_account_id: "openrail.near",
+        sender_account_id: "watcher.openrail.near",
         wait_until: "FINAL",
       });
       return rpcResponse([BOOKED, QUOTE]);
@@ -77,14 +78,16 @@ describe("NearBlocks account-scoped source", () => {
 
     const page = await source.fetch(null);
 
+    expect(url).toContain("/v3/accounts/openrail.near/txns?");
+    expect(url).toContain("limit=100");
     expect(authorization).toBe("Bearer secret-key");
     expect(statusCalls).toBe(1);
     expect(page.blocks).toHaveLength(1);
-    expect(page.blocks[0]?.height).toBe(TXN.block.block_height);
-    expect(page.blocks[0]?.timestamp).toBe(1793617822);
+    expect(page.blocks[0]?.height).toBe(HEIGHT);
+    expect(page.blocks[0]?.timestamp).toBe(1794478343);
     expect(page.blocks[0]?.receipts[0]?.txHash).toBe(TXN.transaction_hash);
     expect(page.blocks[0]?.receipts[0]?.logs).toEqual([BOOKED, QUOTE]);
-    expect(page.cursor).toBe(`h:${TXN.block.block_height}`);
+    expect(page.cursor).toBe(`v3:${HEIGHT}:${HEIGHT}:`);
     expect(source.callCounts()).toEqual({
       "nearblocks.txns": 1,
       "rpc.tx_status": 1,
@@ -99,15 +102,15 @@ describe("NearBlocks account-scoped source", () => {
       "",
       ["https://rpc.test"],
       async (url) => {
-        if (url.includes("/v1/account/")) return nbResponse([TXN]);
+        if (url.includes("/v3/accounts/")) return nbResponse([TXN]);
         rpcCalls += 1;
         return rpcResponse([BOOKED]);
       },
     );
-    const page = await source.fetch(`h:${TXN.block.block_height}`);
+    const page = await source.fetch(`v3:${HEIGHT}:${HEIGHT}:`);
     expect(page.blocks).toHaveLength(0);
     expect(rpcCalls).toBe(0);
-    expect(page.cursor).toBe(`h:${TXN.block.block_height}`);
+    expect(page.cursor).toBe(`v3:${HEIGHT}:${HEIGHT}:`);
   });
 
   it("only keeps logs from receipts executed by the root account", async () => {
@@ -117,22 +120,17 @@ describe("NearBlocks account-scoped source", () => {
       "",
       ["https://rpc.test"],
       async (url) =>
-        url.includes("/v1/account/")
+        url.includes("/v3/accounts/")
           ? nbResponse([TXN])
           : rpcResponse([BOOKED], "someone.else.near"),
     );
     const page = await source.fetch(null);
     expect(page.blocks).toHaveLength(0);
-    expect(page.latestBlock).toBe(TXN.block.block_height);
+    expect(page.latestBlock).toBe(HEIGHT);
   });
 
-  it("walks older pages until it reaches already-indexed heights", async () => {
+  it("keeps v3's opaque next page while a backlog is walked", async () => {
     const urls: string[] = [];
-    const older = {
-      ...TXN,
-      transaction_hash: "OlderTx",
-      block: { block_height: TXN.block.block_height - 1 },
-    };
     const source = new NearBlocksEventSource(
       "openrail.near",
       "https://nb.test",
@@ -140,20 +138,50 @@ describe("NearBlocks account-scoped source", () => {
       ["https://rpc.test"],
       async (url) => {
         urls.push(url);
-        if (url.includes("/v1/account/")) {
-          return urls.filter((entry) => entry.includes("/v1/account/")).length === 1
-            ? nbResponse([TXN], "p2")
-            : nbResponse([older], null);
-        }
-        return rpcResponse([BOOKED]);
+        if (!url.includes("/v3/accounts/")) return rpcResponse([BOOKED]);
+        return urls.filter((entry) => entry.includes("/v3/accounts/")).length === 1
+          ? nbResponse([TXN], FIXTURE.meta.next_page)
+          : nbResponse([OLDER], null);
+      },
+      100,
+      1,
+    );
+    const first = await source.fetch(null);
+    expect(first.done).toBe(false);
+    expect(first.cursor).toBe(
+      `v3:${HEIGHT}:0:${Buffer.from(FIXTURE.meta.next_page).toString("base64url")}`,
+    );
+
+    const second = await source.fetch(first.cursor);
+    expect(urls.find((entry) => entry.includes("next="))).toBeDefined();
+    expect(second.blocks.map((block) => block.height)).toEqual([Number(OLDER.block.block_height)]);
+    expect(second.done).toBe(true);
+    expect(second.latestBlock).toBe(HEIGHT);
+  });
+
+  it("walks backwards until it reaches already-indexed heights", async () => {
+    const urls: string[] = [];
+    const source = new NearBlocksEventSource(
+      "openrail.near",
+      "https://nb.test",
+      "",
+      ["https://rpc.test"],
+      async (url) => {
+        urls.push(url);
+        if (!url.includes("/v3/accounts/")) return rpcResponse([BOOKED]);
+        return urls.filter((entry) => entry.includes("/v3/accounts/")).length === 1
+          ? nbResponse([TXN], "p2")
+          : nbResponse([OLDER], null);
       },
     );
-    const page = await source.fetch(`h:${TXN.block.block_height - 2}`);
+    const page = await source.fetch(
+      `v3:${Number(OLDER.block.block_height) - 1}:${Number(OLDER.block.block_height) - 1}:`,
+    );
     expect(page.blocks.map((block) => block.height)).toEqual([
-      TXN.block.block_height - 1,
-      TXN.block.block_height,
+      Number(OLDER.block.block_height),
+      HEIGHT,
     ]);
-    expect(urls.filter((url) => url.includes("/v1/account/"))).toHaveLength(2);
+    expect(urls.filter((entry) => entry.includes("/v3/accounts/"))).toHaveLength(2);
   });
 
   it("a quiet hour costs two NearBlocks calls and no RPC calls", async () => {
@@ -165,7 +193,7 @@ describe("NearBlocks account-scoped source", () => {
       "",
       ["https://rpc.test"],
       async (url) => {
-        if (url.includes("/v1/account/")) {
+        if (url.includes("/v3/accounts/")) {
           listCalls += 1;
           return nbResponse([]);
         }
@@ -190,5 +218,10 @@ describe("NearBlocks account-scoped source", () => {
       async () => new Response("quota", { status: 429 }),
     );
     await expect(source.fetch(null)).rejects.toThrow("NEARBLOCKS_HTTP_429");
+  });
+
+  it("has no v1 or v2 route left in the source", () => {
+    const source = readFileSync(fileURLToPath(new URL("./nearblocks.ts", import.meta.url)), "utf8");
+    expect(source).not.toMatch(/\/v[12]\//);
   });
 });

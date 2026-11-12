@@ -19,8 +19,10 @@ and see the CSV envelope; `format=pdf` returns the PDF envelope.
 → `curl -s localhost:8788/r/<booking-tx-hash>` and see the receipt. Any other hash is 404
 (`receipt_equals_booked_event`).
 
-`INDEXER_SOURCE=nearblocks` (default) uses the account-scoped NearBlocks `/v1/account/<root>/txns`
-list (cursor paging). The list rows have no logs, so each new transaction is read once with
+`INDEXER_SOURCE=nearblocks` (default) uses the account-scoped NearBlocks `/v3/accounts/<root>/txns`
+list (newest-first, opaque `next_page` paging). The scan cursor is `v3:<newest height>:<floor height>:<next page>`;
+a finished poll starts at the newest transaction and walks back to the floor, while a backlog keeps
+v3's cursor until it reaches the floor. The list rows have no logs, so each new transaction is read once with
 `EXPERIMENTAL_tx_status` (`wait_until: FINAL`) and only receipts executed by `<root>` are kept.
 If a NearBlocks request fails, that poll falls back to the RPC scanner (one request per block,
 still heavy); `INDEXER_SOURCE=rpc` selects the scanner directly for tests or an emergency run;
