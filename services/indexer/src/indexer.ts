@@ -11,6 +11,8 @@ import { WatcherViews, type Gap } from "./gaps.js";
 
 export const DEFAULT_POLL_INTERVAL_MS = 30 * 60 * 1000;
 export const BOOST_POLL_INTERVAL_MS = 60_000;
+/** Reading the watcher's own SQLite file costs no NearBlocks or RPC call, so that source is read every few seconds: a booking shows on the dashboard and fires its webhook at once. */
+export const LOCAL_SOURCE_POLL_INTERVAL_MS = 5_000;
 export const BOOST_DURATION_MS = 5 * 60 * 1000;
 
 export interface IndexerOptions {
@@ -75,6 +77,8 @@ export class Indexer {
     this.enricher = options.enricher;
     this.maxPagesPerSync = Math.max(1, options.maxPagesPerSync ?? 5);
     this.pollIntervalMs = Math.max(1, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+    if (options.sourceLabel === "watcher")
+      this.pollIntervalMs = Math.min(this.pollIntervalMs, LOCAL_SOURCE_POLL_INTERVAL_MS);
     this.retentionDays = Math.max(1, options.retentionDays ?? 30);
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
@@ -198,7 +202,12 @@ export class Indexer {
 
   /** Raise the polling cadence to one minute for five minutes (bounded by the remaining budget). */
   poke(): number {
-    if (this.budget !== undefined && this.budget.health().remaining <= 0) return 0;
+    if (
+      this.sourceLabel !== "watcher" &&
+      this.budget !== undefined &&
+      this.budget.health().remaining <= 0
+    )
+      return 0;
     // A poke while a boost is running does not extend it: every price and every cash-out pokes, and a chain of
     // extensions meant a tick every few seconds all day.
     if (this.now() >= this.boostUntil) this.boostUntil = this.now() + BOOST_DURATION_MS;
