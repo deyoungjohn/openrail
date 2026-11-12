@@ -134,7 +134,7 @@ describe("the public pay and ack answers", () => {
       booking_tx: "BOOKTX444",
     });
     const body = (await w.get("/v1/pay/claims/c-1")).body as Public;
-    expect(body.payments).toEqual([{ tx_hash: "BOOKTX444", near: true }]);
+    expect(body.payments).toEqual([{ tx_hash: "BOOKTX444", near: true, receipt: true }]);
     expect(body.paid_at).toBe("2026-11-09T13:00:00Z");
   });
 });
