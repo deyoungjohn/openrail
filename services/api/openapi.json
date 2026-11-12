@@ -2109,6 +2109,10 @@
           },
           "payout": {
             "$ref": "#/components/schemas/PayoutSettings"
+          },
+          "settlement_asset": {
+            "type": "string",
+            "description": "Where the business is paid: one of the settlement assets (USDC on NEAR, Base, Arbitrum or Solana). Default: USDC on NEAR."
           }
         }
       },
@@ -2144,6 +2148,10 @@
                 "type": ["string", "null"]
               }
             }
+          },
+          "settlement_asset": {
+            "type": "string",
+            "description": "Where the business is paid: one of the settlement assets (USDC on NEAR, Base, Arbitrum or Solana). Default: USDC on NEAR."
           }
         }
       },

@@ -452,6 +452,9 @@ export const copy = {
     payoutBody:
       "Where your money is sent when a client pays. Use a NEAR account, named or a 64-character one from a multichain wallet.",
     payoutAccount: "Payout account",
+    settlementLabel: "Get paid in",
+    settlementHelp:
+      "Every payment, whatever chain your client pays from, settles to you as USDC on this network. You can change it later in Settings.",
     savePayout: "Save payout account",
     creditTitle: "Storage credit",
     creditHelp:

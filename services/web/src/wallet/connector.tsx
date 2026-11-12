@@ -26,54 +26,18 @@ import {
   type AppKitNetwork,
 } from "@reown/appkit/networks";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { WagmiProvider, type Config } from "wagmi";
-import type { Address, EIP1193Provider, Hex } from "viem";
+import type { Address, EIP1193Provider } from "viem";
 import { sendEvmPayment } from "./evm";
 import { buildSolanaUsdcTransfer, SOLANA_RPC_URL } from "./solana-pay";
 
-const PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
-export const connectorEnabled = PROJECT_ID !== "";
-
-export type Namespace = "eip155" | "solana";
-
-export interface ConnectorState {
-  enabled: boolean;
-  evmAddress: string | null;
-  solAddress: string | null;
-  /** Opens the connect dialog for one chain family. */
-  open: (ns: Namespace) => void;
-  disconnect: (ns: Namespace) => Promise<void>;
-  payEvm: (request: {
-    chainId: number;
-    to: Address;
-    amount: bigint;
-    token: Address | null;
-  }) => Promise<Hex>;
-  paySolana: (request: {
-    to: string;
-    mint: string;
-    amount: bigint;
-    decimals: number;
-  }) => Promise<string>;
-}
-
-const OFF: ConnectorState = {
-  enabled: false,
-  evmAddress: null,
-  solAddress: null,
-  open: () => undefined,
-  disconnect: async () => undefined,
-  payEvm: async () => {
-    throw new Error("wallet_not_connected");
-  },
-  paySolana: async () => {
-    throw new Error("wallet_not_connected");
-  },
-};
-
-const Ctx = createContext<ConnectorState>(OFF);
-export const useConnector = (): ConnectorState => useContext(Ctx);
+import {
+  ConnectorCtx,
+  connectorEnabled,
+  PROJECT_ID,
+  type ConnectorState,
+} from "./connector-context";
 
 const EVM_NETWORKS = [mainnet, base, arbitrum, optimism, polygon, bsc] as [
   AppKitNetwork,
@@ -149,7 +113,7 @@ function Live({ children }: { children: ReactNode }) {
       solProvider.walletProvider,
     ],
   );
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <ConnectorCtx.Provider value={value}>{children}</ConnectorCtx.Provider>;
 }
 
 export function ConnectorProvider({ children }: { children: ReactNode }) {

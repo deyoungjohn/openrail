@@ -4,6 +4,7 @@ import {
   chainOfRoute,
   formatDueDate,
   formatToken,
+  countdownUnits,
   payUnits,
   hashStrings,
   payStage,
@@ -245,5 +246,13 @@ describe("payUnits", () => {
   });
   it("rounds SOL up to five decimals", () => {
     expect(payUnits("11134668", 9, "SOL")).toBe("11140000");
+  });
+});
+
+describe("countdownUnits", () => {
+  it("adds hours when there is more than an hour left", () => {
+    expect(countdownUnits(60 * 60_000)).toEqual(["hours", "minutes", "seconds"]);
+    expect(countdownUnits(10 * 60_000)).toEqual(["minutes", "seconds"]);
+    expect(countdownUnits(3 * 86_400_000)).toEqual(["days", "hours", "minutes"]);
   });
 });

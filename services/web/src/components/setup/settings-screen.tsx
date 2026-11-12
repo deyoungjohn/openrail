@@ -14,6 +14,7 @@ import { AccountBar } from "../auth/account-bar";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
+import { DEFAULT_SETTLEMENT, SettlementSelect } from "./settlement-select";
 import { Tabs } from "../ui/tabs";
 import { ErrorState } from "../ui/state";
 import { StorageCreditCard } from "./storage-credit-card";
@@ -35,6 +36,7 @@ function ProfileCard({
   const [name, setName] = useState(business.legal_name);
   const [payout, setPayout] = useState(business.payout_account);
   const [email, setEmail] = useState(business.contact_email);
+  const [asset, setAsset] = useState(business.settlement_asset || DEFAULT_SETTLEMENT);
   const [shown, setShown] = useState(false);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
 
@@ -42,6 +44,7 @@ function ProfileCard({
   if (name.trim() !== business.legal_name) changed.legal_name = name.trim();
   if (payout.trim() !== business.payout_account) changed.payout_account = payout.trim();
   if (email.trim() !== business.contact_email) changed.contact_email = email.trim();
+  if (asset !== (business.settlement_asset || DEFAULT_SETTLEMENT)) changed.settlement_asset = asset;
   const dirty = Object.keys(changed).length > 0;
 
   const nameBad = name.trim() === "";
@@ -92,6 +95,7 @@ function ProfileCard({
           onChange={(e) => setEmail(e.target.value)}
           error={shown && emailBad ? t.badEmail : undefined}
         />
+        <SettlementSelect value={asset} onChange={setAsset} />
         <ErrorNote>{state === "failed" ? s.saveFailed : null}</ErrorNote>
         <div className="flex items-center justify-center gap-3">
           <Button type="submit" disabled={!dirty} loading={state === "saving"}>

@@ -34,6 +34,7 @@ function harness(overrides: Partial<ApiDeps> = {}) {
     claim: vi.fn(async () => ({
       token_id: "c-1",
       kind: 0,
+      issuer_id: "acme.openrail.near",
       claim_account: "c-1.openrail.near",
       terms_hash: "0x" + "a".repeat(64),
       amount_due: "12500000",
@@ -999,5 +1000,43 @@ describe("receipt PDF route", () => {
       const missing = await h.app.handle(request("GET", path, undefined, ""));
       expect(missing.status).toBe(404);
     }
+  });
+});
+
+describe("where the merchant is paid", () => {
+  it("is a setting: one of the settlement assets, USDC on NEAR by default, anything else refused", async () => {
+    const { app, secret } = harness();
+    const before = await app.handle(request("GET", "/v1/business", undefined, secret));
+    expect((before.body as { settlement_asset: string }).settlement_asset).toBe(
+      "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    );
+    const base = "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near";
+    const ok = await app.handle(request("PUT", "/v1/business", { settlement_asset: base }, secret));
+    expect((ok.body as { settlement_asset: string }).settlement_asset).toBe(base);
+    const bad = await app.handle(
+      request("PUT", "/v1/business", { settlement_asset: "nep141:evil.near" }, secret),
+    );
+    expect(bad.status).toBe(400);
+  });
+
+  it("a price is asked for in the asset the merchant chose, whatever the payer's route", async () => {
+    const { app, secret, quoteProvider } = harness();
+    const base = "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near";
+    await app.handle(request("PUT", "/v1/business", { settlement_asset: base }, secret));
+    await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
+    await app.handle(
+      request(
+        "POST",
+        "/v1/pay/sessions",
+        {
+          token_id: "c-1",
+          route_id: "R7",
+          refund_to: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+        },
+        secret,
+      ),
+    );
+    const asked = quoteProvider.quote.mock.calls.at(-1)?.[0] as { destinationAsset: string };
+    expect(asked.destinationAsset).toBe(base);
   });
 });

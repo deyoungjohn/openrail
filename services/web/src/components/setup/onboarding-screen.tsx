@@ -16,6 +16,7 @@ import { useAuth } from "../auth/auth-provider";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
+import { DEFAULT_SETTLEMENT, SettlementSelect } from "./settlement-select";
 import { ErrorState, Skeleton } from "../ui/state";
 import { AccountId } from "../ui/account-id";
 import { StorageCreditCard } from "./storage-credit-card";
@@ -75,9 +76,18 @@ function ProfileForm({ business, onSaved }: { business: Business | null; onSaved
   );
 }
 
-function PayoutForm({ initial, onSaved }: { initial: string; onSaved: () => void }) {
+function PayoutForm({
+  initial,
+  initialAsset,
+  onSaved,
+}: {
+  initial: string;
+  initialAsset: string;
+  onSaved: () => void;
+}) {
   const t = copy.setup;
   const [value, setValue] = useState(initial);
+  const [asset, setAsset] = useState(initialAsset);
   const [shown, setShown] = useState(false);
   const [state, setState] = useState<"idle" | "saving" | "failed">("idle");
   const bad = !isNearAccountId(value.trim());
@@ -92,7 +102,10 @@ function PayoutForm({ initial, onSaved }: { initial: string; onSaved: () => void
         if (bad) return;
         setState("saving");
         try {
-          await dashClient.business.update({ payout_account: value.trim() });
+          await dashClient.business.update({
+            payout_account: value.trim(),
+            settlement_asset: asset,
+          });
           onSaved();
         } catch {
           setState("failed");
@@ -108,6 +121,7 @@ function PayoutForm({ initial, onSaved }: { initial: string; onSaved: () => void
         onChange={(e) => setValue(e.target.value.trim())}
         error={shown && bad ? t.badAccount : undefined}
       />
+      <SettlementSelect value={asset} onChange={setAsset} />
       <ErrorNote>{state === "failed" ? t.saveFailed : null}</ErrorNote>
       <div className="flex justify-center">
         <Button type="submit" loading={state === "saving"}>
@@ -219,6 +233,7 @@ export function OnboardingScreen() {
                     {open && s.id === "payout" ? (
                       <PayoutForm
                         initial={business?.payout_account || account}
+                        initialAsset={business?.settlement_asset || DEFAULT_SETTLEMENT}
                         onSaved={reloadBiz}
                       />
                     ) : null}

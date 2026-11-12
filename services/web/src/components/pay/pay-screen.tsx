@@ -28,6 +28,7 @@ import {
   type PayStep,
   refundAddressProblem,
   remainingCents,
+  countdownUnits,
   spreadLabel,
   type PayStage,
   type PayStatus,
@@ -36,6 +37,7 @@ import { formatUsd } from "@/lib/format";
 import { usePayWallet } from "@/wallet/pay-wallet";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
+import dynamic from "next/dynamic";
 import { PageSkeleton } from "../ui/page-skeleton";
 import { Card } from "../ui/card";
 import { CHAINS } from "../ui/chain-badge";
@@ -444,7 +446,7 @@ function SessionView({
             <Countdown
               key={epoch}
               target={Date.parse(session.deadline)}
-              units={["minutes", "seconds"]}
+              units={countdownUnits(Date.parse(session.deadline) - Date.now())}
               variant="compact"
               label={p.timeLeft}
               completeLabel={copy.countdown.expired}
@@ -465,12 +467,23 @@ interface Leg {
 
 type Mode = "paste" | "wallet" | "split";
 
+// The wallet connector (WalletConnect, wagmi, Solana) is heavy: it loads here, on the pay pages only, and not in every
+// page of the app (it kept the whole site busy, and the dashboard stuttered while it started).
+const ConnectorProvider = dynamic(
+  () => import("@/wallet/connector").then((m) => m.ConnectorProvider),
+  {
+    ssr: false,
+  },
+);
+
 export function PayScreen({ tokenId, source }: { tokenId: string; source?: PayScreenSource }) {
   const flow = source ?? invoiceSource;
   const words = useMemo<PayWords>(() => ({ ...copy.pay, ...(flow.words ?? {}) }), [flow]);
   return (
     <PayWordsContext.Provider value={words}>
-      <PayFlow tokenId={tokenId} source={flow} />
+      <ConnectorProvider>
+        <PayFlow tokenId={tokenId} source={flow} />
+      </ConnectorProvider>
     </PayWordsContext.Provider>
   );
 }

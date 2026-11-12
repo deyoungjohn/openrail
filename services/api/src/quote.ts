@@ -16,6 +16,8 @@ export interface ClaimSnapshot {
   outstanding: string;
   amountDue: string;
   kindRules: KindRules;
+  /** The merchant the claim was issued for (their business account), when the contract view says. */
+  issuerId?: string;
 }
 
 export interface QuoteProviderRequest {
@@ -105,6 +107,8 @@ export interface QuoteServiceDeps {
    * Solana arrived as $9.999048 and left the order "partially paid" for $0.000952). Default 0: the amount is exact.
    */
   marginBps?: number;
+  /** The destination asset the claim's issuer chose to be paid in, when they chose. */
+  destinationFor?: (claim: ClaimSnapshot) => string | undefined;
 }
 
 function id(prefix: string): string {
@@ -207,7 +211,7 @@ export class QuoteService {
         : amountBaseUnits;
     const provider = await this.deps.provider.quote({
       originAsset: route.originAssetId,
-      destinationAsset: route.destinationAssetId,
+      destinationAsset: this.deps.destinationFor?.(claim) ?? route.destinationAssetId,
       amount: requested.toString(),
       swapType: route.swapType,
       slippageTolerance: route.swapType === "EXACT_OUTPUT" ? 30 : 0,

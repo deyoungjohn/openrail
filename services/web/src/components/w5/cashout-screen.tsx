@@ -258,7 +258,7 @@ export function CashoutScreen() {
                         >
                           {lines.map((l) => (
                             <option key={l.tokenId} value={l.tokenId}>
-                              {tokenLabel(l.tokenId)} · {formatUsd(l.units / 10_000n)}
+                              {`${tokenLabel(l.tokenId)} · ${formatUsd(l.units / 10_000n)}`}
                             </option>
                           ))}
                         </Select>
@@ -348,9 +348,12 @@ export function CashoutScreen() {
                   {quote && (phase === "quoted" || phase === "signing") ? (
                     <>
                       {/* The cost comes before anything that signs. */}
-                      <section aria-label={t.costTitle} className="surface-card space-y-4 p-6">
+                      <section
+                        aria-label={t.costTitle}
+                        className="surface-card space-y-4 p-5 sm:p-6"
+                      >
                         <h2 className="text-[18px] leading-[26px] font-semibold">{t.costTitle}</h2>
-                        <dl className="space-y-3">
+                        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
                           <div>
                             <dt className="caption">{t.cost}</dt>
                             <dd className="tabular text-[28px] leading-[1.1] font-bold">
@@ -377,7 +380,7 @@ export function CashoutScreen() {
                               </span>
                             </dd>
                           </div>
-                          <div>
+                          <div className="sm:col-span-2">
                             <dt className="caption">{t.to}</dt>
                             <dd>
                               <AddressChip
@@ -391,50 +394,49 @@ export function CashoutScreen() {
                         </dl>
                         <p className="caption">{t.bufferNote}</p>
                         {highCost(share) ? <p className="caption">{t.costHigh}</p> : null}
+                        {expired ? (
+                          <div role="status" className="space-y-3 border-t border-border pt-4">
+                            <h2 className="text-[18px] leading-[26px] font-semibold">
+                              {t.expiredTitle}
+                            </h2>
+                            <p className="text-[15px]">{t.expiredBody}</p>
+                            <Button onClick={() => void ask()}>{t.newQuote}</Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-4 border-t border-border pt-4">
+                            <p className="flex items-center justify-between text-[14px]">
+                              <span className="caption">{t.expiresIn}</span>
+                              <span onClick={undefined}>
+                                <Countdown
+                                  target={Date.parse(quote.deadline)}
+                                  units={
+                                    Date.parse(quote.deadline) - Date.now() > 86_400_000
+                                      ? ["days", "hours", "minutes"]
+                                      : Date.parse(quote.deadline) - Date.now() > 3_600_000
+                                        ? ["hours", "minutes", "seconds"]
+                                        : ["minutes", "seconds"]
+                                  }
+                                  variant="compact"
+                                />
+                              </span>
+                            </p>
+                            {!canSign ? (
+                              <div className="space-y-2">
+                                <p className="text-[14px]">{t.signInFirst}</p>
+                                <NearWalletView {...near} />
+                              </div>
+                            ) : null}
+                            <ErrorNote>{error ? error : null}</ErrorNote>
+                            <Button
+                              onClick={() => void sign()}
+                              loading={phase === "signing"}
+                              disabled={!canSign}
+                            >
+                              {phase === "signing" ? t.signing : t.sign}
+                            </Button>
+                          </div>
+                        )}
                       </section>
-
-                      {expired ? (
-                        <div role="status" className="surface-card space-y-3 p-6">
-                          <h2 className="text-[18px] leading-[26px] font-semibold">
-                            {t.expiredTitle}
-                          </h2>
-                          <p className="text-[15px]">{t.expiredBody}</p>
-                          <Button onClick={() => void ask()}>{t.newQuote}</Button>
-                        </div>
-                      ) : (
-                        <div className="surface-card space-y-4 p-6">
-                          <p className="flex items-center justify-between text-[14px]">
-                            <span className="caption">{t.expiresIn}</span>
-                            <span onClick={undefined}>
-                              <Countdown
-                                target={Date.parse(quote.deadline)}
-                                units={
-                                  Date.parse(quote.deadline) - Date.now() > 86_400_000
-                                    ? ["days", "hours", "minutes"]
-                                    : Date.parse(quote.deadline) - Date.now() > 3_600_000
-                                      ? ["hours", "minutes", "seconds"]
-                                      : ["minutes", "seconds"]
-                                }
-                                variant="compact"
-                              />
-                            </span>
-                          </p>
-                          {!canSign ? (
-                            <div className="space-y-2">
-                              <p className="text-[14px]">{t.signInFirst}</p>
-                              <NearWalletView {...near} />
-                            </div>
-                          ) : null}
-                          <ErrorNote>{error ? error : null}</ErrorNote>
-                          <Button
-                            onClick={() => void sign()}
-                            loading={phase === "signing"}
-                            disabled={!canSign}
-                          >
-                            {phase === "signing" ? t.signing : t.sign}
-                          </Button>
-                        </div>
-                      )}
                     </>
                   ) : null}
 
