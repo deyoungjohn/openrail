@@ -171,7 +171,7 @@ test.describe("statements", () => {
     await expect(page.locator("main [role=alert]")).toContainText("doesn't match");
   });
 
-  test("a PDF has no preview but can be downloaded", async ({ page }) => {
+  test("a PDF is previewed in the page and can be downloaded", async ({ page }) => {
     await mockApi(page, {
       "GET /v1/statements": {
         body: statement({ format: "pdf", filename: "s.pdf", content_type: "application/pdf" }),
@@ -180,7 +180,9 @@ test.describe("statements", () => {
     await page.goto("/app/statements");
     await choose(page, "Format", "PDF");
     await request(page);
-    await expect(page.getByText("PDF statements have no preview")).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Statement preview" }).locator("iframe"),
+    ).toBeVisible();
     await expect(page.getByRole("link", { name: /Download s\.pdf/ })).toBeVisible();
   });
 
