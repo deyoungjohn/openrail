@@ -876,6 +876,10 @@ export type ConfidentialWithdrawIntent = Record<string, unknown>;
 
 export type ConfidentialWithdrawSubmit = Record<string, unknown>;
 
+export interface ConfidentialKeyStatus {
+  registered: boolean;
+}
+
 export type ConfidentialWithdrawStatus = Record<string, unknown>;
 
 export interface PayDepositNudge {
@@ -1539,6 +1543,18 @@ export interface operations {
       "400": Error;
       "401": Error;
       "409": Error;
+    };
+  };
+  getConfidentialKeyStatus: {
+    parameters: {
+      query: {
+        public_key: string;
+      };
+    };
+    responses: {
+      "200": ConfidentialKeyStatus;
+      "400": Error;
+      "401": Error;
     };
   };
   confidentialWithdrawQuote: {
