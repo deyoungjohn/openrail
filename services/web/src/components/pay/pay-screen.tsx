@@ -232,7 +232,12 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
       void client.pay.nudgeDeposit(session.id, hash).catch(() => undefined);
     } catch (e) {
       const code = (e as { code?: number } | null)?.code;
-      setProblem(code === 4001 ? p.walletRejected : p.walletFailed);
+      const why = e instanceof Error ? e.message.slice(0, 80) : "";
+      console.error("wallet payment failed", e);
+      // Say why when the wallet or the network said something (the Solana RPC refusing a browser, no SOL for the account rent).
+      setProblem(
+        code === 4001 ? p.walletRejected : why ? `${p.walletFailed} (${why})` : p.walletFailed,
+      );
     } finally {
       setBusy(false);
     }
@@ -498,6 +503,8 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   const [starting, setStarting] = useState(false);
   const [sessionError, setSessionError] = useState<null | "failed" | "refund">(null);
   const [sessionNote, setSessionNote] = useState<string | null>(null);
+  // The reason the price could not be made (the API's code), so a failure is never just "couldn't".
+  const [sessionWhy, setSessionWhy] = useState<string | null>(null);
   const [refund, setRefund] = useState("");
   const [refundShown, setRefundShown] = useState(false);
   const [split, setSplit] = useState(false);
@@ -701,6 +708,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
     async (r: Route, refundTo: string, cents: bigint, partial: boolean, replace?: string) => {
       setSessionError(null);
       setSessionNote(null);
+      setSessionWhy(null);
       setStarting(true);
       try {
         const s = await client.pay.createSession({
@@ -726,6 +734,8 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
       } catch (e) {
         const note = source.sessionNote?.(e) ?? null;
         setSessionNote(note);
+        setSessionWhy(e instanceof ApiError ? e.code : "network");
+        console.error("price failed", e);
         setSessionError(
           e instanceof ApiError && e.code === "invalid_refund_address" ? "refund" : "failed",
         );
@@ -1067,7 +1077,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
           ) : sessionError === "failed" ? (
             <div className="surface-card">
               <ErrorState
-                body={split && legs.length > 0 ? p.mixPartFailed : p.sessionError}
+                body={`${split && legs.length > 0 ? p.mixPartFailed : p.sessionError}${sessionWhy ? ` (${sessionWhy})` : ""}`}
                 onRetry={route ? submit : undefined}
               />
             </div>

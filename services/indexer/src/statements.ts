@@ -132,7 +132,7 @@ export function renderPdf(lines: string[]): Uint8Array {
   const text = lines
     .map(
       (line, index) =>
-        `${index === 0 ? "/F1 14 Tf " : "/F1 9 Tf "}0 ${760 - index * 18} Td (${escapePdfText(line)}) Tj`,
+        `${index === 0 ? "/F1 14 Tf " : "/F1 9 Tf "}1 0 0 1 50 ${760 - index * 18} Tm (${escapePdfText(line)}) Tj`,
     )
     .join("\n");
   const content = `BT\n${text}\nET\n`;
