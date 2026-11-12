@@ -86,13 +86,15 @@ export function CashoutScreen() {
   // The money is taken from one token: the one the business holds the most of (a payment from Base is a balance of
   // the Base USDC token, and moving a token that is not held is refused by the chain). What can be cashed out now is
   // that balance, in whole cents (cut, never rounded up).
-  const held =
-    balance.state === "ready"
-      ? balance.data.lines.reduce<(typeof balance.data.lines)[number] | null>(
-          (best, l) => (best === null || l.units > best.units ? l : best),
-          null,
-        )
-      : null;
+  const lines = balance.state === "ready" ? balance.data.lines : [];
+  const largest = lines.reduce<(typeof lines)[number] | null>(
+    (best, l) => (best === null || l.units > best.units ? l : best),
+    null,
+  );
+  // The balance is often spread over several tokens (4.45 on Base and 4.00 on NEAR: the pill adds them up, 8.45); a
+  // cash-out takes from one of them, so the person picks which (the largest is chosen first).
+  const [sourceId, setSourceId] = useState<string | null>(null);
+  const held = lines.find((l) => l.tokenId === sourceId) ?? largest;
   const availableCents = held ? held.units / 10_000n : null;
   const units = parseUsdcInput(amountText);
   const percent =
@@ -243,6 +245,24 @@ export function CashoutScreen() {
                         void ask();
                       }}
                     >
+                      {lines.length > 1 ? (
+                        <Select
+                          label={t.takeFrom}
+                          value={held?.tokenId ?? ""}
+                          onValueChange={(v) => {
+                            setSourceId(v);
+                            setAmountText("");
+                            setPhase("form");
+                            setQuote(null);
+                          }}
+                        >
+                          {lines.map((l) => (
+                            <option key={l.tokenId} value={l.tokenId}>
+                              {tokenLabel(l.tokenId)} · {formatUsd(l.units / 10_000n)}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : null}
                       {availableCents !== null ? (
                         <p className="text-[15px]" data-testid="cashout-available">
                           {t.available}{" "}

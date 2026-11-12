@@ -213,16 +213,20 @@ describe("hashStrings", () => {
   });
 });
 
-describe("payUnits for an 18-decimal stablecoin (USDT on BNB Chain)", () => {
-  it("rounds UP to six decimals, never shows 18, never sends less than the price", () => {
+describe("payUnits for a stablecoin: two decimals, rounded UP", () => {
+  it("BNB Chain USDT (18 decimals) is shown as cents, never as 18 digits, never below the price", () => {
     const price = "2008958170371703903"; // 2.008958170371703903
     const sent = payUnits(price, 18, "USDT");
-    expect(sent).toBe("2008959000000000000");
-    expect(formatToken(sent, 18)).toBe("2.008959");
+    expect(sent).toBe("2010000000000000000");
+    expect(formatToken(sent, 18)).toBe("2.01");
     expect(BigInt(sent)).toBeGreaterThanOrEqual(BigInt(price));
   });
-  it("a 6-decimal stablecoin is unchanged", () => {
-    expect(payUnits("10042765", 6, "USDT")).toBe("10042765");
+  it("a price that is already whole cents is unchanged", () => {
+    expect(payUnits("10010000", 6, "USDT")).toBe("10010000");
+    expect(payUnits("10000000", 6, "USDC")).toBe("10000000");
+  });
+  it("a sub-cent price rounds up to the next cent", () => {
+    expect(payUnits("10042765", 6, "USDT")).toBe("10050000");
   });
 });
 
@@ -234,10 +238,10 @@ describe("payUnits", () => {
       1348354311809600n,
     );
   });
-  it("leaves an amount that is already round, and USDC, exactly as quoted", () => {
+  it("leaves an amount that is already round exactly as quoted; a stablecoin is rounded up to whole cents", () => {
     expect(payUnits("1349000000000000", 18, "ETH")).toBe("1349000000000000");
     expect(payUnits("3000000", 6, "USDC")).toBe("3000000");
-    expect(payUnits("1234567", 6, "USDC")).toBe("1234567");
+    expect(payUnits("1234567", 6, "USDC")).toBe("1240000"); // $1.234567 -> $1.24, never below the price
   });
   it("rounds SOL up to five decimals", () => {
     expect(payUnits("11134668", 9, "SOL")).toBe("11140000");
