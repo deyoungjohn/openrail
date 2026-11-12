@@ -32,6 +32,8 @@ export interface EventSource {
   fetch(cursor: string | null): Promise<SourcePage>;
   /** HTTP/RPC calls per feature, for the load budget. */
   callCounts?(): Record<string, number>;
+  /** True when the source has reached INDEXER_FROM or the stored position. */
+  caughtUp?(): boolean;
 }
 
 export interface ParsedEvent {

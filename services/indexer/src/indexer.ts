@@ -25,6 +25,7 @@ export interface IndexerOptions {
   budget?: BudgetGovernor;
   rootAccount?: string;
   txStatus?: TxStatusReader;
+  from?: string;
 }
 
 export interface SyncResult {
@@ -48,6 +49,7 @@ export class Indexer {
   private readonly budget?: BudgetGovernor;
   private readonly rootAccount?: string;
   private readonly txStatus?: TxStatusReader;
+  private readonly from?: string;
   private lastHead: number | null = null;
   private lastPolledAt: string | null = null;
   private boostUntil = 0;
@@ -65,6 +67,7 @@ export class Indexer {
     this.budget = options.budget;
     this.rootAccount = options.rootAccount;
     this.txStatus = options.txStatus;
+    this.from = options.from;
   }
 
   private async enrich(event: { event: string; eventKey: string }): Promise<void> {
@@ -228,6 +231,8 @@ export class Indexer {
     poll_interval_ms: number;
     boost_until: number;
     boost_active: boolean;
+    from: string | null;
+    caught_up: boolean | null;
     degraded: boolean;
     nearblocks_budget?: ReturnType<BudgetGovernor["health"]>;
   } {
@@ -239,6 +244,8 @@ export class Indexer {
       poll_interval_ms: this.pollIntervalMs,
       boost_until: this.boostUntil,
       boost_active: this.now() < this.boostUntil,
+      from: this.from ?? null,
+      caught_up: this.source.caughtUp?.() ?? null,
       degraded: this.budget?.health().blocked ?? false,
       ...(this.budget === undefined ? {} : { nearblocks_budget: this.budget.health() }),
     };

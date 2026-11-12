@@ -1,12 +1,14 @@
 /**
  * Account-scoped production source.
  *
- * NearBlocks lists the transactions that touch `<root>` (`/v1/account/<root>/txns`, cursor
- * paging). The list rows have no logs, so each new transaction is read once with
- * `EXPERIMENTAL_tx_status` (`wait_until: FINAL`); only receipts executed by `<root>` are kept.
+ * NearBlocks v3 lists the transactions that touch `<root>` (`/v3/accounts/<root>/txns`),
+ * newest-first, paged with an opaque `next_page` cursor. The list rows have no logs, so each new
+ * transaction is read once with `EXPERIMENTAL_tx_status` (`wait_until: FINAL`); only receipts
+ * executed by `<root>` are kept.
  *
- * The cursor is our own `h:<height>`: fetch the newest page(s), keep transactions above it,
- * and stop once a page reaches already-indexed heights. A quiet poll is one NearBlocks call.
+ * The cursor is `v3:<newest height>:<next page>`. A finished page stores an empty next page, so the
+ * next poll starts at the newest transaction and walks back until it meets the stored height. While
+ * walking a large backlog the cursor keeps v3's opaque next page, so no transaction is skipped.
  */
 import type { BudgetGovernor } from "./budget.js";
 import { toSeconds } from "./time.js";
@@ -15,7 +17,7 @@ import type { EventSource, SourceBlock, SourcePage, SourceReceipt } from "./type
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 interface NbBlockRef {
-  block_height?: number;
+  block_height?: number | string;
   block_timestamp?: number | string;
   block_hash?: string;
 }
@@ -31,8 +33,7 @@ interface NbTxn {
 }
 
 interface NbResponse {
-  cursor?: string | null;
-  txns?: NbTxn[];
+  data?: NbTxn[];
   meta?: { next_page?: string | null };
 }
 
@@ -43,12 +44,49 @@ interface TxStatus {
   }[];
 }
 
+interface ParsedCursor {
+  latest: number;
+  floor: number;
+  nextPage: string | null;
+}
+
 const timestampSeconds = toSeconds;
 
-function cursorHeight(cursor: string | null): number {
-  if (cursor === null) return 0;
-  const match = /^h:(\d+)$/.exec(cursor);
-  return match?.[1] === undefined ? 0 : Number(match[1]);
+function parseCursor(cursor: string | null): ParsedCursor {
+  if (cursor === null) return { latest: 0, floor: 0, nextPage: null };
+  // Cursors written before the v3 migration stored just the newest height; keep them readable.
+  const legacy = /^h:(\d+)$/.exec(cursor);
+  if (legacy?.[1] !== undefined) {
+    const height = Number(legacy[1]);
+    return { latest: height, floor: height, nextPage: null };
+  }
+  if (cursor.startsWith("v3:")) {
+    const rest = cursor.slice(3);
+    const first = rest.indexOf(":");
+    const second = first === -1 ? -1 : rest.indexOf(":", first + 1);
+    if (first !== -1 && second !== -1) {
+      const latest = Number(rest.slice(0, first));
+      const floor = Number(rest.slice(first + 1, second));
+      const encoded = rest.slice(second + 1);
+      const nextPage = encoded === "" ? null : Buffer.from(encoded, "base64url").toString("utf8");
+      return {
+        latest: Number.isFinite(latest) ? latest : 0,
+        floor: Number.isFinite(floor) ? floor : 0,
+        nextPage,
+      };
+    }
+  }
+  return { latest: 0, floor: 0, nextPage: null };
+}
+
+function encodeCursor(latest: number, floor: number, nextPage: string | null): string {
+  const encoded = nextPage === null ? "" : Buffer.from(nextPage).toString("base64url");
+  return `v3:${latest}:${floor}:${encoded}`;
+}
+
+function rowHeight(tx: NbTxn): number {
+  const value = tx.receipt_block?.block_height ?? tx.block?.block_height ?? 0;
+  return typeof value === "number" ? value : Number(value) || 0;
 }
 
 export class NearBlocksEventSource implements EventSource {
@@ -59,6 +97,7 @@ export class NearBlocksEventSource implements EventSource {
   private readonly limit: number;
   private readonly maxPages: number;
   private readonly counts = new Map<string, number>();
+  private reached = false;
 
   constructor(
     private readonly rootAccount: string,
@@ -69,6 +108,7 @@ export class NearBlocksEventSource implements EventSource {
     limit = 100,
     maxPages = 5,
     private readonly budget?: BudgetGovernor,
+    private readonly fromSeconds = 0,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKeys = (typeof apiKey === "string" ? [apiKey] : [...apiKey]).filter((k) => k !== "");
@@ -82,18 +122,22 @@ export class NearBlocksEventSource implements EventSource {
     return Object.fromEntries(this.counts);
   }
 
+  caughtUp(): boolean {
+    return this.reached;
+  }
+
   private increment(feature: string): void {
     this.counts.set(feature, (this.counts.get(feature) ?? 0) + 1);
   }
 
-  private async listPage(cursor: string | null): Promise<NbResponse> {
+  private async listPage(nextPage: string | null): Promise<NbResponse> {
     if (this.budget !== undefined) await this.budget.beforeCall();
     // With several keys each takes its own share of the day (the governor says which one is on).
     const apiKey =
       this.apiKeys[Math.min(this.budget?.keyIndex() ?? 0, this.apiKeys.length - 1)] ?? "";
     const query = new URLSearchParams({ limit: String(this.limit) });
-    if (cursor !== null) query.set("cursor", cursor);
-    const url = `${this.baseUrl}/v1/account/${encodeURIComponent(this.rootAccount)}/txns?${query.toString()}`;
+    if (nextPage !== null) query.set("next", nextPage);
+    const url = `${this.baseUrl}/v3/accounts/${encodeURIComponent(this.rootAccount)}/txns?${query.toString()}`;
     this.increment("nearblocks.txns");
     let response: Response;
     try {
@@ -176,21 +220,32 @@ export class NearBlocksEventSource implements EventSource {
   }
 
   async fetch(cursor: string | null): Promise<SourcePage> {
-    const storedHeight = cursorHeight(cursor);
-    let next: string | null = null;
-    let latestBlock = storedHeight;
-    let oldestHeight = Number.POSITIVE_INFINITY;
+    const parsed = parseCursor(cursor);
+    const storedHeight = parsed.floor;
+    let next: string | null = parsed.nextPage;
+    let latestBlock = parsed.latest;
     let done = false;
     const blocks = new Map<number, SourceBlock>();
 
     for (let pageIndex = 0; pageIndex < this.maxPages; pageIndex += 1) {
       const body = await this.listPage(next);
-      const txns = Array.isArray(body.txns) ? body.txns : [];
-      const heights: number[] = [];
+      const txns = Array.isArray(body.data) ? body.data : [];
+      let reachedStored = false;
+      let lastHeight = storedHeight;
       for (const tx of txns) {
-        const height = tx.receipt_block?.block_height ?? tx.block?.block_height ?? 0;
-        if (height <= storedHeight) continue;
-        heights.push(height);
+        const height = rowHeight(tx);
+        lastHeight = Math.max(lastHeight, height);
+        const txTimestamp = timestampSeconds(
+          tx.receipt_block?.block_timestamp ?? tx.block?.block_timestamp ?? tx.block_timestamp,
+        );
+        if (this.fromSeconds > 0 && txTimestamp > 0 && txTimestamp < this.fromSeconds) {
+          reachedStored = true;
+          continue;
+        }
+        if (height <= storedHeight) {
+          reachedStored = true;
+          continue;
+        }
         latestBlock = Math.max(latestBlock, height);
         const receipts = await this.rootLogs(tx);
         if (receipts.length === 0) continue;
@@ -202,24 +257,23 @@ export class NearBlocksEventSource implements EventSource {
         block.receipts.push(...receipts);
         blocks.set(height, block);
       }
-      if (heights.length > 0) oldestHeight = Math.min(oldestHeight, ...heights);
-      next = body.cursor ?? body.meta?.next_page ?? null;
-      if (
-        next === null ||
-        txns.length === 0 ||
-        (heights.length > 0 && oldestHeight <= storedHeight)
-      ) {
+      latestBlock = Math.max(latestBlock, lastHeight);
+      next = body.meta?.next_page ?? null;
+      if (reachedStored || next === null || txns.length === 0) {
         done = true;
+        next = null;
         break;
       }
+      if (pageIndex === this.maxPages - 1) break;
     }
 
+    this.reached = done;
     const ordered = [...blocks.values()].sort((a, b) => a.height - b.height);
-    latestBlock = Math.max(latestBlock, ...ordered.map((block) => block.height));
-    const nextCursor =
-      done || !Number.isFinite(oldestHeight)
-        ? latestBlock
-        : Math.max(storedHeight, oldestHeight - 1);
-    return { blocks: ordered, cursor: `h:${nextCursor}`, done, latestBlock };
+    const nextCursor = encodeCursor(
+      latestBlock,
+      done ? latestBlock : storedHeight,
+      done ? null : next,
+    );
+    return { blocks: ordered, cursor: nextCursor, done, latestBlock };
   }
 }
