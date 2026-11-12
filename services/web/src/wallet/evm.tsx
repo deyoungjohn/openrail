@@ -47,10 +47,34 @@ export function useEvm() {
   return ctx;
 }
 
-declare global {
-  interface Window {
-    ethereum?: EIP1193Provider;
+/** Switch the wallet to the route's chain, then a plain transfer (the native coin, or an ERC-20 transfer). */
+export async function sendEvmPayment(
+  provider: EIP1193Provider,
+  from: Address,
+  {
+    chainId,
+    to,
+    amount,
+    token,
+  }: { chainId: number; to: Address; amount: bigint; token: Address | null },
+): Promise<Hex> {
+  const current = await provider.request({ method: "eth_chainId" });
+  if (typeof current !== "string" || parseInt(current, 16) !== chainId) {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: numberToHex(chainId) }],
+    });
   }
+  const tx =
+    token === null
+      ? { from, to, value: numberToHex(amount) }
+      : {
+          from,
+          to: token,
+          data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] }),
+        };
+  const hash = await provider.request({ method: "eth_sendTransaction", params: [tx] });
+  return hash as Hex;
 }
 
 // Injected provider only (window.ethereum). We hold no key and sign nothing here.
@@ -60,7 +84,7 @@ export function EvmProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const provider = window.ethereum;
+    const provider = window.ethereum as EIP1193Provider | undefined;
     setAvailable(Boolean(provider));
     if (!provider) return;
     // Reconnect silently if the site is already permitted.
@@ -77,7 +101,7 @@ export function EvmProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const connect = useCallback(async () => {
-    const provider = window.ethereum;
+    const provider = window.ethereum as EIP1193Provider | undefined;
     if (!provider) return;
     setError(false);
     try {
@@ -91,30 +115,10 @@ export function EvmProvider({ children }: { children: ReactNode }) {
   const disconnect = useCallback(() => setAddress(null), []);
 
   const pay = useCallback<EvmState["pay"]>(
-    async ({ chainId, to, amount, token }) => {
-      const provider = window.ethereum;
+    async (request) => {
+      const provider = window.ethereum as EIP1193Provider | undefined;
       if (!provider || !address) throw new Error("wallet_not_connected");
-      const current = await provider.request({ method: "eth_chainId" });
-      if (typeof current !== "string" || parseInt(current, 16) !== chainId) {
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: numberToHex(chainId) }],
-        });
-      }
-      const tx =
-        token === null
-          ? { from: address, to, value: numberToHex(amount) }
-          : {
-              from: address,
-              to: token,
-              data: encodeFunctionData({
-                abi: erc20Abi,
-                functionName: "transfer",
-                args: [to, amount],
-              }),
-            };
-      const hash = await provider.request({ method: "eth_sendTransaction", params: [tx] });
-      return hash as Hex;
+      return sendEvmPayment(provider, address, request);
     },
     [address],
   );

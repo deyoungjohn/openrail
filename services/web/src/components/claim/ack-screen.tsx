@@ -81,7 +81,10 @@ function AckActions({ claim, onAcked }: { claim: Claim; onAcked: () => void }) {
     setPhase("signing");
     try {
       if (debtor?.kind === "evm") {
-        const { chainId, signature } = await signEvmAck(window.ethereum, claim);
+        const { chainId, signature } = await signEvmAck(
+          window.ethereum as Parameters<typeof signEvmAck>[0],
+          claim,
+        );
         setPhase("sending");
         await api.relayEvmAck(claim.tokenId, chainId, signature);
       } else if (debtor?.kind === "near") {
