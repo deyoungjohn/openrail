@@ -2,6 +2,7 @@
 
 import { copy } from "@/copy";
 import { useEvm } from "@/wallet/evm";
+import type { PayWallet } from "@/wallet/pay-wallet";
 import { useNear } from "@/wallet/near";
 import { AccountId } from "./ui/account-id";
 import { AddressChip } from "./ui/address-chip";
@@ -78,6 +79,34 @@ export function EvmWalletView({
       </Button>
       {!available ? <p className="caption">{copy.wallet.noEvmWallet}</p> : null}
       {error ? <p className="text-danger text-[13px]">{copy.wallet.evmFailed}</p> : null}
+    </div>
+  );
+}
+
+/** The connect control of the pay page's wallet tab: the wallet of the chosen route's chain, and nothing else. */
+export function WalletConnectView({ wallet, chosen }: { wallet: PayWallet; chosen: boolean }) {
+  const t = copy.wallet;
+  if (!chosen) return <p className="caption">{t.pickRouteFirst}</p>;
+  if (wallet.kind === null || !wallet.available)
+    return <p className="caption">{t.noWalletForRoute}</p>;
+  if (wallet.address)
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <AddressChip
+          value={wallet.address}
+          chain={wallet.kind === "solana" ? "solana" : "ethereum"}
+        />
+        <Button variant="secondary" size="sm" onClick={wallet.disconnect}>
+          {t.disconnect}
+        </Button>
+      </div>
+    );
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Button size="sm" onClick={wallet.connect}>
+        {wallet.kind === "solana" ? t.connectSolana : t.connectEvm}
+      </Button>
+      {wallet.error ? <p className="text-danger text-[13px]">{t.evmFailed}</p> : null}
     </div>
   );
 }

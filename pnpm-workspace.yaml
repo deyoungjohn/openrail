@@ -10,3 +10,5 @@ allowBuilds:
   "@swc/core": false
   lmdb: false
   msgpackr-extract: false
+  "@reown/appkit": false
+  bigint-buffer: false

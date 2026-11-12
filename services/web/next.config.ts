@@ -9,7 +9,17 @@ const config: NextConfig = {
   webpack(config) {
     config.resolve.extensionAlias = { ".js": [".ts", ".tsx", ".js"] };
     // WalletConnect's logger optionally requires pino-pretty, a Node-only pretty printer.
-    config.resolve.alias = { ...config.resolve.alias, "pino-pretty": false };
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "pino-pretty": false,
+      // The Coinbase wallet connector (inside the wagmi connectors the connect dialog lists) names x402 payment
+      // packages as optional peers. We never use them, so they resolve to nothing instead of failing the build.
+      "@x402/core/client": false,
+      "@x402/evm": false,
+      "@x402/evm/exact/client": false,
+      "@x402/evm/upto/client": false,
+      "@x402/svm/exact/client": false,
+    };
     return config;
   },
 };

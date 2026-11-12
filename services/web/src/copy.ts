@@ -34,6 +34,11 @@ export const copy = {
     footer: "Payments by Openrail",
   },
   wallet: {
+    pickRouteFirst: "Choose a token and a network below, then connect a wallet for it.",
+    noWalletForRoute:
+      "This asset cannot be sent from a connected wallet here. Copy the address and send it from your own wallet.",
+    connectEvm: "Connect an EVM wallet",
+    connectSolana: "Connect a Solana wallet",
     near: "NEAR wallet",
     evm: "Browser wallet",
     signIn: "Sign in",

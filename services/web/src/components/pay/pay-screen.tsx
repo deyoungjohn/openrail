@@ -33,7 +33,7 @@ import {
   type PayStatus,
 } from "@/lib/pay";
 import { formatUsd } from "@/lib/format";
-import { useEvm } from "@/wallet/evm";
+import { usePayWallet } from "@/wallet/pay-wallet";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -46,7 +46,7 @@ import { Countdown } from "../ui/countdown";
 import { Input } from "../ui/input";
 import { Modal } from "../ui/modal";
 import { Tabs } from "../ui/tabs";
-import { EvmWalletView } from "../wallet-buttons";
+import { WalletConnectView } from "../wallet-buttons";
 import { QrPanel } from "../ui/qr-panel";
 import { EmptyState, ErrorState } from "../ui/state";
 import { Timeline } from "../ui/timeline";
@@ -208,22 +208,20 @@ function QuoteNote({
 /** Pay straight from the connected wallet instead of copying the address or scanning the code. */
 function WalletPay({ session, route }: { session: Session; route: Route }) {
   const p = usePayWords();
-  const evm = useEvm();
+  const wallet = usePayWallet(route);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  if (route.evm_chain_id === null || !evm.available) return null;
+  if (wallet.kind === null || !wallet.available) return null;
 
   const send = async () => {
     setBusy(true);
     setProblem(null);
     try {
-      const hash = await evm.pay({
-        chainId: route.evm_chain_id as number,
-        to: session.deposit_address as `0x${string}`,
-        amount: BigInt(payUnits(session.amount_in, route.origin_decimals, route.payer_asset)),
-        token: route.origin_contract === null ? null : (route.origin_contract as `0x${string}`),
-      });
+      const hash = await wallet.pay(
+        session.deposit_address,
+        BigInt(payUnits(session.amount_in, route.origin_decimals, route.payer_asset)),
+      );
       setSent(hash);
     } catch (e) {
       const code = (e as { code?: number } | null)?.code;
@@ -237,12 +235,12 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
   return (
     <div className="w-full space-y-3">
       <div className="flex justify-center">
-        {evm.address ? (
+        {wallet.address ? (
           <Button type="button" onClick={() => void send()} loading={busy} disabled={sent !== null}>
             {p.walletPay(amount)}
           </Button>
         ) : (
-          <Button type="button" variant="secondary" onClick={() => void evm.connect()}>
+          <Button type="button" variant="secondary" onClick={() => wallet.connect()}>
             {p.walletConnect}
           </Button>
         )}
@@ -474,7 +472,6 @@ export function PayScreen({ tokenId, source }: { tokenId: string; source?: PaySc
 
 function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource }) {
   const p = usePayWords();
-  const evm = useEvm();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [tick, setTick] = useState(0);
   const [mode, setMode] = useState<Mode>("wallet");
@@ -492,7 +489,6 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   const restored = useRef(false);
   // A reload brings back the prices already made. Until they have been read fresh, the page says it is loading: it must
   // not show "Pay this order" for a few seconds to a payer whose money has already arrived.
-  const [restoring, setRestoring] = useState(true);
   const restoredIds = useRef<Set<string>>(new Set());
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
   const [gaveUp, setGaveUp] = useState(false);
@@ -540,10 +536,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   // price it gave for this invoice. Open ones come back as they were; the rest are listed as earlier.
   useEffect(() => {
     if (restored.current) return;
-    if (routes.length === 0) {
-      if (load.state === "ready") setRestoring(false);
-      return;
-    }
+    if (routes.length === 0) return;
     restored.current = true;
     source
       .listSessions(tokenId, claim as PayFlowClaim)
@@ -582,8 +575,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
           setSplit(keep.length > 1);
         }
       })
-      .catch(() => undefined)
-      .finally(() => setRestoring(false));
+      .catch(() => undefined);
   }, [routes, tokenId, claim, source]);
 
   // Never wait for ever: if the server does not answer, show the page as it is after a few seconds.
@@ -629,6 +621,8 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   }, [refreshMs, loadedNow, settledNow]);
 
   const route = routes.find((r) => r.id === routeId) ?? null;
+  // The wallet of the chosen route's chain family: a Solana route never picks up a cached EVM address.
+  const wallet = usePayWallet(route);
   const outstanding = claim?.outstanding ?? "0";
   // What is left to pay once the parts so far are counted.
   const remaining = remainingCents(outstanding, legs);
@@ -636,18 +630,27 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   // A connected wallet stands in for an empty refund address, so only a missing one is a problem.
   const refundProblem = refundAddressProblem(
     route ? chainOfRoute(route) : null,
-    refund.trim() === "" && route && route.evm_chain_id !== null && evm.address
-      ? evm.address
-      : refund,
+    refund.trim() === "" && wallet.address ? wallet.address : refund,
   );
   const amountProblem = split ? legAmountProblem(amountText, remaining) : null;
 
+  const filled = useRef("");
   // A connected wallet fills in the refund address, but only on the wallet tab: the paste tab
   // never fills it in by itself, so the person chooses where a refund goes.
   useEffect(() => {
-    if (mode === "wallet" && route && route.evm_chain_id !== null && evm.address && refund === "")
-      setRefund(evm.address);
-  }, [mode, route, evm.address, refund]);
+    if (mode === "wallet" && wallet.address && refund === "") {
+      setRefund(wallet.address);
+      filled.current = wallet.address;
+    } else if (
+      filled.current !== "" &&
+      refund === filled.current &&
+      wallet.address !== filled.current
+    ) {
+      // The route moved to another chain family: the address filled in for the old one goes with it.
+      setRefund(wallet.address ?? "");
+      filled.current = wallet.address ?? "";
+    }
+  }, [mode, route, wallet.address, refund]);
 
   const pickRoute = (id: string) => {
     setRouteId(id);
@@ -752,7 +755,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
     setAmountShown(true);
     if (!route || refundProblem !== null || amountProblem !== null) return;
     // A forgotten refund address falls back to the connected wallet (the address the money comes from).
-    const refundTo = refund.trim() === "" ? (evm.address ?? "") : refund;
+    const refundTo = refund.trim() === "" ? (wallet.address ?? "") : refund;
     const cents = split ? (legCents(amountText) ?? 0n) : remainingCents(outstanding, []);
     void start(route, refundTo, cents, split);
   };
@@ -770,7 +773,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
       ) : (
         <div className="space-y-2">
           <p className="caption">{p.walletTabHelp}</p>
-          <EvmWalletView {...evm} />
+          <WalletConnectView wallet={wallet} chosen={route !== null} />
         </div>
       )}
       <RouteSelects routes={routes} routeId={routeId} onPick={pickRoute} />
@@ -939,7 +942,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
       !fresh.has(l.session.id) &&
       (l.stage === "waiting" || l.stage === "processing"),
   );
-  if ((restoring || waitingFresh) && !gaveUp) {
+  if (waitingFresh && !gaveUp) {
     return (
       <>
         <div className="mx-auto max-w-2xl space-y-6">

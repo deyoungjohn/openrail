@@ -28,6 +28,12 @@
     "@near-wallet-selector/nightly": "10.1.4",
     "@near-wallet-selector/wallet-connect": "10.1.4",
     "@openrail/api-client": "workspace:*",
+    "@reown/appkit": "^1.8.24",
+    "@reown/appkit-adapter-solana": "^1.8.24",
+    "@reown/appkit-adapter-wagmi": "^1.8.24",
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "1.98.4",
+    "@tanstack/react-query": "^5.107.1",
     "clsx": "2.1.1",
     "lucide-react": "1.66.0",
     "motion": "12.34.0",
@@ -38,7 +44,8 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "recharts": "3.10.1",
-    "viem": "2.57.14"
+    "viem": "2.57.14",
+    "wagmi": "^3.7.11"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
