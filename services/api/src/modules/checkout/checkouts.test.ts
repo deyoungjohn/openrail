@@ -2207,11 +2207,34 @@ describe("checkout events reach the merchant: GET /v1/events and a signed webhoo
   });
 
   it("hosted_page_and_api_return_checking_status_when_chain_cannot_be_read", async () => {
-    let failChain = false;
+    // A checkout that was never read and cannot be read now: "checking", never a 500.
     const failingChain: CheckoutChain = {
+      claim: async () => {
+        throw new Error("RPC network timeout");
+      },
+      checkoutState: async () => {
+        throw new Error("RPC rate limit exceeded");
+      },
+      paymentLog: async () => [],
+    };
+    const h = harness({ chain: failingChain });
+    const { body: created } = await createCheckout(h, { order_ref: "ORD-RPC-1" });
+    const id = created.id;
+    const r2 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
+    expect(r2.status).toBe(200);
+    expect(r2.body.status).toBe("checking");
+    const r3 = await call(h, "GET", `/v1/public/checkouts/${id}`);
+    expect(r3.status).toBe(200);
+    expect(r3.body.status).toBe("checking");
+    expect(r3.body.order_ref).toBe("ORD-RPC-1");
+  });
+
+  it("a partial payment stays partial when the chain cannot be read for a moment (the page flapped between partial, checking and waiting)", async () => {
+    let failChain = false;
+    const flaky: CheckoutChain = {
       claim: async (token) => {
-        if (failChain) throw new Error("RPC network timeout");
-        return claimView({ token_id: token });
+        if (failChain) throw new Error("RPC rate limit exceeded");
+        return claimView({ token_id: token, booked_total: "1000000" });
       },
       checkoutState: async () => {
         if (failChain) throw new Error("RPC rate limit exceeded");
@@ -2219,29 +2242,18 @@ describe("checkout events reach the merchant: GET /v1/events and a signed webhoo
       },
       paymentLog: async () => [],
     };
-
-    const h = harness({ chain: failingChain });
-    const { body: created } = await createCheckout(h, { order_ref: "ORD-RPC-1" });
+    const h = harness({ chain: flaky });
+    const { body: created } = await createCheckout(h, { order_ref: "ORD-RPC-2" });
     const id = created.id;
-
-    // Normal read works
-    const r1 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
-    expect(r1.status).toBe(200);
-    expect(r1.body.status).toBe("pending");
-
-    // Now simulate chain failure (RPC down / quota exhausted)
+    expect((await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme)).body.status).toBe(
+      "partial",
+    );
     failChain = true;
-
-    // API get does not return 500; returns 200 with status "checking"
-    const r2 = await call(h, "GET", `/v1/checkouts/${id}`, undefined, h.keys.acme);
-    expect(r2.status).toBe(200);
-    expect(r2.body.status).toBe("checking");
-
-    // Hosted page public view does not throw 500; returns 200 with status "checking"
-    const r3 = await call(h, "GET", `/v1/public/checkouts/${id}`);
-    expect(r3.status).toBe(200);
-    expect(r3.body.status).toBe("checking");
-    expect(r3.body.order_ref).toBe("ORD-RPC-1");
+    for (let i = 0; i < 5; i += 1) {
+      const r = await call(h, "GET", `/v1/public/checkouts/${id}`);
+      expect(r.status).toBe(200);
+      expect(r.body.status).toBe("partial");
+    }
   });
 
   it("shopify_app_replay_creates_retries_and_delivers_signed_webhooks_matching_contract", async () => {

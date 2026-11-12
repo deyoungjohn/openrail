@@ -7,6 +7,7 @@ import type { PayClaim } from "@/components/pay/invoice-card";
 import { PayScreen, type PayFlowClaim, type PayScreenSource } from "@/components/pay/pay-screen";
 import { AddressChip } from "@/components/ui/address-chip";
 import { Countdown } from "@/components/ui/countdown";
+import { latchStatus, type CheckoutStatus } from "./checkout";
 import { StatusChip, type Status } from "@/components/ui/status-chip";
 import { copy } from "@/copy";
 import { formatToken, type PayStage } from "@/lib/pay";
@@ -231,10 +232,17 @@ function summaryOf(c: PublicCheckoutPayload, topStage: PayStage | null, received
  * The hosted checkout page is the standard pay flow (the one invoices use: a pay card with Wallet, Exchange and Split,
  * the price and QR code in a pop-over, the steps across the page) with this summary card and a checkout's own words.
  */
+/** The status each checkout page showed last (see `latchStatus`). */
+const shownStatus = new Map<string, CheckoutStatus>();
+
 const checkoutSource = (id: string): PayScreenSource => ({
   load: async (tokenId) => {
     try {
-      return (await fetchCheckout(tokenId)) as unknown as PayFlowClaim;
+      const fresh = (await fetchCheckout(tokenId)) as unknown as PublicCheckoutPayload;
+      // One status with confidence: it only moves forward while the page is open.
+      const status = latchStatus(shownStatus.get(tokenId), fresh.status);
+      shownStatus.set(tokenId, status);
+      return (status === fresh.status ? fresh : { ...fresh, status }) as unknown as PayFlowClaim;
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         // An older invoice link: `/c/<id>` of an invoice goes to its own page.

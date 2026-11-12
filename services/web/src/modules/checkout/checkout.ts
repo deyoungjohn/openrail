@@ -204,3 +204,27 @@ export function safeReturnUrl(value: string | null | undefined): string | null {
     return null;
   }
 }
+
+const RANK: Partial<Record<CheckoutStatus, number>> = {
+  pending: 0,
+  checking: 0,
+  partial: 1,
+  paid: 2,
+  accepted: 2,
+};
+
+/**
+ * The status a page shows: money that has been seen never un-arrives. A read that says "checking" or "waiting" after
+ * "partially paid" (a busy RPC, a slow reader) is noise, not news, so the page keeps the status it had; states that
+ * end the checkout (expired, late, refunded, needs attention) are always taken as they come.
+ */
+export function latchStatus(
+  previous: CheckoutStatus | undefined,
+  next: CheckoutStatus,
+): CheckoutStatus {
+  if (previous === undefined) return next;
+  const was = RANK[previous];
+  const now = RANK[next];
+  if (was === undefined || now === undefined) return next;
+  return now < was ? previous : next;
+}

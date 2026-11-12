@@ -870,8 +870,12 @@ export class Checkouts {
       context.docs.put(NS_LAST, stored.token_id, fresh, stored.account_id);
       return { ...fresh, checking: false };
     } catch {
+      // The chain could not be read just now (a busy or exhausted RPC). What was read last is still true for a payment
+      // that only moves forward, so the page keeps showing it instead of dropping to "checking" and back. Only a
+      // checkout never read at all is "checking".
       const last = context.docs.get<ChainSnapshot>(NS_LAST, stored.token_id);
-      return { claim: last?.claim ?? {}, state: last?.state ?? null, checking: true };
+      if (last !== undefined) return { claim: last.claim, state: last.state, checking: false };
+      return { claim: {}, state: null, checking: true };
     }
   }
 

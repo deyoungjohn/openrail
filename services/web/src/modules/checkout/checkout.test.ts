@@ -10,6 +10,7 @@ import {
   checkoutPayWords,
   checkoutStatusLabel,
   countdownTargetMs,
+  latchStatus,
   safeReturnUrl,
   type PublicCheckout,
 } from "./checkout";
@@ -150,5 +151,24 @@ describe("a checkout is not an invoice: the hosted page never says invoice", () 
       .map((m) => m[1] ?? m[2] ?? "")
       .filter((t) => /invoice/i.test(t));
     expect(literal).toEqual([]);
+  });
+});
+
+describe("latchStatus: money that has been seen never un-arrives", () => {
+  it("keeps partial when the next read says checking or waiting", () => {
+    expect(latchStatus("partial", "checking")).toBe("partial");
+    expect(latchStatus("partial", "pending")).toBe("partial");
+  });
+  it("keeps paid when the next read says partial", () => {
+    expect(latchStatus("paid", "partial")).toBe("paid");
+  });
+  it("moves forward", () => {
+    expect(latchStatus("pending", "partial")).toBe("partial");
+    expect(latchStatus("partial", "paid")).toBe("paid");
+    expect(latchStatus(undefined, "checking")).toBe("checking");
+  });
+  it("takes the states that end a checkout as they come", () => {
+    for (const s of ["expired", "late", "refunded", "needs_attention"] as const)
+      expect(latchStatus("partial", s)).toBe(s);
   });
 });
