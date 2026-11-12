@@ -30,6 +30,9 @@ export interface IndexerOptions {
   fromSeconds?: number;
   watcherDbPath?: string;
   sourceLabel?: "watcher" | "scan";
+  /** Builds a source for one claim account's transactions; used only by the gap sweep. */
+  gapSourceFactory?: (claimAccount: string) => EventSource;
+  gapIntervalMs?: number;
 }
 
 export interface SyncResult {
@@ -57,6 +60,9 @@ export class Indexer {
   private readonly fromSeconds: number;
   private readonly watcherViews: WatcherViews;
   private readonly sourceLabel: "watcher" | "scan";
+  private readonly gapSourceFactory: ((claimAccount: string) => EventSource) | undefined;
+  private readonly gapIntervalMs: number;
+  private lastGapSweep = 0;
   private readonly gapSince = new Map<string, number>();
   private lastHead: number | null = null;
   private lastPolledAt: string | null = null;
@@ -79,6 +85,8 @@ export class Indexer {
     this.fromSeconds = options.fromSeconds ?? 0;
     this.watcherViews = new WatcherViews(options.watcherDbPath);
     this.sourceLabel = options.sourceLabel ?? "scan";
+    this.gapSourceFactory = options.gapSourceFactory;
+    this.gapIntervalMs = Math.max(60_000, options.gapIntervalMs ?? 10 * 60_000);
   }
 
   private async enrich(event: { event: string; eventKey: string }): Promise<void> {
@@ -160,6 +168,34 @@ export class Indexer {
     return { latest_block: latestBlock, blocks, events, pages, calls };
   }
 
+  /** Backfills one claim account's transactions, stopping once the gap's expected total is held. */
+  async sweepGaps(): Promise<number> {
+    this.lastGapSweep = this.now();
+    if (this.gapSourceFactory === undefined) return 0;
+    let filled = 0;
+    for (const gap of this.gaps()) {
+      if (gap.claim_account === "") continue;
+      const source = this.gapSourceFactory(gap.claim_account);
+      let cursor: string | null = null;
+      for (let pageIndex = 0; pageIndex < this.maxPagesPerSync; pageIndex += 1) {
+        const page = await source.fetch(cursor);
+        for (const block of page.blocks) {
+          const inserted = this.store.ingestBlock(block);
+          filled += inserted.length;
+          for (const event of inserted) {
+            await this.emit(event);
+            await this.enrich(event);
+          }
+        }
+        if (page.done || this.store.bookedTotal(gap.token_id) >= BigInt(gap.expected)) break;
+        if (page.cursor === null || page.cursor === cursor) break;
+        cursor = page.cursor;
+      }
+      this.logger.warn("gap backfill", { token_id: gap.token_id, filled });
+    }
+    return filled;
+  }
+
   /** Raise the polling cadence to one minute for five minutes (bounded by the remaining budget). */
   poke(): number {
     if (this.budget !== undefined && this.budget.health().remaining <= 0) return 0;
@@ -216,6 +252,7 @@ export class Indexer {
       if (signal?.aborted === true) break;
       try {
         await this.syncOnce();
+        if (this.now() - this.lastGapSweep >= this.gapIntervalMs) await this.sweepGaps();
         this.prune();
       } catch (error) {
         this.logger.error(

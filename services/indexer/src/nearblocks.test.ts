@@ -239,6 +239,29 @@ describe("NearBlocks account-scoped source", () => {
     expect(page.cursor).toBe(`v3:${HEIGHT}:${HEIGHT}:`);
   });
 
+  it("a known transaction costs no tx-status call during a gap backfill", async () => {
+    let rpcCalls = 0;
+    const source = new NearBlocksEventSource(
+      "c-1.openrail.near",
+      "https://nb.test",
+      "",
+      ["https://rpc.test"],
+      async (url) => {
+        if (url.includes("/v3/accounts/")) return nbResponse([TXN]);
+        rpcCalls += 1;
+        return rpcResponse([BOOKED]);
+      },
+      25,
+      5,
+      undefined,
+      0,
+      (hash) => hash !== TXN.transaction_hash,
+    );
+    const page = await source.fetch(null);
+    expect(page.blocks).toHaveLength(0);
+    expect(rpcCalls).toBe(0);
+  });
+
   it("surfaces a provider error to the indexer retry loop", async () => {
     const source = new NearBlocksEventSource(
       "openrail.near",
