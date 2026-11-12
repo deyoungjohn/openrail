@@ -7,7 +7,7 @@ export const copy = {
     invoices: "Invoices",
     payments: "Payments",
     statements: "Statements",
-    cashout: "Cash out",
+    cashout: "Pay out",
     developers: "Developers",
     settings: "Settings",
     openMenu: "Open menu",
@@ -152,7 +152,7 @@ export const copy = {
         hint: "Send a pay link to a client",
       },
       { href: "/app/invoices", title: "Invoices", hint: "Every invoice and its status" },
-      { href: "/app/cashout", title: "Cash out", hint: "Move your balance to the network you use" },
+      { href: "/app/cashout", title: "Pay out", hint: "Move your balance to the network you use" },
       { href: "/app/developers", title: "Developers", hint: "API keys, webhooks and events" },
       { href: "/app/settings", title: "Settings", hint: "Your profile and payouts" },
     ],
@@ -834,7 +834,7 @@ export const copy = {
     unreadable: "We couldn't read your balance from the chain. Try again in a moment.",
   },
   cashout: {
-    title: "Cash out",
+    title: "Pay out",
     intro:
       "Your payments are held for you on Near intents, under your own account: the balance is yours and Openrail never holds it. Cash out sends USDC from that balance to another address on any available network you choose.",
     available: "Available to cash out now:",
@@ -935,8 +935,9 @@ export const copy = {
     privateHelp:
       "Moves the amount to your private balance on Near Intents. It stays yours; it is just not shown on the public chain. No address needed.",
     onPrivate: "in your private balance",
-    tabsLabel: "Cash out",
-    tabCashOut: "Cash out",
+    tabsLabel: "Pay out",
+    tabCashOut: "Withdraw",
+    tabPublic: "Public",
     tabStats: "Stats",
     sentBody: "Your wallet signed it. The money arrives on the other network in a few minutes.",
     quoteFailed: "We couldn't get a quote. Nothing was charged. Try again.",

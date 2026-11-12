@@ -11,7 +11,7 @@ test("an unknown address shows a 404 page with links to the main pages", async (
   const nav = page.getByRole("navigation", { name: "Pages you may be looking for" });
   await expect(nav.getByRole("link", { name: /Dashboard/ })).toHaveAttribute("href", "/app");
   await expect(nav.getByRole("link", { name: /Create an invoice/ })).toBeVisible();
-  await expect(nav.getByRole("link", { name: /Cash out/ })).toBeVisible();
+  await expect(nav.getByRole("link", { name: /Pay out/ })).toBeVisible();
 });
 
 test("the Payments page lists payments and opens a row for the rest", async ({ page, context }) => {
