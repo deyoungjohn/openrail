@@ -466,6 +466,14 @@
       "mock": true
     },
     {
+      "file": "confidential.key.json",
+      "method": "GET",
+      "path": "/v1/balance/confidential/key",
+      "status": 200,
+      "schema": "ConfidentialKeyStatus",
+      "mock": true
+    },
+    {
       "file": "cashouts.shield.json",
       "method": "POST",
       "path": "/v1/cashout/quote",

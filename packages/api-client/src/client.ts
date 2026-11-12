@@ -298,6 +298,8 @@ export class OpenrailClient {
 
   /** The private balance: withdraw to a wallet. The money-moving steps need a signed-in session, not an API key. */
   confidential = {
+    keyStatus: (publicKey: string): Promise<SuccessBody<"getConfidentialKeyStatus">> =>
+      this.call("GET", "/v1/balance/confidential/key", { query: { public_key: publicKey } }),
     withdrawQuote: (
       body: RequestBodyOf<"confidentialWithdrawQuote">,
     ): Promise<SuccessBody<"confidentialWithdrawQuote">> =>
