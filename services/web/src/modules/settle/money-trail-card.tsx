@@ -17,6 +17,24 @@ import {
 
 const TYPES = ["settle_held", "settle_sent", "settle_settled", "settle_refunded"] as const;
 
+/** What "Held" means depends on the schedule: the words must not promise a schedule the merchant did not choose. */
+function heldHint(schedule: string | null): string {
+  switch (schedule) {
+    case "each_payment":
+      return "Booked to you. It moves to your private balance within a few minutes.";
+    case "daily":
+      return "Booked to you. It moves to your private balance once a day.";
+    case "weekly":
+      return "Booked to you. It moves to your private balance once a week.";
+    case "monthly":
+      return "Booked to you. It moves to your private balance once a month.";
+    case "manual":
+      return "Booked to you. Nothing moves until you choose a schedule.";
+    default:
+      return "Booked to you and waiting to be moved.";
+  }
+}
+
 const WORDS: Record<TrailStage, { label: string; hint: string }> = {
   held: { label: "Held", hint: "Booked to you and waiting to be moved on your schedule." },
   sending: { label: "On its way", hint: "Being moved to your private balance." },
@@ -70,6 +88,12 @@ function Tile({ label, cents, hint }: { label: string; cents: bigint; hint: stri
 /** Where the money is: held, on its way, in the private balance, or returned. Read from the settle events, no chain call. */
 export function MoneyTrailCard() {
   const [data, retry] = useAsync(async () => buildTrail(await loadEvents()), []);
+  const [biz] = useAsync(() => dashClient.business.get(), []);
+  const schedule = biz.state === "ready" ? (biz.data.payout?.schedule ?? "manual") : null;
+  const words: Record<TrailStage, { label: string; hint: string }> = {
+    ...WORDS,
+    held: { label: WORDS.held.label, hint: heldHint(schedule) },
+  };
   const rows: TrailRow[] = data.state === "ready" ? data.data : [];
   const totals = trailTotals(rows);
   const cents = (u: bigint) => unitsToCents(u);
@@ -93,22 +117,22 @@ export function MoneyTrailCard() {
     {
       id: "where",
       header: "Where it is",
-      value: (r) => WORDS[r.stage].label,
-      cell: (r) => <span className="text-[13px] font-medium">{WORDS[r.stage].label}</span>,
+      value: (r) => words[r.stage].label,
+      cell: (r) => <span className="text-[13px] font-medium">{words[r.stage].label}</span>,
     },
   ];
 
   return (
     <div className="space-y-4">
       <div className="grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile label="Held" cents={cents(totals.held)} hint={WORDS.held.hint} />
-        <Tile label="On its way" cents={cents(totals.sending)} hint={WORDS.sending.hint} />
+        <Tile label="Held" cents={cents(totals.held)} hint={words.held.hint} />
+        <Tile label="On its way" cents={cents(totals.sending)} hint={words.sending.hint} />
         <Tile
           label="In your private balance"
           cents={cents(totals.private)}
-          hint={WORDS.private.hint}
+          hint={words.private.hint}
         />
-        <Tile label="Returned" cents={cents(totals.returned)} hint={WORDS.returned.hint} />
+        <Tile label="Returned" cents={cents(totals.returned)} hint={words.returned.hint} />
       </div>
       <Card title="Where your money is" state="ready" className="p-0">
         <DataTable
@@ -140,7 +164,7 @@ export function MoneyTrailCard() {
                 <dd className="font-mono text-[13px]">{r.tokenId}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="caption">{WORDS[r.stage].hint}</dt>
+                <dt className="caption">{words[r.stage].hint}</dt>
                 <dd>
                   {r.tx ? (
                     <AddressChip value={r.tx} chain="near" tx />
