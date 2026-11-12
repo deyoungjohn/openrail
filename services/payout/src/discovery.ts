@@ -12,8 +12,12 @@ export class IndexerHeldDiscovery implements HeldDiscovery {
     this.fetchImpl = fetchImpl;
   }
 
+  /** `settle_held` events seen per token in the last read: a token with the same count as before has nothing new. */
+  readonly counts = new Map<string, number>();
+
   async tokens(): Promise<string[]> {
     const tokens = new Set<string>();
+    this.counts.clear();
     let after = "0";
     for (let page = 0; page < 50; page += 1) {
       const response = await this.fetchImpl(`${this.baseUrl}/events?after=${after}&limit=200`);
@@ -29,6 +33,8 @@ export class IndexerHeldDiscovery implements HeldDiscovery {
           row.token_id !== ""
         ) {
           tokens.add(row.token_id);
+          if (row.event === "settle_held")
+            this.counts.set(row.token_id, (this.counts.get(row.token_id) ?? 0) + 1);
         }
       }
       const next =

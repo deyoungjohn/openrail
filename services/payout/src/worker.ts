@@ -26,6 +26,10 @@ export interface PayoutWorkerDeps {
   clock?: () => number;
   sleep?: (ms: number) => Promise<void>;
   settleRecheckMs?: number;
+  /** A token with nothing left to do is read again only after this long (default 6 h), or at once when a new `settle_held` event shows up for it. */
+  idleRecheckMs?: number;
+  /** A token whose held share is waiting (manual, or not due yet) is read again after this long at most (default 5 min). */
+  waitingRecheckMs?: number;
   alert?: (message: string, data?: Record<string, unknown>) => void;
   settings?: { forToken(tokenId: string): Promise<PayoutSettings | null> };
 }
@@ -46,11 +50,19 @@ export class PayoutWorker {
   private readonly recheckMs: number;
   private readonly uncertain = new Set<string>();
   private readonly firstSeen = new Map<string, number>();
+  /** When each token may be read again. The worker used to read every token every tick: 15 s x 2 tokens used the day's 380 calls in half an hour (12 Nov). */
+  private readonly nextRead = new Map<string, number>();
+  /** For a token with nothing to do: the number of `settle_held` events it had when it was last read. */
+  private readonly finalAt = new Map<string, number>();
+  private readonly idleMs: number;
+  private readonly waitingMs: number;
 
   constructor(private readonly deps: PayoutWorkerDeps) {
     this.clock = deps.clock ?? Date.now;
     this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.recheckMs = deps.settleRecheckMs ?? 6_000;
+    this.idleMs = deps.idleRecheckMs ?? 6 * 60 * 60_000;
+    this.waitingMs = deps.waitingRecheckMs ?? 5 * 60_000;
   }
 
   private key(tokenId: string, index: number): string {
@@ -70,7 +82,26 @@ export class PayoutWorker {
     const tokens = [...new Set(await this.deps.discovery.tokens())];
     summary.tokens = tokens.length;
 
+    const counts = (this.deps.discovery as { counts?: ReadonlyMap<string, number> }).counts;
     for (const tokenId of tokens) {
+      // Nothing left to do and no new `settle_held` event since: not read again (no RPC call at all).
+      const seen = this.finalAt.get(tokenId);
+      if (seen !== undefined && counts !== undefined && (counts.get(tokenId) ?? 0) <= seen) {
+        summary.skipped.push(`${tokenId}: all shares final`);
+        await this.processCheckoutRefunds(tokenId, summary);
+        continue;
+      }
+      if (seen !== undefined) {
+        this.finalAt.delete(tokenId);
+        this.nextRead.delete(tokenId);
+      }
+      const due = this.nextRead.get(tokenId);
+      if (due !== undefined && this.clock() < due) {
+        // The held shares are not read again yet (that is the RPC call); a checkout refund is still looked for.
+        summary.skipped.push(`${tokenId}: not read again until ${new Date(due).toISOString()}`);
+        await this.processCheckoutRefunds(tokenId, summary);
+        continue;
+      }
       let settings: PayoutSettings | null = null;
       try {
         settings = (await this.deps.settings?.forToken(tokenId)) ?? null;
@@ -84,6 +115,12 @@ export class PayoutWorker {
         summary.errors.push(`${tokenId}: settle_held: ${String(error)}`);
         continue;
       }
+      // Read again at once while something moves; later when nothing does.
+      let wait: number | null = this.idleMs;
+      const readAgainIn = (ms: number | null) => {
+        if (ms === null) wait = null;
+        else if (wait !== null) wait = Math.min(wait, ms);
+      };
       for (let index = 0; index < entries.length; index += 1) {
         const entry = entries[index];
         if (entry === undefined) continue;
@@ -91,6 +128,7 @@ export class PayoutWorker {
         if (name !== "Held" && name !== "InFlight") continue;
         summary.held += 1;
         if (name === "InFlight") {
+          readAgainIn(null);
           const payoutId = inFlightId(entry.status);
           if (payoutId === null) continue;
           await this.finishInFlight(tokenId, index, payoutId, summary);
@@ -98,11 +136,13 @@ export class PayoutWorker {
         }
         const key = this.key(tokenId, index);
         if (this.uncertain.has(key)) {
+          readAgainIn(60_000);
           summary.skipped.push(`${key}: send state uncertain`);
           continue;
         }
         const schedule = settings?.schedule ?? "each_payment";
         if (schedule === "manual") {
+          readAgainIn(this.waitingMs);
           summary.skipped.push(`${key}: payout schedule manual`);
           continue;
         }
@@ -110,11 +150,18 @@ export class PayoutWorker {
         this.firstSeen.set(key, bookedAt);
         const end = calculatePeriodEndUtc(bookedAt, schedule);
         if (end !== null && this.clock() < end) {
+          readAgainIn(Math.min(this.waitingMs, end - this.clock()));
           summary.skipped.push(`${key}: not due for schedule ${schedule}`);
           continue;
         }
         await this.startPayout(tokenId, index, entry, summary, settings?.destination ?? undefined);
+        // A payout was started: follow it on the next tick.
+        readAgainIn(null);
       }
+      if (wait === null) this.nextRead.delete(tokenId);
+      else if (wait === this.idleMs && counts !== undefined)
+        this.finalAt.set(tokenId, counts.get(tokenId) ?? 0);
+      else this.nextRead.set(tokenId, this.clock() + wait);
       await this.processCheckoutRefunds(tokenId, summary);
     }
     return summary;

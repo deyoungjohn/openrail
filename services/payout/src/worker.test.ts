@@ -467,3 +467,83 @@ describe("the relayer balance read (11 Nov: the first RPC was spent and the work
     }
   });
 });
+
+describe("the worker does not read a token it has nothing to do for (12 Nov: 15 s x 2 tokens used the day's 380 calls)", () => {
+  function reads(entries: HeldEntry[], schedule: "each_payment" | "manual" = "each_payment") {
+    let now = Date.parse("2026-11-05T00:00:00Z");
+    const chain = new FakeChain();
+    chain.entries.set("c-1", entries);
+    const settleHeld = vi.spyOn(chain, "settleHeld");
+    const worker = new PayoutWorker({
+      discovery: { tokens: async () => ["c-1"] },
+      chain,
+      quote: { quote: vi.fn() } as unknown as QuotePort,
+      status: { status: vi.fn() } as unknown as StatusPort,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      clock: () => now,
+      sleep: async () => undefined,
+      settleRecheckMs: 0,
+      settings: { forToken: async () => ({ schedule, destination: null }) },
+    });
+    return { worker, settleHeld, advance: (ms: number) => (now += ms) };
+  }
+
+  it("a token whose shares are all final is read once, then not for 6 hours", async () => {
+    const { worker, settleHeld, advance } = reads([held({ status: "Settled" as never })]);
+    for (let i = 0; i < 40; i += 1) {
+      await worker.tick();
+      advance(15_000);
+    }
+    expect(settleHeld).toHaveBeenCalledTimes(1); // 10 minutes of 15 s ticks
+    advance(6 * 60 * 60_000);
+    await worker.tick();
+    expect(settleHeld).toHaveBeenCalledTimes(2);
+  });
+
+  it("with event counts: never read again until a new settle_held event shows up for the token", async () => {
+    const counts = new Map([["c-1", 1]]);
+    let now = Date.parse("2026-11-05T00:00:00Z");
+    const chain = new FakeChain();
+    chain.entries.set("c-1", [held({ status: "Settled" as never })]);
+    const settleHeld = vi.spyOn(chain, "settleHeld");
+    const worker = new PayoutWorker({
+      discovery: { tokens: async () => ["c-1"], counts } as never,
+      chain,
+      quote: { quote: vi.fn() } as unknown as QuotePort,
+      status: { status: vi.fn() } as unknown as StatusPort,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      clock: () => now,
+      sleep: async () => undefined,
+      settleRecheckMs: 0,
+    });
+    await worker.tick();
+    now += 7 * 24 * 60 * 60_000; // a week later, still the same count: no call
+    await worker.tick();
+    expect(settleHeld).toHaveBeenCalledTimes(1);
+    counts.set("c-1", 2); // a second share was held
+    await worker.tick();
+    expect(settleHeld).toHaveBeenCalledTimes(2);
+  });
+
+  it("a held share under the manual schedule is read every 5 minutes, not every tick", async () => {
+    const { worker, settleHeld, advance } = reads([held()], "manual");
+    for (let i = 0; i < 40; i += 1) {
+      await worker.tick();
+      advance(15_000);
+    }
+    // 40 ticks = 10 minutes: at 0, 5 and 10 minutes at the most
+    expect(settleHeld.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(settleHeld.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("a share in flight is read on every tick", async () => {
+    const { worker, settleHeld, advance } = reads([
+      held({ status: { InFlight: { payout_id: 7 } } as never }),
+    ]);
+    for (let i = 0; i < 5; i += 1) {
+      await worker.tick().catch(() => undefined);
+      advance(15_000);
+    }
+    expect(settleHeld).toHaveBeenCalledTimes(5);
+  });
+});
