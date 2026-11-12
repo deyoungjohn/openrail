@@ -90,7 +90,7 @@ async function main(): Promise<void> {
     nearBlocksKeys,
     rpcUrls,
     undefined,
-    100,
+    25,
     5,
     budget,
     from?.seconds ?? 0,

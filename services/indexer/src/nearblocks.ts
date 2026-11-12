@@ -105,7 +105,7 @@ export class NearBlocksEventSource implements EventSource {
     apiKey: string | readonly string[] = "",
     rpcUrls: string[] = [],
     fetchImpl: FetchLike = (input, init) => fetch(input, init),
-    limit = 100,
+    limit = 25,
     maxPages = 5,
     private readonly budget?: BudgetGovernor,
     private readonly fromSeconds = 0,
@@ -114,7 +114,7 @@ export class NearBlocksEventSource implements EventSource {
     this.apiKeys = (typeof apiKey === "string" ? [apiKey] : [...apiKey]).filter((k) => k !== "");
     this.rpcUrls = rpcUrls;
     this.fetchImpl = fetchImpl;
-    this.limit = Math.max(1, Math.min(limit, 100));
+    this.limit = Math.max(1, Math.min(limit, 25));
     this.maxPages = Math.max(1, maxPages);
   }
 
