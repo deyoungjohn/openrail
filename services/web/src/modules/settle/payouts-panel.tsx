@@ -9,7 +9,9 @@ import { Card } from "@/components/ui/card";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Select } from "@/components/ui/input";
 import { useNear } from "@/wallet/near";
-import { MoneyTrailCard } from "./money-trail-card";
+import { MoneyTrailCard, useTrail } from "./money-trail-card";
+import { trailTotals } from "./money-trail";
+import { WithdrawCard } from "./withdraw-card";
 import { readSettlement } from "./read-settlement";
 import {
   clearSettlementCall,
@@ -141,13 +143,16 @@ function PrivateBalanceCard({ accountId }: { accountId: string }) {
 
 export function PayoutsPanel() {
   const auth = useAuth();
+  const trail = useTrail();
+  const inPrivate = trail[0].state === "ready" ? trailTotals(trail[0].data).private : 0n;
   return (
     <div className="space-y-6">
       <ScheduleCard />
       {auth.state.status === "signedIn" ? (
         <PrivateBalanceCard accountId={auth.state.accountId} />
       ) : null}
-      <MoneyTrailCard />
+      {auth.state.status === "signedIn" ? <WithdrawCard approxUnits={inPrivate} /> : null}
+      <MoneyTrailCard trail={trail} />
     </div>
   );
 }

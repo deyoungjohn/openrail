@@ -86,8 +86,13 @@ function Tile({ label, cents, hint }: { label: string; cents: bigint; hint: stri
 }
 
 /** Where the money is: held, on its way, in the private balance, or returned. Read from the settle events, no chain call. */
-export function MoneyTrailCard() {
-  const [data, retry] = useAsync(async () => buildTrail(await loadEvents()), []);
+/** The trail of the merchant's held shares, read once for the cards that show it. */
+export function useTrail() {
+  return useAsync(async () => buildTrail(await loadEvents()), []);
+}
+
+export function MoneyTrailCard({ trail }: { trail: ReturnType<typeof useTrail> }) {
+  const [data, retry] = trail;
   const [biz] = useAsync(() => dashClient.business.get(), []);
   const schedule = biz.state === "ready" ? (biz.data.payout?.schedule ?? "manual") : null;
   const words: Record<TrailStage, { label: string; hint: string }> = {
