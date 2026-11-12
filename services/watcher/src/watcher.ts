@@ -341,6 +341,11 @@ export class Watcher {
       transaction_outcome?: { id?: unknown };
     } | null;
     const hash = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id;
+    this.store?.recordOutcome(outcome ?? {}, {
+      tokenId,
+      blockHeight: this.lastBlockHeight ?? 0,
+      timestamp: Math.floor(this.now() / 1000),
+    });
     try {
       if (typeof hash === "string" && hash !== "") await this.indexer?.registerTx(hash);
       await this.indexer?.poke();
