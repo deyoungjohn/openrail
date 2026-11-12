@@ -47,6 +47,12 @@ export interface NearClientLike {
   sendFunctionCall(request: FunctionCallRequest): Promise<unknown>;
   /** RPC requests made since the start, per feature (the shared client counts them). */
   callCounts?(): Record<string, number>;
+  rpcHealth?(): {
+    host: string;
+    state: "ok" | "cooling";
+    last_error: string | null;
+    calls_last_hour: number;
+  }[];
 }
 
 export interface ChainStatus {

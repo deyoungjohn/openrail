@@ -184,6 +184,7 @@ describe("near client cycles through its RPCs", () => {
     const client = new NearClient({
       rpcUrls: ["https://rpc.one", "https://rpc.two", "https://rpc.three"],
       fetchImpl,
+      cacheMs: 0,
     });
     const call = () =>
       client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" });
@@ -243,6 +244,125 @@ describe("near client cycles through its RPCs", () => {
       ),
     );
     expect(peak).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("near client RPC pool health", () => {
+  it("cools a 429 endpoint for Retry-After and skips it on the next call", async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("one")) {
+        return new Response(JSON.stringify({ error: "limit" }), {
+          status: 429,
+          headers: { "retry-after": "120", "content-type": "application/json" },
+        });
+      }
+      return callResult({ ok: true });
+    });
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.one/path", "https://rpc.two/path"],
+      fetchImpl,
+      sleep: async () => undefined,
+      cacheMs: 0,
+    });
+    await client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" });
+    const health = client.rpcHealth();
+    expect(health[0]).toMatchObject({
+      host: "rpc.one",
+      state: "cooling",
+      last_error: "RPC_QUOTA_EXCEEDED",
+      calls_last_hour: 1,
+    });
+    expect(health[1]).toMatchObject({ host: "rpc.two", state: "ok" });
+    urls.length = 0;
+    await client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" });
+    expect(urls).toEqual(["https://rpc.two/path"]);
+  });
+
+  it("hedges a slow read to the next RPC and takes the first answer", async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("one")) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return callResult({ from: "one" });
+      }
+      return callResult({ from: "two" });
+    });
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.one", "https://rpc.two"],
+      fetchImpl,
+      hedgeDelayMs: 10,
+      sleep: async () => undefined,
+      cacheMs: 0,
+    });
+    const value = await client.view<{ from: string }>({
+      contractId: "intents.near",
+      methodName: "mt_balance_of",
+      feature: "api",
+    });
+    expect(value.from).toBe("two");
+    expect(urls).toContain("https://rpc.two");
+  });
+
+  it("shares the same read within two seconds", async () => {
+    let calls = 0;
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.one"],
+      fetchImpl: async () => {
+        calls += 1;
+        return callResult({ ok: true });
+      },
+    });
+    const view = () =>
+      client.view({ contractId: "intents.near", methodName: "mt_balance_of", feature: "api" });
+    await view();
+    await view();
+    expect(calls).toBe(1);
+  });
+
+  it("a broadcast is not hedged; a timeout reads the transaction status instead", async () => {
+    const keyPair = KeyPair.fromRandom("ed25519");
+    process.env.OPENRAIL_NEAR_TEST_ACCOUNT = "issuer.test.near";
+    process.env.OPENRAIL_NEAR_TEST_KEY = keyPair.toString();
+    const broadcasts: string[] = [];
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        method: string;
+        params: { request_type?: string };
+      };
+      const url = String(input);
+      if (body.method === "block") return rpcResult({ header: { hash: BLOCK_HASH } });
+      if (body.params.request_type === "view_access_key") {
+        return rpcResult({ nonce: 7, block_hash: BLOCK_HASH, block_height: 1 });
+      }
+      if (body.method === "broadcast_tx_commit") {
+        broadcasts.push(url);
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return jsonResponse({ error: "timeout" }, 504);
+      }
+      return rpcResult({ status: { SuccessValue: "" }, receipts_outcome: [] });
+    });
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.one", "https://rpc.two"],
+      fetchImpl,
+      signer: {
+        accountIdEnv: "OPENRAIL_NEAR_TEST_ACCOUNT",
+        privateKeyEnv: "OPENRAIL_NEAR_TEST_KEY",
+      },
+      readTimeoutMs: 20,
+      maxRetries: 0,
+    });
+    const outcome = (await client.sendFunctionCall({
+      receiverId: "openrail.near",
+      methodName: "reconcile",
+      feature: "watcher",
+    })) as { receipts_outcome?: unknown[] };
+    expect(outcome.receipts_outcome).toEqual([]);
+    expect(broadcasts).toHaveLength(1);
   });
 });
 

@@ -185,6 +185,7 @@ export class Watcher {
         ...(this.near.callCounts?.() ?? {}),
         ...(this.chain.callCounts?.() ?? {}),
       },
+      ...(this.near.rpcHealth === undefined ? {} : { rpc_endpoints: this.near.rpcHealth() }),
     };
   }
 

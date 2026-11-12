@@ -158,7 +158,11 @@ async function main(): Promise<void> {
           inspector.keyInfo(issuerAccount, issuerPublicKey),
           inspector.keyInfo(issuerAccount, relayPublicKey),
         ]);
-        return { issuer_key: keySummary(issuer), relay_key: keySummary(relay) };
+        return {
+          issuer_key: keySummary(issuer),
+          relay_key: keySummary(relay),
+          rpc_endpoints: [...issuerNear.rpcHealth(), ...relayNear.rpcHealth()],
+        };
       },
       { okMs: 60_000, failMs: 15_000 },
     ),
