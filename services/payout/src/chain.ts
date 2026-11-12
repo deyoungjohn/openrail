@@ -1,5 +1,7 @@
 /** NEAR adapter for the settle/payout views and calls. */
 import { getEnv, nearClientFromEnv, type NearClient } from "@openrail/shared";
+import type { DatabaseSync } from "node:sqlite";
+import { appendOutcomeEvents, type OutcomeLike } from "@openrail/shared";
 import type { CallBudget } from "./budget.js";
 import type {
   ChainPort,
@@ -36,6 +38,13 @@ export interface PayoutChainOptions {
   budget?: CallBudget;
   /** Indexer `/events` endpoint, used to read the checkout refund event payload. */
   indexerUrl?: string;
+  /**
+   * This worker's own single-writer event file (`events` table, see `ensureEventTable`): every `EVENT_JSON` log of the
+   * transactions it sends is written here, and the indexer reads it, so the dashboard learns `settle_sent`,
+   * `settle_settled` and `settle_refunded` without a NearBlocks or RPC lookup.
+   */
+  eventDb?: DatabaseSync;
+  now?: () => number;
 }
 
 function u128(value: unknown): string {
@@ -55,8 +64,14 @@ export class PayoutChain implements ChainPort {
   private readonly rootAccount: string;
   private readonly budget: CallBudget | undefined;
   private readonly indexerUrl: string | undefined;
+  private readonly eventDb: DatabaseSync | undefined;
+  private readonly now: () => number;
+  /** Events that could not be written (counted in health). */
+  eventWriteFailures = 0;
 
   constructor(options: PayoutChainOptions) {
+    this.eventDb = options.eventDb;
+    this.now = options.now ?? Date.now;
     this.rootAccount = options.rootAccount;
     this.budget = options.budget;
     this.indexerUrl =
@@ -69,6 +84,21 @@ export class PayoutChain implements ChainPort {
           privateKeyEnv: "PAYOUT_RELAYER_PRIVATE_KEY",
         },
       });
+  }
+
+  /** Best effort: a failing write never stops a payout, it is counted. */
+  private record(result: unknown, tokenId: string): void {
+    if (this.eventDb === undefined) return;
+    try {
+      appendOutcomeEvents(this.eventDb, (result ?? {}) as OutcomeLike, {
+        tokenId,
+        blockHeight: 0,
+        timestamp: Math.floor(this.now() / 1000),
+        source: "payout",
+      });
+    } catch {
+      this.eventWriteFailures += 1;
+    }
   }
 
   private async guarded<T>(call: () => Promise<T>): Promise<T> {
@@ -149,6 +179,7 @@ export class PayoutChain implements ChainPort {
         feature: "payout.settle_payout",
       }),
     );
+    this.record(result, tokenId);
     const value = successValue(result);
     const payoutId = typeof value === "number" ? value : Number(value);
     if (!Number.isSafeInteger(payoutId) || payoutId <= 0) {
@@ -176,6 +207,7 @@ export class PayoutChain implements ChainPort {
         feature: "payout.refund_late",
       }),
     );
+    this.record(result, tokenId);
     const value = successValue(result);
     const payoutId = typeof value === "number" ? value : Number(value);
     if (!Number.isSafeInteger(payoutId) || payoutId <= 0) {
@@ -252,7 +284,7 @@ export class PayoutChain implements ChainPort {
     payoutId: number,
     outcome: PayoutOutcome,
   ): Promise<void> {
-    await this.guarded(() =>
+    const result = await this.guarded(() =>
       this.near.sendFunctionCall({
         receiverId: this.rootAccount,
         methodName: "report_payout",
@@ -262,6 +294,7 @@ export class PayoutChain implements ChainPort {
         feature: "payout.report_payout",
       }),
     );
+    this.record(result, tokenId);
   }
 
   /** The relayer's NEAR balance, read through the shared RPC cycle. A failed read throws: it is not a zero balance. */

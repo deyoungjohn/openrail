@@ -1,6 +1,10 @@
 /** Entrypoint for the settle payout worker (started only when the settle module is enabled). */
 import { readFileSync } from "node:fs";
 import { createLogger, getEnv, requireEnv } from "@openrail/shared";
+import { chmodSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { ensureEventTable } from "@openrail/shared";
 import { CallBudget } from "./budget.js";
 import { PayoutChain } from "./chain.js";
 import { IndexerHeldDiscovery } from "./discovery.js";
@@ -42,7 +46,31 @@ async function main(): Promise<void> {
     numberEnv("PAYOUT_RPC_DAILY_BUDGET", 380),
     numberEnv("PAYOUT_RPC_MIN_SPACING_MS", 7_000),
   );
-  const chain = new PayoutChain({ rootAccount, budget, indexerUrl });
+  // The worker's own event file, read by the indexer (INDEXER_EVENT_SOURCES). A folder it cannot write: no file, no crash.
+  let eventDb: DatabaseSync | undefined;
+  try {
+    const path = getEnv("PAYOUT_DB_PATH") ?? "/var/lib/openrail/payout.sqlite";
+    mkdirSync(dirname(path), { recursive: true });
+    eventDb = new DatabaseSync(path);
+    eventDb.exec("PRAGMA journal_mode=WAL");
+    // the indexer reads it as another user of the same group
+    for (const suffix of ["", "-wal", "-shm"]) {
+      try {
+        chmodSync(path + suffix, 0o660);
+      } catch {
+        // may not exist yet
+      }
+    }
+    ensureEventTable(eventDb);
+  } catch {
+    eventDb = undefined;
+  }
+  const chain = new PayoutChain({
+    rootAccount,
+    budget,
+    indexerUrl,
+    ...(eventDb ? { eventDb } : {}),
+  });
   let lastAlert: string | null = null;
   const worker = new PayoutWorker({
     discovery: new IndexerHeldDiscovery(indexerUrl),
