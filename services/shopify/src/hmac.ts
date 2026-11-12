@@ -25,9 +25,7 @@ export function verifyShopifyWebhookHmac(
  * Matches `services/api/src/webhooks.ts:signWebhook`.
  */
 export function signOpenrailWebhook(secret: string, timestamp: number, rawBody: string): string {
-  const sig = createHmac("sha256", secret)
-    .update(`${timestamp}.${rawBody}`, "utf8")
-    .digest("hex");
+  const sig = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`, "utf8").digest("hex");
   return `t=${timestamp},v1=${sig}`;
 }
 
@@ -169,7 +167,6 @@ export class OrderTokenStore {
   }
 }
 
-
 export type SessionTokenResult = { ok: true } | { ok: false; reason: string; detail?: string };
 
 /**
@@ -205,7 +202,8 @@ export function verifyShopifySessionToken(
     return { ok: false, reason: "malformed" };
   }
   if (header.alg !== "HS256") return { ok: false, reason: "bad_algorithm" };
-  if (typeof claims.exp !== "number" || claims.exp <= nowSec) return { ok: false, reason: "expired" };
+  if (typeof claims.exp !== "number" || claims.exp <= nowSec)
+    return { ok: false, reason: "expired" };
   if (claims.aud !== clientId) return { ok: false, reason: "wrong_app" };
   // `dest` is the shop. Shopify's docs call it a URL; the checkout extension's token carries a bare host
   // (`<shop>.myshopify.com`, found on a live thank-you page 10 Nov): accept both, compare the host only.
@@ -213,7 +211,9 @@ export function verifyShopifySessionToken(
   let host = "";
   if (rawDest !== "") {
     try {
-      host = (rawDest.includes("://") ? new URL(rawDest).host : rawDest.replace(/\/.*$/, "")).toLowerCase();
+      host = (
+        rawDest.includes("://") ? new URL(rawDest).host : rawDest.replace(/\/.*$/, "")
+      ).toLowerCase();
     } catch {
       host = "";
     }
@@ -225,6 +225,10 @@ export function verifyShopifySessionToken(
       detail: `token dest unreadable (claim names: ${Object.keys(claims).join(",")})`,
     };
   if (host !== shopDomain.toLowerCase())
-    return { ok: false, reason: "wrong_shop", detail: `token shop ${host}, configured ${shopDomain}` };
+    return {
+      ok: false,
+      reason: "wrong_shop",
+      detail: `token shop ${host}, configured ${shopDomain}`,
+    };
   return { ok: true };
 }

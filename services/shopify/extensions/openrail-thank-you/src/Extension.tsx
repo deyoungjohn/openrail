@@ -28,8 +28,7 @@ export default function extension() {
 function ThankYou() {
   const g = shopify as unknown as Globals;
   const base = String(g.settings?.value?.openrail_app_base_url ?? DEFAULT_BASE).replace(/\/+$/, "");
-  const orderGid =
-    g.orderConfirmation?.value?.order?.id ?? g.orderConfirmation?.current?.order?.id;
+  const orderGid = g.orderConfirmation?.value?.order?.id ?? g.orderConfirmation?.current?.order?.id;
   const confirmationNumber =
     g.orderConfirmation?.value?.number ?? g.orderConfirmation?.current?.number;
   const [data, setData] = useState<ThankYouData | null>(null);

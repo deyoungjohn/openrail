@@ -11,9 +11,7 @@ import { ShopifyPaymentsAppClient } from "./payments-app-client.js";
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB
 
-export function createShopifyHttpListener(
-  app: ReturnType<typeof createShopifyApp>,
-) {
+export function createShopifyHttpListener(app: ReturnType<typeof createShopifyApp>) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = req.method ?? "GET";
     const rawUrl = req.url ?? "/";
@@ -50,7 +48,11 @@ export function createShopifyHttpListener(
 
     if (bodyTooLarge) {
       res.writeHead(413, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: { code: "payload_too_large", message: "Request body exceeds 1 MB" } }));
+      res.end(
+        JSON.stringify({
+          error: { code: "payload_too_large", message: "Request body exceeds 1 MB" },
+        }),
+      );
       return;
     }
 
@@ -114,10 +116,7 @@ export function startShopifyServer(
     adminClient,
   });
 
-  const checkoutApi = createHttpCheckoutApiPort(
-    env.OPENRAIL_API_URL,
-    env.OPENRAIL_API_KEY,
-  );
+  const checkoutApi = createHttpCheckoutApiPort(env.OPENRAIL_API_URL, env.OPENRAIL_API_KEY);
 
   const app = createShopifyApp({
     env,

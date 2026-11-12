@@ -203,8 +203,7 @@ export class ShopifyPaymentsAppClient {
       id,
       ...(networkTransactionId ? { networkTransactionId } : {}),
     });
-    const redirectUrl =
-      data.paymentSessionResolve.paymentSession?.nextAction?.context?.redirectUrl;
+    const redirectUrl = data.paymentSessionResolve.paymentSession?.nextAction?.context?.redirectUrl;
     return {
       ...(redirectUrl ? { redirectUrl } : {}),
       userErrors: data.paymentSessionResolve.userErrors,
@@ -214,7 +213,10 @@ export class ShopifyPaymentsAppClient {
   async paymentSessionPending(
     id: string,
     pendingExpiresAt: string,
-    reason: "BUYER_ACTION_REQUIRED" | "NETWORK_ACTION_REQUIRED" | "PARTNER_ACTION_REQUIRED" = "BUYER_ACTION_REQUIRED",
+    reason:
+      | "BUYER_ACTION_REQUIRED"
+      | "NETWORK_ACTION_REQUIRED"
+      | "PARTNER_ACTION_REQUIRED" = "BUYER_ACTION_REQUIRED",
   ): Promise<{ userErrors: ShopifyUserError[] }> {
     const data = await this.graphql<{
       paymentSessionPending: { userErrors: ShopifyUserError[] };
@@ -245,8 +247,7 @@ export class ShopifyPaymentsAppClient {
         ...(merchantMessage ? { merchantMessage } : {}),
       },
     });
-    const redirectUrl =
-      data.paymentSessionReject.paymentSession?.nextAction?.context?.redirectUrl;
+    const redirectUrl = data.paymentSessionReject.paymentSession?.nextAction?.context?.redirectUrl;
     return {
       ...(redirectUrl ? { redirectUrl } : {}),
       userErrors: data.paymentSessionReject.userErrors,

@@ -16,16 +16,8 @@
 
 import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import {
-  ShopifyAdminClient,
-  type ShopifyOrder,
-  type ShopifyShop,
-} from "../src/admin-client.js";
-import {
-  createShopifyApp,
-  type CheckoutApiPort,
-  type ShopifyAppEnv,
-} from "../src/app.js";
+import { ShopifyAdminClient } from "../src/admin-client.js";
+import { createShopifyApp, type CheckoutApiPort, type ShopifyAppEnv } from "../src/app.js";
 import {
   OrderTokenStore,
   createOrderPayToken,
@@ -61,29 +53,40 @@ function mintSessionToken(
   return `${head}.${body}.${sig}`;
 }
 
-function createIndependentHarness(options: {
-  orderTotal?: string;
-  currency?: string;
-  gateways?: string[];
-  initialPaid?: boolean;
-} = {}) {
+function createIndependentHarness(
+  options: {
+    orderTotal?: string;
+    currency?: string;
+    gateways?: string[];
+    initialPaid?: boolean;
+  } = {},
+) {
   let now = 1_762_700_000;
   const total = options.orderTotal ?? "50.00";
   const currency = options.currency ?? "USD";
   const gateways = options.gateways ?? ["Pay with stablecoins (Openrail)"];
 
   const markPaidCalls: string[] = [];
-  const checkoutCreateCalls: Array<{ body: any; idempotencyKey: string }> = [];
-  const checkouts = new Map<string, any>();
+  const checkoutCreateCalls: Array<{
+    body: Parameters<CheckoutApiPort["createCheckout"]>[0];
+    idempotencyKey: string;
+  }> = [];
+  const checkouts = new Map<
+    string,
+    Awaited<ReturnType<CheckoutApiPort["createCheckout"]>>["checkout"]
+  >();
   const loggedLines: string[] = [];
-  const storedAuditState: any[] = [];
+  const storedAuditState: Array<Parameters<CheckoutApiPort["createCheckout"]>[0]> = [];
 
   const adminClient = {
     getShop: vi.fn(async () => ({
       name: "Test Store",
       currencyCode: currency,
       myshopifyDomain: TEST_ENV.SHOPIFY_SHOP_DOMAIN,
-      primaryDomain: { url: `https://${TEST_ENV.SHOPIFY_SHOP_DOMAIN}`, host: TEST_ENV.SHOPIFY_SHOP_DOMAIN },
+      primaryDomain: {
+        url: `https://${TEST_ENV.SHOPIFY_SHOP_DOMAIN}`,
+        host: TEST_ENV.SHOPIFY_SHOP_DOMAIN,
+      },
     })),
     getOrder: vi.fn(async (orderGid: string) => ({
       id: orderGid,
@@ -177,7 +180,10 @@ function createIndependentHarness(options: {
       exp: now + expOffset,
     });
 
-  const sendOrderWebhook = async (payload: Record<string, unknown>, key = TEST_ENV.SHOPIFY_WEBHOOK_SECRET) => {
+  const sendOrderWebhook = async (
+    payload: Record<string, unknown>,
+    key = TEST_ENV.SHOPIFY_WEBHOOK_SECRET,
+  ) => {
     const raw = JSON.stringify(payload);
     return app.handle({
       method: "POST",
@@ -533,7 +539,9 @@ describe("Shopify Connector Independent Gate (Update 60)", () => {
     const h = createIndependentHarness();
     // Simulate Admin API blocked on protected customer data
     h.adminClient.getOrder = vi.fn(async () => {
-      throw new Error("Shopify Admin GraphQL error: This app is not approved to access the Order object.");
+      throw new Error(
+        "Shopify Admin GraphQL error: This app is not approved to access the Order object.",
+      );
     });
 
     // 1. Landing before webhook arrives -> 202 order_pending

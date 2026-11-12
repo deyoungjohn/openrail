@@ -870,10 +870,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
     };
   }
 
-  async function handleOrderPayRedirect(
-    rawToken: string,
-    _req: HttpRequest,
-  ): Promise<HttpResponse> {
+  async function handleOrderPayRedirect(rawToken: string): Promise<HttpResponse> {
     const verified = verifyOrderPayToken(
       decodeURIComponent(rawToken),
       env.SHOPIFY_ORDER_TOKEN_SECRET,
@@ -911,7 +908,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
     const parsedOrder = parseAndNormalizeOrderId(orderGid);
     const numericId = parsedOrder?.numericId ?? extractNumericOrderId(orderGid);
     const orderRef = sanitizeOrderRef(`shopify-${numericId}`);
-    let binding =
+    const binding =
       bindingsByOrderGid.get(orderGid) ??
       bindingsByOrderGid.get(numericId) ??
       bindingsByOrderRef.get(orderRef);
@@ -2354,7 +2351,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           }
 
           const totalUsd = binding.expectedTotalUsd;
-          let status: "unpaid" | "partial" | "paid" | "pending" = "unpaid";
+          let status: "unpaid" | "partial" | "paid" | "pending";
           if (binding.paid || binding.status === "paid") {
             status = "paid";
           } else if (binding.status === "partial") {
@@ -2445,7 +2442,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
 
       const payMatch = /^\/shopify\/pay\/([^/]+)$/.exec(path);
       if (method === "GET" && payMatch?.[1]) {
-        return handleOrderPayRedirect(payMatch[1], req);
+        return handleOrderPayRedirect(payMatch[1]);
       }
 
       if (method === "POST" && path === "/shopify/payment_session") {

@@ -230,9 +230,7 @@ export class ShopifyAdminClient {
     }
 
     if (!this.clientId || !this.clientSecret) {
-      throw new Error(
-        "MISSING_CREDENTIALS: Provide clientId and clientSecret (or accessToken)",
-      );
+      throw new Error("MISSING_CREDENTIALS: Provide clientId and clientSecret (or accessToken)");
     }
 
     const nowSec = this.clock();
@@ -253,7 +251,7 @@ export class ShopifyAdminClient {
     });
 
     if (!response.ok) {
-      let desc = "";
+      let desc: string;
       try {
         const errJson = (await response.json()) as { error?: string; error_description?: string };
         desc = errJson.error_description || errJson.error || "";

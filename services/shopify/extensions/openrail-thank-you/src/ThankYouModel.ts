@@ -78,7 +78,8 @@ export function buildThankYouViewModel(
       tone: "warning",
       heading: "Payment status unavailable",
       text: "We could not load the payment status for this order. Reload the page, or contact the shop.",
-      bodyText: "We could not load the payment status for this order. Reload the page, or contact the shop.",
+      bodyText:
+        "We could not load the payment status for this order. Reload the page, or contact the shop.",
     };
   }
 
@@ -289,9 +290,7 @@ export function stepPollState(
 
   const nextFailures = current.consecutiveFailures + 1;
   const shouldShowError = current.lastGoodData === null || nextFailures >= 3;
-  const nextData: ThankYouData = shouldShowError
-    ? { status: "error" }
-    : current.lastGoodData!;
+  const nextData: ThankYouData = shouldShowError ? { status: "error" } : current.lastGoodData!;
 
   return {
     nextData,

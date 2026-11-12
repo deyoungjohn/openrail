@@ -87,7 +87,8 @@ function CheckoutPay() {
   }
 
   if (failed) {
-    let errorText = "We could not prepare the payment link. Reload the page or choose another payment method.";
+    let errorText =
+      "We could not prepare the payment link. Reload the page or choose another payment method.";
     if (errorCode === "rate_limited") {
       errorText = "Too many payment requests. Please wait a moment and try again.";
     } else if (errorCode === "unsupported_currency") {
@@ -101,7 +102,11 @@ function CheckoutPay() {
   }
   return (
     <s-banner heading="Pay with stablecoins (Openrail)">
-      {url ? <s-button href={url}>Pay with stablecoins</s-button> : <s-text>Preparing your payment link…</s-text>}
+      {url ? (
+        <s-button href={url}>Pay with stablecoins</s-button>
+      ) : (
+        <s-text>Preparing your payment link…</s-text>
+      )}
     </s-banner>
   );
 }

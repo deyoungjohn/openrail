@@ -15,8 +15,5 @@ export function shouldRenderCheckoutPay(
 ): boolean {
   const handle = (configuredHandle ?? "").trim();
   if (!handle) return false;
-  return (
-    Array.isArray(selectedOptions) &&
-    selectedOptions.some((opt) => opt.handle === handle)
-  );
+  return Array.isArray(selectedOptions) && selectedOptions.some((opt) => opt.handle === handle);
 }

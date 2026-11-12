@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 import { ShopifyAdminClient, type ShopifyOrder, type ShopifyShop } from "../src/admin-client.js";
 import {
@@ -34,7 +35,6 @@ import {
   signOpenrailWebhook,
   signShopifyWebhookHmac,
   verifyOpenrailWebhookSignature,
-  verifyOrderPayToken,
   verifyShopifyWebhookHmac,
 } from "../src/hmac.js";
 import { ShopifyPaymentsAppClient } from "../src/payments-app-client.js";
@@ -52,6 +52,11 @@ const TEST_ENV: ShopifyAppEnv = {
   APP_BASE_URL: "https://shopify.openrail.incepture.dev",
   SHOPIFY_PRE_ORDER_LINK: "1",
 };
+
+function stderrOf(error: unknown): string {
+  const stderr = (error as { stderr?: { toString(encoding: string): string } }).stderr;
+  return stderr === undefined ? "" : stderr.toString("utf8");
+}
 
 function makeUsdShop(overrides: Partial<ShopifyShop> = {}): ShopifyShop {
   return {
@@ -1539,24 +1544,22 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
       const listener = createShopifyHttpListener(h.app);
 
       // 1. Health check via HTTP listener
-      const mockReq: any = {
+      const mockReq = {
         method: "GET",
         url: "/health",
         headers: { host: "127.0.0.1:8083" },
         async *[Symbol.asyncIterator]() {},
-      };
+      } as unknown as IncomingMessage;
       let status = 0;
-      let headersWritten: Record<string, string> = {};
       let bodyData = "";
-      const mockRes: any = {
-        writeHead: vi.fn((s: number, h: Record<string, string>) => {
+      const mockRes = {
+        writeHead: vi.fn((s: number) => {
           status = s;
-          headersWritten = h;
         }),
         end: vi.fn((data?: string) => {
           if (data) bodyData = data;
         }),
-      };
+      } as unknown as ServerResponse;
 
       await listener(mockReq, mockRes);
       expect(status).toBe(200);
@@ -1564,24 +1567,24 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
 
       // 2. Payload limit check (> 1 MB)
       const bigChunk = Buffer.alloc(1024 * 1024 + 10, "a");
-      const bigReq: any = {
+      const bigReq = {
         method: "POST",
         url: "/shopify/webhooks/openrail",
         headers: { host: "127.0.0.1:8083" },
         async *[Symbol.asyncIterator]() {
           yield bigChunk;
         },
-      };
+      } as unknown as IncomingMessage;
       let bigStatus = 0;
       let bigBody = "";
-      const bigRes: any = {
+      const bigRes = {
         writeHead: vi.fn((s: number) => {
           bigStatus = s;
         }),
         end: vi.fn((data?: string) => {
           if (data) bigBody = data;
         }),
-      };
+      } as unknown as ServerResponse;
       await listener(bigReq, bigRes);
       expect(bigStatus).toBe(413);
       expect(JSON.parse(bigBody).error.code).toBe("payload_too_large");
@@ -1688,9 +1691,9 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
       let failed = false;
       try {
         execFileSync("bash", [checkScript, placeholderToml], { stdio: "pipe" });
-      } catch (err: any) {
+      } catch (err: unknown) {
         failed = true;
-        const stderr = err.stderr ? err.stderr.toString("utf8") : "";
+        const stderr = stderrOf(err);
         expect(stderr).toContain("placeholder");
         expect(stderr).toContain("Shopify CLI does NOT expand environment variables");
       }
@@ -1704,9 +1707,9 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
         let angleFailed = false;
         try {
           execFileSync("bash", [checkScript, angleBracketFile], { stdio: "pipe" });
-        } catch (err: any) {
+        } catch (err: unknown) {
           angleFailed = true;
-          const stderr = err.stderr?.toString("utf8") ?? "";
+          const stderr = stderrOf(err);
           expect(stderr).toContain("placeholder");
         }
         expect(angleFailed).toBe(true);
@@ -1716,9 +1719,9 @@ describe("Shopify module — Webhooks, Session Idempotency, Paid-Late & Offsite 
         let emptyFailed = false;
         try {
           execFileSync("bash", [checkScript, emptyFile], { stdio: "pipe" });
-        } catch (err: any) {
+        } catch (err: unknown) {
           emptyFailed = true;
-          const stderr = err.stderr?.toString("utf8") ?? "";
+          const stderr = stderrOf(err);
           expect(stderr).toContain("empty");
         }
         expect(emptyFailed).toBe(true);
@@ -4481,7 +4484,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const h = createTestHarness();
         h.adminClient.getOrder = (async () => {
           throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
-        }) as any;
+        }) as unknown as typeof h.adminClient.getOrder;
         const webhookRes = await sendOrdersCreateWebhook(h, {
           id: 6581579383999,
           admin_graphql_api_id: "gid://shopify/Order/6581579383999",
@@ -4522,7 +4525,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const getOrderMock = vi.fn(async () => {
           throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
         });
-        h.adminClient.getOrder = getOrderMock as any;
+        h.adminClient.getOrder = getOrderMock as unknown as typeof h.adminClient.getOrder;
 
         const webhookRes = await sendOrdersCreateWebhook(h, {
           id: 6581579383141,
@@ -4574,7 +4577,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const h = createTestHarness();
         h.adminClient.getOrder = vi.fn(async () => {
           throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
-        }) as any;
+        }) as unknown as typeof h.adminClient.getOrder;
 
         // 1. Buyer lands on thank-you page before webhook arrives -> 202
         const res1 = await h.app.handle({
@@ -4636,7 +4639,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         const h = createTestHarness();
         h.adminClient.getOrder = vi.fn(async () => {
           throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
-        }) as any;
+        }) as unknown as typeof h.adminClient.getOrder;
 
         // First seen at t=0
         const res1 = await h.app.handle({
@@ -4664,14 +4667,14 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           rawBody: "",
         });
         expect(res2.status).toBe(404);
-        expect((res2.body.error as any)?.code).toBe("order_not_found");
+        expect((res2.body.error as { code?: string } | undefined)?.code).toBe("order_not_found");
       });
 
       it("order-status returns 404 not_openrail_order when webhook recorded non-Openrail gateway", async () => {
         const h = createTestHarness();
         h.adminClient.getOrder = vi.fn(async () => {
           throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
-        }) as any;
+        }) as unknown as typeof h.adminClient.getOrder;
 
         await sendOrdersCreateWebhook(h, {
           id: 6581777777777,
@@ -4694,7 +4697,7 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
           rawBody: "",
         });
         expect(res.status).toBe(404);
-        expect((res.body.error as any)?.code).toBe("not_openrail_order");
+        expect((res.body.error as { code?: string } | undefined)?.code).toBe("not_openrail_order");
       });
 
       it("orders/create webhook validates currency and total amount", async () => {
@@ -4728,10 +4731,10 @@ describe("Update 12: money-path fixes (underpaid orders, cart changes, rate limi
         });
         h.adminClient.getOrder = vi.fn(async () => {
           throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
-        }) as any;
+        }) as unknown as typeof h.adminClient.getOrder;
         h.adminClient.markOrderAsPaid = vi.fn(async () => {
           throw new Error(PROTECTED_CUSTOMER_DATA_ERR);
-        }) as any;
+        }) as unknown as typeof h.adminClient.markOrderAsPaid;
 
         // 1. Webhook sets up binding
         await sendOrdersCreateWebhook(h, {
