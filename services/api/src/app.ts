@@ -86,6 +86,8 @@ export interface ContractPort {
   sponsorStatus?(accountId: string): Promise<{ pool: string; cap: number; used: number }>;
   /** What became of a transaction on chain (used to follow a cash-out). */
   txStatus?(txHash: string, senderId: string): Promise<"success" | "failed" | "pending">;
+  /** `has_public_key` on intents.near: a withdrawal signed by an unregistered key ends FAILED. */
+  intentsHasPublicKey?(accountId: string, publicKey: string): Promise<boolean>;
 }
 
 export interface IssuerPort {
@@ -1859,6 +1861,23 @@ export class ApiApp {
       }
     }
 
+    if (path === "/v1/balance/confidential/key" && method === "GET") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const publicKey = request.query.get("public_key") ?? "";
+      if (!/^(ed25519|secp256k1):[1-9A-HJ-NP-Za-km-z]+$/.test(publicKey))
+        throw new ApiError(400, "invalid_public_key");
+      if (this.deps.contract.intentsHasPublicKey === undefined)
+        throw new ApiError(503, "intents_key_check_unavailable");
+      return {
+        status: 200,
+        body: {
+          registered: await this.deps.contract.intentsHasPublicKey(context.accountId, publicKey),
+        },
+      };
+    }
     if (path === "/v1/balance/confidential/withdraw/quote" && method === "POST") {
       if (this.deps.config.confidentialIntents !== true)
         throw new ApiError(400, "confidential_intents_disabled");
@@ -1932,11 +1951,18 @@ export class ApiApp {
       const body = (request.body ?? {}) as { signed_data?: unknown };
       if (body.signed_data === null || typeof body.signed_data !== "object")
         throw new ApiError(400, "invalid_request", "signed_data required");
+      const signedData = body.signed_data as Record<string, unknown>;
+      const publicKey = signedData.public_key;
+      if (typeof publicKey !== "string" || publicKey === "")
+        throw new ApiError(400, "invalid_request", "signed_data.public_key required");
+      if (
+        this.deps.contract.intentsHasPublicKey !== undefined &&
+        !(await this.deps.contract.intentsHasPublicKey(submitter.accountId, publicKey))
+      )
+        throw new ApiError(403, "intents_key_not_registered");
       return {
         status: 200,
-        body: await this.deps.confidential.submitIntent(
-          body.signed_data as Record<string, unknown>,
-        ),
+        body: await this.deps.confidential.submitIntent(signedData),
       };
     }
     if (path === "/v1/balance/confidential/withdraw/status" && method === "GET") {

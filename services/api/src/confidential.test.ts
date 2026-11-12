@@ -72,7 +72,9 @@ async function harness() {
       logQuote: vi.fn(),
       acknowledgeEvm: vi.fn(),
     } as never,
-    contract: {} as never,
+    contract: {
+      intentsHasPublicKey: vi.fn(async () => true),
+    } as never,
     accessKey: { has: async () => true },
     cashout: { quote: vi.fn() },
     confidential: {
@@ -95,7 +97,7 @@ async function harness() {
     headers: { authorization: `Bearer ${session.sessionToken}` },
     body,
   });
-  return { app, request, apiKey: secret };
+  return { app, request, apiKey: secret, deps };
 }
 
 describe("confidential balance", () => {
@@ -139,11 +141,51 @@ describe("confidential withdraw", () => {
 
     const submitted = await app.handle(
       request("POST", "/v1/balance/confidential/withdraw/submit", {
-        signed_data: { standard: "nep413" },
+        signed_data: { standard: "nep413", public_key: "ed25519:11111111111111111111111111111111" },
       }),
     );
     expect(submitted.status).toBe(200);
     expect(submitted.body).toMatchObject({ intentHash: "intent-1" });
+  });
+
+  it("reads whether the session account registered the signing key on intents.near", async () => {
+    const { app, request, deps } = await harness();
+    const key = "ed25519:11111111111111111111111111111111";
+    const registered = vi.fn(async () => true);
+    (deps.contract as unknown as { intentsHasPublicKey: typeof registered }).intentsHasPublicKey =
+      registered;
+    const response = await app.handle({
+      ...request("GET", "/v1/balance/confidential/key"),
+      query: new URLSearchParams({ public_key: key }),
+    });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ registered: true });
+    expect(registered).toHaveBeenCalledWith("merchant.near", key);
+
+    const bad = await app.handle({
+      ...request("GET", "/v1/balance/confidential/key"),
+      query: new URLSearchParams({ public_key: "not-a-key" }),
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body).toMatchObject({ error: { code: "invalid_public_key" } });
+  });
+
+  it("refuses a signed intent whose key is not registered before calling the provider", async () => {
+    const { app, request, deps } = await harness();
+    const submitIntent = vi.fn(async () => ({ intentHash: "must-not-run" }));
+    (deps.confidential as unknown as { submitIntent: typeof submitIntent }).submitIntent =
+      submitIntent;
+    (
+      deps.contract as unknown as { intentsHasPublicKey: () => Promise<boolean> }
+    ).intentsHasPublicKey = async () => false;
+    const response = await app.handle(
+      request("POST", "/v1/balance/confidential/withdraw/submit", {
+        signed_data: { standard: "nep413", public_key: "ed25519:11111111111111111111111111111111" },
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: { code: "intents_key_not_registered" } });
+    expect(submitIntent).not.toHaveBeenCalled();
   });
 
   it("refuses an API key for money-moving preparation", async () => {

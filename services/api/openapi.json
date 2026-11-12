@@ -3454,6 +3454,16 @@
         "type": "object",
         "additionalProperties": true
       },
+      "ConfidentialKeyStatus": {
+        "type": "object",
+        "required": ["registered"],
+        "properties": {
+          "registered": {
+            "type": "boolean",
+            "description": "True when has_public_key(account, key) is true on intents.near."
+          }
+        }
+      },
       "ConfidentialWithdrawStatus": {
         "type": "object",
         "additionalProperties": true
@@ -6924,6 +6934,64 @@
           }
         },
         "description": "Path, tokenIds query and optional source field are not confirmed by a real call yet."
+      }
+    },
+    "/v1/balance/confidential/key": {
+      "get": {
+        "operationId": "getConfidentialKeyStatus",
+        "summary": "Whether the signing key is registered on intents.near",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "public_key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(ed25519|secp256k1):[1-9A-HJ-NP-Za-km-z]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The key registration state for the authenticated account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialKeyStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off or invalid public key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/balance/confidential/withdraw/quote": {

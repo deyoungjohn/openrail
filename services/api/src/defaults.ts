@@ -206,6 +206,16 @@ export function createContractPort(rootAccount: string): ContractPort {
     async txStatus(txHash, senderId) {
       return near.txStatus(txHash, senderId);
     },
+    async intentsHasPublicKey(accountId, publicKey) {
+      return (
+        (await near.view<boolean>({
+          contractId: "intents.near",
+          methodName: "has_public_key",
+          args: { account_id: accountId, public_key: publicKey },
+          feature: "api.intents_key",
+        })) === true
+      );
+    },
     async settleHeld(tokenId) {
       const held = await near.view<Record<string, unknown>[]>({
         contractId: rootAccount,
