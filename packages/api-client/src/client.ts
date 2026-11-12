@@ -291,6 +291,28 @@ export class OpenrailClient {
       }),
   };
 
+  /** The private balance: withdraw to a wallet. The money-moving steps need a signed-in session, not an API key. */
+  confidential = {
+    withdrawQuote: (
+      body: RequestBodyOf<"confidentialWithdrawQuote">,
+    ): Promise<SuccessBody<"confidentialWithdrawQuote">> =>
+      this.call("POST", "/v1/balance/confidential/withdraw/quote", { body }),
+    withdrawIntent: (depositAddress: string): Promise<SuccessBody<"confidentialWithdrawIntent">> =>
+      this.call("POST", "/v1/balance/confidential/withdraw/intent", {
+        body: { deposit_address: depositAddress },
+      }),
+    withdrawSubmit: (
+      signedData: Record<string, unknown>,
+    ): Promise<SuccessBody<"confidentialWithdrawSubmit">> =>
+      this.call("POST", "/v1/balance/confidential/withdraw/submit", {
+        body: { signed_data: signedData },
+      }),
+    withdrawStatus: (depositAddress: string): Promise<SuccessBody<"confidentialWithdrawStatus">> =>
+      this.call("GET", "/v1/balance/confidential/withdraw/status", {
+        query: { deposit_address: depositAddress },
+      }),
+  };
+
   health = (): Promise<SuccessBody<"getHealth">> => this.call("GET", "/v1/health");
 
   analytics = (): Promise<SuccessBody<"getAnalytics">> => this.call("GET", "/v1/analytics");
