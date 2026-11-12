@@ -751,10 +751,9 @@ function baseUnits(value: string): bigint {
 
 function usdText(value: string): string {
   const units = baseUnits(value);
-  const whole = units / 1_000_000n;
-  let frac = (units % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
-  if (frac.length < 2) frac = frac.padEnd(2, "0");
-  return `$${whole.toString()}.${frac}`;
+  // USDC has six decimals; round the exact amount once, half up, to cents.
+  const cents = (units + 5_000n) / 10_000n;
+  return `$${(cents / 100n).toString()}.${(cents % 100n).toString().padStart(2, "0")}`;
 }
 
 function totalText(rows: readonly { amount: string }[]): string {
@@ -816,7 +815,7 @@ function drawStatementTable(
   emptyText: string,
 ): void {
   const continuation =
-    kind === "payments" ? "Payments received (continued)" : "Cash-outs (continued)";
+    kind === "payments" ? "Settled Payments (continued)" : "Cash-outs (continued)";
   ensureStatementSpace(builder, 80, continuation);
   drawStatementTableHeader(builder, kind);
   if (rows.length === 0) {
@@ -916,17 +915,10 @@ function drawWordmark(builder: StatementBuilder, x: number, y: number, scale: nu
   builder.content += "f\nQ\n";
 }
 
-function drawWordmarkIcon(builder: StatementBuilder, x: number, y: number, scale: number): void {
-  builder.content += `q\n${ACCENT} rg\nn\n`;
-  drawWordmarkPath(builder, WORDMARK_PATHS[0] ?? "", 0, 0, x, y, scale);
-  builder.content += "f\nQ\n";
-}
-
 /** Deterministic financial statement, one page per table overflow. */
 export function renderStatementPdf(document: StatementDocument): Uint8Array {
   const builder: StatementBuilder = { pages: [], content: "", y: SPAGE_HEIGHT - SMARGIN, page: 0 };
   sBeginPage(builder, null);
-  drawWordmarkIcon(builder, SMARGIN + (SWIDTH - 18) / 2, SPAGE_HEIGHT - 82, 0.055);
   const business = fitText(document.businessName, SWIDTH - 40, 18, "/F2");
   text(
     builder,
@@ -937,36 +929,33 @@ export function renderStatementPdf(document: StatementDocument): Uint8Array {
     INK,
     business,
   );
-  const titleY = SPAGE_HEIGHT - 152;
+  const titleY = SPAGE_HEIGHT - 142;
+  const first = "Settled";
+  const second = "Payments";
+  const gap = 10;
+  const titleWidth = measureTextWidth("/F2", first, 34) + gap + measureTextWidth("/F2", second, 34);
+  const titleX = SMARGIN + (SWIDTH - titleWidth) / 2;
+  text(builder, titleX, titleY, 34, "/F2", INK, first);
   text(
     builder,
-    SMARGIN + (SWIDTH - measureTextWidth("/F2", "Payments", 34)) / 2,
+    titleX + measureTextWidth("/F2", first, 34) + gap,
     titleY,
     34,
     "/F2",
-    INK,
-    "Payments",
-  );
-  text(
-    builder,
-    SMARGIN + (SWIDTH - measureTextWidth("/F2", "received", 34)) / 2,
-    titleY - 38,
-    34,
-    "/F2",
     ACCENT,
-    "received",
+    second,
   );
   const period = `Statement, ${statementPeriod(document.from, document.to)}`;
   text(
     builder,
     SMARGIN + (SWIDTH - measureTextWidth("/F1", period, 10)) / 2,
-    titleY - 62,
+    titleY - 38,
     10,
     "/F1",
     GRAY,
     period,
   );
-  builder.y = titleY - 100;
+  builder.y = titleY - 76;
 
   drawStatementTable(
     builder,
@@ -991,7 +980,7 @@ export function renderStatementPdf(document: StatementDocument): Uint8Array {
   text(builder, SMARGIN, builder.y, 12, "/F2", INK, "Left in balance:");
   text(builder, SRIGHT, builder.y, 12, "/F2", ACCENT, usdText(leftUnits.toString()), "right");
   builder.y -= 46;
-  ensureStatementSpace(builder, 54, "Statement (continued)");
+  ensureStatementSpace(builder, 66, "Statement (continued)");
   text(builder, SMARGIN, builder.y, 7, "/F1", GRAY, `Fingerprint: ${document.fingerprint}`);
   builder.y -= 12;
   text(
@@ -1005,6 +994,8 @@ export function renderStatementPdf(document: StatementDocument): Uint8Array {
   );
   builder.y -= 12;
   text(builder, SMARGIN, builder.y, 7, "/F1", GRAY, "Amounts are USDC settled on NEAR.");
+  builder.y -= 12;
+  text(builder, SMARGIN, builder.y, 7, "/F1", GRAY, "Totals are rounded once from exact amounts.");
   finishPages(builder);
   const totalPages = builder.pages.length;
   builder.pages = builder.pages.map((page, index) => {

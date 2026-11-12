@@ -36,41 +36,44 @@ describe("statement PDF", () => {
   it("prints the business, rows, periods, totals and balance", () => {
     const text = textOf(renderStatementPdf(doc()));
     expect(text).toContain("Belmonte Apparels");
+    expect(text).toContain("Settled");
     expect(text).toContain("Payments");
-    expect(text).toContain("received");
     expect(text).toContain("Statement, Nov 1 to Nov 12, 2026");
     expect(text).toContain("Nov 1, 2026");
     expect(text).toContain("INV-2026-001");
     expect(text).toContain("Checkout wc_order_7");
-    expect(text).toContain("$12.500001");
+    expect(text).toContain("$12.50");
     expect(text).toContain("Total received");
-    expect(text).toContain("$14.500001");
+    expect(text).toContain("$14.50");
     expect(text).toContain("Total cashed out");
     expect(text).toContain("$2.00");
     expect(text).toContain("Left in balance:");
-    expect(text).toContain("$12.500001");
+    expect(text).toContain("$12.50");
     expect(text).toContain("Powered by");
     expect(text).toContain("Amounts are USDC settled on NEAR.");
+    expect(text).toContain("Totals are rounded once from exact amounts.");
     expect(text).toContain(`Fingerprint: 0x${"ab".repeat(32)}`);
   });
 
-  it("sums in integer base units, never rounding a sub-cent payment", () => {
+  it("rounds rows to two decimals but sums exact base units once", () => {
     const text = textOf(
       renderStatementPdf(
         doc({
+          // Each row rounds down to $0.00; the exact sum rounds up to $0.01.
           payments: [
-            { date: "2026-11-01T00:00:00Z", from: "A", amount: "1" },
-            { date: "2026-11-01T01:00:00Z", from: "B", amount: "999999" },
+            { date: "2026-11-01T00:00:00Z", from: "A", amount: "4999" },
+            { date: "2026-11-01T01:00:00Z", from: "B", amount: "4999" },
           ],
           cashouts: [],
         }),
       ),
     );
-    expect(text).toContain("$0.000001");
-    expect(text).toContain("$0.999999");
-    expect(text).toContain("$1.00");
+    expect(text.match(/\$0\.00/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(text).toContain("Total received");
+    expect(text).toContain("$0.01");
     expect(text).toContain("Left in balance:");
-    expect(text).toContain("$1.00");
+    expect(text).toContain("$0.01");
+    expect(text).not.toContain("$12.500001");
   });
 
   it("paginates 120 rows with a repeated header and a footer on every page", () => {
