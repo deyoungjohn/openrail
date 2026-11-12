@@ -860,6 +860,41 @@ function drawStatementFooter(builder: StatementBuilder, page: number, total: num
   line(builder, SMARGIN, SFOOTER_Y + 25, SRIGHT, SFOOTER_Y + 25, 0.35, "0.86 0.86 0.86");
 }
 
+function drawWordmarkPath(
+  builder: StatementBuilder,
+  path: string,
+  tx: number,
+  ty: number,
+  x: number,
+  y: number,
+  scale: number,
+): void {
+  const tokens = path.match(/[MLCZ]|-?\d*\.?\d+/g) ?? [];
+  let i = 0;
+  while (i < tokens.length) {
+    const command = tokens[i++] ?? "";
+    if (command === "M" || command === "L") {
+      const gx = Number(tokens[i++] ?? 0);
+      const gy = Number(tokens[i++] ?? 0);
+      const px = x + (tx + gx) * scale;
+      const py = y + (WORDMARK_VIEWBOX.height - (ty + gy)) * scale;
+      builder.content += `${px.toFixed(2)} ${py.toFixed(2)} ${command === "M" ? "m" : "l"}\n`;
+    } else if (command === "C") {
+      const points: string[] = [];
+      for (let n = 0; n < 6; n += 2) {
+        const gx = Number(tokens[i++] ?? 0);
+        const gy = Number(tokens[i++] ?? 0);
+        points.push(
+          `${(x + (tx + gx) * scale).toFixed(2)} ${(y + (WORDMARK_VIEWBOX.height - (ty + gy)) * scale).toFixed(2)}`,
+        );
+      }
+      builder.content += `${points.join(" ")} c\n`;
+    } else if (command === "Z") {
+      builder.content += "h\n";
+    }
+  }
+}
+
 function drawWordmark(builder: StatementBuilder, x: number, y: number, scale: number): void {
   const transforms: Array<[number, number]> = [
     [0, 0],
@@ -874,31 +909,14 @@ function drawWordmark(builder: StatementBuilder, x: number, y: number, scale: nu
   builder.content += `q\n${ACCENT} rg\nn\n`;
   for (const [index, path] of WORDMARK_PATHS.entries()) {
     const [tx, ty] = transforms[index] ?? [0, 0];
-    const tokens = path.match(/[MLCZ]|-?\d*\.?\d+/g) ?? [];
-    let i = 0;
-    while (i < tokens.length) {
-      const command = tokens[i++] ?? "";
-      if (command === "M" || command === "L") {
-        const gx = Number(tokens[i++] ?? 0);
-        const gy = Number(tokens[i++] ?? 0);
-        const px = x + (tx + gx) * scale;
-        const py = y + (WORDMARK_VIEWBOX.height - (ty + gy)) * scale;
-        builder.content += `${px.toFixed(2)} ${py.toFixed(2)} ${command === "M" ? "m" : "l"}\n`;
-      } else if (command === "C") {
-        const points: string[] = [];
-        for (let n = 0; n < 6; n += 2) {
-          const gx = Number(tokens[i++] ?? 0);
-          const gy = Number(tokens[i++] ?? 0);
-          points.push(
-            `${(x + (tx + gx) * scale).toFixed(2)} ${(y + (WORDMARK_VIEWBOX.height - (ty + gy)) * scale).toFixed(2)}`,
-          );
-        }
-        builder.content += `${points.join(" ")} c\n`;
-      } else if (command === "Z") {
-        builder.content += "h\n";
-      }
-    }
+    drawWordmarkPath(builder, path, tx, ty, x, y, scale);
   }
+  builder.content += "f\nQ\n";
+}
+
+function drawWordmarkIcon(builder: StatementBuilder, x: number, y: number, scale: number): void {
+  builder.content += `q\n${ACCENT} rg\nn\n`;
+  drawWordmarkPath(builder, WORDMARK_PATHS[0] ?? "", 0, 0, x, y, scale);
   builder.content += "f\nQ\n";
 }
 
@@ -906,6 +924,7 @@ function drawWordmark(builder: StatementBuilder, x: number, y: number, scale: nu
 export function renderStatementPdf(document: StatementDocument): Uint8Array {
   const builder: StatementBuilder = { pages: [], content: "", y: SPAGE_HEIGHT - SMARGIN, page: 0 };
   sBeginPage(builder, null);
+  drawWordmarkIcon(builder, SMARGIN + (SWIDTH - 18) / 2, SPAGE_HEIGHT - 82, 0.055);
   const business = fitText(document.businessName, SWIDTH - 40, 18, "/F2");
   text(
     builder,
