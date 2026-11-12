@@ -58,12 +58,28 @@ describe("boost", () => {
       logger: silentLogger(),
       now: () => now,
     });
+    expect(indexer.health()).toMatchObject({ from: null, caught_up: null });
     expect(indexer.health().boost_active).toBe(false);
     const until = indexer.poke();
     expect(until).toBe(now + 5 * 60 * 1000);
     expect(indexer.health().boost_active).toBe(true);
     now += 5 * 60 * 1000 + 1;
     expect(indexer.health().boost_active).toBe(false);
+  });
+});
+
+describe("indexer from", () => {
+  it("reports INDEXER_FROM and caught_up", () => {
+    const indexer = new Indexer({
+      source: new FakeSource([]),
+      store: memoryStore(),
+      logger: silentLogger(),
+      from: "2026-11-13T00:00:00.000Z",
+    });
+    expect(indexer.health()).toMatchObject({
+      from: "2026-11-13T00:00:00.000Z",
+      caught_up: null,
+    });
   });
 });
 

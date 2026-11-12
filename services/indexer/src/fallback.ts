@@ -17,6 +17,10 @@ export class FallbackEventSource implements EventSource {
     }
   }
 
+  caughtUp(): boolean {
+    return this.primary.caughtUp?.() ?? true;
+  }
+
   callCounts(): Record<string, number> {
     const merged: Record<string, number> = {};
     for (const source of [this.primary, this.fallback]) {

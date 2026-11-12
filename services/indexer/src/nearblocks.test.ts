@@ -209,6 +209,36 @@ describe("NearBlocks account-scoped source", () => {
     expect(rpcCalls).toBe(0);
   });
 
+  it("INDEXER_FROM skips older rows and stops after the newest page", async () => {
+    let listCalls = 0;
+    let rpcCalls = 0;
+    const source = new NearBlocksEventSource(
+      "openrail.near",
+      "https://nb.test",
+      "",
+      ["https://rpc.test"],
+      async (url) => {
+        if (url.includes("/v3/accounts/")) {
+          listCalls += 1;
+          return nbResponse([TXN], FIXTURE.meta.next_page);
+        }
+        rpcCalls += 1;
+        return rpcResponse([BOOKED]);
+      },
+      100,
+      5,
+      undefined,
+      1794478400,
+    );
+    const page = await source.fetch(null);
+    expect(listCalls).toBe(1);
+    expect(rpcCalls).toBe(0);
+    expect(page.blocks).toEqual([]);
+    expect(page.done).toBe(true);
+    expect(source.caughtUp()).toBe(true);
+    expect(page.cursor).toBe(`v3:${HEIGHT}:${HEIGHT}:`);
+  });
+
   it("surfaces a provider error to the indexer retry loop", async () => {
     const source = new NearBlocksEventSource(
       "openrail.near",

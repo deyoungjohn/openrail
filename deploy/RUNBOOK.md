@@ -208,7 +208,7 @@ shred -u ~/openrail.env
 sudo ls -l /etc/openrail
 ```
 
-Check: five files (`api.env issuer.env watcher.env indexer.env web.env`), each `-rw-------` owned by `root`. Lines like `not set: EVM_RPC_URL` are fine; they are optional.
+Check: five files (`api.env issuer.env watcher.env indexer.env web.env`), each `-rw-------` owned by `root`. Lines like `not set: EVM_RPC_URL` are fine; they are optional. `indexer.env` may set `INDEXER_FROM` (ISO time or `now`; nothing older is requested, existing rows stay).
 
 ### Step 13. [EC2] Install the services and the web server config, then start
 

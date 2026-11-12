@@ -97,6 +97,7 @@ export class NearBlocksEventSource implements EventSource {
   private readonly limit: number;
   private readonly maxPages: number;
   private readonly counts = new Map<string, number>();
+  private reached = false;
 
   constructor(
     private readonly rootAccount: string,
@@ -107,6 +108,7 @@ export class NearBlocksEventSource implements EventSource {
     limit = 100,
     maxPages = 5,
     private readonly budget?: BudgetGovernor,
+    private readonly fromSeconds = 0,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKeys = (typeof apiKey === "string" ? [apiKey] : [...apiKey]).filter((k) => k !== "");
@@ -118,6 +120,10 @@ export class NearBlocksEventSource implements EventSource {
 
   callCounts(): Record<string, number> {
     return Object.fromEntries(this.counts);
+  }
+
+  caughtUp(): boolean {
+    return this.reached;
   }
 
   private increment(feature: string): void {
@@ -229,6 +235,13 @@ export class NearBlocksEventSource implements EventSource {
       for (const tx of txns) {
         const height = rowHeight(tx);
         lastHeight = Math.max(lastHeight, height);
+        const txTimestamp = timestampSeconds(
+          tx.receipt_block?.block_timestamp ?? tx.block?.block_timestamp ?? tx.block_timestamp,
+        );
+        if (this.fromSeconds > 0 && txTimestamp > 0 && txTimestamp < this.fromSeconds) {
+          reachedStored = true;
+          continue;
+        }
         if (height <= storedHeight) {
           reachedStored = true;
           continue;
@@ -254,6 +267,7 @@ export class NearBlocksEventSource implements EventSource {
       if (pageIndex === this.maxPages - 1) break;
     }
 
+    this.reached = done;
     const ordered = [...blocks.values()].sort((a, b) => a.height - b.height);
     const nextCursor = encodeCursor(
       latestBlock,
