@@ -8,16 +8,16 @@ word unchanged, plus:
 
 The web poller must use this list, not guess from a missing word.
 
-| Provider word | Phase | Terminal | What the UI does |
-| --- | --- | --- | --- |
-| `SUCCESS` | `success` | **yes** | end: show the destination transfer |
-| `REFUNDED` | `refunded` | **yes** | end: the money returned to the private balance |
-| `FAILED` | `failed` | **yes** | end: show the failure and keep the balance |
-| `PENDING_DEPOSIT` | `pending` | no | keep polling |
-| `INCOMPLETE_DEPOSIT` | `pending` | no | keep polling: more of the deposit can still arrive |
-| `KNOWN_DEPOSIT_TX` | `processing` | no | keep polling: the deposit transaction is known |
-| `PROCESSING` | `processing` | no | keep polling |
-| any unknown word | `pending` | no | keep polling; log it, do not end |
+| Provider word        | Phase        | Terminal | What the UI does                                   |
+| -------------------- | ------------ | -------- | -------------------------------------------------- |
+| `SUCCESS`            | `success`    | **yes**  | end: show the destination transfer                 |
+| `REFUNDED`           | `refunded`   | **yes**  | end: the money returned to the private balance     |
+| `FAILED`             | `failed`     | **yes**  | end: show the failure and keep the balance         |
+| `PENDING_DEPOSIT`    | `pending`    | no       | keep polling                                       |
+| `INCOMPLETE_DEPOSIT` | `pending`    | no       | keep polling: more of the deposit can still arrive |
+| `KNOWN_DEPOSIT_TX`   | `processing` | no       | keep polling: the deposit transaction is known     |
+| `PROCESSING`         | `processing` | no       | keep polling                                       |
+| any unknown word     | `pending`    | no       | keep polling; log it, do not end                   |
 
 `INCOMPLETE_DEPOSIT` is **not** an end state. The old page ended "It did not complete" on it; the
 correct behaviour is to keep following until `SUCCESS`, `REFUNDED` or `FAILED`.
