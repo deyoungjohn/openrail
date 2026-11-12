@@ -9,7 +9,7 @@ import { Skeleton } from "./state";
 import type { ViewState } from "./card";
 
 // Every stat card has the same height, filled or empty (the grid stretches them to the tallest of the row).
-const shell = "surface-card h-full min-h-[232px] min-w-0 p-5 sm:p-6";
+const shell = "surface-card flex h-full min-h-[232px] min-w-0 flex-col p-5 sm:p-6";
 
 function Delta({ pct }: { pct: number | null }) {
   if (pct === null) return <span className="text-[12px] text-muted">–</span>;
@@ -63,7 +63,7 @@ export function MonthlyRevenueCard({
           <p className="tabular mt-3 text-[28px] leading-8 font-semibold tracking-tight">
             {formatUsd(cents)}
           </p>
-          <p className="mt-1 flex items-center gap-1 text-[12px] text-muted">
+          <p className="mb-4 mt-1 flex items-center gap-1 text-[12px] text-muted">
             {deltaPct === null ? (
               c.noComparison
             ) : (
@@ -79,7 +79,7 @@ export function MonthlyRevenueCard({
           <svg
             viewBox="0 0 100 28"
             preserveAspectRatio="none"
-            className="mt-4 h-10 w-full overflow-visible"
+            className="mt-auto h-16 w-full overflow-visible"
             role="img"
             aria-label={c.trend}
           >
@@ -120,14 +120,14 @@ export function WeeklyActivityCard({
   return (
     <section className={shell} aria-label={c.weekly}>
       <h3 className="text-[16px] leading-6 font-semibold">{c.weekly}</h3>
-      <p className="caption">{c.weeklySub}</p>
+      <p className="caption mb-4">{c.weeklySub}</p>
       {state === "loading" ? (
         <div className="mt-4">
           <Loading />
         </div>
       ) : (
         <div
-          className="mt-4 flex h-24 items-stretch gap-1.5"
+          className="mt-auto flex h-32 items-stretch gap-1.5"
           role="img"
           aria-label={days.map((d) => `${d.label}: ${d.count}`).join(", ")}
         >
