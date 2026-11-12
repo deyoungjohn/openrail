@@ -152,7 +152,8 @@ describe("generate", () => {
     for (const text of Object.values(files)) expect(text).not.toContain("gamma");
   });
 
-  it("fails when the Cargo features differ from the enabled ids", () => {
+  it("fails when the Cargo features differ from the enabled contract modules", () => {
+    mkdirSync(join(root, "contracts/openrail/src/modules/alpha"), { recursive: true });
     fixture([{ id: "alpha", enabled: true }], ["alpha", "extra"]);
     expect(generate(root).errors.join("\n")).toMatch(/extra/);
     fixture([{ id: "alpha", enabled: true }], []);
@@ -194,6 +195,7 @@ describe("run", () => {
   });
 
   it("does not write when the features check fails", () => {
+    mkdirSync(join(root, "contracts/openrail/src/modules/alpha"), { recursive: true });
     fixture([{ id: "alpha", enabled: true }], []);
     expect(run(root, { check: false }).ok).toBe(false);
     expect(existsSync(join(root, "services/api/src/enabled.ts"))).toBe(false);

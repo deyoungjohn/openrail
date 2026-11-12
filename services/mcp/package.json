@@ -1,0 +1,22 @@
+{
+  "name": "@openrail/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "openrail-mcp": "bin/openrail-mcp.mjs"
+  },
+  "scripts": {
+    "start": "node bin/openrail-mcp.mjs",
+    "test": "vitest run --config ../../vitest.config.ts --root ."
+  },
+  "dependencies": {
+    "@openrail/api-client": "workspace:*",
+    "@openrail/shared": "workspace:*",
+    "tsx": "4.23.15"
+  },
+  "devDependencies": {
+    "@openrail/api": "workspace:*"
+  }
+}

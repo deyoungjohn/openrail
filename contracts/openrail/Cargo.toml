@@ -17,7 +17,6 @@ near-sdk = { version = "=5.30.0", features = ["unstable"] }
 standing = []
 checkout = []
 proof = []
-agent = []
 shopify = []
 settle = []
 woocommerce = []
@@ -39,5 +38,5 @@ container_build_command = [
     "non-reproducible-wasm",
     "--locked",
     "--features",
-    "standing,checkout,proof,agent,shopify,settle,woocommerce",
+    "standing,checkout,proof,shopify,settle,woocommerce",
 ]

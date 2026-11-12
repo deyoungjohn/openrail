@@ -269,6 +269,22 @@ importers:
         specifier: 7.4.0
         version: 7.4.0
 
+  services/mcp:
+    dependencies:
+      '@openrail/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
+      '@openrail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+    devDependencies:
+      '@openrail/api':
+        specifier: workspace:*
+        version: link:../api
+
   services/payout:
     dependencies:
       '@openrail/shared':
