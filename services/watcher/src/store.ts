@@ -1,5 +1,5 @@
 /** Small SQLite state so a watcher restart does not re-read every claim. */
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -44,6 +44,15 @@ export class WatcherStore {
     try {
       if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
       this.db = open(path);
+      // The indexer reads this file as another user of the same group: group-readable, whatever the umask was when
+      // the file was first made (it was 0600 on the server).
+      if (path !== ":memory:") {
+        try {
+          chmodSync(path, 0o660);
+        } catch {
+          // not ours to change: the unit's UMask applies
+        }
+      }
     } catch {
       // A corrupt file, or a folder the service may not write to, starts empty rather than stopping the watcher.
       this.db = open(":memory:");

@@ -208,7 +208,7 @@ shred -u ~/openrail.env
 sudo ls -l /etc/openrail
 ```
 
-Check: five files (`api.env issuer.env watcher.env indexer.env web.env`), each `-rw-------` owned by `root`. Lines like `not set: EVM_RPC_URL` are fine; they are optional. `watcher.env` has `WATCHER_DB_PATH`; `indexer.env` has `INDEXER_EVENT_SOURCES` (watcher and payout SQLite files, read-only) and optionally `INDEXER_FROM` (ISO time or `now`; nothing older is requested, existing rows stay). Both services run as the same user and need `/var/lib/openrail` in `ReadWritePaths`.
+Check: five files (`api.env issuer.env watcher.env indexer.env web.env`), each `-rw-------` owned by `root`. Lines like `not set: EVM_RPC_URL` are fine; they are optional. `watcher.env` has `WATCHER_DB_PATH`; `indexer.env` has `INDEXER_EVENT_SOURCES` (watcher and payout SQLite files, read-only) and optionally `INDEXER_FROM` (ISO time or `now`; nothing older is requested, existing rows stay). The watcher (and the payout worker) create their event files group-writable (`UMask=0007`, group `openrail`) and the indexer is in that group: a read-only connection to a WAL database still needs to reach the `-wal` and `-shm` files. All three need `/var/lib/openrail` in `ReadWritePaths`.
 
 ### Step 13. [EC2] Install the services and the web server config, then start
 
