@@ -11,7 +11,7 @@ User=openrail-watcher
 Group=openrail
 WorkingDirectory=/opt/openrail/current/services/payout
 EnvironmentFile=/etc/openrail/payout.env
-Environment=NODE_OPTIONS=--max-old-space-size=200
+Environment=NODE_OPTIONS="--max-old-space-size=200 --dns-result-order=ipv4first"
 Environment=NODE_ENV=production
 ExecStart=/opt/openrail/current/node_modules/.bin/tsx src/server.ts
 Restart=always

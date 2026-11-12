@@ -11,7 +11,7 @@ User=openrail-api
 Group=openrail
 WorkingDirectory=/opt/openrail/current/services/shopify
 EnvironmentFile=/etc/openrail/shopify.env
-Environment=NODE_OPTIONS=--max-old-space-size=200
+Environment=NODE_OPTIONS="--max-old-space-size=200 --dns-result-order=ipv4first"
 Environment=NODE_ENV=production
 Environment=PORT=8083
 Environment=SHOPIFY_PORT=8083

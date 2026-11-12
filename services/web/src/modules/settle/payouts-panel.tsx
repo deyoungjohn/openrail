@@ -11,7 +11,6 @@ import { ErrorNote } from "@/components/ui/error-note";
 import { Select } from "@/components/ui/input";
 import { useNear } from "@/wallet/near";
 import { MoneyTrailCard, useTrail } from "./money-trail-card";
-import { trailTotals } from "./money-trail";
 import { WithdrawCard } from "./withdraw-card";
 import { readSettlement } from "./read-settlement";
 import {
@@ -142,11 +141,19 @@ function PrivateBalanceCard({ accountId }: { accountId: string }) {
   );
 }
 
-/** The private balance: how money moves (private balance on or off, schedule) and how to take it out, then where it is. */
+/** Stats: where the money is. Loaded only when the tab is opened (it reads the settle events). */
+function StatsPanel() {
+  const trail = useTrail();
+  return (
+    <div className="space-y-6 py-1">
+      <MoneyTrailCard trail={trail} />
+    </div>
+  );
+}
+
+/** The private balance on the Pay out page: take money out of it, and see where it is. (Its settings are in Settings.) */
 export function PayoutsPanel() {
   const auth = useAuth();
-  const trail = useTrail();
-  const inPrivate = trail[0].state === "ready" ? trailTotals(trail[0].data).private : 0n;
   return (
     <div className="space-y-6 py-1">
       <Tabs
@@ -157,23 +164,11 @@ export function PayoutsPanel() {
             label: "Withdraw",
             panel: (
               <div className="space-y-6 py-1">
-                {auth.state.status === "signedIn" ? (
-                  <PrivateBalanceCard accountId={auth.state.accountId} />
-                ) : null}
-                <ScheduleCard />
-                {auth.state.status === "signedIn" ? <WithdrawCard approxUnits={inPrivate} /> : null}
+                {auth.state.status === "signedIn" ? <WithdrawCard approxUnits={0n} /> : null}
               </div>
             ),
           },
-          {
-            id: "stats",
-            label: "Stats",
-            panel: (
-              <div className="space-y-6 py-1">
-                <MoneyTrailCard trail={trail} />
-              </div>
-            ),
-          },
+          { id: "stats", label: "Stats", panel: <StatsPanel /> },
         ]}
       />
     </div>

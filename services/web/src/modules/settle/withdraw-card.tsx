@@ -121,7 +121,7 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
         setStatus(String(s.status ?? ""));
         if (s.status === "SUCCESS") return setStep("done");
         if (s.status === "REFUNDED" || s.status === "FAILED") {
-          setProblem("It did not complete. The money stays in your private balance.");
+          setProblem(`It did not complete (${s.status}). The money stays in your private balance.`);
           return setStep("failed");
         }
       }
