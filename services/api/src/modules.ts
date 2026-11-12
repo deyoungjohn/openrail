@@ -18,6 +18,8 @@ export interface ModuleStore {
   delete(ns: string, id: string): void;
   /** Documents of a namespace, optionally of one owner, ordered by id. */
   list<T>(ns: string, owner?: string): T[];
+  /** Every module document owned by one account, for features that span enabled modules. */
+  listOwned<T>(owner: string): Array<{ namespace: string; body: T }>;
 }
 
 export interface ApiModuleContext {
@@ -106,6 +108,11 @@ export function createMemoryModuleStore(): ModuleStore {
         .filter((doc) => doc.ns === ns && (owner === undefined || doc.owner === owner))
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         .map((doc) => structuredClone(doc.body) as T),
+    listOwned: <T>(owner: string) =>
+      [...docs.values()]
+        .filter((doc) => doc.owner === owner)
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map((doc) => ({ namespace: doc.ns, body: structuredClone(doc.body) as T })),
   };
 }
 
@@ -141,6 +148,15 @@ export function createSqliteModuleStore(db: DatabaseSync): ModuleStore {
               .prepare("SELECT body FROM module_docs WHERE ns = ? AND owner = ? ORDER BY id")
               .all(ns, owner);
       return rows.map((row) => parse<T>(row.body));
+    },
+    listOwned<T>(owner: string) {
+      const rows = db
+        .prepare("SELECT ns, body FROM module_docs WHERE owner = ? ORDER BY ns, id")
+        .all(owner);
+      return rows.map((row) => ({
+        namespace: String(row.ns),
+        body: parse<T>(row.body),
+      }));
     },
   };
 }

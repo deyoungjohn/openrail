@@ -1034,6 +1034,14 @@ export class ApiApp {
     // events; the API does not read a chain for a statement.
     if (this.deps.indexer !== undefined) {
       const own = new Set(invoices.map((invoice) => invoice.token_id));
+      const labels = new Map<string, string>();
+      for (const doc of this.docs.listOwned<Record<string, unknown>>(accountId)) {
+        const token = typeof doc.body.token_id === "string" ? doc.body.token_id : "";
+        const orderRef = typeof doc.body.order_ref === "string" ? doc.body.order_ref : "";
+        if (token === "" || orderRef === "") continue;
+        own.add(token);
+        labels.set(token, orderRef.startsWith("pl_") ? "Pay link" : `Checkout ${orderRef}`);
+      }
       let after: string | undefined;
       for (let page = 0; page < 10; page += 1) {
         const batch = await this.deps.indexer.listEvents({
@@ -1054,14 +1062,9 @@ export class ApiApp {
           const surplus = /^\d+$/.test(String(data.surplus ?? ""))
             ? BigInt(String(data.surplus))
             : 0n;
-          const orderRef = typeof data.order_ref === "string" ? data.order_ref : "";
           payments.push({
             date: new Date(at).toISOString(),
-            from: orderRef.startsWith("pl_")
-              ? "Pay link"
-              : orderRef !== ""
-                ? `Checkout ${orderRef}`
-                : `Claim ${token}`,
+            from: labels.get(token) ?? `Claim ${token}`,
             amount: (payment + surplus).toString(),
           });
         }
