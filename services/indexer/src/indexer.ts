@@ -229,12 +229,7 @@ export class Indexer {
   }
 
   gaps(): Gap[] {
-    return this.watcherViews.gaps(
-      this.store,
-      this.now(),
-      this.fromSeconds,
-      this.gapSince,
-    );
+    return this.watcherViews.gaps(this.store, this.now(), this.fromSeconds, this.gapSince);
   }
 
   health(): {
@@ -272,11 +267,9 @@ export class Indexer {
       caught_up: this.source.caughtUp?.() ?? null,
       source: this.sourceLabel,
       gaps,
-      oldest_gap_age:
-        gaps.length === 0 ? null : Math.max(...gaps.map((gap) => gap.age_seconds)),
+      oldest_gap_age: gaps.length === 0 ? null : Math.max(...gaps.map((gap) => gap.age_seconds)),
       degraded:
-        (this.budget?.health().blocked ?? false) ||
-        gaps.some((gap) => gap.age_seconds > 30 * 60),
+        (this.budget?.health().blocked ?? false) || gaps.some((gap) => gap.age_seconds > 30 * 60),
       ...(this.budget === undefined ? {} : { nearblocks_budget: this.budget.health() }),
     };
   }

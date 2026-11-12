@@ -130,7 +130,13 @@ export interface AccessKeyPort {
 
 export interface IndexerPort {
   /** Last successful poll and boost state, for the dashboard's freshness caption/poke decision. */
-  status?(): Promise<{ last_polled_at: string | null; boost_active: boolean }>;
+  status?(): Promise<{
+    last_polled_at: string | null;
+    boost_active: boolean;
+    source?: "watcher" | "scan";
+    gaps?: unknown[];
+    oldest_gap_age?: number | null;
+  }>;
   /** The transaction that issued a claim, from its issue event (for invoices issued before it was stored). */
   issueTx?(tokenId: string): Promise<string | undefined>;
   listReceipts(accountId: string, tokenId: string): Promise<Record<string, unknown>[]>;
@@ -799,14 +805,29 @@ export class ApiApp {
   private async dashboardMeta(): Promise<{
     last_polled_at: string | null;
     boost_active: boolean;
+    source: "watcher" | "scan";
+    gaps: unknown[];
+    oldest_gap_age: number | null;
   }> {
-    if (this.deps.indexer?.status === undefined)
-      return { last_polled_at: null, boost_active: false };
-    let status: { last_polled_at: string | null; boost_active: boolean };
+    const empty = {
+      last_polled_at: null,
+      boost_active: false,
+      source: "scan" as const,
+      gaps: [],
+      oldest_gap_age: null,
+    };
+    if (this.deps.indexer?.status === undefined) return empty;
+    let status: {
+      last_polled_at: string | null;
+      boost_active: boolean;
+      source?: "watcher" | "scan";
+      gaps?: unknown[];
+      oldest_gap_age?: number | null;
+    };
     try {
       status = await this.deps.indexer.status();
     } catch {
-      return { last_polled_at: null, boost_active: false };
+      return empty;
     }
     const now = this.clock().getTime();
     const last = status.last_polled_at === null ? null : Date.parse(status.last_polled_at);
@@ -816,7 +837,12 @@ export class ApiApp {
       await this.deps.pokeIndexer?.().catch(() => undefined);
       status = { ...status, boost_active: true };
     }
-    return status;
+    return {
+      ...status,
+      source: status.source ?? "scan",
+      gaps: status.gaps ?? [],
+      oldest_gap_age: status.oldest_gap_age ?? null,
+    };
   }
 
   private async liveInvoices(invoices: InvoiceRecord[]): Promise<unknown[]> {

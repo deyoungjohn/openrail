@@ -51,6 +51,33 @@ describe("indexer event sources", () => {
     }
   });
 
+  it("50 booked payments need no scan or RPC call", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "events-"));
+    try {
+      const watcher = join(dir, "watcher.sqlite");
+      const db = new DatabaseSync(watcher);
+      ensureEventTable(db);
+      for (let n = 0; n < 50; n += 1) {
+        appendOutcomeEvents(
+          db,
+          {
+            transaction: { hash: `Tx${n}` },
+            receipts_outcome: [{ id: "R1", outcome: { logs: [BOOKED] } }],
+          },
+          { tokenId: "c-1", blockHeight: 10, timestamp: 100 },
+        );
+      }
+      db.close();
+      const source = new IndexerEventSource([watcher]);
+      const page = await source.fetch(null);
+      expect(page.blocks).toHaveLength(1);
+      expect(page.blocks[0]?.receipts).toHaveLength(50);
+      expect(source.callCounts()).toEqual({ "event_sources.reads": 50 });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("a missing file is an empty source, not a crash", async () => {
     const source = new IndexerEventSource(["/definitely/not/here.sqlite"]);
     const page = await source.fetch(null);
