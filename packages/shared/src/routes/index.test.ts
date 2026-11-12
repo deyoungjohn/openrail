@@ -19,9 +19,9 @@ import {
 } from "./index.js";
 
 describe("route registry data", () => {
-  it("loads config/routes.json with thirteen routes and four settlement assets", () => {
+  it("loads config/routes.json with the expected routes and four settlement assets", () => {
     const file = loadRoutes();
-    expect(file.routes).toHaveLength(13);
+    expect(file.routes).toHaveLength(18);
     expect(settlementAssets()).toHaveLength(4);
     expect(new Set(settlementAssets()).size).toBe(4);
   });

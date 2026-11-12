@@ -46,6 +46,7 @@ class FakeNear implements NearClientLike {
   readonly calls: Parameters<NearClientLike["sendFunctionCall"]>[0][] = [];
   readonly views: Parameters<NearClientLike["view"]>[0][] = [];
   readonly batches: Parameters<NearClientLike["batchBalanceOf"]>[0][] = [];
+  failSends = false;
 
   constructor(private readonly state: FakeState) {}
 
@@ -84,6 +85,7 @@ class FakeNear implements NearClientLike {
     request: Parameters<NearClientLike["sendFunctionCall"]>[0],
   ): Promise<unknown> {
     this.calls.push(request);
+    if (this.failSends) throw new Error("RPC_TIMEOUT");
     return { ok: true };
   }
 }
@@ -343,6 +345,36 @@ describe("late payments", () => {
 });
 
 describe("watcher decisions", () => {
+  it("retries a failed reconcile with backoff and reports it", async () => {
+    const fixture = setup({
+      config: CONFIG_VIEW,
+      claims: [makeClaim("c-1")],
+      quotes: openQuote(),
+      balances: { "c-1.openrail.near": ["100", "0", "0", "0"] },
+    });
+    fixture.near.failSends = true;
+
+    const first = await fixture.watcher.tick();
+    expect(first.reconciled).toEqual([]);
+    expect(fixture.watcher.snapshot()).toMatchObject({
+      reconcile_failures: 1,
+      retrying_claims: 1,
+    });
+
+    const calls = fixture.near.calls.length;
+    await fixture.watcher.tick();
+    expect(fixture.near.calls.length).toBe(calls);
+
+    fixture.near.failSends = false;
+    fixture.advance(30_000);
+    const retry = await fixture.watcher.tick();
+    expect(retry.reconciled).toEqual(["c-1"]);
+    expect(fixture.watcher.snapshot()).toMatchObject({
+      reconcile_failures: 0,
+      retrying_claims: 0,
+    });
+  });
+
   it("a rise triggers exactly one reconcile with 250 Tgas", async () => {
     const fixture = setup({
       config: CONFIG_VIEW,

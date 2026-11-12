@@ -79,7 +79,7 @@ describe("NearBlocks account-scoped source", () => {
     const page = await source.fetch(null);
 
     expect(url).toContain("/v3/accounts/openrail.near/txns?");
-    expect(url).toContain("limit=100");
+    expect(url).toContain("limit=25");
     expect(authorization).toBe("Bearer secret-key");
     expect(statusCalls).toBe(1);
     expect(page.blocks).toHaveLength(1);

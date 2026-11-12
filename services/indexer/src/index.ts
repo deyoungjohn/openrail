@@ -9,6 +9,7 @@
  *   NEARBLOCKS_DAILY_BUDGET (380), 7 s minimum spacing,
  *   INDEXER_POLL_INTERVAL_MS (1800000), INDEXER_MAX_PAGES (2), INDEXER_RETENTION_DAYS (30),
  *   INDEXER_PORT (8788), INDEXER_START_HEIGHT (0, RPC scanner only)
+ *   INDEXER_EVENT_SOURCES (optional comma list of single-writer SQLite files; read-only)
  *   INDEXER_FROM (ISO time or "now"; nothing older is requested, rows already stored stay)
  *   INDEXER_WEBHOOK_URL / INDEXER_WEBHOOK_SECRET (optional; indexed events only)
  *   ONECLICK_API_URL / ONECLICK_JWT (optional; receipt origin/NEAR hashes)
@@ -27,6 +28,7 @@ import { RpcTxStatusReader } from "./tx-status.js";
 import { createIndexerApp } from "./http.js";
 import { Indexer } from "./indexer.js";
 import { EvmOriginVerifier, OneClickReceiptEnricher, StatusAmountVerifier } from "./receipt.js";
+import { IndexerEventSource } from "./event-sources.js";
 import { FallbackEventSource } from "./fallback.js";
 import { NearBlocksEventSource } from "./nearblocks.js";
 import { repairTimes } from "./time-repair.js";
@@ -88,13 +90,21 @@ async function main(): Promise<void> {
     nearBlocksKeys,
     rpcUrls,
     undefined,
-    100,
+    25,
     5,
     budget,
     from?.seconds ?? 0,
   );
+  const eventPaths = (getEnv("INDEXER_EVENT_SOURCES") ?? "")
+    .split(",")
+    .map((path) => path.trim())
+    .filter((path) => path !== "");
   const source =
-    sourceKind === "rpc" ? rpcSource : new FallbackEventSource(nearBlocksSource, rpcSource);
+    eventPaths.length > 0
+      ? new FallbackEventSource(new IndexerEventSource(eventPaths), nearBlocksSource)
+      : sourceKind === "rpc"
+        ? rpcSource
+        : new FallbackEventSource(nearBlocksSource, rpcSource);
   // Rows written by the old time bug (1970) get their real block time, now and every ten minutes until none is left.
   const repairRound = (): void => {
     void repairTimes({
@@ -145,6 +155,9 @@ async function main(): Promise<void> {
     logger,
     budget,
     ...(from === undefined ? {} : { from: from.label }),
+    fromSeconds: from?.seconds ?? 0,
+    ...(eventPaths[0] === undefined ? {} : { watcherDbPath: eventPaths[0] }),
+    sourceLabel: eventPaths.length > 0 ? "watcher" : "scan",
   });
   const app = createIndexerApp({
     store,

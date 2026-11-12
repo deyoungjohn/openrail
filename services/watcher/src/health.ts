@@ -15,6 +15,9 @@ export interface HealthSnapshot {
   rpc_calls?: Record<string, number>;
   /** Failed batched writes to the watcher store (never fatal). */
   store_write_failures?: number;
+  /** Failed claim processing attempts and claims waiting for the next backoff. */
+  reconcile_failures?: number;
+  retrying_claims?: number;
 }
 
 export interface HealthServer {

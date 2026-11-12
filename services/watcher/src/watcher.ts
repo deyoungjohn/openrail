@@ -124,6 +124,8 @@ export class Watcher {
   private readonly restored = new Set<string>();
   private readonly lastQuote = new Map<string, number | null>();
   private readonly writeRows = new Map<string, StoredClaim>();
+  private readonly retryAt = new Map<string, number>();
+  private readonly retryCount = new Map<string, number>();
   private storeWriteFailures = 0;
   private lastDiscoverAt = 0;
   private lastClaims: ClaimView[] = [];
@@ -177,6 +179,8 @@ export class Watcher {
       last_tick_at: this.lastTickAt === null ? null : new Date(this.lastTickAt).toISOString(),
       last_error: this.lastError,
       store_write_failures: this.store?.writeFailures() ?? this.storeWriteFailures,
+      reconcile_failures: [...this.retryCount.values()].reduce((sum, n) => sum + n, 0),
+      retrying_claims: this.retryAt.size,
       rpc_calls: {
         ...(this.near.callCounts?.() ?? {}),
         ...(this.chain.callCounts?.() ?? {}),
@@ -341,6 +345,11 @@ export class Watcher {
       transaction_outcome?: { id?: unknown };
     } | null;
     const hash = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id;
+    this.store?.recordOutcome(outcome ?? {}, {
+      tokenId,
+      blockHeight: this.lastBlockHeight ?? 0,
+      timestamp: Math.floor(this.now() / 1000),
+    });
     try {
       if (typeof hash === "string" && hash !== "") await this.indexer?.registerTx(hash);
       await this.indexer?.poke();
@@ -574,14 +583,23 @@ export class Watcher {
         decided: finished,
       });
       if (!hasWork) continue;
+      const retryAt = this.retryAt.get(claim.token_id);
+      if (retryAt !== undefined && nowMs < retryAt) continue;
       if (interval > this.config.fastIntervalMs) summary.slow += 1;
       else summary.fast += 1;
       this.lastChecked.set(claim.token_id, nowMs);
 
       try {
         await this.processClaim(claim, blockHeight, summary);
+        this.retryAt.delete(claim.token_id);
+        this.retryCount.delete(claim.token_id);
       } catch (error) {
         this.noteError(error);
+        const count = (this.retryCount.get(claim.token_id) ?? 0) + 1;
+        this.retryCount.set(claim.token_id, count);
+        const wait = Math.min(15 * 60_000, 30_000 * 2 ** Math.min(count - 1, 5));
+        this.retryAt.set(claim.token_id, nowMs + wait);
+        this.logger.warn("claim retry scheduled", claim.token_id, `${wait}ms`);
       }
     }
 

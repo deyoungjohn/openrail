@@ -2,6 +2,12 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import {
+  appendOutcomeEvents,
+  ensureEventTable,
+  type OutcomeContext,
+  type OutcomeLike,
+} from "@openrail/shared";
 import type { ClaimView } from "./types.js";
 
 export interface StoredClaim {
@@ -32,6 +38,7 @@ export class WatcherStore {
           decided INTEGER NOT NULL DEFAULT 0
         );
       `);
+      ensureEventTable(db);
       return db;
     };
     try {
@@ -86,6 +93,15 @@ export class WatcherStore {
       } catch {
         // ignore
       }
+      this.failures += 1;
+    }
+  }
+
+  /** Records every EVENT_JSON log from a transaction the watcher sent; no extra RPC. */
+  recordOutcome(outcome: OutcomeLike, context: OutcomeContext): void {
+    try {
+      appendOutcomeEvents(this.db, outcome, { ...context, source: context.source ?? "watcher" });
+    } catch {
       this.failures += 1;
     }
   }
