@@ -29,10 +29,35 @@ export const chainOfRoute = (r: Pick<RouteLike, "origin_chain">): ChainId | null
   CHAINS.find((c) => c === r.origin_chain) ?? null;
 
 /**
- * An integer amount in base units as a decimal string. Nothing is rounded: every digit is kept,
- * trailing zeros are trimmed down to at least two decimals ("12.50").
+ * HARD RULE (human, 12 Nov): every decimal value in the UI shows two decimal places. An amount in base units as `12.50`,
+ * rounded half up; `"up"` rounds up to the next hundredth (what is owed or must be sent is never shown short).
+ * The one exception is `formatCoinAmount`, for a coin that moves in price and has to be typed into a wallet.
  */
-export function formatToken(units: string, decimals: number): string {
+export function formatToken(
+  units: string,
+  decimals: number,
+  mode: "nearest" | "up" = "nearest",
+): string {
+  const n = BigInt(units);
+  const negative = n < 0n;
+  const abs = negative ? -n : n;
+  const step = decimals > 2 ? 10n ** BigInt(decimals - 2) : 1n;
+  const hundredths =
+    decimals >= 2
+      ? mode === "up"
+        ? (abs + step - 1n) / step
+        : (abs + step / 2n) / step
+      : abs * 10n ** BigInt(2 - decimals);
+  const whole = (hundredths / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const frac = (hundredths % 100n).toString().padStart(2, "0");
+  return `${negative ? "-" : ""}${whole}.${frac}`;
+}
+
+/**
+ * The exception to the two-decimals rule: the amount of ETH or SOL a payer must type into a wallet keeps the digits the
+ * quote was rounded to (`payUnits`), or it would read 0.00. Every digit is kept, trailing zeros trimmed to two.
+ */
+export function formatCoinAmount(units: string, decimals: number): string {
   const n = BigInt(units);
   const base = 10n ** BigInt(decimals);
   const whole = (n / base).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");

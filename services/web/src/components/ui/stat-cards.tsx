@@ -19,7 +19,7 @@ function Delta({ pct }: { pct: number | null }) {
     <span className="tabular flex items-center gap-0.5 text-[12px] text-muted">
       <Icon aria-hidden size={13} />
       {up ? "+" : ""}
-      {pct.toFixed(1)}%
+      {pct.toFixed(2)}%
     </span>
   );
 }
@@ -70,7 +70,7 @@ export function MonthlyRevenueCard({
               <>
                 <span className="tabular text-text">
                   {deltaPct >= 0 ? "+" : ""}
-                  {deltaPct.toFixed(1)}%
+                  {deltaPct.toFixed(2)}%
                 </span>{" "}
                 {c.fromLastMonth}
               </>

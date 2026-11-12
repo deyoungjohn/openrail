@@ -18,14 +18,12 @@ export function middleTruncate(value: string, head = 6, tail = 4): string {
   return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
 
-/** USDC base units (6 decimals) as dollars with every digit: `$1,234.56`, or `$1.000137` below a cent. For what a person signs and for claim counters. */
+/** USDC base units (6 decimals) as dollars and cents, rounded half up (two decimals everywhere: the human's hard rule). For what a person signs and for claim counters. */
 export function formatUsdcExact(units: bigint): string {
-  if (units % 10_000n === 0n) return formatUsd(units / 10_000n);
   const negative = units < 0n;
   const abs = negative ? -units : units;
-  const whole = (abs / 1_000_000n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  const frac = (abs % 1_000_000n).toString().padStart(6, "0");
-  return `${negative ? "-" : ""}$${whole}.${frac}`;
+  const cents = (abs + 5_000n) / 10_000n;
+  return negative ? `-${formatUsd(cents)}` : formatUsd(cents);
 }
 
 /** USDC base units as dollars and cents, a sub-cent amount rounded up to the next cent. For summaries. */

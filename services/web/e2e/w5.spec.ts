@@ -284,7 +284,7 @@ test.describe("cash out", () => {
       destination_chain: "base",
       address: ADDR,
     });
-    const sign = page.getByRole("button", { name: "Sign cash out" });
+    const sign = page.getByRole("button", { name: "Sign Payout" });
     const a = (await cost.boundingBox())!;
     const b = (await sign.boundingBox())!;
     expect(a.y).toBeLessThan(b.y);
@@ -294,7 +294,7 @@ test.describe("cash out", () => {
     await mockApi(page, { "POST /v1/cashout/quote": { status: 201, body: quote() } });
     await page.goto("/app/cashout");
     await ask(page);
-    await page.getByRole("button", { name: "Sign cash out" }).click();
+    await page.getByRole("button", { name: "Sign Payout" }).click();
     await expect(page.getByText("Cash-out sent")).toBeVisible();
   });
 
@@ -328,7 +328,7 @@ test.describe("cash out", () => {
     await page.goto("/app/cashout");
     await ask(page);
     await expect(page.getByText("This quote expired")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Sign cash out" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Sign Payout" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Get a new quote" })).toBeVisible();
   });
 
@@ -352,7 +352,7 @@ test.describe("cash out", () => {
       await mockApi(page, { "POST /v1/cashout/quote": { status: 201, body: quote() } });
       await page.goto("/app/cashout");
       await ask(page);
-      await expect(page.getByRole("button", { name: "Sign cash out" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Sign Payout" })).toBeVisible();
       await axeClean(page);
     });
   }

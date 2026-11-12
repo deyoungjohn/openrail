@@ -3,6 +3,7 @@ import {
   amountPrefix,
   chainOfRoute,
   formatDueDate,
+  formatCoinAmount,
   formatToken,
   countdownUnits,
   payUnits,
@@ -25,15 +26,23 @@ const route = (over: Partial<RouteLike> = {}): RouteLike => ({
   ...over,
 });
 
-describe("formatToken: exact, never rounded", () => {
-  it("shows USDC with at least two decimals", () => {
+describe("formatToken: two decimals, always (hard rule, 12 Nov)", () => {
+  it("shows two decimals, rounded half up", () => {
     expect(formatToken("12500000", 6)).toBe("12.50");
-    expect(formatToken("1000137", 6)).toBe("1.000137");
+    expect(formatToken("1000137", 6)).toBe("1.00");
+    expect(formatToken("2980024", 6)).toBe("2.98");
+    expect(formatToken("2985000", 6)).toBe("2.99");
     expect(formatToken("0", 6)).toBe("0.00");
   });
 
-  it("keeps every digit of an 18-decimals amount and trims trailing zeros", () => {
-    expect(formatToken("3812345678901234000", 18)).toBe("3.812345678901234");
+  it("rounds UP when the amount is owed or must be sent (never short)", () => {
+    expect(formatToken("952", 6, "up")).toBe("0.01");
+    expect(formatToken("2008958", 6, "up")).toBe("2.01");
+    expect(formatToken("12500000", 6, "up")).toBe("12.50");
+  });
+
+  it("is two decimals for an 18-decimals amount too", () => {
+    expect(formatToken("3812345678901234000", 18)).toBe("3.81");
     expect(formatToken("12500000000000000000", 18)).toBe("12.50");
   });
 
@@ -42,7 +51,15 @@ describe("formatToken: exact, never rounded", () => {
   });
 
   it("handles SOL's 9 decimals", () => {
-    expect(formatToken("84210526", 9)).toBe("0.084210526");
+    expect(formatToken("84210526", 9)).toBe("0.08");
+  });
+});
+
+describe("formatCoinAmount: the one exception, an ETH or SOL amount to type into a wallet", () => {
+  it("keeps every digit and trims trailing zeros to two", () => {
+    expect(formatCoinAmount("3812345678901234000", 18)).toBe("3.812345678901234");
+    expect(formatCoinAmount("12500000000000000000", 18)).toBe("12.50");
+    expect(formatCoinAmount("84210526", 9)).toBe("0.084210526");
   });
 });
 
@@ -234,7 +251,7 @@ describe("payUnits for a stablecoin: two decimals, rounded UP", () => {
 describe("payUnits", () => {
   it("rounds an ETH quote up to six decimals, so a wallet can enter it and it never falls short", () => {
     expect(payUnits("1348354311809600", 18, "ETH")).toBe("1349000000000000");
-    expect(formatToken(payUnits("1348354311809600", 18, "ETH"), 18)).toBe("0.001349");
+    expect(formatCoinAmount(payUnits("1348354311809600", 18, "ETH"), 18)).toBe("0.001349");
     expect(BigInt(payUnits("1348354311809600", 18, "ETH"))).toBeGreaterThanOrEqual(
       1348354311809600n,
     );

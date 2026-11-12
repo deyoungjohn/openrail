@@ -18,6 +18,7 @@ import {
   amountPrefix,
   centsToApi,
   chainOfRoute,
+  formatCoinAmount,
   formatToken,
   payUnits,
   legAmountProblem,
@@ -137,11 +138,13 @@ function useNow(intervalMs = 1000): number | null {
 }
 
 /** What the page shows and the wallet button sends: the quote rounded up to decimals a wallet can enter. */
-const amountOf = (session: Session, route: Route): string =>
-  formatToken(
-    payUnits(session.amount_in, route.origin_decimals, route.payer_asset),
-    route.origin_decimals,
-  );
+const amountOf = (session: Session, route: Route): string => {
+  const units = payUnits(session.amount_in, route.origin_decimals, route.payer_asset);
+  // ETH and SOL keep the digits a wallet needs; everything else shows two decimals (rounded up by payUnits).
+  return route.payer_asset === "ETH" || route.payer_asset === "SOL"
+    ? formatCoinAmount(units, route.origin_decimals)
+    : formatToken(units, route.origin_decimals, "up");
+};
 
 const timeOf = (iso: string) => {
   const at = new Date(iso);

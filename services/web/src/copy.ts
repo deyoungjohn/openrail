@@ -930,7 +930,7 @@ export const copy = {
     expiredBody:
       "Quotes are only held for a short time, and an expired one is never signed. Nothing was charged.",
     newQuote: "Get a new quote",
-    sign: "Sign cash out",
+    sign: "Sign Payout",
     signing: "Waiting for your wallet",
     sent: "Cash-out sent",
     again: "Cash out again",

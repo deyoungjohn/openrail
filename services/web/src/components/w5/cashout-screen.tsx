@@ -403,7 +403,7 @@ export function CashoutScreen() {
                             <Button onClick={() => void ask()}>{t.newQuote}</Button>
                           </div>
                         ) : (
-                          <div className="space-y-4 border-t border-border pt-4">
+                          <div className="space-y-3 border-t border-border pt-4">
                             <p className="flex items-center justify-between text-[14px]">
                               <span className="caption">{t.expiresIn}</span>
                               <span onClick={undefined}>
@@ -426,14 +426,16 @@ export function CashoutScreen() {
                                 <NearWalletView {...near} />
                               </div>
                             ) : null}
+                            <div className="flex justify-center">
+                              <Button
+                                onClick={() => void sign()}
+                                loading={phase === "signing"}
+                                disabled={!canSign}
+                              >
+                                {phase === "signing" ? t.signing : t.sign}
+                              </Button>
+                            </div>
                             <ErrorNote>{error ? error : null}</ErrorNote>
-                            <Button
-                              onClick={() => void sign()}
-                              loading={phase === "signing"}
-                              disabled={!canSign}
-                            >
-                              {phase === "signing" ? t.signing : t.sign}
-                            </Button>
                           </div>
                         )}
                       </section>
