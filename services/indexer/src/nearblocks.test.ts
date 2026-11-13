@@ -278,3 +278,60 @@ describe("NearBlocks account-scoped source", () => {
     expect(source).not.toMatch(/\/v[12]\//);
   });
 });
+
+describe("NearBlocks claim backfill (receipt listing)", () => {
+  // Shape of a real `/v3/accounts/c-3.openrail.near/receipts` page (13 Nov): a claim account signs nothing, so its
+  // `/txns` list is empty; one transaction shows once per receipt.
+  const row = (predecessor: string, receiver: string, method: string) => ({
+    actions: [{ action: "FUNCTION_CALL", method }],
+    block: {
+      block_hash: "5iw4FkkWfj7aqiNEwuz229auQdVmmarWqCS4MJP8M7PM",
+      block_height: "223457791",
+      block_timestamp: "1794049556410738353",
+    },
+    predecessor_account_id: predecessor,
+    receipt_id: `R-${method}`,
+    receiver_account_id: receiver,
+    transaction_hash: "DRL8AyASzboGe8DMYtNTBi7nQ96SEKfCxKS4UW9kbMmk",
+  });
+
+  it("lists the claim account's receipts, reads each transaction once and keeps the root's logs", async () => {
+    const urls: string[] = [];
+    const senders: string[] = [];
+    const fetchImpl: FetchLike = async (input, init) => {
+      if (input.includes("/v3/accounts/")) {
+        urls.push(input);
+        return nbResponse(
+          [
+            row("c-3.openrail.near", "intents.near", "mt_transfer"),
+            row("openrail.near", "c-3.openrail.near", "forward"),
+          ],
+          null,
+        );
+      }
+      const body = JSON.parse(String(init?.body)) as { params: { sender_account_id: string } };
+      senders.push(body.params.sender_account_id);
+      return rpcResponse([BOOKED]);
+    };
+    const source = new NearBlocksEventSource(
+      "openrail.near",
+      "https://nb.example",
+      "",
+      ["https://rpc.example"],
+      fetchImpl,
+      25,
+      5,
+      undefined,
+      0,
+      () => true,
+      { listAccount: "c-3.openrail.near", listing: "receipts" },
+    );
+    const page = await source.fetch(null);
+    expect(urls[0]).toContain("/v3/accounts/c-3.openrail.near/receipts?");
+    expect(senders).toHaveLength(1);
+    expect(page.blocks).toHaveLength(1);
+    expect(page.blocks[0]?.receipts[0]?.receiverId).toBe("openrail.near");
+    expect(page.blocks[0]?.receipts[0]?.logs).toEqual([BOOKED]);
+    expect(source.callCounts()["nearblocks.receipts"]).toBe(1);
+  });
+});

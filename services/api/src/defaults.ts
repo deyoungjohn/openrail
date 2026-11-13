@@ -189,6 +189,7 @@ export function createContractPort(rootAccount: string): ContractPort {
     { at: number; value: { token_id: string; amount: string }[] }
   >();
   const balanceReads = new Map<string, Promise<{ token_id: string; amount: string }[]>>();
+  const tokenLists = new Map<string, { at: number; ids: string[] }>();
   return {
     async claim(tokenId) {
       const claim = await near.view<Record<string, unknown> | null>({
@@ -214,20 +215,28 @@ export function createContractPort(rootAccount: string): ContractPort {
     rpcHealth() {
       return near.rpcHealth();
     },
-    // One read per account every 10 s, whatever the number of open tabs: the browser asks us, we ask the chain.
+    // At most one read per account a minute, whatever the number of open tabs: the browser asks us, we ask the chain.
+    // The token list changes only when a new token arrives, so it is kept for 15 minutes: one call per read, not two.
     async intentsBalances(accountId) {
       const kept = balanceCache.get(accountId);
-      if (kept !== undefined && Date.now() - kept.at < 10_000) return kept.value;
+      if (kept !== undefined && Date.now() - kept.at < 60_000) return kept.value;
       const pending = balanceReads.get(accountId);
       if (pending !== undefined) return pending;
       const read = (async () => {
-        const owned = await near.view<{ token_id: string }[]>({
-          contractId: "intents.near",
-          methodName: "mt_tokens_for_owner",
-          args: { account_id: accountId },
-          feature: "api.intents_balance",
-        });
-        const ids = owned.map((t) => t.token_id);
+        const listed = tokenLists.get(accountId);
+        let ids: string[];
+        if (listed !== undefined && Date.now() - listed.at < 15 * 60_000) {
+          ids = listed.ids;
+        } else {
+          const owned = await near.view<{ token_id: string }[]>({
+            contractId: "intents.near",
+            methodName: "mt_tokens_for_owner",
+            args: { account_id: accountId },
+            feature: "api.intents_balance",
+          });
+          ids = owned.map((t) => t.token_id);
+          tokenLists.set(accountId, { at: Date.now(), ids });
+        }
         if (ids.length === 0) return [];
         const amounts = await near.view<string[]>({
           contractId: "intents.near",
@@ -745,6 +754,27 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     });
   }, 5_000);
   timer.unref();
+  // The provider's status for live deposit addresses, every 5 s (each session at most every 20 s): the watcher reads
+  // the chain only when this pokes it. Off without a provider status or a watcher to poke.
+  if (getEnv("WATCHER_URL") !== "off" && getEnv("DEPOSIT_WATCH") !== "off") {
+    let running = false;
+    const depositTimer = setInterval(() => {
+      if (running) return;
+      running = true;
+      void app.deposits
+        .runOnce()
+        .catch((error: unknown) => {
+          logger.warn(
+            "deposit watch failed",
+            error instanceof Error ? error.message : String(error),
+          );
+        })
+        .finally(() => {
+          running = false;
+        });
+    }, 5_000);
+    depositTimer.unref();
+  }
   const recurringLogger = createLogger("api-recurring");
   const scheduler = new RecurringScheduler({
     store: stores.recurring,

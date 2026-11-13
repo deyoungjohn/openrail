@@ -6,13 +6,12 @@ import type { Async } from "./use-async";
 
 type Credit = Awaited<ReturnType<typeof dashClient.business.storageCredit>>;
 
-const EVERY_MS = 10_000;
 const AFTER_DEPOSIT_MS = 2_500;
 const AFTER_DEPOSIT_TRIES = 16;
 
 /**
- * The prepaid storage credit, kept current: it is read again every 10 seconds and whenever the tab comes back into
- * view, without a loading flash. `reload` reads it now; `watchDeposit` reads it every 2.5 seconds for about 40
+ * The prepaid storage credit: read on open and whenever the tab comes back into view, without a loading flash. It only
+ * changes when the business issues or deposits, so there is no timer (each read is an RPC call on the server). `reload` reads it now; `watchDeposit` reads it every 2.5 seconds for about 40
  * seconds, or until the balance changes, so a deposit shows as soon as it is on chain.
  */
 export function useStorageCredit(): [Async<Credit>, () => void, () => void] {
@@ -37,12 +36,10 @@ export function useStorageCredit(): [Async<Credit>, () => void, () => void] {
   useEffect(() => {
     alive.current = true;
     void read();
-    const timer = setInterval(() => void read(), EVERY_MS);
     const onShow = () => document.visibilityState === "visible" && void read();
     document.addEventListener("visibilitychange", onShow);
     return () => {
       alive.current = false;
-      clearInterval(timer);
       document.removeEventListener("visibilitychange", onShow);
     };
   }, [read]);

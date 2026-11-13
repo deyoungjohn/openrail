@@ -59,6 +59,8 @@ export interface ApiStore {
   outboxExpire(endpointId: string, eventId: string): void;
   getPaySession(id: string): PaySession | undefined;
   listPaySessions(tokenId: string): PaySession[];
+  /** Sessions whose status can still change (pending deposit or processing). */
+  listOpenPaySessions(): PaySession[];
   savePaySession(session: PaySession): void;
   getOpenQuotes(tokenId: string): Record<string, unknown>[];
   saveOpenQuotes(tokenId: string, quotes: Record<string, unknown>[]): void;
@@ -232,6 +234,10 @@ export function createMemoryStores(): Stores {
       },
       getPaySession: (id) => paySessions.get(id),
       listPaySessions: (tokenId) => [...paySessions.values()].filter((x) => x.token_id === tokenId),
+      listOpenPaySessions: () =>
+        [...paySessions.values()].filter(
+          (x) => x.status === "pending_deposit" || x.status === "processing",
+        ),
       savePaySession: (session) => paySessions.set(session.id, session),
       getOpenQuotes: (tokenId) => openQuotes.get(tokenId) ?? [],
       saveOpenQuotes: (tokenId, quotes) => openQuotes.set(tokenId, quotes),
@@ -531,6 +537,14 @@ export function createSqliteStores(path: string): Stores {
           "SELECT body FROM pay_sessions WHERE json_extract(body, '$.token_id') = ? ORDER BY rowid",
         )
         .all(tokenId)
+        .map((row) => parseJson<PaySession>(row.body));
+    },
+    listOpenPaySessions() {
+      return db
+        .prepare(
+          "SELECT body FROM pay_sessions WHERE json_extract(body, '$.status') IN ('pending_deposit', 'processing') ORDER BY rowid",
+        )
+        .all()
         .map((row) => parseJson<PaySession>(row.body));
     },
     savePaySession(session) {

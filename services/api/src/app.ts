@@ -37,6 +37,7 @@ import {
   type ApiModuleContext,
   type ModuleStore,
 } from "./modules.js";
+import { DepositWatch } from "./deposit-watch.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
 import {
@@ -524,6 +525,8 @@ export class ApiApp {
   private readonly idempotency: IdempotencyStore;
   private readonly clock: () => Date;
   private readonly quotes: QuoteService;
+  /** Asks the provider about live deposit addresses and pokes the watcher when money moves (no RPC). */
+  readonly deposits: DepositWatch;
   private readonly routes: RouteFile;
   private readonly verifier: Nep413Verifier;
 
@@ -537,6 +540,16 @@ export class ApiApp {
     this.clock = deps.clock ?? (() => new Date());
     this.routes = deps.routes ?? loadRoutes();
     this.verifier = deps.verifier ?? verifyNep413;
+    this.deposits = new DepositWatch({
+      openSessions: () => this.store.listOpenPaySessions(),
+      save: (session) => this.store.savePaySession(session),
+      status: async (address) => this.quotes.status(address),
+      poke: async (tokenId) => {
+        await this.deps.pokeWatcher?.(tokenId);
+      },
+      statusOf: (word) => paymentStatusOf(word),
+      clock: () => this.clock().getTime(),
+    });
     this.quotes = new QuoteService({
       routes: this.routes,
       claim: (tokenId) => this.claimSnapshot(tokenId),
@@ -1744,6 +1757,8 @@ export class ApiApp {
         try {
           const live = await this.quotes.status(session.deposit_address);
           if (live !== undefined) {
+            // The payer's page saw the word first: tell the watcher now, not at the next round.
+            await this.deposits.observe(session, live.status);
             status = paymentStatusOf(live.status);
             swap = {
               status: live.status,

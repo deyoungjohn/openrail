@@ -794,3 +794,116 @@ describe("watcher call volume (11 Nov: the 15 s loop used 7.6M QuickNode credits
     expect(balances).toBe(1);
   });
 });
+
+describe("trigger mode (the API pokes, the watcher confirms on chain)", () => {
+  const TRIGGERED: WatcherConfig = { ...CONFIG, mode: "triggered", balanceCheckMs: HOUR_MS };
+  const calls = (near: FakeNear) => near.views.length + near.batches.length;
+  const tickFor = async (h: ReturnType<typeof setup>, ms: number) => {
+    for (let t = 0; t < ms; t += 15_000) {
+      await h.watcher.tick();
+      h.advance(15_000);
+    }
+  };
+  const open = (n: number) => Array.from({ length: n }, (_, i) => makeClaim(`c-${i + 1}`));
+
+  it("reads nothing on a timer: an idle hour with 10 open claims is the start sweep only (60 calls or fewer)", async () => {
+    const h = setup(
+      { config: CONFIG_VIEW, claims: open(10), quotes: {}, balances: {} },
+      undefined,
+      TRIGGERED,
+    );
+    await tickFor(h, HOUR_MS);
+    const total = calls(h.near);
+    expect(total).toBeLessThanOrEqual(60);
+    const before = calls(h.near);
+    await tickFor(h, HOUR_MS);
+    expect(calls(h.near)).toBe(before);
+    expect(h.near.views.some((v) => v.methodName === "payment_log")).toBe(false);
+  });
+
+  it("a poke with money on the account is booked at once (30 calls or fewer, poke to follow-up)", async () => {
+    const claims = open(10);
+    const state: FakeState = { config: CONFIG_VIEW, claims, quotes: {}, balances: {} };
+    const h = setup(state, undefined, TRIGGERED);
+    await h.watcher.tick();
+    h.advance(15_000);
+    const before = calls(h.near);
+    state.balances["c-3.openrail.near"] = ["5000000", "0", "0", "0"];
+    h.watcher.poke("c-3");
+    const summary = await h.watcher.tick();
+    expect(summary.reconciled).toEqual(["c-3"]);
+    // After the send the contract records the balance and the claim is paid.
+    state.claims[2] = makeClaim("c-3", {
+      status: "Paid",
+      last_seen_balance: { [ASSETS[0] as string]: "5000000" },
+    });
+    h.advance(15_000);
+    await tickFor(h, 10 * 60_000);
+    expect(h.near.calls.filter((c) => c.methodName === "reconcile")).toHaveLength(1);
+    expect(calls(h.near) - before).toBeLessThanOrEqual(30);
+  });
+
+  it("a poke with nothing on the account reads for the window, then stops", async () => {
+    const h = setup(
+      { config: CONFIG_VIEW, claims: open(3), quotes: {}, balances: {} },
+      undefined,
+      TRIGGERED,
+    );
+    await h.watcher.tick();
+    h.advance(15_000);
+    const before = calls(h.near);
+    h.watcher.poke("c-2");
+    await tickFor(h, 3 * 60_000 + 15_000);
+    const during = calls(h.near) - before;
+    expect(during).toBeGreaterThan(0);
+    expect(during).toBeLessThanOrEqual(15);
+    const after = calls(h.near);
+    await tickFor(h, HOUR_MS);
+    expect(calls(h.near)).toBe(after);
+    expect(h.near.calls).toHaveLength(0);
+  });
+
+  it("a poke for a decided claim costs nothing", async () => {
+    const h = setup(
+      {
+        config: CONFIG_VIEW,
+        claims: [makeClaim("c-1", { status: "Paid" })],
+        quotes: {},
+        balances: {},
+      },
+      undefined,
+      TRIGGERED,
+    );
+    await h.watcher.tick();
+    h.advance(15_000);
+    const before = calls(h.near);
+    h.watcher.poke("c-1");
+    await tickFor(h, 5 * 60_000);
+    expect(calls(h.near)).toBe(before);
+  });
+
+  it("the daily sweep books a payment nobody poked for", async () => {
+    const state: FakeState = { config: CONFIG_VIEW, claims: open(2), quotes: {}, balances: {} };
+    const h = setup(state, undefined, TRIGGERED);
+    await h.watcher.tick();
+    state.balances["c-2.openrail.near"] = ["1000000", "0", "0", "0"];
+    h.advance(24 * HOUR_MS - 60_000);
+    expect((await h.watcher.tick()).reconciled).toEqual([]);
+    h.advance(60_000);
+    expect((await h.watcher.tick()).reconciled).toEqual(["c-2"]);
+  });
+
+  it("reports its mode, the armed claims and the last sweep in /health", async () => {
+    const h = setup(
+      { config: CONFIG_VIEW, claims: open(1), quotes: {}, balances: {} },
+      undefined,
+      TRIGGERED,
+    );
+    await h.watcher.tick();
+    h.watcher.poke("c-1");
+    const snap = h.watcher.snapshot();
+    expect(snap.mode).toBe("triggered");
+    expect(snap.armed_claims).toEqual(["c-1"]);
+    expect(snap.last_sweep_at).not.toBeNull();
+  });
+});

@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { readBalance, type Balance } from "./balance";
 import type { Async } from "./use-async";
 
-const EVERY_MS = 15_000;
+const EVERY_MS = 60_000;
 
-/** The business's balance on `intents.near`, read again every 15 seconds and when the tab comes back into view. */
+/**
+ * The business's balance on `intents.near`, read again every minute while the tab is in view and at once when it comes
+ * back into view. A hidden tab reads nothing (each read is an RPC call on the server, and the week's budget is fixed).
+ */
 export function useBalance(accountId: string | null): [Async<Balance>, () => void] {
   const [value, setValue] = useState<Async<Balance>>({ state: "loading" });
   const read = useCallback(async () => {
@@ -20,7 +23,9 @@ export function useBalance(accountId: string | null): [Async<Balance>, () => voi
   }, [accountId]);
   useEffect(() => {
     void read();
-    const timer = setInterval(() => void read(), EVERY_MS);
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void read();
+    }, EVERY_MS);
     const onShow = () => document.visibilityState === "visible" && void read();
     document.addEventListener("visibilitychange", onShow);
     return () => {
