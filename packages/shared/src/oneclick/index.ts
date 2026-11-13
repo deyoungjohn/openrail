@@ -75,6 +75,62 @@ export interface SubmitDepositRequest {
   [key: string]: unknown;
 }
 
+export interface OneClickGenerateIntentRequest {
+  type: "swap_transfer";
+  standard: "nep413" | string;
+  signerId: string;
+  depositAddress: string;
+  [key: string]: unknown;
+}
+
+export interface OneClickGenerateIntentResponse {
+  intent: { standard: string; payload: Record<string, unknown> };
+  correlationId: string;
+  [key: string]: unknown;
+}
+
+export interface OneClickSubmitIntentRequest {
+  type: "swap_transfer";
+  signedData: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface OneClickSubmitIntentResponse {
+  intentHash: string;
+  correlationId: string;
+  [key: string]: unknown;
+}
+
+export interface OneClickAuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  refreshExpiresIn: number;
+  [key: string]: unknown;
+}
+
+export interface OneClickBalanceEntry {
+  tokenId: string;
+  available: string;
+  source: "private" | string;
+  [key: string]: unknown;
+}
+
+export interface OneClickBalancesResponse {
+  balances: OneClickBalanceEntry[];
+  [key: string]: unknown;
+}
+
+export interface OneClickToken {
+  assetId: string;
+  decimals: number;
+  blockchain: string;
+  symbol: string;
+  price: string;
+  priceUpdatedAt: string;
+  [key: string]: unknown;
+}
+
 export interface OneClickClientOptions {
   baseUrl: string;
   apiKey: string;
@@ -187,6 +243,74 @@ export class OneClickClient {
       { method: "POST", body: JSON.stringify(request) },
       true,
     );
+  }
+
+  /** GET /v0/tokens. */
+  async tokens(): Promise<OneClickToken[]> {
+    const body = await this.send(`${this.baseUrl}/v0/tokens`, { method: "GET" }, true);
+    if (!Array.isArray(body))
+      throw new OneClickRequestError(200, "ONECLICK_INVALID_RESPONSE: tokens");
+    return body as OneClickToken[];
+  }
+
+  /** POST /v0/generate-intent. */
+  async generateIntent(
+    request: OneClickGenerateIntentRequest,
+  ): Promise<OneClickGenerateIntentResponse> {
+    const body = (await this.send(
+      `${this.baseUrl}/v0/generate-intent`,
+      { method: "POST", body: JSON.stringify(request) },
+      true,
+    )) as OneClickGenerateIntentResponse;
+    if (body.intent === undefined) {
+      throw new OneClickRequestError(200, "ONECLICK_INVALID_RESPONSE: missing intent");
+    }
+    return body;
+  }
+
+  /** POST /v0/submit-intent. */
+  async submitIntent(request: OneClickSubmitIntentRequest): Promise<OneClickSubmitIntentResponse> {
+    const body = (await this.send(
+      `${this.baseUrl}/v0/submit-intent`,
+      { method: "POST", body: JSON.stringify(request) },
+      true,
+    )) as OneClickSubmitIntentResponse;
+    if (typeof body.intentHash !== "string") {
+      throw new OneClickRequestError(200, "ONECLICK_INVALID_RESPONSE: missing intentHash");
+    }
+    return body;
+  }
+
+  /** POST /v0/auth/authenticate (no partner key: the signed payload is the credential). */
+  async authenticate(signedData: Record<string, unknown>): Promise<OneClickAuthResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/v0/auth/authenticate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signedData }),
+    });
+    const text = await response.text();
+    if (!response.ok) throw new OneClickRequestError(response.status, safeBody(text, this.apiKey));
+    const body = JSON.parse(text === "" ? "{}" : text) as OneClickAuthResponse;
+    if (typeof body.accessToken !== "string" || typeof body.expiresIn !== "number") {
+      throw new OneClickRequestError(200, "ONECLICK_INVALID_RESPONSE: missing accessToken");
+    }
+    return body;
+  }
+
+  /** GET /v0/account/balances with the user-session token, not the partner key. */
+  async balances(userToken: string, tokenIds: string[]): Promise<OneClickBalancesResponse> {
+    const query = tokenIds.map(encodeURIComponent).join(",");
+    const response = await this.fetchImpl(`${this.baseUrl}/v0/account/balances?tokenIds=${query}`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${userToken}` },
+    });
+    const text = await response.text();
+    if (!response.ok) throw new OneClickRequestError(response.status, safeBody(text, this.apiKey));
+    const body = JSON.parse(text === "" ? "{}" : text) as OneClickBalancesResponse;
+    if (!Array.isArray(body.balances)) {
+      throw new OneClickRequestError(200, "ONECLICK_INVALID_RESPONSE: balances");
+    }
+    return body;
   }
 }
 

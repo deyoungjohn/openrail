@@ -1,0 +1,6 @@
+{
+  "accessToken": "user-session-token",
+  "refreshToken": "refresh-token",
+  "expiresIn": 3600,
+  "refreshExpiresIn": 86400
+}
