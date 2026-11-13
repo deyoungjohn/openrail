@@ -1860,6 +1860,8 @@ export class ApiApp {
             line_items: invoice.line_items ?? [],
             due_date: Date.parse(invoice.terms.due_date) / 1000,
             status: typeof live?.status === "string" ? live.status : invoice.status,
+            // The page reads the claim from here, not from a public RPC in the browser (rate limited per visitor).
+            ...(live === undefined ? {} : { claim: live }),
             terms: invoice.terms,
             ...(await this.publicHistory(invoice)),
             domain: {

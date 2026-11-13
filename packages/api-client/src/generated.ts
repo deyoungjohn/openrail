@@ -385,6 +385,7 @@ export interface AckData {
   primary_type: "Acknowledge";
   message: AckMessage;
   line_items: LineItem[];
+  claim?: ClaimView;
 }
 
 export interface AuthChallengeRequest {

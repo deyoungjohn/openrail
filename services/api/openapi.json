@@ -1785,6 +1785,14 @@
             "items": {
               "$ref": "#/components/schemas/LineItem"
             }
+          },
+          "claim": {
+            "description": "The claim as the chain has it (read by the server, at most every 10 s). Absent when the chain has never been read for it.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClaimView"
+              }
+            ]
           }
         }
       },

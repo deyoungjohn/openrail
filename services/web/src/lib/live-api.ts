@@ -150,10 +150,13 @@ async function view<T>(method: string, args: object): Promise<T> {
 
 export const liveApi: OpenrailApi = {
   async getClaim(tokenId) {
-    const v = await view<ClaimViewJson | null>("claim", { token_id: tokenId });
-    if (v === null) return null;
-    // Names and the invoice number come from the API; the page still works without them.
+    // The API reads the claim (cached, one server RPC for every visitor); the browser reads it itself only when the
+    // API has none (an invoice the API does not know, or a chain never read).
     const doc = await client.ack.get(tokenId).catch(() => null);
+    const v =
+      (doc?.claim as unknown as ClaimViewJson | undefined) ??
+      (await view<ClaimViewJson | null>("claim", { token_id: tokenId }));
+    if (v === null) return null;
     const terms = doc?.terms as
       { issuer_legal_name?: string; debtor_legal_name?: string } | undefined;
     return claimFromView(v, {
