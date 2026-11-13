@@ -907,3 +907,19 @@ describe("trigger mode (the API pokes, the watcher confirms on chain)", () => {
     expect(snap.last_sweep_at).not.toBeNull();
   });
 });
+
+describe("a refused clear_stale_lock is not repeated every two minutes", () => {
+  it("doubles the wait after each refusal", async () => {
+    const claim = makeClaim("c-1", { lock: { Module: { until: 10 } } as never });
+    const h = setup({ config: CONFIG_VIEW, claims: [claim], quotes: {}, balances: {} });
+    h.near.failSends = true;
+    const clears = () => h.near.calls.filter((c) => c.methodName === "clear_stale_lock").length;
+    for (let t = 0; t < 60; t += 1) {
+      await h.watcher.tick();
+      h.advance(60_000);
+    }
+    // One hour: tries at 0, ~2, ~6, ~14, ~30 minutes (plus the retry backoff), not thirty.
+    expect(clears()).toBeLessThanOrEqual(6);
+    expect(clears()).toBeGreaterThanOrEqual(2);
+  });
+});
