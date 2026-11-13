@@ -6,9 +6,12 @@ type EarningsSource = { stream: "checkout"; load(): Promise<Earning[]> };
 
 const TYPES = ["checkout.paid", "checkout.partial", "checkout.paid_late"] as const;
 
+/** This booking's amount in base units. The contract's `checkout_paid` carries `amount` (and `total_paid`). */
 function eventAmount(data: Record<string, unknown>): string | null {
-  const value = data.received ?? data.total_received ?? data.amount_due ?? data.total_usd;
-  return typeof value === "string" && /^\d+$/.test(value) ? value : null;
+  for (const value of [data.received, data.amount, data.total_received, data.total_paid]) {
+    if (typeof value === "string" && /^\d+$/.test(value)) return value;
+  }
+  return null;
 }
 
 async function load(): Promise<Earning[]> {

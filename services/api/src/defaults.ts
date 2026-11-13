@@ -681,19 +681,27 @@ function createConfidentialBalancePort(): ConfidentialBalancePort {
       return (await response.json()) as Record<string, unknown>;
     },
     async balances(userToken, tokenIds) {
-      const query = tokenIds.map(encodeURIComponent).join(",");
-      const response = await fetch(`${confidentialBase()}/v0/account/balances?tokenIds=${query}`, {
-        headers: { authorization: `Bearer ${userToken}` },
+      // As the CLI that read it on 12 Nov: no tokenIds filter (with one the answer came back empty and the dashboard
+      // showed $0.00), the partner key beside the user's token; the wanted tokens are kept here.
+      const jwt = getEnv("ONECLICK_JWT");
+      const response = await fetch(`${confidentialBase()}/v0/account/balances`, {
+        headers: {
+          authorization: `Bearer ${userToken}`,
+          ...(jwt === undefined ? {} : { "X-API-Key": jwt }),
+        },
         signal: AbortSignal.timeout(20_000),
       });
       if (!response.ok) throw new ApiError(502, "confidential_balance_failed");
       const body = (await response.json()) as {
         balances?: { tokenId?: unknown; available?: unknown; source?: unknown }[];
       };
+      const wanted = new Set(tokenIds);
       return (body.balances ?? [])
         .filter(
           (entry): entry is { tokenId: string; available: string; source?: string } =>
-            typeof entry.tokenId === "string" && typeof entry.available === "string",
+            typeof entry.tokenId === "string" &&
+            typeof entry.available === "string" &&
+            (wanted.size === 0 || wanted.has(entry.tokenId)),
         )
         .map((entry) => ({
           tokenId: entry.tokenId,

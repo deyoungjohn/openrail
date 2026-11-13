@@ -1812,6 +1812,41 @@ describe("checkout events reach the merchant: GET /v1/events and a signed webhoo
     expect(theirs.body.data).toEqual([]);
   });
 
+  it("dashboard_reads_checkout_paid_by_its_module_name", async () => {
+    // The dashboard asks for `checkout.paid`; the indexer only has `checkout_paid`. Filtering the raw stream by the
+    // module name found nothing, and no checkout payment ever reached the dashboard (13 Nov).
+    const rows: IndexedEvent[] = [
+      event(1, "booked", "someone-else"),
+      event(2, "checkout_paid", "c-101", { booking_seq: 1, booking_tx: "BookTx1" }),
+    ];
+    const h = harness({ indexer: stream(rows) });
+    expect((await createCheckout(h)).body.id).toBe("c-101");
+    const paid = await call(
+      h,
+      "GET",
+      "/v1/events",
+      undefined,
+      h.keys.acme,
+      {},
+      new URLSearchParams({ type: "checkout.paid" }),
+    );
+    expect(paid.status).toBe(200);
+    const data = paid.body.data as IndexedEvent[];
+    expect(data.map((e) => e.type)).toEqual(["checkout.paid"]);
+    expect(data[0]?.data.token_id).toBe("c-101");
+    expect(data[0]?.data.booking_tx).toBe("BookTx1");
+    const theirs = await call(
+      h,
+      "GET",
+      "/v1/events",
+      undefined,
+      h.keys.other,
+      {},
+      new URLSearchParams({ type: "checkout.paid" }),
+    );
+    expect(theirs.body.data).toEqual([]);
+  });
+
   it("checkout_events_visible_without_the_module_only_as_core_events", async () => {
     const h = harness({
       modules: [],

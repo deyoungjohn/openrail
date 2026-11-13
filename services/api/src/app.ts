@@ -33,10 +33,12 @@ import { enabledModules } from "./enabled.js";
 import {
   apiModulesFrom,
   createMemoryModuleStore,
+  expandEvents,
   type ApiModule,
   type ApiModuleContext,
   type ModuleStore,
 } from "./modules.js";
+import type { IndexedEvent } from "./webhooks.js";
 import { confidentialAuthPayload } from "./confidential-auth.js";
 import { DepositWatch } from "./deposit-watch.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
@@ -2630,14 +2632,31 @@ export class ApiApp {
         let next: string | null = null;
         // Read the shared stream page by page until there are enough of this merchant's events (bounded).
         for (let page = 0; page < 10 && found.length < want; page += 1) {
+          // Module event names (`checkout.paid`) are derived from the indexed ones (`checkout_paid`): read the raw
+          // stream, expand each event through the enabled modules, then filter by type. Filtering the raw stream by a
+          // module name matched nothing, so checkout payments never reached the dashboard.
+          // A core name (`booked`) filters at the indexer; a module name (`checkout.paid`) only exists after expansion.
+          const coreType = type !== null && !type.includes(".") ? type : undefined;
           const batch = await this.deps.indexer.listEvents({
             ...(after === undefined ? {} : { after }),
-            ...(type === null ? {} : { type: type ?? undefined }),
+            ...(coreType === undefined ? {} : { type: coreType }),
             limit: 200,
           });
-          for (const e of batch.data as Record<string, unknown>[]) {
-            const token = tokenOf(e);
-            if (token !== undefined && own.has(token)) found.push(e);
+          for (const raw of batch.data as Record<string, unknown>[]) {
+            // Without a type the stream stays as indexed; a type may name a module event, so expand first.
+            const expanded =
+              type === null
+                ? [raw]
+                : (expandEvents(
+                    raw as unknown as IndexedEvent,
+                    this.modules,
+                    this.moduleContext,
+                  ) as unknown as Record<string, unknown>[]);
+            for (const e of expanded) {
+              if (type !== null && e.type !== type) continue;
+              const token = tokenOf(e);
+              if (token !== undefined && own.has(token)) found.push(e);
+            }
           }
           next = batch.next_cursor ?? null;
           if (next === null) break;

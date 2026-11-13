@@ -57,6 +57,19 @@ const WORDS: Record<TrailStage, { label: string; hint: string }> = {
   withdrawn: { label: "Withdrawn", hint: "Sent from your private balance to your wallet." },
 };
 
+/** "Arbiscan", "Basescan", "NearBlocks": the explorer's name from its link, for the link text. */
+function explorerName(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host.includes("nearblocks")) return "NearBlocks";
+    if (host.startsWith("optimistic.")) return "Optimism Etherscan";
+    const name = host.split(".")[0] ?? host;
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  } catch {
+    return "the explorer";
+  }
+}
+
 /** A withdrawal's own word for the table: finished, still moving, or come back. */
 function withdrawalLabel(status: string): string {
   if (status === "SUCCESS") return "Withdrawn";
@@ -282,6 +295,16 @@ export function MoneyTrailCard({ trail }: { trail: ReturnType<typeof useTrail> }
     ...(withdrawals.state === "ready" ? withdrawals.data : []),
   ];
   const totals = trailTotals(rows);
+  // One link a reviewer can click: the payout on its destination chain for a withdrawal, else the NEAR transaction.
+  const linkOf = (r: TrailRow): string | null =>
+    r.withdrawal
+      ? (r.withdrawal.urls[0] ??
+        (r.withdrawal.hashes[0] === undefined
+          ? null
+          : explorerTxUrl(r.withdrawal.chain, r.withdrawal.hashes[0])))
+      : r.tx
+        ? explorerTxUrl("near", r.tx)
+        : null;
   const labelOf = (r: TrailRow) =>
     r.withdrawal ? withdrawalLabel(r.withdrawal.status) : words[r.stage].label;
   const cents = (u: bigint) => unitsToCents(u);
@@ -303,8 +326,30 @@ export function MoneyTrailCard({ trail }: { trail: ReturnType<typeof useTrail> }
       cell: (r) => <span className="tabular font-medium">{formatUsd(cents(r.amount))}</span>,
     },
     {
-      id: "where",
-      header: "Where it is",
+      id: "explorer",
+      header: "Explorer",
+      value: (r) => (linkOf(r) === null ? "" : "1"),
+      cell: (r) => {
+        const url = linkOf(r);
+        return url === null ? (
+          <span className="caption">–</span>
+        ) : (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[13px] font-medium underline underline-offset-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            View on {explorerName(url)}
+          </a>
+        );
+      },
+    },
+    {
+      id: "status",
+      header: "Status",
+      align: "right",
       value: (r) => labelOf(r),
       cell: (r) => <span className="text-[13px] font-medium">{labelOf(r)}</span>,
     },
