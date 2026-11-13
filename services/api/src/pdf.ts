@@ -662,11 +662,11 @@ interface StatementBuilder {
   page: number;
 }
 
-function sBeginPage(builder: StatementBuilder, continuation: string | null): void {
+function sBeginPage(builder: StatementBuilder, continuation: string | null, topInset = 0): void {
   if (builder.content !== "") builder.pages.push(builder.content);
   builder.page += 1;
   builder.content = "";
-  builder.y = SPAGE_HEIGHT - SMARGIN;
+  builder.y = SPAGE_HEIGHT - SMARGIN - topInset;
   drawCorners(builder);
   if (continuation !== null) {
     text(builder, 150, builder.y, 10, "/F2", GRAY, continuation);
@@ -800,7 +800,7 @@ function drawStatementTableHeader(builder: StatementBuilder, kind: "payments" | 
 
 function ensureStatementSpace(builder: StatementBuilder, needed: number): boolean {
   if (builder.y - needed >= SMARGIN + 64) return false;
-  sBeginPage(builder, null);
+  sBeginPage(builder, null, 40);
   return true;
 }
 
