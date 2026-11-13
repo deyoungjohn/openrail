@@ -571,7 +571,7 @@ export class Watcher {
     const claims = [...work.values()];
     summary.claims = claims.length;
     this.claimsTracked = this.knownClaims.size;
-    // The block height only judges a lock: read it when a claim in hand holds one, at most once a minute.
+    // The block height only tells whether a lock has expired: read it when a claim in hand holds one, at most once a minute.
     if (
       claims.some((claim) => !isNoneLock(claim.lock)) &&
       (this.lastBlockHeight === null ||
