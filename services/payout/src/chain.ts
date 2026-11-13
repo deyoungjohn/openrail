@@ -59,6 +59,17 @@ function u128(value: unknown): string {
   return "0";
 }
 
+/**
+ * The contract's `PayoutOutcome` is internally tagged (`#[serde(tag = "outcome", rename_all = "snake_case")]`): it
+ * reads `{"outcome":"settled","destination_tx":"..."}`, not `{"Settled":{...}}`. The old shape failed every report on
+ * 13 Nov and the retries spent about 0.3 NEAR of the relayer's balance.
+ */
+export function outcomeJson(outcome: PayoutOutcome): Record<string, unknown> {
+  if ("Settled" in outcome)
+    return { outcome: "settled", destination_tx: outcome.Settled.destination_tx };
+  return { outcome: "refunded", amount: outcome.Refunded.amount };
+}
+
 export class PayoutChain implements ChainPort {
   private readonly near: NearClient;
   private readonly rootAccount: string;
@@ -288,7 +299,7 @@ export class PayoutChain implements ChainPort {
       this.near.sendFunctionCall({
         receiverId: this.rootAccount,
         methodName: "report_payout",
-        args: { token_id: tokenId, index, payout_id: payoutId, outcome },
+        args: { token_id: tokenId, index, payout_id: payoutId, outcome: outcomeJson(outcome) },
         gas: 100_000_000_000_000n,
         deposit: 0n,
         feature: "payout.report_payout",

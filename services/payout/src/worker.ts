@@ -65,6 +65,28 @@ export class PayoutWorker {
     this.waitingMs = deps.waitingRecheckMs ?? 5 * 60_000;
   }
 
+  private readonly reportBackoff = new Map<string, { until: number; waitMs: number }>();
+
+  private async report(
+    key: string,
+    tokenId: string,
+    index: number,
+    payoutId: number,
+    outcome: Parameters<PayoutWorkerDeps["chain"]["reportPayout"]>[3],
+  ): Promise<void> {
+    try {
+      await this.deps.chain.reportPayout(tokenId, index, payoutId, outcome);
+      this.reportBackoff.delete(key);
+    } catch (error) {
+      const waitMs = Math.min(
+        6 * 60 * 60_000,
+        (this.reportBackoff.get(key)?.waitMs ?? 150_000) * 2,
+      );
+      this.reportBackoff.set(key, { until: this.clock() + waitMs, waitMs });
+      throw error;
+    }
+  }
+
   private key(tokenId: string, index: number): string {
     return `${tokenId}#${index}`;
   }
@@ -373,6 +395,15 @@ export class PayoutWorker {
     summary: WorkerSummary,
   ): Promise<void> {
     const key = this.key(tokenId, index);
+    // A report the contract refused is not sent again at once: each try is a paid transaction (13 Nov: a refused
+    // report repeated every tick spent about 0.3 NEAR). 5 minutes, doubling, at most 6 hours.
+    const backoff = this.reportBackoff.get(key);
+    if (backoff !== undefined && this.clock() < backoff.until) {
+      summary.skipped.push(
+        `${key}: report refused before, next try ${new Date(backoff.until).toISOString()}`,
+      );
+      return;
+    }
     try {
       const payout = await this.deps.chain.payout(payoutId);
       if (payout === null) {
@@ -399,9 +430,7 @@ export class PayoutWorker {
           summary.settled.push(`${key}:${hash}`);
           return;
         }
-        await this.deps.chain.reportPayout(tokenId, index, payoutId, {
-          Settled: { destination_tx: hash },
-        });
+        await this.report(key, tokenId, index, payoutId, { Settled: { destination_tx: hash } });
         summary.settled.push(`${key}:${hash}`);
         return;
       }
@@ -417,7 +446,7 @@ export class PayoutWorker {
           summary.errors.push(`${key}: refund amount missing`);
           return;
         }
-        await this.deps.chain.reportPayout(tokenId, index, payoutId, {
+        await this.report(key, tokenId, index, payoutId, {
           Refunded: { amount: current.refundedAmount },
         });
         summary.refunded.push(`${key}:${status}`);

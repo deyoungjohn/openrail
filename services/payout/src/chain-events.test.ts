@@ -52,3 +52,17 @@ describe("the payout worker's own event file", () => {
     expect(chain.eventWriteFailures).toBeGreaterThan(0);
   });
 });
+
+describe("report_payout argument shape", () => {
+  it("matches the contract's internally tagged PayoutOutcome", async () => {
+    const { outcomeJson } = await import("./chain.js");
+    expect(outcomeJson({ Settled: { destination_tx: "NearTx" } })).toEqual({
+      outcome: "settled",
+      destination_tx: "NearTx",
+    });
+    expect(outcomeJson({ Refunded: { amount: "5" } })).toEqual({
+      outcome: "refunded",
+      amount: "5",
+    });
+  });
+});
