@@ -263,7 +263,16 @@ export class NearBlocksEventSource implements EventSource {
             continue;
           readHashes.add(tx.transaction_hash);
         }
-        const receipts = await this.rootLogs(tx);
+        let receipts: SourceReceipt[];
+        try {
+          receipts = await this.rootLogs(tx);
+        } catch (error) {
+          // A claim backfill skips a transaction no RPC could read now (it is tried again on the next sweep); one bad
+          // read must not stop the others. The root scan keeps its old behaviour: stop and retry the page.
+          if (this.scope === undefined) throw error;
+          this.increment("rpc.tx_status_failed");
+          continue;
+        }
         if (receipts.length === 0) continue;
         const hash = tx.receipt_block?.block_hash ?? tx.block?.block_hash ?? `h${height}`;
         const timestamp = timestampSeconds(

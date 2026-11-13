@@ -165,7 +165,11 @@ async function main(): Promise<void> {
         rootAccount,
         getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
         nearBlocksKeys,
-        rpcUrls,
+        // Old transactions are only on archival nodes: ask those first.
+        [
+          ...rpcUrls.filter((u) => /archival/i.test(u)),
+          ...rpcUrls.filter((u) => !/archival/i.test(u)),
+        ],
         undefined,
         25,
         5,
