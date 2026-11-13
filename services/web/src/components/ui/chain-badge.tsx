@@ -47,7 +47,7 @@ function Mark({ file, alt, size }: { file: string; alt: string; size: number }) 
       width={size}
       height={size}
       style={{ width: size, height: size }}
-      className="inline-block shrink-0 rounded-full"
+      className="block shrink-0 rounded-full"
     />
   );
 }
@@ -71,7 +71,7 @@ export function CoinIcon({ asset, size = 20 }: { asset: string; size?: number })
   return file === undefined ? null : <Mark file={file} alt={asset} size={size} />;
 }
 
-/** A coin with the chain it sits on, as a small mark in its corner: USDC on Base. */
+/** A coin with its chain as a small mark at the top right of it, like a superscript: USDC on Base. */
 export function PairIcon({
   asset,
   chain,
@@ -81,11 +81,24 @@ export function PairIcon({
   chain: ChainId;
   size?: number;
 }) {
-  const small = Math.round(size * 0.55);
+  const small = Math.max(10, Math.round(size * 0.55));
+  const ring = 2;
   return (
-    <span className="relative inline-block shrink-0" style={{ width: size, height: size }}>
+    <span
+      className="relative inline-flex shrink-0"
+      // The corner mark sticks out to the right: keep that room so it never touches the words after it.
+      style={{ width: size, height: size, marginRight: Math.round(small * 0.4) }}
+    >
       <CoinIcon asset={asset} size={size} />
-      <span className="absolute -right-1 -bottom-1 rounded-full border-2 border-surface bg-surface">
+      <span
+        className="absolute grid place-items-center rounded-full bg-surface"
+        style={{
+          width: small + ring * 2,
+          height: small + ring * 2,
+          top: -Math.round(small * 0.4),
+          right: -Math.round(small * 0.4),
+        }}
+      >
         <ChainIcon chain={chain} size={small} />
       </span>
     </span>
