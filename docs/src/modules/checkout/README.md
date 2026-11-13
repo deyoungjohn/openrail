@@ -183,3 +183,12 @@ Subtotal table:
 | \$33.33 | \$0.09 | \$33.42 | 83,550 | \$33.336450 | +\$0.006450 (< 1¢) |
 | \$4.00 (exact cent) | \$0.01 | \$4.01 | 10,025 | \$3.999975 | -\$0.000025 (< 1¢) |
 
+## Limitations
+
+- A checkout lives up to 60 minutes (`expires_in_minutes` 1 to 60); a late payment is booked
+  as `checkout.paid_late`.
+- USD only.
+- `customer_name` and `order_number` are what the store sends; Openrail does not check them.
+- Each checkout opens its own claim account, which needs a small storage deposit carried by
+  the sponsor pool.
+

@@ -93,3 +93,17 @@ pnpm --filter @openrail/shopify test
 ```
 
 All 22 unit, integration, and server pack tests passing.
+
+## Limitations
+
+- **Payment method.** Without Shopify's Payments Partner approval, the app cannot be a native
+  checkout gateway (`write_payment_sessions`, `write_payment_gateways`). The buyer picks the
+  manual payment method "Pay with stablecoins (Openrail)" and pays on the order status page.
+- **Protected customer data.** Reading an order, marking it paid and the `orders/create`
+  webhook need Shopify's protected customer data access, development stores included. Until it
+  is granted, the app works from the checkout it created and its own order binding.
+- **Buyer name.** The buyer's name is protected data, so Shopify checkouts show "Store
+  customer" in the dashboard. The order name (`#1001`) is shown when the app could read the
+  order.
+- **Currency.** USD orders only; another currency is refused (`unsupported_currency`).
+

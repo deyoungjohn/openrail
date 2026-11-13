@@ -42,3 +42,26 @@ Status: **built** facts unless marked **exploring**.
   affected at today's claim counts. Figures: [`evidence/gate-g1-2026-11-04.md`](../../../evidence/gate-g1-2026-11-04.md). The claims between the
   sample points in that run were seeded directly into contract state; the
   sample points are real transactions. **built**
+- Payments are detected through the provider's status, not by polling the chain. The API asks
+  the provider about each live deposit address every 5 s, until an hour after its deadline,
+  and tells the watcher when money moves; the watcher then reads that one claim and books what
+  is on its account. A transfer that bypasses the provider (sent by hand to a claim account) is
+  booked by the daily sweep, so within 24 h, or at once by anyone calling the permissionless
+  `reconcile`. **built**
+- The provider's status endpoint has no published rate limit. If it refuses, the API pauses
+  for one minute, and the payer's page keeps asking on its own. **built**
+- A payment's chain in the dashboard is the chain of the client's pay session. A payment
+  without a pay session (sent by hand) shows the chain its money settled on. **built**
+- The private balance is read from the provider after the business signs once with its
+  wallet. The session lives in the API's memory: after a restart the business signs again.
+  **built**
+- Withdrawals from the private balance are listed from the moment they were recorded here
+  (13 Nov 2026). An earlier withdrawal is added by its deposit address. **built**
+- Each payout, booking and lock clear is a NEAR transaction paid by a service account. A call
+  the contract refuses is retried with a growing wait (2 to 5 minutes, doubling to 6 hours), so
+  a stuck payout cannot drain the account. **built**
+- Invoice acceptance (the client signing the invoice) is in the contract but has no page:
+  clients pay without accepting first, as on common invoicing tools. **built**
+- The client's address and the line items are kept with the invoice, off chain. They are not
+  part of the terms fingerprint. **built**
+
