@@ -671,8 +671,7 @@ export class ApiApp {
     if (kept?.claim !== undefined) return kept.claim;
     const now = this.clock().getTime();
     const cached = this.claimCache.get(tokenId);
-    // 30 s: the pay page asks every 3 s, and each read is an RPC call (the week's budget is fixed).
-    if (cached !== undefined && now - cached.at < 30_000) return cached.claim;
+    if (cached !== undefined && now - cached.at < 10_000) return cached.claim;
     try {
       const claim = await this.deps.contract.claim(tokenId);
       this.claimCache.set(tokenId, { at: now, claim });
