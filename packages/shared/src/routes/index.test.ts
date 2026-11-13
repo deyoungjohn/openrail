@@ -60,7 +60,11 @@ describe("token ids, decimals and standards", () => {
   it("splits nep141 from nep245 token ids", () => {
     expect(tokenStandard(getRoute("R1").originAssetId)).toBe("nep141");
     expect(isNep141(getRoute("R1").originAssetId)).toBe(true);
-    for (const id of ["R4", "R5", "R6", "R12"]) {
+    for (const id of ["R5", "R6"]) {
+      expect(tokenStandard(getRoute(id).originAssetId)).toBe("nep141");
+      expect(isNep141(getRoute(id).originAssetId)).toBe(true);
+    }
+    for (const id of ["R4", "R12"]) {
       expect(tokenStandard(getRoute(id).originAssetId)).toBe("nep245");
       expect(isNep245(getRoute(id).originAssetId)).toBe(true);
     }
