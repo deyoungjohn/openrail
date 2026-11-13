@@ -25,6 +25,8 @@ interface NbBlockRef {
 interface NbTxn {
   transaction_hash?: string;
   signer_account_id?: string;
+  /** Receipt rows (`/receipts`) carry no signer; any account works as the sender for an archival tx-status read. */
+  predecessor_account_id?: string;
   receiver_account_id?: string;
   block?: NbBlockRef | null;
   receipt_block?: NbBlockRef | null;
@@ -110,6 +112,11 @@ export class NearBlocksEventSource implements EventSource {
     private readonly budget?: BudgetGovernor,
     private readonly fromSeconds = 0,
     private readonly shouldRead: (txHash: string) => boolean = () => true,
+    /**
+     * Backfill of one claim: list `listAccount`'s receipts (a claim account signs no transaction, so its `/txns` list
+     * is empty; every forward, payout and surplus release is a receipt to or from it), and keep the root's logs.
+     */
+    private readonly scope: { listAccount: string; listing: "receipts" } | undefined = undefined,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKeys = (typeof apiKey === "string" ? [apiKey] : [...apiKey]).filter((k) => k !== "");
@@ -138,8 +145,10 @@ export class NearBlocksEventSource implements EventSource {
       this.apiKeys[Math.min(this.budget?.keyIndex() ?? 0, this.apiKeys.length - 1)] ?? "";
     const query = new URLSearchParams({ limit: String(this.limit) });
     if (nextPage !== null) query.set("next", nextPage);
-    const url = `${this.baseUrl}/v3/accounts/${encodeURIComponent(this.rootAccount)}/txns?${query.toString()}`;
-    this.increment("nearblocks.txns");
+    const account = this.scope?.listAccount ?? this.rootAccount;
+    const listing = this.scope?.listing ?? "txns";
+    const url = `${this.baseUrl}/v3/accounts/${encodeURIComponent(account)}/${listing}?${query.toString()}`;
+    this.increment(`nearblocks.${listing}`);
     let response: Response;
     try {
       response = await this.fetchImpl(url, {
@@ -200,10 +209,9 @@ export class NearBlocksEventSource implements EventSource {
   }
 
   private async rootLogs(tx: NbTxn): Promise<SourceReceipt[]> {
-    if (typeof tx.transaction_hash !== "string" || typeof tx.signer_account_id !== "string") {
-      return [];
-    }
-    const status = await this.txStatus(tx.transaction_hash, tx.signer_account_id);
+    const sender = tx.signer_account_id ?? tx.predecessor_account_id;
+    if (typeof tx.transaction_hash !== "string" || typeof sender !== "string") return [];
+    const status = await this.txStatus(tx.transaction_hash, sender);
     const receipts: SourceReceipt[] = [];
     for (const outcome of status.receipts_outcome ?? []) {
       if (outcome.outcome?.executor_id !== this.rootAccount) continue;
@@ -227,6 +235,8 @@ export class NearBlocksEventSource implements EventSource {
     let latestBlock = parsed.latest;
     let done = false;
     const blocks = new Map<number, SourceBlock>();
+    // A transaction shows once per receipt in a receipt listing: read its status once.
+    const readHashes = new Set<string>();
 
     for (let pageIndex = 0; pageIndex < this.maxPages; pageIndex += 1) {
       const body = await this.listPage(next);
@@ -248,8 +258,11 @@ export class NearBlocksEventSource implements EventSource {
           continue;
         }
         latestBlock = Math.max(latestBlock, height);
-        if (typeof tx.transaction_hash === "string" && !this.shouldRead(tx.transaction_hash))
-          continue;
+        if (typeof tx.transaction_hash === "string") {
+          if (readHashes.has(tx.transaction_hash) || !this.shouldRead(tx.transaction_hash))
+            continue;
+          readHashes.add(tx.transaction_hash);
+        }
         const receipts = await this.rootLogs(tx);
         if (receipts.length === 0) continue;
         const hash = tx.receipt_block?.block_hash ?? tx.block?.block_hash ?? `h${height}`;
