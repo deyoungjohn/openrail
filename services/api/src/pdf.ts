@@ -488,98 +488,249 @@ export interface ReceiptDocument {
   payer_tx?: { hash?: string; chain?: string; sender?: string } | null;
   near_tx: string;
   claim_account: string;
+  /** What was paid for (the invoice's lines); one line for the payment when absent. */
+  line_items?: LineItem[] | null;
+  /** The client's address, as the business typed it. */
+  client_address?: string | null;
   terms_fingerprint: string;
   verify_command: string;
 }
 
-function drawReceiptTop(builder: PageBuilder, receipt: ReceiptDocument): void {
-  const top = builder.y;
-  text(builder, RIGHT, top + 4, 30, "/F3", INK, "Receipt", "right");
-  text(builder, RIGHT, top - 16, 9, "/F1", GRAY, receipt.receipt_id, "right");
-  text(builder, RIGHT, top - 40, 14, "/F2", ACCENT, "PAID", "right");
+const ON_ACCENT = "1 1 1";
+const RULE = "0.16 0.16 0.16";
 
-  label(builder, "FROM", MARGIN, top);
-  builder.y = top - 16;
-  wrapped(builder, receipt.business_name ?? "Openrail business", MARGIN, 260, 12, "/F2", INK);
-  if (receipt.business_username !== null && receipt.business_username !== undefined) {
-    wrapped(builder, `@${receipt.business_username}`, MARGIN, 260, 9, "/F1", GRAY);
+/** Transaction pages on each chain's explorer (the same ones the web app links to). */
+const EXPLORER_TX: Record<string, string> = {
+  near: "https://nearblocks.io/txns/",
+  ethereum: "https://etherscan.io/tx/",
+  base: "https://basescan.org/tx/",
+  arbitrum: "https://arbiscan.io/tx/",
+  optimism: "https://optimistic.etherscan.io/tx/",
+  polygon: "https://polygonscan.com/tx/",
+  bnb: "https://bscscan.com/tx/",
+  solana: "https://solscan.io/tx/",
+};
+
+const CHAIN_LABEL: Record<string, string> = {
+  near: "NEAR",
+  ethereum: "Ethereum",
+  base: "Base",
+  arbitrum: "Arbitrum",
+  optimism: "Optimism",
+  polygon: "Polygon",
+  bnb: "BNB Chain",
+  solana: "Solana",
+};
+
+/** The chain a settlement asset id lives on (`nep141:sol-...` is USDC bridged from Solana). */
+function assetChain(asset: string): string {
+  if (/:sol-/.test(asset)) return "solana";
+  if (/:base-/.test(asset)) return "base";
+  if (/:arb-/.test(asset)) return "arbitrum";
+  if (/:eth-/.test(asset)) return "ethereum";
+  return "near";
+}
+
+/** Base units with 6 decimals as `7.00` (two decimals, the receipt shows dollars). */
+function sixDecimals(units: string): string | null {
+  if (!/^\d+$/.test(units)) return null;
+  const cents = (BigInt(units) + 5_000n) / 10_000n;
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
+}
+
+interface PdfLink {
+  page: number;
+  rect: [number, number, number, number];
+  url: string;
+}
+
+function fill(
+  builder: PageBuilder,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: string,
+): void {
+  builder.content += `${color} rg\n${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f\n`;
+}
+
+/** Text that opens a link when clicked (a URI annotation over it). */
+function linked(
+  builder: PageBuilder,
+  links: PdfLink[],
+  x: number,
+  y: number,
+  size: number,
+  value: string,
+  url: string | null,
+): void {
+  text(builder, x, y, size, "/F1", url === null ? INK : ACCENT, value);
+  if (url === null) return;
+  const width = measureTextWidth("/F1", value, size);
+  line(builder, x, y - 1.5, x + width, y - 1.5, 0.4, ACCENT);
+  links.push({ page: builder.pages.length, rect: [x, y - 3, x + width, y + size], url });
+}
+
+/**
+ * The receipt, laid out as the invoice template (13 Nov): business and RECEIPT on top, who paid and the amount, the
+ * lines on an accent band, payment method and totals, then everything a reader needs to check it on chain, with
+ * clickable explorer links.
+ */
+function drawReceipt(builder: PageBuilder, receipt: ReceiptDocument, links: PdfLink[]): void {
+  const top = PAGE_HEIGHT - 70;
+  // Business (bold, larger) and the title.
+  builder.y = top;
+  wrapped(builder, receipt.business_name ?? "Openrail business", MARGIN, 300, 18, "/F2", INK, 22);
+  if (receipt.business_username !== null && receipt.business_username !== undefined)
+    wrapped(builder, `@${receipt.business_username}`, MARGIN, 300, 10, "/F1", GRAY, 14);
+  text(builder, RIGHT, top - 8, 34, "/F1", INK, "RECEIPT", "right");
+  text(builder, RIGHT, top - 30, 10, "/F2", ACCENT, "PAID", "right");
+
+  // Who paid, and the receipt's numbers.
+  const block = Math.min(builder.y - 26, top - 80);
+  text(builder, MARGIN, block, 9, "/F1", INK, "Receipt to :");
+  builder.y = block - 20;
+  wrapped(builder, receipt.buyer_name ?? "—", MARGIN, 280, 16, "/F2", INK, 20);
+  builder.y -= 8;
+  text(builder, MARGIN, builder.y, 8, "/F2", INK, "Address");
+  builder.y -= 12;
+  const address = (receipt.client_address ?? "").split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (address.length === 0) address.push("—");
+  for (const part of address) wrapped(builder, part, MARGIN, 280, 8.5, "/F1", INK, 11);
+  builder.y -= 8;
+  text(builder, MARGIN, builder.y, 8, "/F2", INK, "Email");
+  builder.y -= 12;
+  // Email left blank on purpose (no buyer email is kept).
+  builder.y -= 6;
+
+  text(builder, RIGHT, block, 9, "/F1", INK, `No: ${receipt.invoice_number}`, "right");
+  text(builder, RIGHT, block - 16, 9, "/F1", INK, `Date : ${formatDate(receipt.paid_at)}`, "right");
+  text(builder, RIGHT, block - 32, 7.5, "/F1", GRAY, receipt.receipt_id, "right");
+  text(builder, RIGHT, block - 64, 9, "/F1", INK, "Amount paid", "right");
+  text(
+    builder,
+    RIGHT,
+    block - 86,
+    18,
+    "/F2",
+    INK,
+    `USD : $${receipt.amount_usd ?? "0.00"}`,
+    "right",
+  );
+  builder.y = Math.min(builder.y, block - 104);
+
+  // The lines on an accent band, edge to edge.
+  const bandTop = builder.y;
+  fill(builder, 0, bandTop - 24, PAGE_WIDTH, 24, ACCENT);
+  const QTY_X = 372;
+  const PRICE_RIGHT = 478;
+  const head = bandTop - 16;
+  text(builder, MARGIN, head, 9.5, "/F2", ON_ACCENT, "DESCRIPTION");
+  text(builder, QTY_X, head, 9.5, "/F2", ON_ACCENT, "QTY");
+  text(builder, PRICE_RIGHT, head, 9.5, "/F2", ON_ACCENT, "PRICE", "right");
+  text(builder, RIGHT, head, 9.5, "/F2", ON_ACCENT, "TOTAL", "right");
+  builder.y = bandTop - 24;
+  const items =
+    receipt.line_items !== undefined && receipt.line_items !== null && receipt.line_items.length > 0
+      ? receipt.line_items
+      : [
+          {
+            description: `Payment for ${receipt.invoice_number}`,
+            quantity: 1,
+            unit_amount_usd: receipt.amount_usd ?? "0.00",
+            amount_usd: receipt.amount_usd ?? "0.00",
+          },
+        ];
+  for (const item of items) {
+    if (builder.y < 250) {
+      beginPage(builder, `Receipt ${receipt.receipt_id} (continued)`);
+    }
+    const rowTop = builder.y - 20;
+    builder.y = rowTop;
+    wrapped(builder, item.description, MARGIN, 290, 10, "/F1", INK, 13);
+    text(builder, QTY_X + 8, rowTop, 10, "/F1", INK, String(item.quantity), "right");
+    text(builder, PRICE_RIGHT, rowTop, 10, "/F1", INK, `$${item.unit_amount_usd}`, "right");
+    text(builder, RIGHT, rowTop, 10, "/F1", INK, `$${item.amount_usd}`, "right");
+    builder.y = Math.min(builder.y, rowTop - 13) - 4;
+    line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.7, RULE);
   }
 
-  builder.y = Math.min(builder.y, top - 70);
-  line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.8, ACCENT);
-  line(builder, MARGIN, builder.y - 3, RIGHT, builder.y - 3, 0.8, ACCENT);
-  builder.y -= 24;
+  // Payment method and totals.
+  builder.y -= 26;
+  const totalsTop = builder.y;
+  text(builder, MARGIN, totalsTop, 10, "/F2", INK, "Payment Method :");
+  text(builder, MARGIN, totalsTop - 14, 10, "/F2", INK, "Openrail");
+  const fee = receipt.fee_usd ?? "0.00";
+  const feeCents = usdCents(fee) ?? 0n;
+  const totalCents = usdCents(receipt.amount_usd ?? "0.00") ?? 0n;
+  const sub = totalCents - feeCents;
+  const subText = `$${sub / 100n}.${String(sub % 100n).padStart(2, "0")}`;
+  text(builder, 440, totalsTop, 9.5, "/F1", INK, "Sub-total :", "right");
+  text(builder, RIGHT, totalsTop, 9.5, "/F1", INK, subText, "right");
+  text(builder, 440, totalsTop - 18, 9.5, "/F1", INK, "Fee :", "right");
+  text(builder, RIGHT, totalsTop - 18, 9.5, "/F1", INK, `$${fee}`, "right");
+  const barY = totalsTop - 52;
+  fill(builder, 352, barY, PAGE_WIDTH - 352, 26, ACCENT);
+  text(builder, 440, barY + 9, 11, "/F2", ON_ACCENT, "Total paid :", "right");
+  text(builder, RIGHT, barY + 9, 11, "/F2", ON_ACCENT, `$${receipt.amount_usd ?? "0.00"}`, "right");
+  builder.y = barY - 34;
 
-  const blockTop = builder.y;
-  label(builder, "BILLED TO", MARGIN, blockTop);
-  builder.y = blockTop - 16;
-  wrapped(builder, receipt.buyer_name ?? "—", MARGIN, 240, 11, "/F2", INK);
-  const detailX = 360;
-  label(builder, "PAID AT", detailX, blockTop);
-  text(builder, RIGHT, blockTop, 9, "/F1", INK, formatDate(receipt.paid_at), "right");
-  label(builder, "CLAIM ACCOUNT", detailX, blockTop - 16);
-  text(builder, detailX, blockTop - 28, 8, "/F1", INK, receipt.claim_account);
-  builder.y = Math.min(builder.y, blockTop - 40) - 8;
+  // Everything needed to check the payment on chain, with links.
+  if (builder.y < 200) beginPage(builder, `Receipt ${receipt.receipt_id} (continued)`);
+  text(builder, MARGIN, builder.y, 13, "/F1", INK, "Check it on chain");
+  builder.y -= 20;
+  const payerChain = receipt.payer_tx?.chain ?? receipt.network ?? null;
+  const settledChain = assetChain(receipt.paid_asset);
+  const settled = sixDecimals(receipt.paid_amount);
+  const rows: [string, string, string | null][] = [
+    [
+      "Claim account",
+      receipt.claim_account,
+      `https://nearblocks.io/address/${encodeURIComponent(receipt.claim_account)}`,
+    ],
+    ["Terms fingerprint", receipt.terms_fingerprint, null],
+    [
+      "NEAR booking transaction",
+      receipt.near_tx,
+      `${EXPLORER_TX.near}${encodeURIComponent(receipt.near_tx)}`,
+    ],
+    [
+      `Payer's transaction${payerChain ? ` (${CHAIN_LABEL[payerChain] ?? payerChain})` : ""}`,
+      receipt.payer_tx?.hash ?? "—",
+      receipt.payer_tx?.hash && payerChain && EXPLORER_TX[payerChain] !== undefined
+        ? `${EXPLORER_TX[payerChain]}${encodeURIComponent(receipt.payer_tx.hash)}`
+        : null,
+    ],
+    ["Network", payerChain ?? "—", null],
+    [
+      "Settled",
+      `${settled === null ? receipt.paid_amount : `${settled} USDC on ${CHAIN_LABEL[settledChain] ?? settledChain}`} (${receipt.paid_amount} ${receipt.paid_asset})`,
+      null,
+    ],
+    ["Order", receipt.order_ref ?? "—", null],
+    ["Verify", receipt.verify_command, null],
+  ];
+  for (const [caption, value, url] of rows) {
+    if (builder.y < 60) beginPage(builder, `Receipt ${receipt.receipt_id} (continued)`);
+    text(builder, MARGIN, builder.y, 8, "/F2", INK, caption);
+    builder.y -= 11;
+    // The long hex lines stay on one line in a smaller size (so they copy whole).
+    const size = caption === "Verify" || caption === "Terms fingerprint" ? 6.6 : 8;
+    const parts = wrapText(value, WIDTH, size, "/F1");
+    for (const part of parts) {
+      linked(builder, links, MARGIN, builder.y, size, part, url);
+      builder.y -= size + 2;
+    }
+    builder.y -= 5;
+  }
 }
 
 export function renderReceiptPdf(receipt: ReceiptDocument): Uint8Array {
   const builder: PageBuilder = { pages: [], content: "", y: PAGE_HEIGHT - MARGIN };
+  const links: PdfLink[] = [];
   beginPage(builder, null);
-  drawReceiptTop(builder, receipt);
-
-  builder.y -= 40;
-  const tableTop = builder.y;
-  label(builder, "DESCRIPTION", MARGIN, tableTop);
-  text(builder, RIGHT, tableTop, 7, "/F2", ACCENT, "AMOUNT", "right");
-  builder.y = tableTop - 8;
-  line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.5, ACCENT);
-  builder.y -= 18;
-  const reference = `Payment for ${receipt.invoice_number}${receipt.order_ref ? ` (${receipt.order_ref})` : ""}`;
-  wrapped(builder, reference, MARGIN, 300, 9, "/F1", INK);
-  text(builder, RIGHT, tableTop - 18, 9, "/F1", INK, `$${receipt.amount_usd ?? "0.00"}`, "right");
-  builder.y -= 8;
-  line(builder, MARGIN, builder.y, RIGHT, builder.y, 0.35, "0.82 0.82 0.82");
-  builder.y -= 8;
-
-  builder.y -= 12;
-  line(builder, 360, builder.y, RIGHT, builder.y, 1.2, ACCENT);
-  builder.y -= 18;
-  text(builder, 360, builder.y, 10, "/F2", INK, "AMOUNT PAID");
-  text(builder, RIGHT, builder.y, 12, "/F2", ACCENT, `$${receipt.amount_usd ?? "0.00"}`, "right");
-  builder.y -= 14;
-  text(
-    builder,
-    360,
-    builder.y,
-    8,
-    "/F1",
-    GRAY,
-    `Paid in ${receipt.paid_amount} ${receipt.paid_asset}`,
-  );
-  builder.y -= 14;
-  text(builder, 360, builder.y, 8, "/F1", GRAY, `Fee $${receipt.fee_usd ?? "0.00"}`);
-  builder.y -= 30;
-
-  const network = receipt.network ?? receipt.payer_tx?.chain ?? "—";
-  for (const [caption, value] of [
-    ["PAYER'S TRANSACTION", receipt.payer_tx?.hash ?? "—"],
-    ["NEAR BOOKING TRANSACTION", receipt.near_tx],
-    ["NETWORK", network],
-  ] as const) {
-    label(builder, caption, MARGIN, builder.y);
-    builder.y -= 12;
-    wrapped(builder, value, MARGIN, WIDTH, 8, "/F1", INK);
-    builder.y -= 4;
-  }
-
-  builder.y = Math.min(builder.y, 180);
-  label(builder, "TERMS FINGERPRINT", MARGIN, builder.y);
-  builder.y -= 12;
-  wrapped(builder, receipt.terms_fingerprint, MARGIN, WIDTH, 7, "/F1", GRAY);
-  builder.y -= 8;
-  label(builder, "VERIFY", MARGIN, builder.y);
-  builder.y -= 12;
-  wrapped(builder, receipt.verify_command, MARGIN, WIDTH, 7, "/F1", GRAY);
+  drawReceipt(builder, receipt, links);
   finishPages(builder);
 
   const pageIds = builder.pages.map((_, index) => 7 + index * 2);
@@ -594,8 +745,14 @@ export function renderReceiptPdf(receipt: ReceiptDocument): Uint8Array {
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>");
   builder.pages.forEach((content, index) => {
     const contentId = 8 + index * 2;
+    const annots = links
+      .filter((link) => link.page === index)
+      .map(
+        (link) =>
+          `<< /Type /Annot /Subtype /Link /Rect [${link.rect.map((n) => n.toFixed(2)).join(" ")}] /Border [0 0 0] /A << /S /URI /URI (${escapePdfText(link.url)}) >> >>`,
+      );
     objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents ${contentId} 0 R >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >>${annots.length === 0 ? "" : ` /Annots [${annots.join(" ")}]`} /Contents ${contentId} 0 R >>`,
     );
     objects.push(
       `<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}endstream`,

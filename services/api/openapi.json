@@ -896,6 +896,9 @@
             "items": {
               "$ref": "#/components/schemas/LineItem"
             }
+          },
+          "client_address": {
+            "type": ["string", "null"]
           }
         }
       },
@@ -994,6 +997,11 @@
               "type": "string"
             },
             "description": "Additional clauses after the two core clauses."
+          },
+          "client_address": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "The client's postal address, printed on the receipt. Off chain, not part of the terms hash."
           }
         }
       },
@@ -2568,6 +2576,13 @@
           },
           "claim_account": {
             "type": "string"
+          },
+          "line_items": {
+            "type": "array",
+            "description": "What was paid for (the invoice's lines, off chain).",
+            "items": {
+              "$ref": "#/components/schemas/LineItem"
+            }
           }
         }
       },

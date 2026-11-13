@@ -22,6 +22,7 @@ import {
   ApiError,
   outstandingOf,
   paidTotalOf,
+  plainText,
   type ApiRequest,
   type ApiResponse,
   type BusinessRecord,
@@ -113,6 +114,8 @@ export interface StoredCheckout {
   subtotal_usd?: string;
   fee_usd?: string;
   total_usd?: string;
+  /** The store's name for its customer (billing name), shown as the payer in the merchant's dashboard. Optional. */
+  customer_name?: string | null;
 }
 
 export interface CheckoutView {
@@ -655,6 +658,7 @@ export class Checkouts {
           transactions,
           timestamp,
           status,
+          customer_name: stored.customer_name ?? null,
         },
         indexed: true,
       },
@@ -755,6 +759,9 @@ export class Checkouts {
     }
     const returnUrl = parseHttpsUrl(body.return_url, "return_url");
     const cancelUrl = parseHttpsUrl(body.cancel_url, "cancel_url");
+    // Plain text only, short: it is shown to the merchant, never sent on chain.
+    const customerName =
+      typeof body.customer_name === "string" ? plainText(body.customer_name, 120) || null : null;
     const rawItems = body.items;
     const feeResolved = resolveFee(amount.text, [], feeMode);
     const feeItem = feeResolved.items[0];
@@ -819,6 +826,7 @@ export class Checkouts {
       subtotal_usd: feeBreakdown.subtotalUsd,
       fee_usd: feeBreakdown.feeUsd,
       total_usd: feeBreakdown.totalUsd,
+      customer_name: customerName,
     };
     context.docs.put(NS_CHECKOUTS, tokenId, stored, accountId);
     context.docs.put(NS_REFS, refKey, { token_id: tokenId }, accountId);

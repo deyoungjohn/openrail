@@ -225,7 +225,7 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
       value: (r) => r.product,
       cell: (r) => (
         <Link
-          href={`/app/invoices/${encodeURIComponent(r.invoiceId)}`}
+          href={r.href ?? `/app/invoices/${encodeURIComponent(r.invoiceId)}`}
           className="text-accent-text hover:underline"
         >
           {r.product}

@@ -145,6 +145,7 @@ export interface Invoice {
   paid_total: U128;
   recurring_id?: string;
   line_items?: LineItem[];
+  client_address?: string | null;
 }
 
 export interface InvoiceList {
@@ -171,6 +172,7 @@ export interface CreateInvoiceRequest {
   pay_link?: string;
   assignment_agreement_sha256?: Hex32;
   clauses?: string[];
+  client_address?: string;
 }
 
 export interface SendInvoiceRequest {
@@ -603,6 +605,7 @@ export interface PublicReceipt {
   receipt: Receipt;
   verify_url: string;
   claim_account: string;
+  line_items?: LineItem[];
 }
 
 export interface KindRules {

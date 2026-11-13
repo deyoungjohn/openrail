@@ -64,6 +64,8 @@ export function invoiceTotalCents(lines: readonly LineForm[]): bigint | null {
 export interface IssueForm {
   invoiceNumber: string;
   debtorName: string;
+  /** Optional, printed on the receipt. */
+  clientAddress?: string;
   /** `YYYY-MM-DD`. */
   dueDate: string;
   lines: LineForm[];

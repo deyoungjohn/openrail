@@ -43,12 +43,18 @@ async function load(): Promise<Earning[]> {
           id: event.id,
           time: event.created * 1000,
           cents: unitsToCents(BigInt(amount)),
-          payer: "Anonymous",
+          // The store's billing name when it sent one; a checkout from before that is a store sale with no name.
+          payer:
+            typeof data.customer_name === "string" && data.customer_name !== ""
+              ? data.customer_name
+              : "Store customer",
           product: `Checkout ${orderRef}`,
           stream: "checkout",
           chain,
           txHash: bookingTx,
           invoiceId: tokenId,
+          // A checkout is not an invoice: its own page shows the order and its payment.
+          href: `/c/${encodeURIComponent(tokenId)}`,
         });
       }
       const next = batch.next_cursor ?? null;

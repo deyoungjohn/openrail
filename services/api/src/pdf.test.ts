@@ -316,7 +316,7 @@ describe("receipt PDF", () => {
     const pdf = Buffer.from(renderReceiptPdf(receipt)).toString("latin1");
     expect(pdf.startsWith("%PDF-1.4")).toBe(true);
     expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
-    expect(pdf).toContain("Receipt");
+    expect(pdf).toContain("RECEIPT");
     expect(pdf).toContain("PAID");
     for (const value of [
       receipt.receipt_id,

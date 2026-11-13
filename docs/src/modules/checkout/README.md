@@ -37,6 +37,7 @@ When creating the key, tick both **`invoices:read`** and **`invoices:write`**. N
 
 2. **Return and cancel URLs**:
    Checkouts accept `return_url` and `cancel_url` (must be valid `https:` URLs). These are stored, returned in API and public views, and wired into the hosted page's "Back to shop" / "Cancel and return" action buttons (`cancel_url` when unpaid, `return_url` once paid).
+   An optional `customer_name` (plain text, up to 120 characters) is the store's billing name for the buyer. It is shown as the payer in the merchant's dashboard and sent back in the `checkout.paid` webhook; it never goes on chain.
 
 3. **Currency rule (USD only)**:
    The API takes USD amounts. Requests can supply `amount_usd` (string e.g. `"29.99"`), `amount_cents` (integer e.g. `2999`), or `amount_usd_cents`. Any other currency (e.g. `EUR`, `CAD`, `GBP`) is refused with `400 Bad Request` and named code `unsupported_currency`. The API never converts currencies silently.

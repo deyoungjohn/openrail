@@ -217,6 +217,9 @@ export function IssueScreen() {
           invoice_number: form.invoiceNumber.trim(),
           issuer_legal_name: issuer.trim(),
           debtor_legal_name: form.debtorName.trim(),
+          ...((form.clientAddress ?? "").trim() === ""
+            ? {}
+            : { client_address: (form.clientAddress ?? "").trim() }),
           amount_usd: formatUsd(total).slice(1).replaceAll(",", ""),
           due_date: form.dueDate,
           line_items: form.lines.map((l) => ({
@@ -277,6 +280,12 @@ export function IssueScreen() {
             value={form.debtorName}
             onChange={(e) => set("debtorName", e.target.value)}
             error={err("debtorName")}
+          />
+          <Input
+            label={t.clientAddress}
+            helper={t.clientAddressHelp}
+            value={form.clientAddress ?? ""}
+            onChange={(e) => set("clientAddress", e.target.value)}
           />
           <div className="grid gap-6 sm:grid-cols-2">
             <Input

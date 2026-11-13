@@ -340,6 +340,8 @@ export interface InvoiceRecord {
   created_block: number;
   terms: Terms;
   line_items?: LineItem[];
+  /** The client's postal address, as the business typed it. Off chain, not part of the terms hash. */
+  client_address?: string | null;
   fee_mode?: FeeMode;
   /** The transaction that issued the claim on NEAR. */
   issue_tx?: string;
@@ -483,6 +485,20 @@ export function withdrawPhaseOf(word: unknown): WithdrawPhase {
     default:
       return { phase: "pending", terminal: false };
   }
+}
+
+/** Text a person typed, kept printable: control characters and angle brackets dropped, trimmed, cut to `max`. */
+export function plainText(value: string, max: number, keepNewlines = false): string {
+  return Array.from(value)
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      if (ch === "<" || ch === ">") return false;
+      if (keepNewlines && ch === "\n") return true;
+      return code >= 32 && code !== 127;
+    })
+    .join("")
+    .trim()
+    .slice(0, max);
 }
 
 function nowIso(clock: () => Date): string {
@@ -694,9 +710,43 @@ export class ApiApp {
     return invoice;
   }
 
+  /**
+   * The payer's own transaction on the chain they paid from, when the indexer has none: the provider's status for the
+   * claim's pay sessions names it (no RPC). Kept once found.
+   */
+  private async paymentOrigin(tokenId: string): Promise<{ hash: string; chain: string } | null> {
+    const sessions = this.store.listPaySessions(tokenId).slice().reverse();
+    for (const session of sessions) {
+      if (session.status === "pending_deposit" || session.status === "expired") continue;
+      const kept = this.docs.get<{ hash: string; chain: string }>("payment_origin", session.id);
+      if (kept !== undefined) return kept;
+      try {
+        const live = await this.quotes.status(session.deposit_address);
+        const hash = live?.originChainTxHashes?.[0];
+        if (typeof hash !== "string" || hash === "") continue;
+        let chain = "";
+        try {
+          chain = getRoute(session.route_id, this.routes).originChain;
+        } catch {
+          chain = "";
+        }
+        const found = { hash, chain };
+        this.docs.put("payment_origin", session.id, found);
+        return found;
+      } catch {
+        // the provider cannot say now
+      }
+    }
+    return null;
+  }
+
   private async receiptMachine(bookingTxHash: string): Promise<ReceiptDocument> {
     const receipt = await this.receiptFor(bookingTxHash);
     if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
+    if (receipt.origin_tx === null || receipt.origin_tx === undefined) {
+      const origin = await this.paymentOrigin(String(receipt.token_id ?? ""));
+      if (origin !== null) receipt.origin_tx = origin;
+    }
     const tokenId = String(receipt.token_id ?? "");
     const invoice = this.store.getInvoice(tokenId);
     const business = invoice === undefined ? undefined : this.store.getBusiness(invoice.issuer_id);
@@ -729,6 +779,8 @@ export class ApiApp {
       payer_tx: receipt.origin_tx ?? null,
       near_tx: nearHashes[0] ?? bookingTxHash,
       claim_account: claimAccount,
+      line_items: (invoice?.line_items ?? []).map((item) => ({ ...item })),
+      client_address: invoice?.client_address ?? null,
       terms_fingerprint: invoice?.terms_hash ?? String(receipt.terms_hash ?? ""),
       verify_command: `openrail-verify claim ${claimAccount} --terms-hash ${invoice?.terms_hash ?? String(receipt.terms_hash ?? "")}`,
     }) as unknown as ReceiptDocument;
@@ -2703,10 +2755,18 @@ export class ApiApp {
       const bookingTxHash = receiptMatch[1] ?? "";
       const receipt = await this.receiptFor(bookingTxHash);
       if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
+      const tokenId = String(receipt.token_id ?? "");
+      const origin =
+        receipt.origin_tx === null || receipt.origin_tx === undefined
+          ? await this.paymentOrigin(tokenId)
+          : null;
+      const invoice = this.store.getInvoice(tokenId);
       return {
         status: 200,
         body: {
-          receipt,
+          receipt: origin === null ? receipt : { ...receipt, origin_tx: origin },
+          // What was paid for, from the invoice (off chain): the page and the PDF list it.
+          line_items: invoice?.line_items ?? [],
           verify_url: `${this.deps.config.payBaseUrl}/r/${bookingTxHash}`,
           claim_account: `${String(receipt.token_id ?? "")}.${this.deps.config.rootAccount}`,
         },
@@ -2806,6 +2866,7 @@ export class ApiApp {
       line_items?: unknown;
       line_items_sha256?: string;
       fee_mode?: unknown;
+      client_address?: unknown;
       pay_link?: string;
       assignment_agreement_sha256?: string;
       clauses?: string[];
@@ -2972,6 +3033,10 @@ export class ApiApp {
       terms,
       line_items: feeResult.items,
       fee_mode: feeMode,
+      client_address:
+        typeof body.client_address === "string"
+          ? plainText(body.client_address, 300, true) || null
+          : null,
       ...(issueTx === undefined ? {} : { issue_tx: issueTx }),
       ...(options.recurringId === undefined ? {} : { recurring_id: options.recurringId }),
     };

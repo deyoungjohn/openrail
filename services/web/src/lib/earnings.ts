@@ -39,6 +39,8 @@ export interface Earning {
   chain: string;
   txHash: string;
   invoiceId: string;
+  /** Where "Paid for" links to; a module row sets its own page (an invoice row links to the invoice). */
+  href?: string;
 }
 
 const DAY_MS = 86_400_000;
