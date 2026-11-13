@@ -1,6 +1,6 @@
 /** Where a merchant's money is: one row per held share, followed from the booking to the private balance. */
 
-export type TrailStage = "held" | "sending" | "private" | "returned";
+export type TrailStage = "held" | "sending" | "private" | "returned" | "withdrawn";
 
 export interface TrailRow {
   key: string;
@@ -13,6 +13,46 @@ export interface TrailRow {
   time: number;
   /** The NEAR transaction that closed the step (the settle hash or the refund), when there is one. */
   tx: string | null;
+  /** A withdrawal: the provider's word, where it went, and the explorer link of the payout transaction. */
+  withdrawal?: {
+    status: string;
+    chain: string;
+    address: string;
+    hashes: string[];
+    urls: string[];
+  };
+}
+
+export interface WithdrawalJson {
+  deposit_address: string;
+  amount: string;
+  destination_chain: string;
+  address: string;
+  created_at: string;
+  updated_at?: string;
+  status: string;
+  destination_tx_hashes: string[];
+  destination_explorer_urls: string[];
+}
+
+/** One row per withdrawal started on this site: money leaving the private balance. */
+export function withdrawalRows(list: readonly WithdrawalJson[]): TrailRow[] {
+  return list.map((w) => ({
+    key: `w:${w.deposit_address}`,
+    tokenId: "",
+    index: 0,
+    amount: /^\d+$/.test(w.amount) ? BigInt(w.amount) : 0n,
+    stage: "withdrawn" as const,
+    time: Date.parse(w.updated_at ?? w.created_at) || Date.parse(w.created_at) || 0,
+    tx: null,
+    withdrawal: {
+      status: w.status,
+      chain: w.destination_chain,
+      address: w.address,
+      hashes: w.destination_tx_hashes,
+      urls: w.destination_explorer_urls,
+    },
+  }));
 }
 
 export interface TrailEvent {
@@ -96,10 +136,15 @@ export interface TrailTotals {
   sending: bigint;
   private: bigint;
   returned: bigint;
+  /** Withdrawn from the private balance (SUCCESS only). */
+  withdrawn: bigint;
 }
 
 export function trailTotals(rows: readonly TrailRow[]): TrailTotals {
-  const t: TrailTotals = { held: 0n, sending: 0n, private: 0n, returned: 0n };
-  for (const r of rows) t[r.stage] += r.amount;
+  const t: TrailTotals = { held: 0n, sending: 0n, private: 0n, returned: 0n, withdrawn: 0n };
+  for (const r of rows) {
+    if (r.stage === "withdrawn" && r.withdrawal?.status !== "SUCCESS") continue;
+    t[r.stage] += r.amount;
+  }
   return t;
 }

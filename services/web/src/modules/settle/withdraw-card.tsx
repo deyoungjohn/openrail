@@ -8,12 +8,24 @@ import { Card } from "@/components/ui/card";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Input, Select } from "@/components/ui/input";
 import { dashClient } from "@/lib/client";
-import { parseUsdcInput } from "@/lib/w5";
+import { explorerTxUrl, parseUsdcInput } from "@/lib/w5";
 import { useNear } from "@/wallet/near";
 import { checkIntent, signedIntent, type WithdrawIntent } from "./withdraw";
 
 /** The asset the shield moved: USDC on NEAR. A withdraw takes the same asset out. */
 const SOURCE_ASSET = "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+
+/** The provider lists the payout transactions as strings or `{hash, explorerUrl}`; a missing link comes from our own map. */
+export function destinationTxs(v: unknown, chain: string): { hash: string; url: string | null }[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((x) => {
+    const hash =
+      typeof x === "string" ? x : typeof x?.hash === "string" ? (x.hash as string) : null;
+    if (hash === null || hash === "") return [];
+    const given = typeof x?.explorerUrl === "string" && x.explorerUrl !== "" ? x.explorerUrl : null;
+    return [{ hash, url: given ?? explorerTxUrl(chain, hash) }];
+  });
+}
 
 const CHAINS: { id: string; label: string; chain: ChainId }[] = [
   { id: "base", label: "Base", chain: "base" },
@@ -72,6 +84,8 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quoted | null>(null);
   const [status, setStatus] = useState<string>("");
+  // The transaction that paid the wallet on the destination chain, from the provider's status.
+  const [arrived, setArrived] = useState<{ hash: string; url: string | null }[]>([]);
   // The signed withdrawal waits here while the wallet's key is registered with the intents contract (one small transaction).
   const [waiting, setWaiting] = useState<{
     body: Record<string, unknown>;
@@ -127,9 +141,13 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
       await new Promise((r) => setTimeout(r, 3000));
       const s = (await dashClient.confidential.withdrawStatus(quote.depositAddress)) as {
         status?: string;
+        swapDetails?: { destinationChainTxHashes?: unknown };
       };
       setStatus(String(s.status ?? ""));
-      if (s.status === "SUCCESS") return setStep("done");
+      if (s.status === "SUCCESS") {
+        setArrived(destinationTxs(s.swapDetails?.destinationChainTxHashes, chain));
+        return setStep("done");
+      }
       if (s.status === "REFUNDED" || s.status === "FAILED") {
         console.log("withdraw ended", quote.depositAddress, s);
         setProblem(
@@ -283,9 +301,26 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
           </p>
         ) : null}
         {step === "done" ? (
-          <p role="status" className="text-[14px] font-medium">
-            Done. The money is in your wallet.
-          </p>
+          <div role="status" className="space-y-1 text-[14px]">
+            <p className="font-medium">Done. The money is in your wallet.</p>
+            {arrived.map((t) =>
+              t.url ? (
+                <a
+                  key={t.hash}
+                  href={t.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block font-mono text-[13px] underline underline-offset-2"
+                >
+                  {`${t.hash.slice(0, 10)}…${t.hash.slice(-6)}`} on the explorer
+                </a>
+              ) : (
+                <span key={t.hash} className="block font-mono text-[13px]">
+                  {t.hash}
+                </span>
+              ),
+            )}
+          </div>
         ) : null}
         {step === "register" || step === "registering" ? (
           <p role="status" className="text-[14px]">
@@ -324,6 +359,7 @@ export function WithdrawCard({ approxUnits }: { approxUnits: bigint }) {
                 setQuote(null);
                 setProblem(null);
                 setStatus("");
+                setArrived([]);
               }}
             >
               Start again

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTrail, trailTotals, type TrailEvent } from "./money-trail";
+import { buildTrail, trailTotals, withdrawalRows, type TrailEvent } from "./money-trail";
 
 const ev = (type: string, created: number, data: Record<string, unknown>): TrailEvent => ({
   id: `${type}-${created}`,
@@ -59,6 +59,43 @@ describe("money trail", () => {
       ev("settle_held", 1, { token_id: "b", index: 0, amount: "200" }),
       ev("settle_settled", 2, { token_id: "b", index: 0, destination_tx: "x" }),
     ]);
-    expect(trailTotals(rows)).toEqual({ held: 100n, sending: 0n, private: 200n, returned: 0n });
+    expect(trailTotals(rows)).toEqual({
+      held: 100n,
+      sending: 0n,
+      private: 200n,
+      returned: 0n,
+      withdrawn: 0n,
+    });
+  });
+});
+
+describe("withdrawals in the trail", () => {
+  it("lists each withdrawal with its explorer link and counts only the finished ones", () => {
+    const rows = withdrawalRows([
+      {
+        deposit_address: "d1",
+        amount: "1000000",
+        destination_chain: "base",
+        address: "0xabc",
+        created_at: "2026-11-13T06:00:00.000Z",
+        updated_at: "2026-11-13T06:01:00.000Z",
+        status: "SUCCESS",
+        destination_tx_hashes: ["0x00d4"],
+        destination_explorer_urls: ["https://basescan.org/tx/0x00d4"],
+      },
+      {
+        deposit_address: "d2",
+        amount: "500000",
+        destination_chain: "base",
+        address: "0xabc",
+        created_at: "2026-11-13T07:00:00.000Z",
+        status: "PROCESSING",
+        destination_tx_hashes: [],
+        destination_explorer_urls: [],
+      },
+    ]);
+    expect(rows[0]?.stage).toBe("withdrawn");
+    expect(rows[0]?.withdrawal?.urls).toEqual(["https://basescan.org/tx/0x00d4"]);
+    expect(trailTotals(rows).withdrawn).toBe(1000000n);
   });
 });
