@@ -215,6 +215,12 @@ export function createContractPort(rootAccount: string): ContractPort {
     rpcHealth() {
       return near.rpcHealth();
     },
+    rpcBudget() {
+      return near.rpcBudget();
+    },
+    txHealth() {
+      return near.txHealth();
+    },
     // At most one read per account a minute, whatever the number of open tabs: the browser asks us, we ask the chain.
     // The token list changes only when a new token arrives, so it is kept for 15 minutes: one call per read, not two.
     async intentsBalances(accountId) {

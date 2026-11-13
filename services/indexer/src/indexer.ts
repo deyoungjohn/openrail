@@ -41,6 +41,19 @@ export interface IndexerOptions {
     last_error: string | null;
     calls_last_hour: number;
   }[];
+  rpcBudget?: () => {
+    used: number;
+    budget: number;
+    remaining: number;
+    pace_per_hour: number;
+    by_class: Record<string, number>;
+  };
+  txHealth?: () => {
+    tx_sent: number;
+    tx_failed: Record<string, number>;
+    near_burnt: string;
+    methods: Record<string, unknown>;
+  };
 }
 
 export interface SyncResult {
@@ -71,6 +84,8 @@ export class Indexer {
   private readonly gapSourceFactory: ((claimAccount: string) => EventSource) | undefined;
   private readonly gapIntervalMs: number;
   private readonly rpcEndpoints: NonNullable<IndexerOptions["rpcEndpoints"]> | undefined;
+  private readonly rpcBudget: NonNullable<IndexerOptions["rpcBudget"]> | undefined;
+  private readonly txHealth: NonNullable<IndexerOptions["txHealth"]> | undefined;
   private lastGapSweep = 0;
   private readonly gapSince = new Map<string, number>();
   private lastHead: number | null = null;
@@ -99,6 +114,8 @@ export class Indexer {
     this.gapSourceFactory = options.gapSourceFactory;
     this.gapIntervalMs = Math.max(60_000, options.gapIntervalMs ?? 10 * 60_000);
     this.rpcEndpoints = options.rpcEndpoints;
+    this.rpcBudget = options.rpcBudget;
+    this.txHealth = options.txHealth;
   }
 
   private async enrich(event: { event: string; eventKey: string }): Promise<void> {
@@ -306,6 +323,11 @@ export class Indexer {
     gaps: Gap[];
     oldest_gap_age: number | null;
     rpc_endpoints?: ReturnType<NonNullable<IndexerOptions["rpcEndpoints"]>>;
+    rpc_budget?: ReturnType<NonNullable<IndexerOptions["rpcBudget"]>>;
+    tx_sent?: number;
+    tx_failed?: Record<string, number>;
+    near_burnt?: string;
+    tx_methods?: Record<string, unknown>;
     degraded: boolean;
     nearblocks_budget?: ReturnType<BudgetGovernor["health"]>;
   } {
@@ -324,6 +346,15 @@ export class Indexer {
       gaps,
       oldest_gap_age: gaps.length === 0 ? null : Math.max(...gaps.map((gap) => gap.age_seconds)),
       ...(this.rpcEndpoints === undefined ? {} : { rpc_endpoints: this.rpcEndpoints() }),
+      ...(this.rpcBudget === undefined ? {} : { rpc_budget: this.rpcBudget() }),
+      ...(this.txHealth === undefined
+        ? {}
+        : (({ tx_sent, tx_failed, near_burnt, methods }) => ({
+            tx_sent,
+            tx_failed,
+            near_burnt,
+            tx_methods: methods,
+          }))(this.txHealth())),
       degraded:
         (this.budget?.health().blocked ?? false) || gaps.some((gap) => gap.age_seconds > 30 * 60),
       ...(this.budget === undefined ? {} : { nearblocks_budget: this.budget.health() }),

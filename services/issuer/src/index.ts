@@ -162,6 +162,15 @@ async function main(): Promise<void> {
           issuer_key: keySummary(issuer),
           relay_key: keySummary(relay),
           rpc_endpoints: [...issuerNear.rpcHealth(), ...relayNear.rpcHealth()],
+          rpc_budget: issuerNear.rpcBudget(),
+          tx_sent: issuerNear.txHealth().tx_sent + relayNear.txHealth().tx_sent,
+          tx_failed: {
+            ...issuerNear.txHealth().tx_failed,
+            ...relayNear.txHealth().tx_failed,
+          },
+          near_burnt: (
+            BigInt(issuerNear.txHealth().near_burnt) + BigInt(relayNear.txHealth().near_burnt)
+          ).toString(),
         };
       },
       { okMs: 60_000, failMs: 15_000 },

@@ -64,4 +64,3 @@ Status: **built** facts unless marked **exploring**.
   clients pay without accepting first, as on common invoicing tools. **built**
 - The client's address and the line items are kept with the invoice, off chain. They are not
   part of the terms fingerprint. **built**
-

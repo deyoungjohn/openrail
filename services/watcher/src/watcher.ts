@@ -197,6 +197,15 @@ export class Watcher {
         ...(this.chain.callCounts?.() ?? {}),
       },
       ...(this.near.rpcHealth === undefined ? {} : { rpc_endpoints: this.near.rpcHealth() }),
+      ...(this.near.rpcBudget === undefined ? {} : { rpc_budget: this.near.rpcBudget() }),
+      ...(this.near.txHealth === undefined
+        ? {}
+        : (({ tx_sent, tx_failed, near_burnt, methods }) => ({
+            tx_sent,
+            tx_failed,
+            near_burnt,
+            tx_methods: methods,
+          }))(this.near.txHealth())),
       ...(this.config.mode === "triggered"
         ? {
             mode: "triggered" as const,

@@ -106,6 +106,14 @@ async function main(): Promise<void> {
     last_error: lastError,
     last_alert: lastAlert,
     last_summary: lastSummary,
+    rpc_endpoints: chain.rpcHealth(),
+    rpc_budget: chain.rpcBudget(),
+    ...(({ tx_sent, tx_failed, near_burnt, methods }) => ({
+      tx_sent,
+      tx_failed,
+      near_burnt,
+      tx_methods: methods,
+    }))(chain.txHealth()),
   }));
 
   const tick = async (): Promise<void> => {

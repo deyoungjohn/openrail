@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeyPair } from "near-api-js";
-import { NearClient, NearQuotaError, NearRpcError } from "./index.js";
+import { NearClient, NearQuotaError, NearRpcError, type FetchLike } from "./index.js";
 
 const BLOCK_HASH = "1".repeat(32);
 
@@ -365,6 +365,146 @@ describe("near client RPC pool health", () => {
   });
 });
 
+describe("near client RPC budget", () => {
+  function budgetClient(
+    urls: string[],
+    fetchImpl: FetchLike,
+    now: () => number,
+    budget = 10,
+  ): NearClient {
+    return new NearClient({
+      rpcUrls: urls,
+      fetchImpl,
+      sleep: async () => undefined,
+      cacheMs: 0,
+      dailyBudget: budget,
+      now,
+      hedgeDelayMs: 10,
+    });
+  }
+
+  it("routes ui/sweep/discover to fallbacks and trigger reads to the paid URL", async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      urls.push(String(input));
+      return callResult({ ok: true });
+    });
+    const client = budgetClient(["https://paid.test", "https://free.test"], fetchImpl, () =>
+      Date.UTC(2026, 10, 13, 6),
+    );
+    await client.view({ contractId: "x", methodName: "a", feature: "api" });
+    expect(urls).toEqual(["https://free.test"]);
+    expect(client.rpcBudget().used).toBe(0);
+
+    urls.length = 0;
+    await client.view({ contractId: "x", methodName: "b", feature: "watcher:claim" });
+    expect(urls).toEqual(["https://paid.test"]);
+    expect(client.rpcBudget()).toMatchObject({ used: 1, budget: 10, remaining: 9 });
+    expect(client.rpcBudget().by_class.trigger).toBe(1);
+
+    urls.length = 0;
+    await client.view({ contractId: "x", methodName: "c", feature: "watcher:sweep" });
+    expect(urls).toEqual(["https://free.test"]);
+    expect(client.rpcBudget().used).toBe(1);
+  });
+
+  it("uses the paid URL for a free-class read only below 80% when fallbacks are cooling", async () => {
+    const urls: string[] = [];
+    const now = Date.UTC(2026, 10, 13, 6);
+    let freeCalls = 0;
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("free") && (freeCalls += 1) === 1)
+        return jsonResponse({ error: "limit" }, 429);
+      return callResult({ ok: true });
+    });
+    const client = budgetClient(["https://paid.test", "https://free.test"], fetchImpl, () => now);
+    for (let n = 0; n < 7; n += 1) {
+      await client.view({
+        contractId: "x",
+        methodName: "trigger",
+        args: { n },
+        feature: "watcher:claim",
+      });
+    }
+    expect(client.rpcBudget().used).toBe(7);
+    urls.length = 0;
+    await client.view({ contractId: "x", methodName: "ui1", feature: "api" }); // free 429 -> paid
+    expect(urls).toEqual(["https://free.test", "https://paid.test"]);
+    expect(client.rpcBudget().used).toBe(8);
+  });
+
+  it("at 100% only send and status still use the paid URL", async () => {
+    const urls: string[] = [];
+    let now = Date.UTC(2026, 10, 13, 6);
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      urls.push(String(input));
+      const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
+      if (body.method === "tx") return rpcResult({ status: { SuccessValue: "" } });
+      return callResult({ ok: true });
+    });
+    const client = budgetClient(["https://paid.test", "https://free.test"], fetchImpl, () => now);
+    for (let n = 0; n < 10; n += 1) {
+      await client.view({
+        contractId: "x",
+        methodName: "trigger",
+        args: { n },
+        feature: "watcher:claim",
+      });
+    }
+    expect(client.rpcBudget().used).toBe(10);
+    urls.length = 0;
+    now += 1_000;
+    await client.view({ contractId: "x", methodName: "after", feature: "watcher:claim" });
+    expect(urls).toEqual(["https://free.test"]);
+    urls.length = 0;
+    await client.txStatus("HASH", "acct.near");
+    expect(urls).toEqual(["https://paid.test"]);
+  });
+
+  it("resets the used count at UTC midnight", async () => {
+    const urls: string[] = [];
+    let now = Date.UTC(2026, 10, 13, 23, 59);
+    const client = budgetClient(
+      ["https://paid.test", "https://free.test"],
+      async (input) => {
+        urls.push(String(input));
+        return callResult({ ok: true });
+      },
+      () => now,
+      1,
+    );
+    await client.view({ contractId: "x", methodName: "one", feature: "watcher:claim" });
+    expect(urls).toEqual(["https://paid.test"]);
+    urls.length = 0;
+    await client.view({ contractId: "x", methodName: "two", feature: "watcher:claim" });
+    expect(urls).toEqual(["https://free.test"]);
+    now = Date.UTC(2026, 10, 14, 0, 1);
+    urls.length = 0;
+    await client.view({ contractId: "x", methodName: "three", feature: "watcher:claim" });
+    expect(urls).toEqual(["https://paid.test"]);
+    expect(client.rpcBudget().used).toBe(1);
+  });
+
+  it("a paid hedge goes to a fallback, never to the paid URL again", async () => {
+    const urls: string[] = [];
+    const client = budgetClient(
+      ["https://paid.test", "https://free.test"],
+      async (input) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.includes("paid")) await new Promise((resolve) => setTimeout(resolve, 50));
+        return callResult({ ok: true });
+      },
+      () => Date.UTC(2026, 10, 13, 6),
+    );
+    await client.view({ contractId: "x", methodName: "slow", feature: "watcher:claim" });
+    expect(urls.filter((url) => url.includes("paid"))).toHaveLength(1);
+    expect(urls.some((url) => url.includes("free"))).toBe(true);
+  });
+});
+
 describe("near client retry and failover", () => {
   it("fails over to the second RPC on a quota error and never reads it as rejected", async () => {
     const urls: string[] = [];
@@ -454,6 +594,57 @@ describe("near client retry and failover", () => {
 });
 
 describe("near client signing", () => {
+  it("counts transactions, burnt NEAR and alerts once after three failures", async () => {
+    const keyPair = KeyPair.fromRandom("ed25519");
+    process.env.OPENRAIL_NEAR_TEST_ACCOUNT = "issuer.test.near";
+    process.env.OPENRAIL_NEAR_TEST_KEY = keyPair.toString();
+    let fail = true;
+    const alerts: string[] = [];
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        method: string;
+        params: { request_type?: string };
+      };
+      if (body.method === "block") return rpcResult({ header: { hash: BLOCK_HASH } });
+      if (body.params.request_type === "view_access_key") {
+        return rpcResult({ nonce: 7, block_hash: BLOCK_HASH, block_height: 1 });
+      }
+      if (fail) return jsonResponse({ error: "unavailable" }, 503);
+      return rpcResult({
+        status: { SuccessValue: "" },
+        transaction_outcome: { outcome: { tokens_burnt: "1000" } },
+        receipts_outcome: [{ outcome: { tokens_burnt: "250" } }],
+      });
+    });
+    const client = new NearClient({
+      rpcUrls: ["https://rpc.primary"],
+      fetchImpl,
+      maxRetries: 0,
+      onAlert: (event) => alerts.push(event.method),
+      signer: {
+        accountIdEnv: "OPENRAIL_NEAR_TEST_ACCOUNT",
+        privateKeyEnv: "OPENRAIL_NEAR_TEST_KEY",
+      },
+    });
+    const send = () =>
+      client.sendFunctionCall({ receiverId: "openrail.near", methodName: "reconcile" });
+    for (let n = 0; n < 3; n += 1) await expect(send()).rejects.toBeInstanceOf(NearRpcError);
+    expect(alerts).toEqual(["reconcile"]);
+    expect(client.txHealth()).toMatchObject({
+      tx_sent: 0,
+      tx_failed: { reconcile: 3 },
+      methods: { reconcile: { failed: 3, consecutive_failures: 3 } },
+    });
+
+    fail = false;
+    await send();
+    expect(client.txHealth()).toMatchObject({
+      tx_sent: 1,
+      near_burnt: "1250",
+      methods: { reconcile: { sent: 1, failed: 3, consecutive_failures: 0 } },
+    });
+  });
+
   it("reads the outcome when the send response timed out", async () => {
     const keyPair = KeyPair.fromRandom("ed25519");
     process.env.OPENRAIL_NEAR_TEST_ACCOUNT = "issuer.test.near";

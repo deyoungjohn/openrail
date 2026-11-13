@@ -10,6 +10,23 @@ export interface PayoutHealthSnapshot {
   last_alert: string | null;
   last_summary: unknown;
   budget?: { day: string; used: number; daily_budget: number; remaining: number };
+  rpc_endpoints?: {
+    host: string;
+    state: "ok" | "cooling";
+    last_error: string | null;
+    calls_last_hour: number;
+  }[];
+  rpc_budget?: {
+    used: number;
+    budget: number;
+    remaining: number;
+    pace_per_hour: number;
+    by_class: Record<string, number>;
+  };
+  tx_sent?: number;
+  tx_failed?: Record<string, number>;
+  near_burnt?: string;
+  tx_methods?: Record<string, unknown>;
 }
 
 export async function startPayoutHealthServer(

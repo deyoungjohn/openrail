@@ -46,6 +46,65 @@ export interface NearClientOptions {
   cooldownMs?: number;
   /** The same read within this window is shared. */
   cacheMs?: number;
+  /** Calls to the first (paid) URL per UTC day. 0 is unlimited. */
+  dailyBudget?: number;
+  now?: () => number;
+  /** Called once when a method fails three times in a row. */
+  onAlert?: (event: { method: string; message: string }) => void;
+}
+
+export type RpcClass = "send" | "status" | "trigger" | "sweep" | "discover" | "ui";
+
+export interface RpcBudgetHealth {
+  used: number;
+  budget: number;
+  remaining: number;
+  pace_per_hour: number;
+  by_class: Record<RpcClass, number>;
+}
+
+export interface RpcTxHealth {
+  tx_sent: number;
+  tx_failed: Record<string, number>;
+  near_burnt: string;
+  methods: Record<
+    string,
+    { sent: number; failed: number; consecutive_failures: number; near_burnt: string }
+  >;
+}
+
+/** The priority class of one call; sends and tx status are the only classes that always pay. */
+export function rpcClassOf(method: string, feature: string): RpcClass {
+  if (/broadcast|send_tx|sendTransaction/i.test(method)) return "send";
+  if (method === "tx" || /status/i.test(method) || /status/i.test(feature)) return "status";
+  if (/sweep/i.test(feature)) return "sweep";
+  if (/discover/i.test(feature)) return "discover";
+  if (feature === "watcher" || feature === "watcher:claim" || feature === "watcher:balances")
+    return "trigger";
+  return "ui";
+}
+
+interface TxMethodState {
+  sent: number;
+  failed: number;
+  consecutiveFailures: number;
+  nearBurnt: bigint;
+  alerted: boolean;
+}
+
+function burntOf(value: unknown): bigint {
+  if (value === null || typeof value !== "object") return 0n;
+  const outcome = value as {
+    transaction_outcome?: { outcome?: { tokens_burnt?: unknown } };
+    receipts_outcome?: { outcome?: { tokens_burnt?: unknown } }[];
+  };
+  let total = 0n;
+  const add = (raw: unknown): void => {
+    if (typeof raw === "string" && /^\d+$/.test(raw)) total += BigInt(raw);
+  };
+  add(outcome.transaction_outcome?.outcome?.tokens_burnt);
+  for (const receipt of outcome.receipts_outcome ?? []) add(receipt.outcome?.tokens_burnt);
+  return total;
 }
 
 export interface RpcEndpointHealth {
@@ -144,6 +203,21 @@ export class NearClient {
   private readonly readTimeoutMs: number;
   private readonly cooldownMs: number;
   private readonly cacheMs: number;
+  private readonly budget: number;
+  private readonly now: () => number;
+  private readonly onAlert: ((event: { method: string; message: string }) => void) | undefined;
+  private budgetDay = "";
+  private budgetUsed = 0;
+  private readonly budgetByClass: Record<RpcClass, number> = {
+    send: 0,
+    status: 0,
+    trigger: 0,
+    sweep: 0,
+    discover: 0,
+    ui: 0,
+  };
+  private txSent = 0;
+  private readonly txMethods = new Map<string, TxMethodState>();
   private readonly endpointState = new Map<string, EndpointState>();
   private readonly readCache = new Map<string, { at: number; value: unknown }>();
   private readonly pendingReads = new Map<string, Promise<unknown>>();
@@ -171,6 +245,9 @@ export class NearClient {
     this.readTimeoutMs = Math.max(100, options.readTimeoutMs ?? 4_000);
     this.cooldownMs = Math.max(1_000, options.cooldownMs ?? 60_000);
     this.cacheMs = Math.max(0, options.cacheMs ?? 2_000);
+    this.budget = Math.max(0, Math.floor(options.dailyBudget ?? 0));
+    this.now = options.now ?? Date.now;
+    this.onAlert = options.onAlert;
     for (const url of this.rpcUrls) {
       this.endpointState.set(url, {
         lastSuccess: 0,
@@ -240,26 +317,96 @@ export class NearClient {
     else this.inFlight -= 1;
   }
 
-  /**
-   * Healthy RPCs first, starting from the one that answered last. Cooling RPCs are skipped; when
-   * every RPC is cooling, the one whose cooldown ends first is tried.
-   */
-  private urlOrder(): number[] {
-    const now = Date.now();
-    const all = this.rpcUrls.map((url, index) => ({ url, index }));
-    const ready = all.filter(
-      (entry) => (this.endpointState.get(entry.url)?.cooldownUntil ?? 0) <= now,
+  private resetBudget(): void {
+    if (this.budget <= 0) return;
+    const day = new Date(this.now()).toISOString().slice(0, 10);
+    if (day === this.budgetDay) return;
+    this.budgetDay = day;
+    this.budgetUsed = 0;
+    for (const key of Object.keys(this.budgetByClass) as RpcClass[]) this.budgetByClass[key] = 0;
+  }
+
+  private chargePaid(cls: RpcClass): void {
+    if (this.budget <= 0) return;
+    this.resetBudget();
+    this.budgetUsed += 1;
+    this.budgetByClass[cls] += 1;
+  }
+
+  private paidAllowed(cls: RpcClass): boolean {
+    if (this.budget <= 0) return true;
+    this.resetBudget();
+    if (this.budgetUsed < this.budget) return true;
+    return cls === "send" || cls === "status";
+  }
+
+  /** Budget health for `/health.rpc_budget`. */
+  rpcBudget(): RpcBudgetHealth {
+    this.resetBudget();
+    const now = this.now();
+    const dayStart = Date.UTC(
+      new Date(now).getUTCFullYear(),
+      new Date(now).getUTCMonth(),
+      new Date(now).getUTCDate(),
     );
+    const hours = Math.max((now - dayStart) / 3_600_000, 1 / 60);
+    return {
+      used: this.budgetUsed,
+      budget: this.budget,
+      remaining: this.budget <= 0 ? 0 : Math.max(0, this.budget - this.budgetUsed),
+      pace_per_hour: Math.round((this.budgetUsed / hours) * 10) / 10,
+      by_class: { ...this.budgetByClass },
+    };
+  }
+
+  /**
+   * Endpoint order for a class. Sends/status may use the paid URL; trigger reads may until 100%;
+   * sweep/discover/ui use a fallback only, and paid only when every fallback is cooling and the
+   * budget is below 80%.
+   */
+  private urlOrder(cls: RpcClass = "ui"): number[] {
+    const now = this.now();
+    const all = this.rpcUrls.map((url, index) => ({ url, index }));
+    const isReady = (entry: { url: string }): boolean =>
+      (this.endpointState.get(entry.url)?.cooldownUntil ?? 0) <= now;
+    const ready = all.filter(isReady);
     const cooling = all
-      .filter((entry) => !ready.includes(entry))
+      .filter((entry) => !isReady(entry))
       .sort(
         (a, b) =>
           (this.endpointState.get(a.url)?.cooldownUntil ?? 0) -
           (this.endpointState.get(b.url)?.cooldownUntil ?? 0),
       );
-    // Cooling endpoints are only a last resort, after every ready endpoint has failed.
-    const pool = [...ready, ...cooling];
-    const start = pool.findIndex((entry) => entry.index === this.cursor);
+    let pool = [...ready, ...cooling];
+    if (this.budget > 0) {
+      const paid = all[0];
+      const freeReady = ready.filter((entry) => entry.index !== 0);
+      const freeCooling = cooling.filter((entry) => entry.index !== 0);
+      if (cls === "sweep" || cls === "discover" || cls === "ui") {
+        if (freeReady.length > 0)
+          pool =
+            this.budgetUsed < this.budget * 0.8 && paid !== undefined
+              ? [...freeReady, ...freeCooling, paid]
+              : [...freeReady, ...freeCooling];
+        else if (this.budgetUsed < this.budget * 0.8) pool = paid === undefined ? [] : [paid];
+        else pool = freeCooling;
+      } else if (cls === "trigger" && !this.paidAllowed("trigger")) {
+        pool = pool.filter((entry) => entry.index !== 0);
+      } else if (paid !== undefined && this.paidAllowed(cls)) {
+        const paidReady = ready.some((entry) => entry.index === 0);
+        pool = paidReady
+          ? [paid, ...pool.filter((entry) => entry.index !== 0)]
+          : pool.filter((entry) => entry.index !== 0);
+      }
+    }
+    const paidFirst =
+      this.budget > 0 &&
+      (cls === "send" || cls === "status" || cls === "trigger") &&
+      this.paidAllowed(cls) &&
+      pool[0]?.index === 0;
+    const freeFirst = cls === "sweep" || cls === "discover" || cls === "ui";
+    const start =
+      paidFirst || freeFirst ? 0 : pool.findIndex((entry) => entry.index === this.cursor);
     return pool.map((_, k) => pool[((start < 0 ? 0 : start) + k) % pool.length]!.index);
   }
 
@@ -320,10 +467,12 @@ export class NearClient {
     feature: string,
     timeoutMs: number,
     settled: () => boolean,
+    cls: RpcClass,
   ): Promise<T> {
     const url = this.rpcUrls[index]!;
     this.noteCall(url);
     this.increment(feature);
+    if (index === 0) this.chargePaid(cls);
     await this.acquire();
     try {
       if (settled()) throw new NearRpcError("RPC_HEDGE_ABANDONED");
@@ -370,8 +519,9 @@ export class NearClient {
    * a definite failure, start the next at once; take the first good answer.
    */
   private async rpcRead<T>(method: string, params: unknown, feature: string): Promise<T> {
-    if (this.rpcUrls.length === 1) return this.rpcReadOne<T>(method, params, feature);
-    const order = this.urlOrder();
+    const cls = rpcClassOf(method, feature);
+    if (this.rpcUrls.length === 1) return this.rpcReadOne<T>(method, params, feature, cls);
+    const order = this.urlOrder(cls);
     return new Promise<T>((resolve, reject) => {
       let next = 0;
       let active = 0;
@@ -395,7 +545,7 @@ export class NearClient {
           if (!done) launch();
         }, this.hedgeDelayMs);
         timers.push(hedge);
-        this.attempt<T>(index, method, params, feature, this.readTimeoutMs, () => done).then(
+        this.attempt<T>(index, method, params, feature, this.readTimeoutMs, () => done, cls).then(
           (value) => {
             clearTimeout(hedge);
             if (done) return;
@@ -434,8 +584,14 @@ export class NearClient {
   }
 
   /** A single endpoint keeps the old retry/backoff for a transient failure. */
-  private async rpcReadOne<T>(method: string, params: unknown, feature: string): Promise<T> {
-    const index = this.urlOrder()[0] as number;
+  private async rpcReadOne<T>(
+    method: string,
+    params: unknown,
+    feature: string,
+    cls: RpcClass,
+  ): Promise<T> {
+    const order = this.urlOrder(cls);
+    const index = (order[0] ?? 0) as number;
     let lastError: NearRpcError | undefined;
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       try {
@@ -446,6 +602,7 @@ export class NearClient {
           feature,
           this.readTimeoutMs,
           () => false,
+          cls,
         );
       } catch (error) {
         const rpcError = error instanceof NearRpcError ? error : new NearRpcError(String(error));
@@ -464,7 +621,8 @@ export class NearClient {
    */
   private async rpcSend<T>(method: string, params: unknown, feature: string): Promise<T> {
     let lastError: NearRpcError | undefined;
-    const order = this.urlOrder();
+    const cls = rpcClassOf(method, feature);
+    const order = this.urlOrder(cls);
     const attempts = this.rpcUrls.length === 1 ? this.maxRetries + 1 : 1;
     for (let k = 0; k < order.length; k += 1) {
       const index = order[k] as number;
@@ -477,6 +635,7 @@ export class NearClient {
             feature,
             this.requestTimeoutMs,
             () => false,
+            cls,
           );
         } catch (error) {
           const rpcError = error instanceof NearRpcError ? error : new NearRpcError(String(error));
@@ -672,31 +831,100 @@ export class NearClient {
     );
   }
 
+  private txState(method: string): TxMethodState {
+    let state = this.txMethods.get(method);
+    if (state === undefined) {
+      state = { sent: 0, failed: 0, consecutiveFailures: 0, nearBurnt: 0n, alerted: false };
+      this.txMethods.set(method, state);
+    }
+    return state;
+  }
+
+  private recordTx(method: string, ok: boolean, outcome: unknown): void {
+    const state = this.txState(method);
+    if (ok) {
+      state.sent += 1;
+      state.consecutiveFailures = 0;
+      state.alerted = false;
+      state.nearBurnt += burntOf(outcome);
+    } else {
+      state.failed += 1;
+      state.consecutiveFailures += 1;
+      if (state.consecutiveFailures === 3 && !state.alerted) {
+        state.alerted = true;
+        this.onAlert?.({
+          method,
+          message: `RPC_TX_FAILED_3: ${method} failed 3 times in a row`,
+        });
+      }
+    }
+    this.txSent += ok ? 1 : 0;
+  }
+
+  /** Transactions sent/failed by method, and the yoctoNEAR burnt the outcome reports. */
+  txHealth(): RpcTxHealth {
+    let burnt = 0n;
+    const methods: RpcTxHealth["methods"] = {};
+    for (const [method, state] of this.txMethods) {
+      burnt += state.nearBurnt;
+      methods[method] = {
+        sent: state.sent,
+        failed: state.failed,
+        consecutive_failures: state.consecutiveFailures,
+        near_burnt: state.nearBurnt.toString(),
+      };
+    }
+    return {
+      tx_sent: this.txSent,
+      tx_failed: Object.fromEntries(
+        [...this.txMethods]
+          .filter(([, state]) => state.failed > 0)
+          .map(([m, state]) => [m, state.failed]),
+      ),
+      near_burnt: burnt.toString(),
+      methods,
+    };
+  }
+
   /** Sign and broadcast a function call, waiting for the RPC result. */
   async sendFunctionCall(request: FunctionCallRequest): Promise<unknown> {
     const signed = await this.signFunctionCall(request);
     const feature = request.feature ?? "near";
+    const method = request.methodName;
     try {
-      return await this.rpcSend<unknown>("broadcast_tx_commit", [signed.signedTxBase64], feature);
+      const outcome = await this.rpcSend<unknown>(
+        "broadcast_tx_commit",
+        [signed.signedTxBase64],
+        feature,
+      );
+      this.recordTx(method, true, outcome);
+      return outcome;
     } catch (error) {
       // The send may have landed even when its response timed out. Only then read the outcome,
       // so the normal path still costs one call.
-      if (this.signerEnv === undefined) throw error;
-      const senderId = requireEnv(this.signerEnv.accountIdEnv);
-      const outcome = await this.txStatusResult(signed.txHash, senderId);
-      const status =
-        outcome !== null && typeof outcome === "object"
-          ? (outcome as { status?: unknown }).status
-          : undefined;
-      if (
-        status !== undefined &&
-        typeof status === "object" &&
-        status !== null &&
-        "Failure" in status
-      )
-        throw error;
-      if (outcome === undefined || outcome === null) throw error;
-      return outcome;
+      if (this.signerEnv !== undefined) {
+        try {
+          const senderId = requireEnv(this.signerEnv.accountIdEnv);
+          const outcome = await this.txStatusResult(signed.txHash, senderId);
+          const status =
+            outcome !== null && typeof outcome === "object"
+              ? (outcome as { status?: unknown }).status
+              : undefined;
+          const failure =
+            status !== undefined &&
+            typeof status === "object" &&
+            status !== null &&
+            "Failure" in status;
+          if (!failure && outcome !== undefined && outcome !== null) {
+            this.recordTx(method, true, outcome);
+            return outcome;
+          }
+        } catch {
+          // fall through to the original error
+        }
+      }
+      this.recordTx(method, false, undefined);
+      throw error;
     }
   }
 }
@@ -742,5 +970,13 @@ export function rpcWorked(urls: readonly string[], url: string): void {
 
 /** Build a client from NEAR_RPC_URL and its fallbacks (see nearRpcUrlsFromEnv). */
 export function nearClientFromEnv(options: Omit<NearClientOptions, "rpcUrls"> = {}): NearClient {
-  return new NearClient({ ...options, rpcUrls: nearRpcUrlsFromEnv() });
+  const raw = getEnv("NEAR_RPC_DAILY_BUDGET");
+  const parsed = raw === undefined || raw === "" ? 0 : Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error("ENV_INVALID: NEAR_RPC_DAILY_BUDGET");
+  return new NearClient({
+    ...options,
+    rpcUrls: nearRpcUrlsFromEnv(),
+    dailyBudget: options.dailyBudget ?? Math.floor(parsed),
+    onAlert: options.onAlert ?? ((event) => console.error(event.message)),
+  });
 }

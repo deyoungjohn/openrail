@@ -309,6 +309,34 @@ export class PayoutChain implements ChainPort {
   }
 
   /** The relayer's NEAR balance, read through the shared RPC cycle. A failed read throws: it is not a zero balance. */
+  rpcHealth(): {
+    host: string;
+    state: "ok" | "cooling";
+    last_error: string | null;
+    calls_last_hour: number;
+  }[] {
+    return this.near.rpcHealth();
+  }
+
+  rpcBudget(): {
+    used: number;
+    budget: number;
+    remaining: number;
+    pace_per_hour: number;
+    by_class: Record<string, number>;
+  } {
+    return this.near.rpcBudget();
+  }
+
+  txHealth(): {
+    tx_sent: number;
+    tx_failed: Record<string, number>;
+    near_burnt: string;
+    methods: Record<string, unknown>;
+  } {
+    return this.near.txHealth();
+  }
+
   async balanceYocto(): Promise<bigint> {
     const account = getEnv("PAYOUT_RELAYER_ACCOUNT_ID") ?? "";
     if (account === "") throw new Error("MISSING_ENV: PAYOUT_RELAYER_ACCOUNT_ID");
