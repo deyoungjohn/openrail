@@ -552,6 +552,14 @@
       "status": 200,
       "schema": "ConfidentialWithdrawalList",
       "mock": true
+    },
+    {
+      "file": "confidential.withdrawals.import.json",
+      "method": "POST",
+      "path": "/v1/balance/confidential/withdrawals",
+      "status": 201,
+      "schema": "ConfidentialWithdrawal",
+      "mock": true
     }
   ]
 }

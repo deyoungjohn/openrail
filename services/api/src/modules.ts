@@ -35,6 +35,12 @@ export interface ApiModuleContext {
   withIdempotency(request: ApiRequest, run: () => Promise<ApiResponse>): Promise<ApiResponse>;
   /** Read-only contract view; the module supplies its own method name and arguments. */
   view(contractMethod: string, args: object): Promise<unknown>;
+  /** The provider's word about a deposit address (its own quota, no RPC); undefined when it cannot say. */
+  providerStatus?(
+    depositAddress: string,
+  ): Promise<
+    { status: string; nearTxHashes?: string[]; destinationChainTxHashes?: string[] } | undefined
+  >;
   /** Ask the indexer to poll sooner after a booked payment (core throttling lives in the API). */
   pokeIndexer?(): Promise<void>;
   indexer?: import("./app.js").IndexerPort;

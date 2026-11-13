@@ -3615,6 +3615,15 @@
             }
           }
         }
+      },
+      "ConfidentialWithdrawalImport": {
+        "type": "object",
+        "required": ["deposit_address"],
+        "properties": {
+          "deposit_address": {
+            "type": "string"
+          }
+        }
       }
     }
   },
@@ -7609,6 +7618,79 @@
           },
           "401": {
             "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "importConfidentialWithdrawal",
+        "summary": "Add an earlier withdrawal by its deposit address",
+        "description": "Recorded only when the provider's quote for that address was refunded to this merchant.",
+        "tags": ["Business"],
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfidentialWithdrawalImport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recorded, with the provider's latest status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialWithdrawal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off or no deposit address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs a signed-in session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a withdrawal of this merchant.",
             "content": {
               "application/json": {
                 "schema": {

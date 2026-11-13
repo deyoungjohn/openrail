@@ -327,6 +327,13 @@ export class OpenrailClient {
     /** Withdrawals started on this site, newest first, with explorer links. */
     withdrawals: (): Promise<SuccessBody<"listConfidentialWithdrawals">> =>
       this.call("GET", "/v1/balance/confidential/withdrawals"),
+    /** Adds an earlier withdrawal (one made before they were recorded, or from the CLI) by its deposit address. */
+    importWithdrawal: (
+      depositAddress: string,
+    ): Promise<SuccessBody<"importConfidentialWithdrawal">> =>
+      this.call("POST", "/v1/balance/confidential/withdrawals", {
+        body: { deposit_address: depositAddress },
+      }),
     /** The empty intent the wallet signs to open a session (versioned nonce, 4-minute window). */
     authPayload: (): Promise<SuccessBody<"getConfidentialAuthPayload">> =>
       this.call("GET", "/v1/balance/confidential/auth-payload"),

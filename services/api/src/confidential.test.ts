@@ -421,3 +421,48 @@ describe("withdrawals started here are listed with their explorer links", () => 
     expect((again.body as { data: unknown[] }).data).toHaveLength(1);
   });
 });
+
+describe("adding an earlier withdrawal by its deposit address", () => {
+  it("records it only when the provider says the merchant made it", async () => {
+    const { app, request, deps } = await harness();
+    const status = deps.confidential?.withdrawStatus as ReturnType<typeof vi.fn>;
+    status.mockResolvedValue({
+      status: "SUCCESS",
+      updatedAt: "2026-11-12T18:18:26.000Z",
+      quoteResponse: {
+        quoteRequest: {
+          refundTo: "merchant.near",
+          depositType: "CONFIDENTIAL_INTENTS",
+          amount: "500000",
+          originAsset: USDC,
+          destinationAsset: "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+          recipient: "0x" + "e".repeat(40),
+        },
+      },
+      swapDetails: { destinationChainTxHashes: [{ hash: "0x08bc", explorerUrl: "" }] },
+    });
+    const added = await app.handle(
+      request("POST", "/v1/balance/confidential/withdrawals", {
+        deposit_address: "05c110b159a2df23",
+      }),
+    );
+    expect(added.status).toBe(201);
+    expect(added.body).toMatchObject({
+      destination_chain: "base",
+      amount: "500000",
+      status: "SUCCESS",
+      destination_tx_hashes: ["0x08bc"],
+    });
+
+    status.mockResolvedValue({
+      status: "SUCCESS",
+      quoteResponse: {
+        quoteRequest: { refundTo: "someone-else.near", depositType: "CONFIDENTIAL_INTENTS" },
+      },
+    });
+    const foreign = await app.handle(
+      request("POST", "/v1/balance/confidential/withdrawals", { deposit_address: "aaaaaaaaaaaa" }),
+    );
+    expect(foreign.status).toBe(404);
+  });
+});

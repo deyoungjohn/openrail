@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildTrail, trailTotals, withdrawalRows, type TrailEvent } from "./money-trail";
+import {
+  applyHeldState,
+  buildTrail,
+  trailTotals,
+  withdrawalRows,
+  type TrailEvent,
+} from "./money-trail";
 
 const ev = (type: string, created: number, data: Record<string, unknown>): TrailEvent => ({
   id: `${type}-${created}`,
@@ -97,5 +103,31 @@ describe("withdrawals in the trail", () => {
     expect(rows[0]?.stage).toBe("withdrawn");
     expect(rows[0]?.withdrawal?.urls).toEqual(["https://basescan.org/tx/0x00d4"]);
     expect(trailTotals(rows).withdrawn).toBe(1000000n);
+  });
+});
+
+describe("the contract's state over stale events", () => {
+  it("shows a share whose payout finished as in the private balance", () => {
+    const rows = buildTrail([
+      {
+        id: "e1",
+        type: "settle_held",
+        created: 1,
+        data: { token_id: "c-9", index: 0, amount: "9974051" },
+      },
+      {
+        id: "e2",
+        type: "settle_held",
+        created: 2,
+        data: { token_id: "c-8", index: 0, amount: "1995000" },
+      },
+    ]);
+    const next = applyHeldState(rows, [
+      { token_id: "c-9", index: 0, state: "settled", tx: "NearTx" },
+      { token_id: "c-8", index: 0, state: "held", tx: null },
+    ]);
+    expect(next.find((r) => r.tokenId === "c-9")).toMatchObject({ stage: "private", tx: "NearTx" });
+    expect(next.find((r) => r.tokenId === "c-8")?.stage).toBe("held");
+    expect(trailTotals(next)).toMatchObject({ private: 9974051n, held: 1995000n });
   });
 });

@@ -2183,6 +2183,57 @@ export class ApiApp {
       started.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
       return { status: 200, body: { data: started } };
     }
+    // A withdrawal made before they were recorded here (or from the CLI): added by its deposit address, only when the
+    // provider says it was this merchant's own (the quote's refund account is the merchant).
+    if (path === "/v1/balance/confidential/withdrawals" && method === "POST") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
+      const context = this.requireAuth(request);
+      if (context.kind !== "session") throw new ApiError(403, "session_required");
+      const depositAddress = (request.body as { deposit_address?: unknown } | undefined)
+        ?.deposit_address;
+      if (typeof depositAddress !== "string" || !/^[0-9A-Za-z._-]{8,128}$/.test(depositAddress))
+        throw new ApiError(400, "invalid_request", "deposit_address required");
+      const provider = await this.deps.confidential.withdrawStatus(depositAddress);
+      const quoteRequest = ((provider.quoteResponse as Record<string, unknown> | undefined)
+        ?.quoteRequest ?? {}) as Record<string, unknown>;
+      if (
+        quoteRequest.refundTo !== context.accountId ||
+        quoteRequest.depositType !== "CONFIDENTIAL_INTENTS"
+      )
+        throw new ApiError(404, "withdrawal_not_found");
+      const destination =
+        typeof quoteRequest.destinationAsset === "string" ? quoteRequest.destinationAsset : "";
+      const chain = /:base-/.test(destination)
+        ? "base"
+        : /:arb-/.test(destination)
+          ? "arbitrum"
+          : /:eth-/.test(destination)
+            ? "ethereum"
+            : /:sol-/.test(destination)
+              ? "solana"
+              : "near";
+      const created =
+        typeof provider.updatedAt === "string" ? provider.updatedAt : nowIso(this.clock);
+      const record: ConfidentialWithdrawalRecord = {
+        deposit_address: depositAddress,
+        account_id: context.accountId,
+        amount: typeof quoteRequest.amount === "string" ? quoteRequest.amount : "0",
+        source_asset: typeof quoteRequest.originAsset === "string" ? quoteRequest.originAsset : "",
+        destination_chain: chain,
+        address: typeof quoteRequest.recipient === "string" ? quoteRequest.recipient : "",
+        created_at: created,
+        status: "QUOTED",
+        amount_out: null,
+        destination_tx_hashes: [],
+        destination_explorer_urls: [],
+        near_tx_hashes: [],
+        updated_at: created,
+      };
+      this.docs.put("confidential_withdrawals", depositAddress, record, context.accountId);
+      return { status: 201, body: this.noteWithdrawal(depositAddress, provider) ?? record };
+    }
     if (path === "/v1/balance/confidential/auth-payload" && method === "GET") {
       if (this.deps.config.confidentialIntents !== true)
         throw new ApiError(400, "confidential_intents_disabled");
@@ -2690,6 +2741,16 @@ export class ApiApp {
       ...(this.deps.pokeIndexer === undefined
         ? {}
         : { pokeIndexer: () => this.deps.pokeIndexer?.() ?? Promise.resolve() }),
+      providerStatus: async (depositAddress) => {
+        const live = await this.quotes.status(depositAddress);
+        return live === undefined
+          ? undefined
+          : {
+              status: live.status,
+              nearTxHashes: live.nearTxHashes ?? [],
+              destinationChainTxHashes: live.destinationChainTxHashes ?? [],
+            };
+      },
       view: async (methodName, args) => {
         if (this.deps.contract.view === undefined)
           throw new ApiError(503, "contract_view_unavailable");

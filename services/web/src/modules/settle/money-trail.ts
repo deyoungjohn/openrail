@@ -148,3 +148,36 @@ export function trailTotals(rows: readonly TrailRow[]): TrailTotals {
   }
   return t;
 }
+
+export interface HeldState {
+  token_id: string;
+  index: number;
+  state: "held" | "sending" | "settled" | "returned" | "released";
+  tx: string | null;
+}
+
+/**
+ * The contract (and, for a payout still marked in flight, the provider) knows better than the events: a share the
+ * events still show as held or on its way takes the state the API reads for it. Released (paid to the public NEAR
+ * Intents account) is shown as returned to the merchant.
+ */
+export function applyHeldState(
+  rows: readonly TrailRow[],
+  states: readonly HeldState[],
+): TrailRow[] {
+  const byKey = new Map(states.map((s) => [`${s.token_id}#${s.index}`, s]));
+  return rows.map((r) => {
+    if (r.stage !== "held" && r.stage !== "sending") return r;
+    const s = byKey.get(r.key);
+    if (s === undefined) return r;
+    const stage: TrailStage =
+      s.state === "settled"
+        ? "private"
+        : s.state === "sending"
+          ? "sending"
+          : s.state === "returned" || s.state === "released"
+            ? "returned"
+            : "held";
+    return { ...r, stage, tx: s.tx ?? r.tx };
+  });
+}

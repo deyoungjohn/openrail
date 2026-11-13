@@ -897,6 +897,10 @@ export interface ConfidentialWithdrawalList {
   data: ConfidentialWithdrawal[];
 }
 
+export interface ConfidentialWithdrawalImport {
+  deposit_address: string;
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -1647,6 +1651,16 @@ export interface operations {
     "200": ConfidentialWithdrawalList;
     "400": Error;
     "401": Error;
+    };
+  };
+  importConfidentialWithdrawal: {
+    requestBody: ConfidentialWithdrawalImport;
+    responses: {
+    "201": ConfidentialWithdrawal;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
 }
