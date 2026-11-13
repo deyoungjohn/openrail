@@ -254,15 +254,6 @@ export function InvoiceDetailScreen({ id }: { id: string }) {
             <AddressChip value={invoice.claim_account} head={12} tail={14} />
             <p className="caption mt-3">{t.accountBody}</p>
           </Card>
-          <Card title={t.ackTitle}>
-            {claim.ack ? (
-              <StatusChip status={{ kind: "acknowledged" }} />
-            ) : (
-              <p className="text-[15px]">{t.ackNone}</p>
-            )}
-            <p className="caption mt-3">{t.ackLink}</p>
-            <AddressChip value={invoice.ack_url} head={28} tail={10} />
-          </Card>
         </div>
       </div>
 

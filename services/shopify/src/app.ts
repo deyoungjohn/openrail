@@ -163,6 +163,8 @@ export interface CreateCheckoutRequest {
   expires_in_minutes?: number;
   return_url?: string;
   cancel_url?: string;
+  /** The store's own order number (Shopify's order name, like "#1001"), shown in the merchant's dashboard. */
+  order_number?: string;
   fee_mode?: "absorb" | "pass_to_customer";
   items?: Array<{
     name: string;
@@ -981,6 +983,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
           expires_in_minutes: 60,
           return_url: order.statusPageUrl,
           cancel_url: order.statusPageUrl,
+          ...(order.name ? { order_number: order.name } : {}),
           ...(items.length > 0 ? { items } : {}),
         },
         idempotencyKey,
@@ -1045,6 +1048,9 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
     const { checkout } = await checkoutApi.createCheckout(
       {
         order_ref: orderRef,
+        ...(binding!.orderName && binding!.orderName.startsWith("#")
+          ? { order_number: binding!.orderName }
+          : {}),
         amount_usd: amountUsd,
         currency: "USD",
         expires_in_minutes: 60,
@@ -1777,6 +1783,7 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
                 expires_in_minutes: 60,
                 return_url: order!.statusPageUrl,
                 cancel_url: order!.statusPageUrl,
+                ...(order!.name ? { order_number: order!.name } : {}),
                 ...(items.length > 0 ? { items } : {}),
               },
               idempotencyKey,
@@ -1808,6 +1815,9 @@ export function createShopifyApp(options: CreateShopifyAppOptions) {
             const { checkout } = await checkoutApi.createCheckout(
               {
                 order_ref: orderRef,
+                ...(binding.orderName && binding.orderName.startsWith("#")
+                  ? { order_number: binding.orderName }
+                  : {}),
                 amount_usd: amountUsd,
                 currency: "USD",
                 expires_in_minutes: 60,

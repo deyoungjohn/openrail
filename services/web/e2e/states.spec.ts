@@ -90,13 +90,6 @@ test.describe("loading: a skeleton while the answer is on its way, never a blank
     await expect(page.getByRole("button", { name: "Sign in" })).toHaveCount(0);
   });
 
-  test("ack page and transfer page (fixture mode)", async ({ page }) => {
-    await page.goto("/ack/c-slow", { waitUntil: "commit" });
-    await expect(skeleton(page)).toBeVisible();
-    await page.goto("/app/invoices/c-slow/transfer", { waitUntil: "commit" });
-    await expect(skeleton(page)).toBeVisible();
-  });
-
   test("statements and cash out show a busy button while they work", async ({ page }) => {
     await mockApi(page, {
       ...base(),
@@ -305,7 +298,6 @@ test.describe("keyboard: every control is reachable and shows the focus ring", (
     ["sign-in card", "/app", 3],
     ["pay page", "/pay/c-1", 3],
     ["receipt", `/r/${RECEIPT_HASH}`, 3],
-    ["ack page", "/ack/c-1", 4],
   ];
   for (const [name, path, min] of open)
     test(name, async ({ page }) => {

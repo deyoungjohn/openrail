@@ -1820,9 +1820,10 @@ describe("checkout events reach the merchant: GET /v1/events and a signed webhoo
       event(2, "checkout_paid", "c-101", { booking_seq: 1, booking_tx: "BookTx1" }),
     ];
     const h = harness({ indexer: stream(rows) });
-    expect((await createCheckout(h, { customer_name: "Ada <b>Lovelace</b>" })).body.id).toBe(
-      "c-101",
-    );
+    expect(
+      (await createCheckout(h, { customer_name: "Ada <b>Lovelace</b>", order_number: "46" })).body
+        .id,
+    ).toBe("c-101");
     const paid = await call(
       h,
       "GET",
@@ -1839,6 +1840,7 @@ describe("checkout events reach the merchant: GET /v1/events and a signed webhoo
     expect(data[0]?.data.booking_tx).toBe("BookTx1");
     // The store's billing name is the payer in the dashboard (angle brackets dropped).
     expect(data[0]?.data.customer_name).toBe("Ada bLovelace/b");
+    expect(data[0]?.data.order_number).toBe("46");
     const theirs = await call(
       h,
       "GET",

@@ -22,18 +22,6 @@ const base = (): Handlers => ({
   "GET /v1/pay/sessions/{id}": ok({ ...fixture("pay.sessions.status"), status: "pending_deposit" }),
 });
 
-/** An injected browser wallet, so the wallet button is enabled. */
-async function injectWallet(page: Page) {
-  await page.addInitScript((account) => {
-    (window as unknown as { ethereum: unknown }).ethereum = {
-      request: async ({ method }: { method: string }) =>
-        method === "eth_accounts" || method === "eth_requestAccounts" ? [account] : null,
-      on: () => {},
-      removeListener: () => {},
-    };
-  }, SIGNER);
-}
-
 /** The accessible name of each focus stop inside <main>, in Tab order, starting at the top of main. */
 async function mainTabOrder(page: Page): Promise<string[]> {
   await page.locator("main").evaluate((m) => {
@@ -123,6 +111,7 @@ test.describe("tab order follows the visual order", () => {
     expectOrder(await mainTabOrder(page), [
       "From",
       "Client name",
+      "Client address (optional)",
       "Invoice number",
       /^Due date/,
       "Description",
@@ -130,22 +119,6 @@ test.describe("tab order follows the visual order", () => {
       "Price",
       "Add line",
       "Create invoice",
-    ]);
-  });
-
-  test("ack page: the details first, then the wallet, then the confirm button", async ({
-    page,
-  }) => {
-    await injectWallet(page);
-    await page.goto("/ack/c-1");
-    await expect(page.getByRole("button", { name: "Confirm with wallet" })).toBeVisible();
-    expectOrder(await mainTabOrder(page), [
-      /^Copy 0x82c0/,
-      /^Copy c-1\.op/,
-      // The stand-in wallet is already connected: its address, then disconnect, then the confirm button.
-      /^Copy 0x53C5/,
-      "Disconnect",
-      "Confirm with wallet",
     ]);
   });
 
@@ -218,7 +191,6 @@ test.describe("every icon-only control has a screen-reader name", () => {
     ["settings", "/app/settings", true],
     ["onboarding", "/app/onboarding", true],
     ["transfer", "/app/invoices/c-3/transfer", true],
-    ["ack", "/ack/c-1", false],
     ["pay", "/pay/c-1", false],
     ["receipt", "/r/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", false],
     ["component gallery", "/_dev/components", false],

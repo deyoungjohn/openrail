@@ -54,7 +54,6 @@ const screens: [string, string, boolean][] = [
   ["developers", "/app/developers", true],
   ["onboarding", "/app/onboarding", true],
   ["transfer", "/app/invoices/c-3/transfer", true],
-  ["ack", "/ack/c-1", false],
   ["pay", "/pay/c-1", false],
   ["receipt", `/r/${HASH}`, false],
 ];

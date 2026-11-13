@@ -121,43 +121,9 @@ function Collections({ earnings }: { earnings: readonly Earning[] }) {
     [earnings, range, stream],
   );
   const months = useMemo(() => byMonth(filtered).reverse(), [filtered]);
-  const chains = useMemo(() => byChain(filtered), [filtered]);
 
   const monthCols: DataTableColumn<(typeof months)[number]>[] = [
     { id: "month", header: d.month, sortable: true, value: (r) => r.month },
-    {
-      id: "cents",
-      header: d.amount,
-      sortable: true,
-      numeric: true,
-      value: (r) => Number(r.cents),
-      cell: (r) => formatUsd(r.cents),
-      formatTotal: (n) => formatUsd(BigInt(Math.round(n))),
-    },
-  ];
-  const chainCols: DataTableColumn<(typeof chains)[number]>[] = [
-    {
-      id: "chain",
-      header: d.network,
-      sortable: true,
-      value: (r) => CHAINS[r.chain as keyof typeof CHAINS] ?? r.chain,
-      cell: (r) =>
-        r.chain in CHAINS ? (
-          <WithIcon icon={<ChainIcon chain={r.chain as keyof typeof CHAINS} />}>
-            {CHAINS[r.chain as keyof typeof CHAINS]}
-          </WithIcon>
-        ) : (
-          r.chain
-        ),
-    },
-    {
-      id: "count",
-      header: d.payments,
-      sortable: true,
-      numeric: true,
-      hideBelow: "sm",
-      value: (r) => r.count,
-    },
     {
       id: "cents",
       header: d.amount,
@@ -181,23 +147,13 @@ function Collections({ earnings }: { earnings: readonly Earning[] }) {
         />
         <Pills label={d.streamFilter} value={stream} options={streamOptions} onChange={setStream} />
       </div>
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div>
         <DataTable
           data={months}
           columns={monthCols}
           rowId={(r) => r.month}
           title={d.byMonth}
           caption={d.byMonth}
-          totals={["cents"]}
-          pageSize={6}
-          emptyState={empty}
-        />
-        <DataTable
-          data={chains}
-          columns={chainCols}
-          rowId={(r) => r.chain}
-          title={d.paidFrom}
-          caption={d.paidFrom}
           totals={["cents"]}
           pageSize={6}
           emptyState={empty}
@@ -226,7 +182,8 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
       cell: (r) => (
         <Link
           href={r.href ?? `/app/invoices/${encodeURIComponent(r.invoiceId)}`}
-          className="text-accent-text hover:underline"
+          title={r.product}
+          className="block max-w-[22ch] truncate text-accent-text hover:underline"
         >
           {r.product}
         </Link>
@@ -401,6 +358,72 @@ function Streams({
   );
 }
 
+/** Brand colours of the chains, so the slices read at a glance. */
+const CHAIN_COLOR: Record<string, string> = {
+  base: "#0052ff",
+  arbitrum: "#28a0f0",
+  ethereum: "#627eea",
+  optimism: "#ff0420",
+  polygon: "#8247e5",
+  bnb: "#f0b90b",
+  solana: "#14f195",
+  near: "#00c08b",
+};
+
+/** Where clients paid from: the chain of each client's own payment (not where the money settled). */
+function PaidFrom({ earnings }: { earnings: readonly Earning[] }) {
+  const d = copy.dash;
+  const data = byChain(earnings);
+  const total = data.reduce((n, s) => n + s.cents, 0n);
+  const name = (chain: string) => CHAINS[chain as keyof typeof CHAINS] ?? chain;
+  const colour = (chain: string) => CHAIN_COLOR[chain] ?? "var(--text-muted)";
+  const label = data.map((s) => `${name(s.chain)}: ${formatUsd(s.cents)}`).join(", ");
+  return (
+    <Card title={d.paidFrom} info={d.paidFromInfo}>
+      <div className="flex items-center gap-4">
+        <PieChart width={120} height={120} role="img" aria-label={label}>
+          <Pie
+            data={
+              total === 0n
+                ? [{ chain: "none", value: 1 }]
+                : data.map((s) => ({ chain: s.chain, value: Number(s.cents) }))
+            }
+            dataKey="value"
+            innerRadius={36}
+            outerRadius={56}
+            stroke="none"
+            isAnimationActive={false}
+          >
+            {(total === 0n ? [{ chain: "none" }] : data).map((s, i) => (
+              <Cell key={i} fill={s.chain === "none" ? "var(--surface-2)" : colour(s.chain)} />
+            ))}
+          </Pie>
+        </PieChart>
+        {total === 0n ? <p className="caption">{d.noPayments}</p> : null}
+        <ul className="min-w-0 flex-1 space-y-1.5 text-[14px]">
+          {data.map((s) => (
+            <li key={s.chain} className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ background: colour(s.chain) }}
+              />
+              {s.chain in CHAINS ? (
+                <WithIcon icon={<ChainIcon chain={s.chain as keyof typeof CHAINS} />}>
+                  {name(s.chain)}
+                </WithIcon>
+              ) : (
+                <span>{name(s.chain)}</span>
+              )}
+              <span className="tabular ml-auto pl-3 font-medium">{formatUsd(s.cents)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Card>
+  );
+}
+
 export function DashboardScreen() {
   const d = copy.dash;
   const [load, retry] = useEarnings();
@@ -453,14 +476,8 @@ export function DashboardScreen() {
             <TopClientsCard clients={clients} state={loading ? "loading" : "ready"} />
           </div>
 
-          <div className="grid items-stretch gap-4 lg:grid-cols-3">
-            <div className="min-w-0 lg:col-span-2">
-              {loading ? (
-                <DataTable data={[]} columns={[]} rowId={() => ""} title={d.activity} loading />
-              ) : (
-                <Activity earnings={earnings} />
-              )}
-            </div>
+          {/* Two pie cards under the four cards, each as wide as two of them. */}
+          <div className="grid items-stretch gap-4 lg:grid-cols-2">
             <div className="min-w-0">
               {loading ? (
                 <Card title={d.streamsTitle} state="loading" />
@@ -471,6 +488,21 @@ export function DashboardScreen() {
                 />
               )}
             </div>
+            <div className="min-w-0">
+              {loading ? (
+                <Card title={d.paidFrom} state="loading" />
+              ) : (
+                <PaidFrom earnings={earnings} />
+              )}
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            {loading ? (
+              <DataTable data={[]} columns={[]} rowId={() => ""} title={d.activity} loading />
+            ) : (
+              <Activity earnings={earnings} />
+            )}
           </div>
 
           {loading ? null : <Collections earnings={earnings} />}

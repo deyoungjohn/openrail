@@ -36,9 +36,20 @@ async function load(): Promise<Earning[]> {
         seen.add(key);
         const asset = typeof data.asset === "string" ? data.asset : "";
         const origin = typeof data.origin_tx === "string" ? { hash: data.origin_tx } : null;
-        const chain = chainOfReceipt({ asset, origin_tx: origin } as ReceiptLike);
+        const chain = chainOfReceipt({
+          asset,
+          origin_tx: origin,
+          origin_chain: typeof data.origin_chain === "string" ? data.origin_chain : null,
+        } as ReceiptLike);
         const orderRef =
           typeof data.order_ref === "string" && data.order_ref !== "" ? data.order_ref : tokenId;
+        // The store's own order number when it sent one ("#46"); else the store's reference, shortened in the table.
+        const number =
+          typeof data.order_number === "string" && data.order_number !== ""
+            ? data.order_number.startsWith("#")
+              ? data.order_number
+              : `#${data.order_number}`
+            : null;
         rows.push({
           id: event.id,
           time: event.created * 1000,
@@ -48,7 +59,7 @@ async function load(): Promise<Earning[]> {
             typeof data.customer_name === "string" && data.customer_name !== ""
               ? data.customer_name
               : "Store customer",
-          product: `Checkout ${orderRef}`,
+          product: number === null ? `Order ${orderRef}` : `Order ${number}`,
           stream: "checkout",
           chain,
           txHash: bookingTx,

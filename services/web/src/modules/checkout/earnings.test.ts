@@ -35,7 +35,7 @@ describe("checkout earnings source", () => {
       expect.objectContaining({
         stream: "checkout",
         cents: 200n,
-        product: "Checkout ORD-1",
+        product: "Order ORD-1",
         txHash: "0xbooking",
         invoiceId: "c-1",
       }),

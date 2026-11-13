@@ -20,6 +20,8 @@ export interface ReceiptLike {
   time: string;
   /** Absent until the receipt is verified against the origin chain; the asset still says which chain it came from. */
   origin_tx?: { chain?: string; hash?: string; sender?: string } | null;
+  /** The chain the client paid from (the route of their pay session), sent by the API. */
+  origin_chain?: string | null;
   booking_tx_hash: string;
 }
 
@@ -59,7 +61,14 @@ const ASSET_CHAIN: [string, string][] = [
 ];
 
 /** The chain the money came from: the verified origin transaction when there is one, else read from the asset. */
-export function chainOfReceipt(r: Pick<ReceiptLike, "asset" | "origin_tx">): string {
+/**
+ * Where the client paid from. The asset id only says where the merchant's money settled (a payment from Base settled
+ * as NEAR USDC looked like a NEAR payment), so it is the last resort.
+ */
+export function chainOfReceipt(
+  r: Pick<ReceiptLike, "asset" | "origin_tx"> & { origin_chain?: string | null },
+): string {
+  if (r.origin_chain) return r.origin_chain;
   const verified = r.origin_tx?.chain;
   if (verified) return verified;
   const id = r.asset.replace(/^nep\d+:/, "");

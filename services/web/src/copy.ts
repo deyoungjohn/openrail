@@ -614,6 +614,7 @@ export const copy = {
     viewAll: "View all invoices",
     byMonth: "Collections by month",
     paidFrom: "Where clients paid from",
+    paidFromInfo: "The chain each client paid from, not the chain your money settled on",
     noPayments: "No payments yet",
     noPaymentsBody: "Money that comes in shows here by month and by network.",
     number: "Number",
@@ -630,7 +631,7 @@ export const copy = {
     activityEmpty: "No payments yet",
     activityEmptyBody:
       "Payments from invoices, checkouts and pay links appear here as they are booked.",
-    streamsTitle: "Earnings by stream",
+    streamsTitle: "Earning stream",
     streamsInfo: "Money received through invoices, checkouts and pay links",
     payer: "Payer",
     product: "Paid for",

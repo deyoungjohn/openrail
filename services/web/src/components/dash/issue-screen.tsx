@@ -147,12 +147,6 @@ function DoneSheet({ invoice, onClose }: { invoice: Invoice; onClose: () => void
           </dd>
         </div>
         <div>
-          <dt className="caption">{t.ackLink}</dt>
-          <dd>
-            <AddressChip value={invoice.ack_url} head={30} tail={8} />
-          </dd>
-        </div>
-        <div>
           <dt className="caption">{t.account}</dt>
           <dd>
             <AddressChip value={invoice.claim_account} head={12} tail={14} />

@@ -141,22 +141,20 @@ test.describe("dashboard", () => {
         .filter({ hasText: "$250.50" }),
     ).toHaveCount(0);
 
-    // The last 7 days leave out the receipt from 40 days ago.
+    // The filters act on the collections table; the pie cards above show all time (13 Nov layout).
     await page
       .getByRole("button", { name: /^Time:/ })
       .last()
       .click();
     await page.getByRole("button", { name: "Last 7 days" }).click();
-    await expect(from).toContainText("$100.00");
-    await expect(from).not.toContainText("$200.00");
+    await expect(from).toContainText("$200.00");
 
-    // No checkout or pay link payments exist: the tables say so.
+    // No checkout or pay link payments exist: the table says so.
     await page
       .getByRole("group", { name: "Stream" })
       .last()
       .getByRole("button", { name: "Checkout" })
       .click();
-    await expect(from).toContainText("No payments yet");
     await expect(months).toContainText("No payments yet");
   });
 
@@ -327,8 +325,8 @@ test.describe("claim detail", () => {
     const v = (k: string) => page.locator(`[data-counter="${k}"]`);
     await expect(v("amount_due")).toHaveText("$12.50");
     await expect(v("booked_total")).toHaveText("$5.00");
-    await expect(v("distributed_total")).toHaveText("$4.987500");
-    await expect(v("fee_total")).toHaveText("$0.012500");
+    await expect(v("distributed_total")).toHaveText("$4.99");
+    await expect(v("fee_total")).toHaveText("$0.01");
     await expect(v("surplus")).toHaveText("$0.00");
     await expect(v("outstanding")).toHaveText("$7.50");
     await expect(page.getByText("Partially paid · $7.50 due")).toBeVisible();
@@ -344,7 +342,6 @@ test.describe("claim detail", () => {
     await expect(page.getByRole("heading", { name: "Open payment links" })).toBeVisible();
     await expect(page.getByText("invoice.paid")).toBeVisible();
     await expect(page.getByText("no keys", { exact: false })).toBeVisible();
-    await expect(page.getByText("Not accepted yet")).toBeVisible();
     await expect(page.getByRole("link", { name: "Sell invoice" })).toHaveAttribute(
       "href",
       "/app/invoices/c-1/transfer",
@@ -641,9 +638,10 @@ test.describe("dashboard module sources", () => {
     const main = page.getByRole("main");
     await expect(main.getByRole("img", { name: /Checkout: \$2\.00/ })).toBeVisible();
     const activity = main.getByRole("region", { name: "Inflow" });
-    await expect(activity.getByRole("row", { name: /Checkout ORD-77/ })).toBeVisible();
-    await expect(
-      activity.getByRole("link", { name: /Receipt for Checkout ORD-77/ }),
-    ).toHaveAttribute("href", "/r/0xcheckout");
+    await expect(activity.getByRole("row", { name: /Order ORD-77/ })).toBeVisible();
+    await expect(activity.getByRole("link", { name: /Receipt for Order ORD-77/ })).toHaveAttribute(
+      "href",
+      "/r/0xcheckout",
+    );
   });
 });

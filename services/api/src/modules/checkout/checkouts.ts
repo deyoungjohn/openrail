@@ -116,6 +116,8 @@ export interface StoredCheckout {
   total_usd?: string;
   /** The store's name for its customer (billing name), shown as the payer in the merchant's dashboard. Optional. */
   customer_name?: string | null;
+  /** The store's own order number (WooCommerce order number, Shopify order name). Optional, display only. */
+  order_number?: string | null;
 }
 
 export interface CheckoutView {
@@ -659,6 +661,7 @@ export class Checkouts {
           timestamp,
           status,
           customer_name: stored.customer_name ?? null,
+          order_number: stored.order_number ?? null,
         },
         indexed: true,
       },
@@ -762,6 +765,10 @@ export class Checkouts {
     // Plain text only, short: it is shown to the merchant, never sent on chain.
     const customerName =
       typeof body.customer_name === "string" ? plainText(body.customer_name, 120) || null : null;
+    const orderNumber =
+      typeof body.order_number === "string" || typeof body.order_number === "number"
+        ? plainText(String(body.order_number), 40) || null
+        : null;
     const rawItems = body.items;
     const feeResolved = resolveFee(amount.text, [], feeMode);
     const feeItem = feeResolved.items[0];
@@ -827,6 +834,7 @@ export class Checkouts {
       fee_usd: feeBreakdown.feeUsd,
       total_usd: feeBreakdown.totalUsd,
       customer_name: customerName,
+      order_number: orderNumber,
     };
     context.docs.put(NS_CHECKOUTS, tokenId, stored, accountId);
     context.docs.put(NS_REFS, refKey, { token_id: tokenId }, accountId);

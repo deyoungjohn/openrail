@@ -711,6 +711,29 @@ export class ApiApp {
   }
 
   /**
+   * The chain the client paid from: the route of the claim's latest pay session that took money (no call at all). Not
+   * the chain the merchant's money settled on, which is what the asset id says.
+   */
+  originChainOf(tokenId: string): string | null {
+    const sessions = this.store.listPaySessions(tokenId);
+    for (let i = sessions.length - 1; i >= 0; i -= 1) {
+      const session = sessions[i];
+      if (
+        session === undefined ||
+        session.status === "pending_deposit" ||
+        session.status === "expired"
+      )
+        continue;
+      try {
+        return getRoute(session.route_id, this.routes).originChain;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /**
    * The payer's own transaction on the chain they paid from, when the indexer has none: the provider's status for the
    * claim's pay sessions names it (no RPC). Kept once found.
    */
@@ -1738,7 +1761,16 @@ export class ApiApp {
         this.requireScope(context, "receipts:read");
         const invoice = this.ownInvoice(context.accountId, invoiceId);
         const receipts = await this.receiptsFor(invoice);
-        return { status: 200, body: { data: receipts } };
+        const originChain = this.originChainOf(invoice.token_id);
+        return {
+          status: 200,
+          body: {
+            data:
+              originChain === null
+                ? receipts
+                : receipts.map((r) => ({ ...r, origin_chain: r.origin_chain ?? originChain })),
+          },
+        };
       }
       if (action === "pdf" && method === "GET") {
         const context = this.requireAuth(request);
@@ -2707,7 +2739,13 @@ export class ApiApp {
             for (const e of expanded) {
               if (type !== null && e.type !== type) continue;
               const token = tokenOf(e);
-              if (token !== undefined && own.has(token)) found.push(e);
+              if (token === undefined || !own.has(token)) continue;
+              const data = (e.data ?? {}) as Record<string, unknown>;
+              const originChain =
+                data.origin_chain === undefined ? this.originChainOf(token) : null;
+              found.push(
+                originChain === null ? e : { ...e, data: { ...data, origin_chain: originChain } },
+              );
             }
           }
           next = batch.next_cursor ?? null;
