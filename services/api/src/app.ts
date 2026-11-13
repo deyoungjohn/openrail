@@ -88,6 +88,8 @@ export interface ContractPort {
   txStatus?(txHash: string, senderId: string): Promise<"success" | "failed" | "pending">;
   /** `has_public_key` on intents.near: a withdrawal signed by an unregistered key ends FAILED. */
   intentsHasPublicKey?(accountId: string, publicKey: string): Promise<boolean>;
+  /** Every token an account holds on intents.near, with its base-unit amount (the dashboard balance). */
+  intentsBalances?(accountId: string): Promise<{ token_id: string; amount: string }[]>;
   /** RPC pool visibility for /health. */
   rpcHealth?(): {
     host: string;
@@ -1885,6 +1887,20 @@ export class ApiApp {
       }
     }
 
+    if (path === "/v1/balance/intents" && method === "GET") {
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      if (this.deps.contract.intentsBalances === undefined)
+        throw new ApiError(503, "balance_unavailable");
+      try {
+        return {
+          status: 200,
+          body: { balances: await this.deps.contract.intentsBalances(context.accountId) },
+        };
+      } catch {
+        throw new ApiError(503, "balance_unavailable");
+      }
+    }
     if (path === "/v1/balance/confidential/key" && method === "GET") {
       if (this.deps.config.confidentialIntents !== true)
         throw new ApiError(400, "confidential_intents_disabled");

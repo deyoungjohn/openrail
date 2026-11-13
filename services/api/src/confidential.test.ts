@@ -170,6 +170,27 @@ describe("confidential withdraw", () => {
     expect(bad.body).toMatchObject({ error: { code: "invalid_public_key" } });
   });
 
+  it("reads the business's intents.near balance on the server, so the browser needs no RPC", async () => {
+    const { app, request, deps } = await harness();
+    const read = vi.fn(async () => [{ token_id: USDC, amount: "9974051" }]);
+    (deps.contract as unknown as { intentsBalances: typeof read }).intentsBalances = read;
+    const response = await app.handle(request("GET", "/v1/balance/intents"));
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ balances: [{ token_id: USDC, amount: "9974051" }] });
+    expect(read).toHaveBeenCalledWith("merchant.near");
+  });
+
+  it("answers 503 balance_unavailable when the chain read fails", async () => {
+    const { app, request, deps } = await harness();
+    (deps.contract as unknown as { intentsBalances: () => Promise<never> }).intentsBalances =
+      async () => {
+        throw new Error("RPC_NETWORK");
+      };
+    const response = await app.handle(request("GET", "/v1/balance/intents"));
+    expect(response.status).toBe(503);
+    expect(response.body).toMatchObject({ error: { code: "balance_unavailable" } });
+  });
+
   it("refuses a signed intent whose key is not registered before calling the provider", async () => {
     const { app, request, deps } = await harness();
     const submitIntent = vi.fn(async () => ({ intentHash: "must-not-run" }));

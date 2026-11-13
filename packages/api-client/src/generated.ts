@@ -18,26 +18,22 @@ export interface Error {
   error: ErrorDetail;
 }
 
-export type Debtor =
-  | {
-      Evm: Hex20;
-    }
-  | {
-      Near: string;
-    };
+export type Debtor = {
+  Evm: Hex20;
+} | {
+  Near: string;
+};
 
-export type AckScheme =
-  | {
-      Evm: {
-        chain_id: number;
-        signer: Hex20;
-      };
-    }
-  | {
-      Near: {
-        account: string;
-      };
-    };
+export type AckScheme = {
+  Evm: {
+    chain_id: number;
+    signer: Hex20;
+  };
+} | {
+  Near: {
+    account: string;
+  };
+};
 
 export interface Ack {
   scheme: AckScheme;
@@ -46,40 +42,34 @@ export interface Ack {
 
 export type Status = "Issued" | "PartiallyPaid" | "Paid" | "Cancelled" | "Closed";
 
-export type Lock =
-  | "None"
-  | {
-      Reconciling: {
-        since: number;
-      };
-    }
-  | {
-      TransferWindow: {
-        until: number;
-      };
-    }
-  | {
-      Module: {
-        id: string;
-        until: number;
-      };
-    };
+export type Lock = "None" | {
+  Reconciling: {
+    since: number;
+  };
+} | {
+  TransferWindow: {
+    until: number;
+  };
+} | {
+  Module: {
+    id: string;
+    until: number;
+  };
+};
 
-export type Leg =
-  | {
-      Pay: {
-        receiver: string;
-        amount: U128;
-        asset?: string;
-      };
-    }
-  | {
-      Hold: {
-        module_id: string;
-        amount: U128;
-        asset?: string;
-      };
-    };
+export type Leg = {
+  Pay: {
+    receiver: string;
+    amount: U128;
+    asset?: string;
+  };
+} | {
+  Hold: {
+    module_id: string;
+    amount: U128;
+    asset?: string;
+  };
+};
 
 export interface Terms {
   schema: "openrail.terms.v1";
@@ -248,15 +238,7 @@ export interface Payment {
   swap_details: SwapDetails;
 }
 
-export type WebhookEventType =
-  | "invoice.created"
-  | "invoice.accepted"
-  | "invoice.partially_paid"
-  | "invoice.paid"
-  | "payment.late"
-  | "payout.failed"
-  | "invoice.closed"
-  | "storage_sponsored";
+export type WebhookEventType = "invoice.created" | "invoice.accepted" | "invoice.partially_paid" | "invoice.paid" | "payment.late" | "payout.failed" | "invoice.closed" | "storage_sponsored";
 
 export interface CreateWebhookEndpointRequest {
   url: string;
@@ -583,8 +565,7 @@ export interface Cashout {
   deadline: string;
   tx_hash: string | null;
   tx_state: "success" | "failed" | "pending" | "unknown" | null;
-  status:
-    "quoted" | "sent" | "processing" | "success" | "refunded" | "incomplete" | "failed" | "expired";
+  status: "quoted" | "sent" | "processing" | "success" | "refunded" | "incomplete" | "failed" | "expired";
   provider_status: string | null;
   near_tx_hashes: string[];
   destination_tx_hashes: string[];
@@ -596,8 +577,7 @@ export interface CashoutList {
 
 export interface CashoutQuoteRequest {
   amount: U128;
-  destination_chain:
-    "base" | "arbitrum" | "optimism" | "polygon" | "solana" | "ethereum" | "near" | "confidential";
+  destination_chain: "base" | "arbitrum" | "optimism" | "polygon" | "solana" | "ethereum" | "near" | "confidential";
   address: string;
   source_asset?: string;
 }
@@ -666,13 +646,7 @@ export interface PaymentList {
   meta?: SyncMeta;
 }
 
-export type ApiKeyScope =
-  | "invoices:read"
-  | "invoices:write"
-  | "payments:read"
-  | "receipts:read"
-  | "webhooks:write"
-  | "pay_sessions:create";
+export type ApiKeyScope = "invoices:read" | "invoices:write" | "payments:read" | "receipts:read" | "webhooks:write" | "pay_sessions:create";
 
 export interface Health {
   ok: true;
@@ -886,684 +860,691 @@ export interface PayDepositNudge {
   ok: boolean;
 }
 
+export interface IntentsBalance {
+  balances: Array<{
+    token_id: string;
+    amount: string;
+  }>;
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     requestBody: CreateInvoiceRequest;
     responses: {
-      "201": Invoice;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "409": Error;
-      "503": Error;
+    "201": Invoice;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "409": Error;
+    "503": Error;
     };
   };
   listInvoices: {
     parameters: {
-      query: {
-        cursor?: string;
-        limit?: number;
-        status?: Status;
-      };
+    query: {
+      cursor?: string;
+      limit?: number;
+      status?: Status;
     };
+  };
     responses: {
-      "200": InvoiceList;
-      "400": Error;
-      "401": Error;
-      "403": Error;
+    "200": InvoiceList;
+    "400": Error;
+    "401": Error;
+    "403": Error;
     };
   };
   getInvoice: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": InvoiceDetail;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": InvoiceDetail;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   sendInvoice: {
     parameters: {
-      path: {
-        id: string;
-      };
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    path: {
+      id: string;
     };
+    header: {
+      "Idempotency-Key"?: string;
+    };
+  };
     requestBody: SendInvoiceRequest;
     responses: {
-      "200": SendInvoiceResponse;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
-      "409": Error;
+    "200": SendInvoiceResponse;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
+    "409": Error;
     };
   };
   listReceipts: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": ReceiptList;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": ReceiptList;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   getPayment: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": Payment;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": Payment;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   listWebhookEndpoints: {
     responses: {
-      "200": WebhookEndpointList;
-      "400": Error;
-      "401": Error;
-      "403": Error;
+    "200": WebhookEndpointList;
+    "400": Error;
+    "401": Error;
+    "403": Error;
     };
   };
   createWebhookEndpoint: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     requestBody: CreateWebhookEndpointRequest;
     responses: {
-      "201": WebhookEndpoint;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "409": Error;
+    "201": WebhookEndpoint;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "409": Error;
     };
   };
   listEvents: {
     parameters: {
-      query: {
-        cursor?: string;
-        limit?: number;
-        type?: WebhookEventType;
-      };
+    query: {
+      cursor?: string;
+      limit?: number;
+      type?: WebhookEventType;
     };
+  };
     responses: {
-      "200": WebhookEventList;
-      "400": Error;
-      "401": Error;
+    "200": WebhookEventList;
+    "400": Error;
+    "401": Error;
     };
   };
   listRoutes: {
     responses: {
-      "200": RouteList;
-      "400": Error;
-      "401": Error;
+    "200": RouteList;
+    "400": Error;
+    "401": Error;
     };
   };
   createPaySession: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     requestBody: PaySessionRequest;
     responses: {
-      "201": PaySession;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "409": Error;
-      "503": Error;
+    "201": PaySession;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "409": Error;
+    "503": Error;
     };
   };
   getPaySession: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": PaySessionStatus;
-      "400": Error;
-      "401": Error;
-      "404": Error;
+    "200": PaySessionStatus;
+    "400": Error;
+    "401": Error;
+    "404": Error;
     };
   };
   getPublicClaim: {
     parameters: {
-      path: {
-        token_id: string;
-      };
+    path: {
+      token_id: string;
     };
+  };
     responses: {
-      "200": PublicClaim;
-      "400": Error;
-      "401": Error;
-      "404": Error;
+    "200": PublicClaim;
+    "400": Error;
+    "401": Error;
+    "404": Error;
     };
   };
   getAckData: {
     parameters: {
-      path: {
-        token_id: string;
-      };
+    path: {
+      token_id: string;
     };
+  };
     responses: {
-      "200": AckData;
-      "400": Error;
-      "401": Error;
-      "404": Error;
+    "200": AckData;
+    "400": Error;
+    "401": Error;
+    "404": Error;
     };
   };
   getOpenApi: {
     responses: {
-      "200": Record<string, unknown>;
+    "200": Record<string, unknown>;
     };
   };
   createAuthChallenge: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     requestBody: AuthChallengeRequest;
     responses: {
-      "200": AuthChallenge;
-      "400": Error;
-      "401": Error;
-      "409": Error;
+    "200": AuthChallenge;
+    "400": Error;
+    "401": Error;
+    "409": Error;
     };
   };
   verifyAuthChallenge: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     requestBody: AuthVerifyRequest;
     responses: {
-      "200": AuthSession;
-      "400": Error;
-      "401": Error;
+    "200": AuthSession;
+    "400": Error;
+    "401": Error;
     };
   };
   listApiKeys: {
     responses: {
-      "200": ApiKeyList;
-      "400": Error;
-      "401": Error;
+    "200": ApiKeyList;
+    "400": Error;
+    "401": Error;
     };
   };
   createApiKey: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     requestBody: CreateApiKeyRequest;
     responses: {
-      "201": ApiKeyCreated;
-      "400": Error;
-      "401": Error;
-      "409": Error;
+    "201": ApiKeyCreated;
+    "400": Error;
+    "401": Error;
+    "409": Error;
     };
   };
   rotateApiKey: {
     parameters: {
-      path: {
-        id: string;
-      };
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    path: {
+      id: string;
     };
+    header: {
+      "Idempotency-Key"?: string;
+    };
+  };
     responses: {
-      "200": ApiKeyCreated;
-      "400": Error;
-      "401": Error;
-      "404": Error;
-      "409": Error;
+    "200": ApiKeyCreated;
+    "400": Error;
+    "401": Error;
+    "404": Error;
+    "409": Error;
     };
   };
   deleteApiKey: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": DeletedResource;
-      "400": Error;
-      "401": Error;
-      "404": Error;
+    "200": DeletedResource;
+    "400": Error;
+    "401": Error;
+    "404": Error;
     };
   };
   deleteWebhookEndpoint: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": DeletedResource;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": DeletedResource;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   testWebhookEndpoint: {
     parameters: {
-      path: {
-        id: string;
-      };
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    path: {
+      id: string;
     };
+    header: {
+      "Idempotency-Key"?: string;
+    };
+  };
     responses: {
-      "200": WebhookTestResult;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
-      "409": Error;
+    "200": WebhookTestResult;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
+    "409": Error;
     };
   };
   listWebhookDeliveries: {
     parameters: {
-      path: {
-        id: string;
-      };
-      query: {
-        cursor?: string;
-        limit?: number;
-      };
+    path: {
+      id: string;
     };
+    query: {
+      cursor?: string;
+      limit?: number;
+    };
+  };
     responses: {
-      "200": WebhookDeliveryList;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": WebhookDeliveryList;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   getBusiness: {
     responses: {
-      "200": Business;
-      "400": Error;
-      "401": Error;
+    "200": Business;
+    "400": Error;
+    "401": Error;
     };
   };
   updateBusiness: {
     requestBody: UpdateBusinessRequest;
     responses: {
-      "200": Business;
-      "400": Error;
-      "401": Error;
-      "409": Error;
-      "429": Error;
+    "200": Business;
+    "400": Error;
+    "401": Error;
+    "409": Error;
+    "429": Error;
     };
   };
   getStorageCredit: {
     responses: {
-      "200": StorageCredit;
-      "400": Error;
-      "401": Error;
-      "503": Error;
+    "200": StorageCredit;
+    "400": Error;
+    "401": Error;
+    "503": Error;
     };
   };
   getStatement: {
     parameters: {
-      query: {
-        from?: string;
-        to?: string;
-        format?: "csv" | "pdf";
-        token_id?: string;
-      };
+    query: {
+      from?: string;
+      to?: string;
+      format?: "csv" | "pdf";
+      token_id?: string;
     };
+  };
     responses: {
-      "200": Statement;
-      "400": Error;
-      "401": Error;
+    "200": Statement;
+    "400": Error;
+    "401": Error;
     };
   };
   getInvoicePdf: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": PdfDocument;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": PdfDocument;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   listOpenQuotes: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": OpenQuoteList;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": OpenQuoteList;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   listCashouts: {
     responses: {
-      "200": CashoutList;
-      "401": Error;
-      "403": Error;
+    "200": CashoutList;
+    "401": Error;
+    "403": Error;
     };
   };
   getCashout: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": Cashout;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": Cashout;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   markCashoutSent: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     requestBody: {
       tx_hash: string;
     };
     responses: {
-      "200": Cashout;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": Cashout;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   createCashoutQuote: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     requestBody: CashoutQuoteRequest;
     responses: {
-      "201": CashoutQuote;
-      "400": Error;
-      "401": Error;
-      "409": Error;
+    "201": CashoutQuote;
+    "400": Error;
+    "401": Error;
+    "409": Error;
     };
   };
   getPublicReceipt: {
     parameters: {
-      path: {
-        booking_tx_hash: string;
-      };
+    path: {
+      booking_tx_hash: string;
     };
+  };
     responses: {
-      "200": PublicReceipt;
-      "404": Error;
+    "200": PublicReceipt;
+    "404": Error;
     };
   };
   acknowledgeEvm: {
     parameters: {
-      path: {
-        token_id: string;
-      };
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    path: {
+      token_id: string;
     };
+    header: {
+      "Idempotency-Key"?: string;
+    };
+  };
     requestBody: AckEvmRequest;
     responses: {
-      "200": AckEvmResponse;
-      "400": Error;
-      "404": Error;
-      "409": Error;
-      "422": Error;
+    "200": AckEvmResponse;
+    "400": Error;
+    "404": Error;
+    "409": Error;
+    "422": Error;
     };
   };
   getAuthSession: {
     responses: {
-      "200": AuthSessionInfo;
-      "401": Error;
+    "200": AuthSessionInfo;
+    "401": Error;
     };
   };
   logout: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     responses: {
-      "200": LogoutResponse;
+    "200": LogoutResponse;
     };
   };
   listPayments: {
     responses: {
-      "200": PaymentList;
-      "400": Error;
-      "401": Error;
-      "403": Error;
+    "200": PaymentList;
+    "400": Error;
+    "401": Error;
+    "403": Error;
     };
   };
   getHealth: {
     responses: {
-      "200": Health;
+    "200": Health;
     };
   };
   createRecurringInvoice: {
     parameters: {
-      header: {
-        "Idempotency-Key"?: string;
-      };
+    header: {
+      "Idempotency-Key"?: string;
     };
+  };
     requestBody: CreateRecurringInvoiceRequest;
     responses: {
-      "201": RecurringInvoice;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "409": Error;
+    "201": RecurringInvoice;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "409": Error;
     };
   };
   listRecurringInvoices: {
     responses: {
-      "200": RecurringInvoiceList;
-      "401": Error;
-      "403": Error;
+    "200": RecurringInvoiceList;
+    "401": Error;
+    "403": Error;
     };
   };
   getRecurringInvoice: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": RecurringInvoiceDetail;
-      "401": Error;
-      "403": Error;
-      "404": Error;
+    "200": RecurringInvoiceDetail;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
   updateRecurringInvoice: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     requestBody: UpdateRecurringInvoiceRequest;
     responses: {
-      "200": RecurringInvoice;
-      "400": Error;
-      "401": Error;
-      "403": Error;
-      "404": Error;
-      "409": Error;
+    "200": RecurringInvoice;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
+    "409": Error;
     };
   };
   getAnalytics: {
     responses: {
-      "200": Analytics;
-      "401": Error;
-      "403": Error;
+    "200": Analytics;
+    "401": Error;
+    "403": Error;
     };
   };
   listPaySessions: {
     parameters: {
-      path: {
-        token_id: string;
-      };
+    path: {
+      token_id: string;
     };
+  };
     responses: {
-      "200": PaySessionList;
-      "400": Error;
-      "401": Error;
-      "404": Error;
+    "200": PaySessionList;
+    "400": Error;
+    "401": Error;
+    "404": Error;
     };
   };
   checkBusinessUsername: {
     parameters: {
-      query: {
-        u: string;
-      };
+    query: {
+      u: string;
     };
+  };
     responses: {
-      "200": UsernameAvailability;
-      "400": Error;
-      "401": Error;
+    "200": UsernameAvailability;
+    "400": Error;
+    "401": Error;
     };
   };
   feePreview: {
     parameters: {
-      query: {
-        subtotal_usd: string;
-        fee_mode?: FeeMode;
-      };
+    query: {
+      subtotal_usd: string;
+      fee_mode?: FeeMode;
     };
+  };
     responses: {
-      "200": FeePreview;
-      "400": Error;
-      "401": Error;
+    "200": FeePreview;
+    "400": Error;
+    "401": Error;
     };
   };
   getReceiptPdf: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": ReceiptPdfDocument;
-      "404": Error;
+    "200": ReceiptPdfDocument;
+    "404": Error;
     };
   };
   getMachineReceipt: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     responses: {
-      "200": MachineReceipt;
-      "404": Error;
+    "200": MachineReceipt;
+    "404": Error;
     };
   };
   payoutEstimate: {
     parameters: {
-      query: {
-        destination: string;
-      };
+    query: {
+      destination: string;
     };
+  };
     responses: {
-      "200": PayoutEstimate;
-      "400": Error;
-      "401": Error;
+    "200": PayoutEstimate;
+    "400": Error;
+    "401": Error;
     };
   };
   listWebhookEventTypes: {
     responses: {
-      "200": WebhookEventTypes;
-      "401": Error;
+    "200": WebhookEventTypes;
+    "401": Error;
     };
   };
   createConfidentialSession: {
     requestBody: ConfidentialSessionRequest;
     responses: {
-      "200": ConfidentialSession;
-      "400": Error;
-      "401": Error;
+    "200": ConfidentialSession;
+    "400": Error;
+    "401": Error;
     };
   };
   getConfidentialBalance: {
     parameters: {
-      query: {
-        token_ids?: string;
-      };
+    query: {
+      token_ids?: string;
     };
+  };
     responses: {
-      "200": ConfidentialBalance;
-      "400": Error;
-      "401": Error;
-      "409": Error;
+    "200": ConfidentialBalance;
+    "400": Error;
+    "401": Error;
+    "409": Error;
     };
   };
   getConfidentialKeyStatus: {
     parameters: {
-      query: {
-        public_key: string;
-      };
+    query: {
+      public_key: string;
     };
+  };
     responses: {
-      "200": ConfidentialKeyStatus;
-      "400": Error;
-      "401": Error;
+    "200": ConfidentialKeyStatus;
+    "400": Error;
+    "401": Error;
     };
   };
   confidentialWithdrawQuote: {
     requestBody: ConfidentialWithdrawQuoteRequest;
     responses: {
-      "200": ConfidentialWithdrawQuote;
-      "400": Error;
-      "401": Error;
-      "403": Error;
+    "200": ConfidentialWithdrawQuote;
+    "400": Error;
+    "401": Error;
+    "403": Error;
     };
   };
   confidentialWithdrawIntent: {
@@ -1571,10 +1552,10 @@ export interface operations {
       deposit_address: string;
     };
     responses: {
-      "200": ConfidentialWithdrawIntent;
-      "400": Error;
-      "401": Error;
-      "403": Error;
+    "200": ConfidentialWithdrawIntent;
+    "400": Error;
+    "401": Error;
+    "403": Error;
     };
   };
   confidentialWithdrawSubmit: {
@@ -1582,37 +1563,44 @@ export interface operations {
       signed_data: Record<string, unknown>;
     };
     responses: {
-      "200": ConfidentialWithdrawSubmit;
-      "400": Error;
-      "401": Error;
-      "403": Error;
+    "200": ConfidentialWithdrawSubmit;
+    "400": Error;
+    "401": Error;
+    "403": Error;
     };
   };
   confidentialWithdrawStatus: {
     parameters: {
-      query: {
-        deposit_address: string;
-      };
+    query: {
+      deposit_address: string;
     };
+  };
     responses: {
-      "200": ConfidentialWithdrawStatus;
-      "400": Error;
-      "401": Error;
+    "200": ConfidentialWithdrawStatus;
+    "400": Error;
+    "401": Error;
     };
   };
   nudgePayDeposit: {
     parameters: {
-      path: {
-        id: string;
-      };
+    path: {
+      id: string;
     };
+  };
     requestBody: {
       tx_hash: string;
     };
     responses: {
-      "200": PayDepositNudge;
-      "400": Error;
-      "404": Error;
+    "200": PayDepositNudge;
+    "400": Error;
+    "404": Error;
+    };
+  };
+  getIntentsBalance: {
+    responses: {
+    "200": IntentsBalance;
+    "401": Error;
+    "503": Error;
     };
   };
 }
