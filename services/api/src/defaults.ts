@@ -184,6 +184,11 @@ export async function storageCreditOf(
 
 export function createContractPort(rootAccount: string): ContractPort {
   const near = nearClientFromEnv();
+  const balanceCache = new Map<
+    string,
+    { at: number; value: { token_id: string; amount: string }[] }
+  >();
+  const balanceReads = new Map<string, Promise<{ token_id: string; amount: string }[]>>();
   return {
     async claim(tokenId) {
       const claim = await near.view<Record<string, unknown> | null>({
@@ -208,6 +213,38 @@ export function createContractPort(rootAccount: string): ContractPort {
     },
     rpcHealth() {
       return near.rpcHealth();
+    },
+    // One read per account every 10 s, whatever the number of open tabs: the browser asks us, we ask the chain.
+    async intentsBalances(accountId) {
+      const kept = balanceCache.get(accountId);
+      if (kept !== undefined && Date.now() - kept.at < 10_000) return kept.value;
+      const pending = balanceReads.get(accountId);
+      if (pending !== undefined) return pending;
+      const read = (async () => {
+        const owned = await near.view<{ token_id: string }[]>({
+          contractId: "intents.near",
+          methodName: "mt_tokens_for_owner",
+          args: { account_id: accountId },
+          feature: "api.intents_balance",
+        });
+        const ids = owned.map((t) => t.token_id);
+        if (ids.length === 0) return [];
+        const amounts = await near.view<string[]>({
+          contractId: "intents.near",
+          methodName: "mt_batch_balance_of",
+          args: { account_id: accountId, token_ids: ids },
+          feature: "api.intents_balance",
+        });
+        return ids.map((token_id, i) => ({ token_id, amount: String(amounts[i] ?? "0") }));
+      })();
+      balanceReads.set(accountId, read);
+      try {
+        const value = await read;
+        balanceCache.set(accountId, { at: Date.now(), value });
+        return value;
+      } finally {
+        balanceReads.delete(accountId);
+      }
     },
     async intentsHasPublicKey(accountId, publicKey) {
       return (

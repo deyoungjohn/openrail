@@ -3476,6 +3476,28 @@
             "type": "boolean"
           }
         }
+      },
+      "IntentsBalance": {
+        "type": "object",
+        "required": ["balances"],
+        "properties": {
+          "balances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["token_id", "amount"],
+              "properties": {
+                "token_id": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "string",
+                  "description": "Base units, as intents.near reports them."
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -7312,6 +7334,53 @@
           },
           "404": {
             "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/balance/intents": {
+      "get": {
+        "operationId": "getIntentsBalance",
+        "summary": "The business's balances on intents.near, read by the server",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token ids and base-unit amounts held by the authenticated account. Cached for a few seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentsBalance"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The chain could not be read right now.",
             "content": {
               "application/json": {
                 "schema": {

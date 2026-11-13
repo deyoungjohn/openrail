@@ -12,7 +12,7 @@ export function useBalance(accountId: string | null): [Async<Balance>, () => voi
   const read = useCallback(async () => {
     if (accountId === null) return;
     try {
-      const data = await readBalance(accountId);
+      const data = await readBalance();
       setValue({ state: "ready", data });
     } catch (error) {
       setValue((v) => (v.state === "ready" ? v : { state: "error", error }));

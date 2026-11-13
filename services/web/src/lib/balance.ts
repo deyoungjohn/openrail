@@ -1,11 +1,8 @@
 // What a business holds from the payments it received. A payment is paid out to the business as a balance of
 // `intents.near` (a multi-token contract), not as a token in its NEAR wallet, so a wallet shows nothing: this
-// reads the balance there, straight from the chain.
+// reads the balance there, through the API (which reads the chain).
 
-const RPC_URLS = (process.env.NEXT_PUBLIC_NEAR_RPC_URL ?? "https://free.rpc.fastnear.com")
-  .split(",")
-  .map((u) => u.trim())
-  .filter(Boolean);
+import { dashClient } from "./client";
 
 /** The contract that holds the balances. */
 export const INTENTS_CONTRACT = "intents.near";
@@ -57,56 +54,18 @@ export interface Balance {
 export const usdcNetwork = (tokenId: string): string | null =>
   USDC_TOKENS.find((t) => t.match.test(tokenId))?.network ?? null;
 
-async function view<T>(contract: string, method: string, args: object): Promise<T> {
-  let last: unknown = new Error("RPC: no url");
-  for (const url of RPC_URLS) {
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "query",
-          params: {
-            request_type: "call_function",
-            finality: "final",
-            account_id: contract,
-            method_name: method,
-            args_base64: btoa(JSON.stringify(args)),
-          },
-        }),
-        signal: AbortSignal.timeout(10_000),
-      });
-      const body = (await response.json()) as { result?: { result?: number[] } };
-      if (!body.result?.result) throw new Error("VIEW_FAILED");
-      return JSON.parse(new TextDecoder().decode(Uint8Array.from(body.result.result))) as T;
-    } catch (error) {
-      last = error;
-    }
-  }
-  throw last;
-}
-
 /** The USDC balance of a NEAR account on `intents.near`, per network, read live from the chain. */
-export async function readBalance(accountId: string): Promise<Balance> {
-  const owned = await view<{ token_id: string }[]>(INTENTS_CONTRACT, "mt_tokens_for_owner", {
-    account_id: accountId,
-  });
-  const ids = owned.map((t) => t.token_id);
-  if (ids.length === 0) return { total: 0n, lines: [], otherTokens: [] };
-  const amounts = await view<string[]>(INTENTS_CONTRACT, "mt_batch_balance_of", {
-    account_id: accountId,
-    token_ids: ids,
-  });
+export async function readBalance(): Promise<Balance> {
+  // The server reads the chain (with its own endpoints and keys); the browser makes no RPC call of its own.
+  const { balances } = await dashClient.balance.intents();
   const lines: BalanceLine[] = [];
   const otherTokens: string[] = [];
-  ids.forEach((tokenId, i) => {
+  for (const { token_id: tokenId, amount } of balances) {
     const network = usdcNetwork(tokenId);
-    const units = BigInt(amounts[i] ?? "0");
-    if (units === 0n) return;
+    const units = BigInt(amount);
+    if (units === 0n) continue;
     if (network) lines.push({ tokenId, network, units });
     else otherTokens.push(tokenId);
-  });
+  }
   return { total: lines.reduce((n, l) => n + l.units, 0n), lines, otherTokens };
 }

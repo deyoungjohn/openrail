@@ -296,6 +296,12 @@ export class OpenrailClient {
       }),
   };
 
+  /** What the business holds on intents.near, read by the server (the browser never talks to an RPC). */
+  balance = {
+    intents: (): Promise<SuccessBody<"getIntentsBalance">> =>
+      this.call("GET", "/v1/balance/intents"),
+  };
+
   /** The private balance: withdraw to a wallet. The money-moving steps need a signed-in session, not an API key. */
   confidential = {
     keyStatus: (publicKey: string): Promise<SuccessBody<"getConfidentialKeyStatus">> =>
