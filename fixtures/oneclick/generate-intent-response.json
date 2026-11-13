@@ -1,0 +1,11 @@
+{
+  "intent": {
+    "standard": "nep413",
+    "payload": {
+      "message": "{\"deadline\":\"2026-11-15T18:53:36.000Z\",\"signer_id\":\"merchant.near\",\"intents\":[]}",
+      "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "recipient": "intents.far"
+    }
+  },
+  "correlationId": "550e8400-e29b-41d4-a716-446655440000"
+}
