@@ -868,6 +868,35 @@ export interface IntentsBalance {
   }>;
 }
 
+export interface ConfidentialAuthPayload {
+  standard: "nep413";
+  payload: {
+    message: string;
+    nonce: string;
+    recipient: "intents.near";
+  };
+}
+
+export interface ConfidentialWithdrawal {
+  deposit_address: string;
+  account_id?: string;
+  amount: string;
+  source_asset: string;
+  destination_chain: string;
+  address: string;
+  created_at: string;
+  updated_at?: string;
+  status: string;
+  amount_out?: string | null;
+  destination_tx_hashes: string[];
+  destination_explorer_urls: string[];
+  near_tx_hashes: string[];
+}
+
+export interface ConfidentialWithdrawalList {
+  data: ConfidentialWithdrawal[];
+}
+
 export interface operations {
   createInvoice: {
     parameters: {
@@ -1602,6 +1631,22 @@ export interface operations {
     "200": IntentsBalance;
     "401": Error;
     "503": Error;
+    };
+  };
+  getConfidentialAuthPayload: {
+    responses: {
+    "200": ConfidentialAuthPayload;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "503": Error;
+    };
+  };
+  listConfidentialWithdrawals: {
+    responses: {
+    "200": ConfidentialWithdrawalList;
+    "400": Error;
+    "401": Error;
     };
   };
 }

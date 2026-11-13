@@ -324,6 +324,20 @@ export class OpenrailClient {
       this.call("GET", "/v1/balance/confidential/withdraw/status", {
         query: { deposit_address: depositAddress },
       }),
+    /** Withdrawals started on this site, newest first, with explorer links. */
+    withdrawals: (): Promise<SuccessBody<"listConfidentialWithdrawals">> =>
+      this.call("GET", "/v1/balance/confidential/withdrawals"),
+    /** The empty intent the wallet signs to open a session (versioned nonce, 4-minute window). */
+    authPayload: (): Promise<SuccessBody<"getConfidentialAuthPayload">> =>
+      this.call("GET", "/v1/balance/confidential/auth-payload"),
+    /** Exchanges the signed payload for a session kept by the API (the provider's token never reaches the browser). */
+    session: (
+      signedData: Record<string, unknown>,
+    ): Promise<SuccessBody<"createConfidentialSession">> =>
+      this.call("POST", "/v1/balance/confidential/session", { body: { signed_data: signedData } }),
+    /** The real private balance; 409 `confidential_session_required` until a session exists. */
+    balance: (): Promise<SuccessBody<"getConfidentialBalance">> =>
+      this.call("GET", "/v1/balance/confidential"),
   };
 
   health = (): Promise<SuccessBody<"getHealth">> => this.call("GET", "/v1/health");

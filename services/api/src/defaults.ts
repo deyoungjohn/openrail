@@ -608,6 +608,8 @@ async function confidentialPost(path: string, body: unknown): Promise<Record<str
 }
 
 function createConfidentialBalancePort(): ConfidentialBalancePort {
+  // The salt changes rarely; a session payload needs the current one.
+  let saltCache: { at: number; value: string } | undefined;
   return {
     async authenticate(signedData) {
       // Not confirmed by a real call yet: the cited guide shows the SDK call, not this path.
@@ -654,6 +656,18 @@ function createConfidentialBalancePort(): ConfidentialBalancePort {
     },
     async submitIntent(signedData) {
       return confidentialPost("/v0/submit-intent", { type: "swap_transfer", signedData });
+    },
+    async currentSalt() {
+      if (saltCache !== undefined && Date.now() - saltCache.at < 10 * 60_000)
+        return saltCache.value;
+      const value = await nearClientFromEnv().view<string>({
+        contractId: "intents.near",
+        methodName: "current_salt",
+        args: {},
+        feature: "api.intents_salt",
+      });
+      saltCache = { at: Date.now(), value };
+      return value;
     },
     async withdrawStatus(depositAddress) {
       const response = await fetch(

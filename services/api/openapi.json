@@ -3506,6 +3506,115 @@
             }
           }
         }
+      },
+      "ConfidentialAuthPayload": {
+        "type": "object",
+        "required": ["standard", "payload"],
+        "properties": {
+          "standard": {
+            "type": "string",
+            "enum": ["nep413"]
+          },
+          "payload": {
+            "type": "object",
+            "required": ["message", "nonce", "recipient"],
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "An empty intent: deadline (4 minutes ahead), no intents, the signer."
+              },
+              "nonce": {
+                "type": "string",
+                "description": "Base64 of the 32-byte versioned nonce (magic, V1, contract salt, deadline ns, start ns, 7 random bytes)."
+              },
+              "recipient": {
+                "type": "string",
+                "enum": ["intents.near"]
+              }
+            }
+          }
+        }
+      },
+      "ConfidentialWithdrawal": {
+        "type": "object",
+        "required": [
+          "deposit_address",
+          "amount",
+          "source_asset",
+          "destination_chain",
+          "address",
+          "created_at",
+          "status",
+          "destination_tx_hashes",
+          "destination_explorer_urls",
+          "near_tx_hashes"
+        ],
+        "properties": {
+          "deposit_address": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Base units of the source asset."
+          },
+          "source_asset": {
+            "type": "string"
+          },
+          "destination_chain": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "description": "The provider's word (PROCESSING, SUCCESS, REFUNDED, FAILED, ...)."
+          },
+          "amount_out": {
+            "type": ["string", "null"]
+          },
+          "destination_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "destination_explorer_urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "near_tx_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ConfidentialWithdrawalList": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfidentialWithdrawal"
+            }
+          }
+        }
       }
     }
   },
@@ -7389,6 +7498,117 @@
           },
           "503": {
             "description": "The chain could not be read right now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/balance/confidential/auth-payload": {
+      "get": {
+        "operationId": "getConfidentialAuthPayload",
+        "summary": "The empty intent the wallet signs to open a private-balance session",
+        "tags": ["Business"],
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payload to sign with NEP-413, then send to the session route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialAuthPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs a signed-in session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Private balance not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/balance/confidential/withdrawals": {
+      "get": {
+        "operationId": "listConfidentialWithdrawals",
+        "summary": "Withdrawals from the private balance started on this site",
+        "tags": ["Business"],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest first, with the provider's status and explorer links.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfidentialWithdrawalList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Flag off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential.",
             "content": {
               "application/json": {
                 "schema": {

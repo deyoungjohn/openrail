@@ -330,3 +330,94 @@ describe("confidential withdraw status words", () => {
     expect(response.body).toMatchObject({ status: "SUCCESS", phase: "success", terminal: true });
   });
 });
+
+describe("private balance session payload (versioned nonce, as the CLI)", () => {
+  it("builds the empty intent with magic, V1, salt, deadline and start time in the nonce", async () => {
+    const { confidentialAuthPayload } = await import("./confidential-auth.js");
+    const now = Date.parse("2026-11-13T08:00:00.500Z");
+    const p = confidentialAuthPayload("merchant.near", "a1b2c3d4", now, new Uint8Array(7).fill(9));
+    expect(p.standard).toBe("nep413");
+    expect(p.payload.recipient).toBe("intents.near");
+    expect(JSON.parse(p.payload.message)).toEqual({
+      deadline: "2026-11-13T08:04:00.000Z",
+      intents: [],
+      signer_id: "merchant.near",
+    });
+    const nonce = Buffer.from(p.payload.nonce, "base64");
+    expect(nonce.length).toBe(32);
+    expect(nonce.subarray(0, 4).toString("hex")).toBe("5628f6c6");
+    expect(nonce[4]).toBe(0);
+    expect(nonce.subarray(5, 9).toString("hex")).toBe("a1b2c3d4");
+    expect(nonce.readBigInt64LE(9)).toBe(
+      BigInt(Date.parse("2026-11-13T08:04:00.000Z")) * 1_000_000n,
+    );
+    expect(nonce.readBigInt64LE(17)).toBe(BigInt(now) * 1_000_000n);
+    expect([...nonce.subarray(25)]).toEqual([9, 9, 9, 9, 9, 9, 9]);
+  });
+
+  it("serves the payload for the signed-in merchant with the contract's salt", async () => {
+    const { app, request, deps } = await harness();
+    (deps.confidential as { currentSalt?: () => Promise<string> }).currentSalt = async () =>
+      "0badf00d";
+    const r = await app.handle(request("GET", "/v1/balance/confidential/auth-payload"));
+    expect(r.status).toBe(200);
+    const body = r.body as { payload: { message: string; nonce: string } };
+    expect(JSON.parse(body.payload.message).signer_id).toBe("merchant.near");
+    expect(Buffer.from(body.payload.nonce, "base64").subarray(5, 9).toString("hex")).toBe(
+      "0badf00d",
+    );
+  });
+});
+
+describe("withdrawals started here are listed with their explorer links", () => {
+  it("records the quote, keeps the provider's links, and hides a price nobody signed", async () => {
+    const { app, request, deps } = await harness();
+    const status = deps.confidential?.withdrawStatus as ReturnType<typeof vi.fn>;
+    status.mockResolvedValue({
+      status: "SUCCESS",
+      swapDetails: {
+        amountOut: "995000",
+        destinationChainTxHashes: [
+          { hash: "0x00d4e1e3f08", explorerUrl: "https://basescan.org/tx/0x00d4e1e3f08" },
+        ],
+        nearTxHashes: [{ hash: "NearHash1", explorerUrl: "" }],
+      },
+    });
+    await app.handle(
+      request("POST", "/v1/balance/confidential/withdraw/quote", {
+        amount: "1000000",
+        source_asset: USDC,
+        destination_chain: "base",
+        address: "0x" + "e".repeat(40),
+      }),
+    );
+    const list = await app.handle(request("GET", "/v1/balance/confidential/withdrawals"));
+    expect(list.status).toBe(200);
+    const rows = (list.body as { data: Record<string, unknown>[] }).data;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      deposit_address: "withdraw-deposit",
+      amount: "1000000",
+      status: "SUCCESS",
+      amount_out: "995000",
+      destination_tx_hashes: ["0x00d4e1e3f08"],
+      destination_explorer_urls: ["https://basescan.org/tx/0x00d4e1e3f08"],
+      near_tx_hashes: ["NearHash1"],
+    });
+
+    status.mockResolvedValue({ status: "PENDING_DEPOSIT" });
+    (deps.confidential?.withdrawQuote as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      quote: { depositAddress: "never-signed" },
+    });
+    await app.handle(
+      request("POST", "/v1/balance/confidential/withdraw/quote", {
+        amount: "2000000",
+        source_asset: USDC,
+        destination_chain: "base",
+        address: "0x" + "e".repeat(40),
+      }),
+    );
+    const again = await app.handle(request("GET", "/v1/balance/confidential/withdrawals"));
+    expect((again.body as { data: unknown[] }).data).toHaveLength(1);
+  });
+});

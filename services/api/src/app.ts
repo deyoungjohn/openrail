@@ -37,6 +37,7 @@ import {
   type ApiModuleContext,
   type ModuleStore,
 } from "./modules.js";
+import { confidentialAuthPayload } from "./confidential-auth.js";
 import { DepositWatch } from "./deposit-watch.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
@@ -191,6 +192,63 @@ export interface ConfidentialBalancePort {
   generateIntent(depositAddress: string, signerId: string): Promise<Record<string, unknown>>;
   submitIntent(signedData: Record<string, unknown>): Promise<Record<string, unknown>>;
   withdrawStatus(depositAddress: string): Promise<Record<string, unknown>>;
+  /** The intents contract's current nonce salt (8 hex digits), for the session payload. */
+  currentSalt?(): Promise<string>;
+}
+
+/** A private-balance withdrawal started on this site, kept so the dashboard can list it with its explorer links. */
+export interface ConfidentialWithdrawalRecord {
+  deposit_address: string;
+  account_id: string;
+  amount: string;
+  source_asset: string;
+  destination_chain: string;
+  address: string;
+  created_at: string;
+  status: string;
+  amount_out: string | null;
+  destination_tx_hashes: string[];
+  destination_explorer_urls: string[];
+  near_tx_hashes: string[];
+  updated_at: string;
+}
+
+/** Hashes and explorer links from the provider's status, whatever its exact shape (strings or `{hash, explorerUrl}`). */
+export function withdrawalLinksOf(provider: Record<string, unknown>): {
+  destination_tx_hashes: string[];
+  destination_explorer_urls: string[];
+  near_tx_hashes: string[];
+  amount_out: string | null;
+} {
+  const details = (provider.swapDetails ?? provider) as Record<string, unknown>;
+  const hashes = (v: unknown): { hash: string; url: string | null }[] =>
+    Array.isArray(v)
+      ? v.flatMap((x) =>
+          typeof x === "string"
+            ? [{ hash: x, url: null }]
+            : x !== null &&
+                typeof x === "object" &&
+                typeof (x as { hash?: unknown }).hash === "string"
+              ? [
+                  {
+                    hash: (x as { hash: string }).hash,
+                    url:
+                      typeof (x as { explorerUrl?: unknown }).explorerUrl === "string"
+                        ? (x as { explorerUrl: string }).explorerUrl
+                        : null,
+                  },
+                ]
+              : [],
+        )
+      : [];
+  const dest = hashes(details.destinationChainTxHashes);
+  const amountOut = details.amountOut ?? details.amountOutFormatted;
+  return {
+    destination_tx_hashes: dest.map((d) => d.hash),
+    destination_explorer_urls: dest.flatMap((d) => (d.url === null ? [] : [d.url])),
+    near_tx_hashes: hashes(details.nearTxHashes).map((d) => d.hash),
+    amount_out: typeof amountOut === "string" ? amountOut : null,
+  };
 }
 
 export interface PayoutEstimatorPort {
@@ -672,6 +730,36 @@ export class ApiApp {
       terms_fingerprint: invoice?.terms_hash ?? String(receipt.terms_hash ?? ""),
       verify_command: `openrail-verify claim ${claimAccount} --terms-hash ${invoice?.terms_hash ?? String(receipt.terms_hash ?? "")}`,
     }) as unknown as ReceiptDocument;
+  }
+
+  /** Stores the provider's latest word and links on a withdrawal started here; quietly nothing for an unknown one. */
+  private noteWithdrawal(
+    depositAddress: string,
+    provider: Record<string, unknown>,
+  ): ConfidentialWithdrawalRecord | undefined {
+    const kept = this.docs.get<ConfidentialWithdrawalRecord>(
+      "confidential_withdrawals",
+      depositAddress,
+    );
+    if (kept === undefined) return undefined;
+    const links = withdrawalLinksOf(provider);
+    const next: ConfidentialWithdrawalRecord = {
+      ...kept,
+      status: typeof provider.status === "string" ? provider.status : kept.status,
+      amount_out: links.amount_out ?? kept.amount_out,
+      destination_tx_hashes:
+        links.destination_tx_hashes.length > 0
+          ? links.destination_tx_hashes
+          : kept.destination_tx_hashes,
+      destination_explorer_urls:
+        links.destination_explorer_urls.length > 0
+          ? links.destination_explorer_urls
+          : kept.destination_explorer_urls,
+      near_tx_hashes: links.near_tx_hashes.length > 0 ? links.near_tx_hashes : kept.near_tx_hashes,
+      updated_at: nowIso(this.clock),
+    };
+    this.docs.put("confidential_withdrawals", depositAddress, next, kept.account_id);
+    return next;
   }
 
   /**
@@ -1972,16 +2060,39 @@ export class ApiApp {
         if (error instanceof AddressError) throw new ApiError(400, "invalid_address");
         throw error;
       }
-      return {
-        status: 200,
-        body: await this.deps.confidential.withdrawQuote({
+      const quoted = await this.deps.confidential.withdrawQuote({
+        amount: body.amount,
+        sourceAsset: body.source_asset,
+        destinationChain: body.destination_chain,
+        address: body.address,
+        refundTo: context.accountId,
+      });
+      const quoteBody = (quoted.quote ?? quoted) as { depositAddress?: unknown };
+      if (typeof quoteBody.depositAddress === "string" && quoteBody.depositAddress !== "") {
+        const now = nowIso(this.clock);
+        const record: ConfidentialWithdrawalRecord = {
+          deposit_address: quoteBody.depositAddress,
+          account_id: context.accountId,
           amount: body.amount,
-          sourceAsset: body.source_asset,
-          destinationChain: body.destination_chain,
+          source_asset: body.source_asset,
+          destination_chain: body.destination_chain,
           address: body.address,
-          refundTo: context.accountId,
-        }),
-      };
+          created_at: now,
+          status: "QUOTED",
+          amount_out: null,
+          destination_tx_hashes: [],
+          destination_explorer_urls: [],
+          near_tx_hashes: [],
+          updated_at: now,
+        };
+        this.docs.put(
+          "confidential_withdrawals",
+          record.deposit_address,
+          record,
+          context.accountId,
+        );
+      }
+      return { status: 200, body: quoted };
     }
     if (path === "/v1/balance/confidential/withdraw/intent" && method === "POST") {
       if (this.deps.config.confidentialIntents !== true)
@@ -2031,9 +2142,63 @@ export class ApiApp {
       if (depositAddress === "")
         throw new ApiError(400, "invalid_request", "deposit_address required");
       const provider = await this.deps.confidential.withdrawStatus(depositAddress);
+      this.noteWithdrawal(depositAddress, provider);
       return {
         status: 200,
         body: { ...provider, ...withdrawPhaseOf(provider.status) },
+      };
+    }
+    if (path === "/v1/balance/confidential/withdrawals" && method === "GET") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const now = this.clock().getTime();
+      const rows = this.docs
+        .list<ConfidentialWithdrawalRecord>("confidential_withdrawals", context.accountId)
+        // A price nobody signed within the hour is not a withdrawal.
+        .filter(
+          (row) =>
+            !(row.status === "QUOTED" || row.status === "PENDING_DEPOSIT") ||
+            now - Date.parse(row.created_at) < 3_600_000,
+        );
+      // A withdrawal still on its way is asked about again (the provider, not an RPC), at most a day after it started.
+      for (const row of rows) {
+        if (
+          this.deps.confidential === undefined ||
+          withdrawPhaseOf(row.status).terminal ||
+          now - Date.parse(row.created_at) > 86_400_000
+        )
+          continue;
+        try {
+          const provider = await this.deps.confidential.withdrawStatus(row.deposit_address);
+          Object.assign(row, this.noteWithdrawal(row.deposit_address, provider) ?? {});
+        } catch {
+          /* keep what is stored */
+        }
+      }
+      const started = rows.filter(
+        (row) => row.status !== "QUOTED" && row.status !== "PENDING_DEPOSIT",
+      );
+      started.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+      return { status: 200, body: { data: started } };
+    }
+    if (path === "/v1/balance/confidential/auth-payload" && method === "GET") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential?.currentSalt === undefined)
+        throw new ApiError(503, "confidential_unavailable");
+      const context = this.requireAuth(request);
+      if (context.kind !== "session") throw new ApiError(403, "session_required");
+      const salt = await this.deps.confidential.currentSalt();
+      return {
+        status: 200,
+        body: confidentialAuthPayload(
+          context.accountId,
+          salt,
+          this.clock().getTime(),
+          randomBytes(7),
+        ),
       };
     }
     if (path === "/v1/balance/confidential/session" && method === "POST") {

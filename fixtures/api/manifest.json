@@ -536,6 +536,22 @@
       "status": 503,
       "schema": "Error",
       "mock": false
+    },
+    {
+      "file": "confidential.auth-payload.json",
+      "method": "GET",
+      "path": "/v1/balance/confidential/auth-payload",
+      "status": 200,
+      "schema": "ConfidentialAuthPayload",
+      "mock": true
+    },
+    {
+      "file": "confidential.withdrawals.json",
+      "method": "GET",
+      "path": "/v1/balance/confidential/withdrawals",
+      "status": 200,
+      "schema": "ConfidentialWithdrawalList",
+      "mock": true
     }
   ]
 }
