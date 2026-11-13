@@ -16,6 +16,14 @@ export const DEFAULT_IDLE_PROBE_MS = 60_000;
 export const DEFAULT_BALANCE_CHECK_MS = 10 * 60_000;
 export const DEFAULT_BLOCK_CACHE_MS = 60_000;
 export const DEFAULT_DISCOVER_CACHE_MS = 60_000;
+/**
+ * Trigger mode (13 Nov, RPC budget of 150,000 calls a week): the watcher reads nothing on a timer. The API polls the
+ * provider's status for each live deposit address and pokes the watcher when money moves; the watcher then confirms on
+ * chain. A sweep of every open claim runs at start and once a day, for payments that bypass the provider.
+ */
+export const DEFAULT_ARM_WINDOW_MS = 3 * 60_000;
+export const DEFAULT_SWEEP_INTERVAL_MS = 24 * 60 * 60_000;
+export const DEFAULT_TRIGGERED_BALANCE_CHECK_MS = 60 * 60_000;
 
 export interface WatcherConfig {
   /** `<root>` contract account. */
@@ -47,6 +55,12 @@ export interface WatcherConfig {
   balanceCheckMs?: number;
   blockCacheMs?: number;
   discoverCacheMs?: number;
+  /** `poll` (the cadence ladder, the default when absent) or `triggered` (reads only after a poke, plus the sweep). */
+  mode?: "poll" | "triggered";
+  /** Trigger mode: how long a poked claim's balance is read at the fast cadence. */
+  armWindowMs?: number;
+  /** Trigger mode: the safety sweep of every open claim; 0 turns it off. */
+  sweepIntervalMs?: number;
 }
 
 function numberEnv(name: string, fallback: number): number {
@@ -61,7 +75,13 @@ function numberEnv(name: string, fallback: number): number {
 
 /** Reads and validates the watcher environment. Never reads a secret value into logs. */
 export function watcherConfigFromEnv(): WatcherConfig {
+  const mode = getEnv("WATCHER_MODE") === "poll" ? "poll" : "triggered";
+  const sweep = getEnv("WATCHER_SWEEP_INTERVAL_MS");
   return {
+    mode,
+    armWindowMs: numberEnv("WATCHER_ARM_WINDOW_MS", DEFAULT_ARM_WINDOW_MS),
+    sweepIntervalMs:
+      sweep === "off" ? 0 : numberEnv("WATCHER_SWEEP_INTERVAL_MS", DEFAULT_SWEEP_INTERVAL_MS),
     rootAccount: requireEnv("NEAR_ROOT_ACCOUNT"),
     watcherAccount: requireEnv("WATCHER_ACCOUNT_ID"),
     fastIntervalMs: numberEnv("WATCHER_POLL_INTERVAL_MS", DEFAULT_FAST_INTERVAL_MS),
@@ -79,7 +99,10 @@ export function watcherConfigFromEnv(): WatcherConfig {
     warmIntervalMs: numberEnv("WATCHER_WARM_INTERVAL_MS", DEFAULT_WARM_INTERVAL_MS),
     coolIntervalMs: numberEnv("WATCHER_COOL_INTERVAL_MS", DEFAULT_COOL_INTERVAL_MS),
     idleProbeMs: numberEnv("WATCHER_IDLE_PROBE_MS", DEFAULT_IDLE_PROBE_MS),
-    balanceCheckMs: numberEnv("WATCHER_BALANCE_CHECK_MS", DEFAULT_BALANCE_CHECK_MS),
+    balanceCheckMs: numberEnv(
+      "WATCHER_BALANCE_CHECK_MS",
+      mode === "triggered" ? DEFAULT_TRIGGERED_BALANCE_CHECK_MS : DEFAULT_BALANCE_CHECK_MS,
+    ),
     blockCacheMs: numberEnv("WATCHER_BLOCK_CACHE_MS", DEFAULT_BLOCK_CACHE_MS),
     discoverCacheMs: numberEnv("WATCHER_DISCOVER_CACHE_MS", DEFAULT_DISCOVER_CACHE_MS),
   };

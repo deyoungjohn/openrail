@@ -25,6 +25,10 @@ export interface HealthSnapshot {
   /** Failed claim processing attempts and claims waiting for the next backoff. */
   reconcile_failures?: number;
   retrying_claims?: number;
+  /** Trigger mode: `triggered`, the claims poked and still being read, and the last safety sweep. */
+  mode?: "poll" | "triggered";
+  armed_claims?: string[];
+  last_sweep_at?: string | null;
 }
 
 export interface HealthServer {

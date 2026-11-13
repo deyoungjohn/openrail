@@ -15,12 +15,14 @@
 import { redactString, type IndexerControl, type Logger } from "@openrail/shared";
 import type { AlertSink, LowBalanceAlert } from "./alerts.js";
 import {
+  DEFAULT_ARM_WINDOW_MS,
   DEFAULT_BALANCE_CHECK_MS,
   DEFAULT_BLOCK_CACHE_MS,
   DEFAULT_COOL_INTERVAL_MS,
   DEFAULT_DISCOVER_CACHE_MS,
   DEFAULT_HOT_WINDOW_MS,
   DEFAULT_IDLE_PROBE_MS,
+  DEFAULT_SWEEP_INTERVAL_MS,
   DEFAULT_WARM_INTERVAL_MS,
   DEFAULT_WARM_WINDOW_MS,
   type WatcherConfig,
@@ -89,6 +91,10 @@ function gasFor(method: WatcherMethod): bigint {
   }
 }
 
+function hasUndistributed(claim: ClaimView): boolean {
+  return Array.isArray(claim.undistributed) && claim.undistributed.length > 0;
+}
+
 function isNoneLock(lock: ClaimLock): boolean {
   return lock === "None" || (typeof lock === "object" && lock !== null && "None" in lock);
 }
@@ -138,6 +144,9 @@ export class Watcher {
   private lastBalanceNear: number | null = null;
   private lastTickAt: number | null = null;
   private lastError: string | null = null;
+  /** Trigger mode: poked claims and until when their balance is read at the fast cadence. */
+  private readonly armedUntil = new Map<string, number>();
+  private lastSweepAt: number | null = null;
   private claimsTracked = 0;
   private fastClaims = 0;
   private slowClaims = 0;
@@ -186,6 +195,14 @@ export class Watcher {
         ...(this.chain.callCounts?.() ?? {}),
       },
       ...(this.near.rpcHealth === undefined ? {} : { rpc_endpoints: this.near.rpcHealth() }),
+      ...(this.config.mode === "triggered"
+        ? {
+            mode: "triggered" as const,
+            armed_claims: [...this.armedUntil.keys()],
+            last_sweep_at:
+              this.lastSweepAt === null ? null : new Date(this.lastSweepAt).toISOString(),
+          }
+        : {}),
     };
   }
 
@@ -466,14 +483,175 @@ export class Watcher {
   poke(tokenId: string): void {
     const claim = this.knownClaims.get(tokenId);
     if (claim !== undefined && !isNonTerminal(claim.status)) return;
+    if (this.config.mode === "triggered") {
+      this.armedUntil.set(tokenId, this.now() + (this.config.armWindowMs ?? DEFAULT_ARM_WINDOW_MS));
+      // The view is re-read on the next tick: a poke means something changed.
+      this.knownAt.set(tokenId, 0);
+      return;
+    }
     this.dueAt.delete(tokenId);
     this.lastInterval.delete(tokenId);
     this.lastDiscoverAt = 0;
   }
 
+  /**
+   * Trigger mode: no read on a timer. A poked claim is read (its view once, then its balance every tick) until its
+   * window ends or it is decided; after a send its view is read again for the follow-up (retry, lock). The sweep reads
+   * every open claim once, at start and then every `sweepIntervalMs`.
+   */
+  private async tickTriggered(nowMs: number): Promise<TickSummary> {
+    const summary: TickSummary = {
+      claims: 0,
+      fast: 0,
+      slow: 0,
+      skipped: 0,
+      reconciled: [],
+      retried: [],
+      cleared: [],
+    };
+    if (
+      this.lastBalanceYocto === null ||
+      nowMs - this.lastBalanceAt >= (this.config.balanceCheckMs ?? DEFAULT_BALANCE_CHECK_MS)
+    ) {
+      await this.checkBalance(nowMs);
+      this.lastBalanceAt = nowMs;
+    }
+
+    const work = new Map<string, ClaimView>();
+    const sweepMs = this.config.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+    if (sweepMs > 0 && (this.lastSweepAt === null || nowMs - this.lastSweepAt >= sweepMs)) {
+      this.lastSweepAt = nowMs;
+      try {
+        for (const claim of await this.discoverClaims()) {
+          this.remember(claim, nowMs);
+          if (isNonTerminal(claim.status) || hasUndistributed(claim))
+            work.set(claim.token_id, claim);
+        }
+        this.lastClaims = [...this.knownClaims.values()];
+      } catch (error) {
+        this.noteError(error);
+      }
+    }
+
+    for (const [tokenId, until] of [...this.armedUntil]) {
+      if (nowMs > until) {
+        this.armedUntil.delete(tokenId);
+        continue;
+      }
+      if (work.has(tokenId)) continue;
+      const retryAt = this.retryAt.get(tokenId);
+      if (retryAt !== undefined && nowMs < retryAt) continue;
+      let claim = this.knownClaims.get(tokenId);
+      if (claim === undefined || (this.knownAt.get(tokenId) ?? 0) === 0) {
+        try {
+          const read = await this.near.view<ClaimView | null>({
+            contractId: this.config.rootAccount,
+            methodName: "claim",
+            args: { token_id: tokenId },
+            feature: "watcher:claim",
+          });
+          if (read === null || typeof read?.token_id !== "string") {
+            this.armedUntil.delete(tokenId);
+            continue;
+          }
+          claim = read;
+          this.remember(claim, nowMs);
+        } catch (error) {
+          this.noteError(error);
+          continue;
+        }
+      }
+      if (!isNonTerminal(claim.status) && !hasUndistributed(claim)) {
+        this.armedUntil.delete(tokenId);
+        continue;
+      }
+      work.set(tokenId, claim);
+    }
+
+    const claims = [...work.values()];
+    summary.claims = claims.length;
+    this.claimsTracked = this.knownClaims.size;
+    // The block height only judges a lock: read it when a claim in hand holds one, at most once a minute.
+    if (
+      claims.some((claim) => !isNoneLock(claim.lock)) &&
+      (this.lastBlockHeight === null ||
+        nowMs - this.lastBlockAt >= (this.config.blockCacheMs ?? DEFAULT_BLOCK_CACHE_MS))
+    ) {
+      try {
+        this.lastBlockHeight = await this.chain.blockHeight();
+        this.lastBlockAt = nowMs;
+      } catch (error) {
+        this.noteError(error);
+      }
+    }
+
+    for (const claim of claims) {
+      const retryAt = this.retryAt.get(claim.token_id);
+      if (retryAt !== undefined && nowMs < retryAt) continue;
+      summary.fast += 1;
+      const sent = summary.reconciled.length + summary.retried.length + summary.cleared.length;
+      try {
+        await this.processClaim(claim, this.lastBlockHeight, summary);
+        this.retryAt.delete(claim.token_id);
+        this.retryCount.delete(claim.token_id);
+      } catch (error) {
+        this.noteError(error);
+        const count = (this.retryCount.get(claim.token_id) ?? 0) + 1;
+        this.retryCount.set(claim.token_id, count);
+        this.retryAt.set(
+          claim.token_id,
+          nowMs + Math.min(15 * 60_000, 30_000 * 2 ** Math.min(count - 1, 5)),
+        );
+        continue;
+      }
+      if (summary.reconciled.length + summary.retried.length + summary.cleared.length > sent) {
+        // Something was sent: the view is stale (last seen balance, legs, lock). Read it again next tick and follow up.
+        this.knownAt.set(claim.token_id, 0);
+        this.armedUntil.set(
+          claim.token_id,
+          nowMs + (this.config.armWindowMs ?? DEFAULT_ARM_WINDOW_MS),
+        );
+      }
+    }
+
+    if (this.store !== undefined && this.writeRows.size > 0) {
+      this.store.save([...this.writeRows.values()]);
+      this.writeRows.clear();
+    }
+    this.fastClaims = summary.fast;
+    this.slowClaims = 0;
+    this.lastTickAt = nowMs;
+    if (claims.length > 0)
+      this.logger.info(
+        "tick",
+        `${claims.length} claims, ${summary.reconciled.length} reconciled, ` +
+          `${summary.retried.length} retried, ${summary.cleared.length} cleared`,
+      );
+    return summary;
+  }
+
+  /** Keeps a claim's view and writes its row (the indexer reads `booked_total` from it to find gaps). */
+  private remember(claim: ClaimView, nowMs: number): void {
+    const finished = !isNonTerminal(claim.status);
+    if (finished) this.finished.set(claim.token_id, nowMs);
+    this.knownClaims.set(claim.token_id, claim);
+    this.knownAt.set(claim.token_id, nowMs);
+    this.dueAt.set(claim.token_id, finished ? DUE_FINAL : nowMs);
+    this.writeRows.set(claim.token_id, {
+      token_id: claim.token_id,
+      kind: claim.kind ?? 0,
+      status: claim.status,
+      last_quote_at: this.lastQuote.get(claim.token_id) ?? null,
+      due_at: finished ? DUE_FINAL : nowMs,
+      last_view: claim,
+      decided: finished,
+    });
+  }
+
   /** One poll. Exposed so tests (and operators) can run a single tick. */
   async tick(): Promise<TickSummary> {
     const nowMs = this.now();
+    if (this.config.mode === "triggered") return this.tickTriggered(nowMs);
     const summary: TickSummary = {
       claims: 0,
       fast: 0,
