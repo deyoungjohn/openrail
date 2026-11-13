@@ -6,12 +6,12 @@
  * watcher: it reads that one claim on chain and books what is there. The provider's word is a trigger, never the
  * amount: the booking is what the contract reads on the claim account.
  *
- * Cadence: every 20 s per session until an hour after its deadline, then no more (the watcher's daily sweep covers a
+ * Cadence: every 5 s per session (human, 13 Nov) until an hour after its deadline, then no more (the watcher's daily sweep covers a
  * deposit that arrives later). A 429 or a failing provider pauses the whole round for a minute.
  */
 import type { PaySession, ProviderStatus } from "./quote.js";
 
-export const DEPOSIT_ASK_EVERY_MS = 20_000;
+export const DEPOSIT_ASK_EVERY_MS = 5_000;
 export const DEPOSIT_GRACE_MS = 60 * 60_000;
 export const DEPOSIT_PAUSE_MS = 60_000;
 

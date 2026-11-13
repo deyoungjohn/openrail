@@ -754,7 +754,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     });
   }, 5_000);
   timer.unref();
-  // The provider's status for live deposit addresses, every 5 s (each session at most every 20 s): the watcher reads
+  // The provider's status for live deposit addresses, each session at most every 5 s: the watcher reads
   // the chain only when this pokes it. Off without a provider status or a watcher to poke.
   if (getEnv("WATCHER_URL") !== "off" && getEnv("DEPOSIT_WATCH") !== "off") {
     let running = false;
@@ -772,7 +772,8 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
         .finally(() => {
           running = false;
         });
-    }, 5_000);
+      // Rounds every second; each session is asked at most every 5 s (DEPOSIT_ASK_EVERY_MS).
+    }, 1_000);
     depositTimer.unref();
   }
   const recurringLogger = createLogger("api-recurring");
