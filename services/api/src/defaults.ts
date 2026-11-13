@@ -754,6 +754,27 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     });
   }, 5_000);
   timer.unref();
+  // The provider's status for live deposit addresses, every 5 s (each session at most every 20 s): the watcher reads
+  // the chain only when this pokes it. Off without a provider status or a watcher to poke.
+  if (getEnv("WATCHER_URL") !== "off" && getEnv("DEPOSIT_WATCH") !== "off") {
+    let running = false;
+    const depositTimer = setInterval(() => {
+      if (running) return;
+      running = true;
+      void app.deposits
+        .runOnce()
+        .catch((error: unknown) => {
+          logger.warn(
+            "deposit watch failed",
+            error instanceof Error ? error.message : String(error),
+          );
+        })
+        .finally(() => {
+          running = false;
+        });
+    }, 5_000);
+    depositTimer.unref();
+  }
   const recurringLogger = createLogger("api-recurring");
   const scheduler = new RecurringScheduler({
     store: stores.recurring,
