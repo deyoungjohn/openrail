@@ -37,7 +37,7 @@ const coreNav: readonly NavItem[] = [
   { href: "/app", label: copy.nav.dashboard, Icon: LayoutDashboard },
   { href: "/app/invoices", label: copy.nav.invoices, Icon: FileText },
   { href: "/app/statements", label: copy.nav.statements, Icon: FileSpreadsheet },
-  { href: "/app/cashout", label: copy.nav.cashout, Icon: Banknote },
+  { href: "/app/payout", label: copy.nav.cashout, Icon: Banknote },
   { href: "/app/developers", label: copy.nav.developers, Icon: Code2 },
   { href: "/app/settings", label: copy.nav.settings, Icon: Settings },
 ];

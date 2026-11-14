@@ -89,7 +89,7 @@ test.describe("reduced motion stops the loading animations", () => {
     await expect(page.locator("main .skeleton").first()).toBeVisible();
     expect(await duration("main .skeleton")).toBeLessThanOrEqual(1);
 
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await page.getByLabel("Amount").fill("2");
     // NEAR is the default destination: pick Base for an EVM address.
     await page.getByRole("button", { name: /^Send to/ }).click();
@@ -191,7 +191,7 @@ test.describe("every icon-only control has a screen-reader name", () => {
     ["claim detail", "/app/invoices/inv_01J00000000000000000000000", true],
     ["issue form", "/app/invoices/new", true],
     ["statements", "/app/statements", true],
-    ["cash out", "/app/cashout", true],
+    ["cash out", "/app/payout", true],
     ["developers", "/app/developers", true],
     ["settings", "/app/settings", true],
     ["onboarding", "/app/onboarding", true],

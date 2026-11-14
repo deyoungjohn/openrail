@@ -107,7 +107,7 @@ test.describe("loading: a skeleton while the answer is on its way, never a blank
       "true",
     );
 
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await page.getByLabel("Amount").fill("2");
     // NEAR is the default destination: pick Base for an EVM address.
     await page.getByRole("button", { name: /^Send to/ }).click();
@@ -278,7 +278,7 @@ test.describe("keyboard: every control is reachable and shows the focus ring", (
     ["claim detail", "/app/invoices/inv_01J00000000000000000000000", 6],
     ["issue form", "/app/invoices/new", 8],
     ["statements", "/app/statements", 6],
-    ["cash out", "/app/cashout", 6],
+    ["cash out", "/app/payout", 6],
     ["onboarding", "/app/onboarding", 6],
     ["settings", "/app/settings", 6],
     ["developers", "/app/developers", 6],

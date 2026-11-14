@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { CashoutScreen } from "@/components/w5/cashout-screen";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Cash out" };
-
+/** The page moved to /app/payout (14 Nov); old links still land there. */
 export default function Page() {
-  return <CashoutScreen />;
+  redirect("/app/payout");
 }

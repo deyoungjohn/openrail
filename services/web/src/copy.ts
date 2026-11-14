@@ -7,7 +7,7 @@ export const copy = {
     invoices: "Invoices",
     payments: "Payments",
     statements: "Statements",
-    cashout: "Pay out",
+    cashout: "Payout",
     developers: "API Integration",
     settings: "Settings",
     openMenu: "Open menu",
@@ -155,7 +155,7 @@ export const copy = {
         hint: "Send a pay link to a client",
       },
       { href: "/app/invoices", title: "Invoices", hint: "Every invoice and its status" },
-      { href: "/app/cashout", title: "Pay out", hint: "Move your balance to the network you use" },
+      { href: "/app/payout", title: "Payout", hint: "Move your balance to the network you use" },
       { href: "/app/developers", title: "API Integration", hint: "API keys, webhooks and events" },
       { href: "/app/settings", title: "Settings", hint: "Your profile and payouts" },
     ],
@@ -840,7 +840,7 @@ export const copy = {
     unreadable: "We couldn't read your balance from the chain. Try again in a moment.",
   },
   cashout: {
-    title: "Pay out",
+    title: "Payout",
     intro:
       "Your payments are held for you on Near intents, under your own account: the balance is yours and Openrail never holds it. Cash out sends USDC from that balance to another address on any available network you choose.",
     available: "Available to cash out now:",
@@ -941,7 +941,7 @@ export const copy = {
     privateHelp:
       "Moves the amount to your confidential balance on Near Intents. It stays yours; it is just not shown on the public chain. No address needed.",
     onPrivate: "in your confidential balance",
-    tabsLabel: "Pay out",
+    tabsLabel: "Payout",
     tabCashOut: "Withdraw",
     tabPublic: "Public",
     takeFrom: "Take it from",

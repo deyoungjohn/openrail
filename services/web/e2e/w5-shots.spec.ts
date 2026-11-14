@@ -66,7 +66,7 @@ for (const scheme of ["light", "dark"] as const) {
       await mockApi(page, handlers);
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: scheme });
-      await page.goto("/app/cashout");
+      await page.goto("/app/payout");
       await page.getByLabel("Amount").fill("2");
       // NEAR is the default destination: pick Base for an EVM address.
       await page.getByRole("button", { name: /^Send to/ }).click();

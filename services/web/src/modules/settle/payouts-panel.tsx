@@ -168,7 +168,7 @@ function StatsPanel() {
   );
 }
 
-/** The confidential balance on the Pay out page: take money out of it, and see where it is. (Its settings are in Settings.) */
+/** The confidential balance on the Payout page: take money out of it, and see where it is. (Its settings are in Settings.) */
 export function PayoutsPanel() {
   const auth = useAuth();
   return (

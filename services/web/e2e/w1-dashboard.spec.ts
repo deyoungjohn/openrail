@@ -192,7 +192,7 @@ test.describe("dashboard", () => {
     // the balance button replaces "Create invoice" in the header and opens the cash-out page
     await expect(page.getByRole("link", { name: "Open the cash out page" })).toHaveAttribute(
       "href",
-      "/app/cashout",
+      "/app/payout",
     );
   });
 

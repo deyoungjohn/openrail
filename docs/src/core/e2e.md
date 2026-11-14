@@ -215,7 +215,7 @@ Verifies transferring debt claim ownership to a third-party assignee.
      - Querying sandbox `nft_token` confirms owner is `investor.near`.
      - Original creditor dashboard updates: invoice moves to "Transferred / Factored" tab.
 
-### Flow 6: Statements and verifiable receipts (`/app/statements`, `/r/[hash]`, `/app/cashout`)
+### Flow 6: Statements and verifiable receipts (`/app/statements`, `/r/[hash]`, `/app/payout`)
 
 Verifies historical statement inspection, receipt verification, and cash-out flow.
 
@@ -235,8 +235,8 @@ Verifies historical statement inspection, receipt verification, and cash-out flo
        - Payout destination transaction hash.
      - "Download Statement (CSV)" produces valid CSV export.
      - "Download Invoice Envelope (PDF)" delivers base64-decoded PDF document.
-4. **Cash-Out Flow (`/app/cashout`)**:
-   - Navigate to `/app/cashout`.
+4. **Cash-Out Flow (`/app/payout`)**:
+   - Navigate to `/app/payout`.
    - Select destination external chain and payout address.
    - **Assertion**: Displays exact output received, network route fee, and arrival confirmation once processed.
 

@@ -174,7 +174,7 @@ export function IssueScreen() {
   const t = copy.issue;
   const [biz] = useAsync(() => dashClient.business.get(), []);
   const [credit, , watchDeposit] = useStorageCredit();
-  const creditLow = credit.state === "ready" && storageCreditLow(BigInt(credit.data.balance));
+  // No storage-credit warning at launch (14 Nov): an invoice without credit is paid from the shared sponsor pool.
   const [issuerEdit, setIssuerEdit] = useState<string | null>(null);
   const issuer = issuerEdit ?? (biz.state === "ready" ? biz.data.legal_name : "");
 
@@ -248,8 +248,6 @@ export function IssueScreen() {
       <header className="space-y-1">
         <h1 className="text-[32px] leading-10 font-bold">{t.title}</h1>
         <p className="text-[15px]">{t.intro}</p>
-        {/* The space is always there, so the line appearing never pushes the page down. */}
-        <ErrorNote>{creditLow ? t.creditLow : null}</ErrorNote>
       </header>
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
