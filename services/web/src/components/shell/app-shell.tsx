@@ -198,8 +198,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
           </Tooltip>
           <Brand className="h-6 w-auto md:hidden" />
-          <div className="ml-auto hidden items-center gap-3 sm:flex">
-            <AccountBar />
+          <div className="ml-auto flex items-center gap-3">
+            <AccountBar place="header" />
           </div>
           <ThemeToggle className="md:hidden" />
         </header>
@@ -212,7 +212,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Modal open={menu} onClose={() => setMenu(false)} title={copy.brand} variant="drawer">
         <NavList collapsed={false} onNavigate={() => setMenu(false)} />
         <div className="mt-6 space-y-3 border-t border-border pt-4">
-          <AccountBar />
+          <AccountBar place="menu" />
         </div>
       </Modal>
     </div>

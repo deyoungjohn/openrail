@@ -415,6 +415,7 @@ export const copy = {
     refundNone: "Connect the wallet you pay from so any refund goes back to it.",
   },
   auth: {
+    previewLabel: "Preview: sign in to use this page",
     title: "Sign in to Openrail",
     body: "Sign in with your NEAR account. You sign one message in your wallet. It costs nothing, and you stay signed in on this device for a week.",
     failed: "We couldn't sign you in. Nothing was changed. Check your wallet and try again.",

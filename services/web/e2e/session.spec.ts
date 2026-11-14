@@ -5,10 +5,16 @@ test.use({ viewport: { width: 1280, height: 800 } });
 // Fixture mode: the mock API keeps its "session" in a cookie so the flow behaves like the real
 // HttpOnly cookie across reloads. The page itself never stores a token (checked below).
 
-test("signed out: asks for one wallet signature and shows no dashboard", async ({ page }) => {
+test("signed out: the dashboard is a preview with nothing in it, and only Sign in works", async ({
+  page,
+}) => {
   await page.goto("/app");
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toHaveCount(0);
+  // The layout is there (14 Nov: people want to see before they sign in) but nothing on it can be used.
+  const preview = page.locator("[inert]");
+  await expect(preview).toHaveCount(1);
+  await expect(preview.getByText("Dashboard", { exact: true }).first()).toBeAttached();
+  await expect(page.getByText("acme.openrail.near")).toHaveCount(0);
 });
 
 test("sign in, reload, still signed in with no second prompt", async ({ page }) => {
