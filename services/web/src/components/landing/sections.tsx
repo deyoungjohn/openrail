@@ -280,7 +280,7 @@ export function Growth() {
   return (
     <section className="mx-auto max-w-[1240px] px-4 py-24 sm:px-6">
       <p className="text-[14px] font-medium text-muted">Built for growth</p>
-      <h2 className={`mt-2 break-words ${H2}`}>Take Your Business On Chain</h2>
+      <h2 className={`mt-2 break-words ${H2}`}>Take Your Business Onchain</h2>
       <p className={`mt-4 max-w-[56ch] ${BODY}`}>
         Three ways in, one account. Every one of them books the money on NEAR, where anyone can
         check it.

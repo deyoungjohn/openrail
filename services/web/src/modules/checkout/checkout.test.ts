@@ -35,7 +35,7 @@ const base = (over: Partial<PublicCheckout> = {}): PublicCheckout => ({
 describe("checkout hosted page rules", () => {
   it("checkout_countdown_uses_requested_deadline", () => {
     // The provider keeps its deposit address open for three days beyond what we ask for;
-    // the countdown shown to a payer uses the on-chain `deadline_requested` (unix seconds).
+    // the countdown shown to a payer uses the onchain `deadline_requested` (unix seconds).
     const requestedUnix = 1_762_769_700;
     const providerThreeDaysLater = "2026-11-13T10:15:00.000Z";
     expect(

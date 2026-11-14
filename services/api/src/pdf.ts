@@ -580,9 +580,9 @@ function drawDoc(builder: PageBuilder, doc: DocLayout, links: PdfLink[]): void {
   text(builder, RIGHT, barY + 9, 11, "/F2", ON_ACCENT, `$${doc.totalUsd}`, "right");
   builder.y = Math.min(barY, my) - 34;
 
-  // Everything needed to check it on chain, with links.
+  // Everything needed to check it onchain, with links.
   if (builder.y < 200) beginPage(builder, doc.continuation);
-  text(builder, MARGIN, builder.y, 13, "/F1", INK, "Check it on chain");
+  text(builder, MARGIN, builder.y, 13, "/F1", INK, "Check it onchain");
   builder.y -= 20;
   for (const [caption, value, url] of doc.checkRows) {
     if (builder.y < 60) beginPage(builder, doc.continuation);
@@ -736,7 +736,7 @@ function receiptLayout(receipt: ReceiptDocument): DocLayout {
 
 /**
  * The receipt, laid out as the invoice template (13 Nov): business and RECEIPT on top, who paid and the amount, the
- * lines on an accent band, payment method and totals, then everything a reader needs to check it on chain, with
+ * lines on an accent band, payment method and totals, then everything a reader needs to check it onchain, with
  * clickable explorer links and the verify command as a terminal would show it.
  */
 export function renderReceiptPdf(receipt: ReceiptDocument): Uint8Array {

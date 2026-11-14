@@ -18,8 +18,8 @@ export const FEATURES: Feature[] = [
     id: "dashboards",
     title: "Dashboards And Analytics",
     subtitle:
-      "Revenue by month, activity by day, top clients and the chains they pay from, all read from the payments booked on chain.",
-    card: "Revenue, activity, top clients and chains, from the payments booked on chain.",
+      "Revenue by month, activity by day, top clients and the chains they pay from, all read from the payments booked onchain.",
+    card: "Revenue, activity, top clients and chains, from the payments booked onchain.",
   },
   {
     id: "stores",

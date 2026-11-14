@@ -63,7 +63,7 @@ test.describe("Full stack integration suite", () => {
     const invoiceLink = page.getByRole("link", { name: invoiceNumber }).first();
     await expect(invoiceLink).toBeVisible();
 
-    // Open invoice detail page and verify on-chain claim information
+    // Open invoice detail page and verify onchain claim information
     await invoiceLink.click();
     await expect(page.getByText(issued.tokenId).first()).toBeVisible();
   });

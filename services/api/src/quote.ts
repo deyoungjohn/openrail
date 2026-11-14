@@ -240,7 +240,7 @@ export class QuoteService {
       route_id: route.id,
       quote_id: quoteId,
       deposit_address: provider.depositAddress,
-      // The deadline promised to the payer is the one logged on chain; the provider keeps its own
+      // The deadline promised to the payer is the one logged onchain; the provider keeps its own
       // deposit address open for three days after it.
       deadline: requestedDeadline,
       deadline_requested: deadlineRequested,

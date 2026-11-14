@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     "Invoices and checkout for businesses. Clients pay from eight chains; you receive USDC where you choose, and every payment is proven on NEAR.",
 };
 
-// The on-chain strip reads the Proof data again at most once a minute.
+// The onchain strip reads the Proof data again at most once a minute.
 export const revalidate = 60;
 
 export default async function Landing() {

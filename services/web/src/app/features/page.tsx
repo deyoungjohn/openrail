@@ -93,7 +93,7 @@ function Hero() {
         </Reveal>
         <Reveal delay={80}>
           <h1 className="mx-auto mt-6 max-w-[16ch] text-[clamp(36px,5.4vw,64px)] leading-[1.04] font-bold tracking-[-0.03em]">
-            Powerful Features Built For Getting Paid
+            Powerful Features Built For Stablecoin Payments
           </h1>
         </Reveal>
         <Reveal delay={160}>

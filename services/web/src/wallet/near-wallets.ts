@@ -11,7 +11,7 @@ import { setupWalletConnect } from "@near-wallet-selector/wallet-connect";
 
 // The wallets we offer: active NEAR wallets people use (Meteor, HOT, Here, Nightly, Intear, NEAR
 // Mobile, OKX; Coin98 removed 14 Nov) plus WalletConnect for Trust and others. OKX is back (14 Nov): sign-in adds no
-// key, and its fresh implicit account (not on chain yet) is accepted with its own key. Order is only the default; the
+// key, and its fresh implicit account (not onchain yet) is accepted with its own key. Order is only the default; the
 // picker puts wallets that can sign you in first, using the selector's own capability check
 // (see probe.ts).
 //

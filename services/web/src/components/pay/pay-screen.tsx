@@ -81,7 +81,7 @@ export interface PayScreenSource {
   listSessions: (tokenId: string, claim: PayFlowClaim) => Promise<Session[]>;
   /** A price can be asked for it. */
   isOpen: (claim: PayFlowClaim) => boolean;
-  /** Settled on chain: stop reading it again. */
+  /** Settled onchain: stop reading it again. */
   isPaid: (claim: PayFlowClaim) => boolean;
   /** The card on the left; `topStage` is how far the payment on screen has got. */
   summary: (
@@ -1052,7 +1052,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   }
 
   const unsettled = legs.some((l) => l.stage === "waiting" || l.stage === "processing");
-  // The provider delivered the whole amount, but the claim on chain is not booked yet (it takes the watcher a moment,
+  // The provider delivered the whole amount, but the claim onchain is not booked yet (it takes the watcher a moment,
   // longer when the RPC is busy): the page is already the page of a paid invoice, not a page that asks for money.
   const received =
     legs.some((l) => l.stage === "paid") &&

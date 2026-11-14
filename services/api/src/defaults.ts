@@ -64,7 +64,7 @@ async function rpc<T>(
 
 /**
  * Does `publicKey` belong to `accountId`? A key the chain lists: yes. A key it does not list: no.
- * An implicit account that has never been funded does not exist on chain yet; its own key is accepted
+ * An implicit account that has never been funded does not exist onchain yet; its own key is accepted
  * then (see implicitKeyMatches). A failing chain read is a 503, never a silent "no".
  */
 /** The chain answered "no": the key or account is not there, or what we sent is not a valid account or key. */
@@ -123,13 +123,13 @@ export function createAccessKeyPort(
         }
       } catch (error) {
         const name = (error as { causeName?: string }).causeName;
-        // An unfunded implicit account is not on chain, and the RPC says so on the key lookup itself: its own key
+        // An unfunded implicit account is not onchain, and the RPC says so on the key lookup itself: its own key
         // (the account id is that key in hex) is the right signer. This refused OKX, Trust and other multi-chain
         // wallets, whose NEAR account is a fresh implicit one (14 Nov).
         if (name === "UNKNOWN_ACCOUNT" && implicitKeyMatches(accountId, publicKey)) return true;
         if (isDefinite(name)) return false;
         log(`access key check unavailable: ${(error as Error).message}`);
-        throw new ApiError(503, "chain_unavailable", "could not check the account key on chain");
+        throw new ApiError(503, "chain_unavailable", "could not check the account key onchain");
       }
     },
   };
@@ -137,7 +137,7 @@ export function createAccessKeyPort(
 
 /**
  * The business's prepaid storage credit, read from the contract on every call (`storage_credit_of`), so a deposit
- * shows as soon as it is on chain. `amount` is the deposit the page suggests (an env default).
+ * shows as soon as it is onchain. `amount` is the deposit the page suggests (an env default).
  */
 export function issuerUnavailableError(status?: number, code?: string): ApiError {
   console.error(

@@ -49,7 +49,7 @@ function baseUnits(amountUsd: string): string {
 /**
  * Canonical terms of a checkout (`openrail.checkout.v1`), per blueprint modules/checkout.md:
  * merchant, order_ref, amount_usd, expiry, items_sha256.
- * Hashed on-chain as `terms_hash` (0x + 64 lower hex).
+ * Hashed onchain as `terms_hash` (0x + 64 lower hex).
  */
 export interface CheckoutTerms {
   amount_usd: string;

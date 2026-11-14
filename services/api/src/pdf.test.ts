@@ -49,7 +49,7 @@ describe("invoice PDF layout contract", () => {
     expect(pdf).toContain("DESCRIPTION");
     expect(pdf).toContain("TOTAL");
     expect(pdf).toContain("Pay online :");
-    expect(pdf).toContain("Check it on chain");
+    expect(pdf).toContain("Check it onchain");
     expect(pdf).toContain("0.247 0.275 0.996 rg");
     expect(pdf).toContain("Tf");
     expect(

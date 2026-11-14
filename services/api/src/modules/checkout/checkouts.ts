@@ -5,7 +5,7 @@
  * (`accept_late`, `refund_quote`).
  *
  * Status (`pending`, `partial`, `paid`, `late`, `accepted`, `refunded`, `expired`), `outstanding`
- * and `paid_total` are read from the claim on chain, never from the record written at creation.
+ * and `paid_total` are read from the claim onchain, never from the record written at creation.
  * The API never signs for the merchant: late-payment endpoints return the call the merchant's
  * wallet signs, and `refund_quote` takes the refund destination from the claim's recorded quote
  * log, never from the request.
@@ -762,7 +762,7 @@ export class Checkouts {
     }
     const returnUrl = parseHttpsUrl(body.return_url, "return_url");
     const cancelUrl = parseHttpsUrl(body.cancel_url, "cancel_url");
-    // Plain text only, short: it is shown to the merchant, never sent on chain.
+    // Plain text only, short: it is shown to the merchant, never sent onchain.
     const customerName =
       typeof body.customer_name === "string" ? plainText(body.customer_name, 120) || null : null;
     const orderNumber =

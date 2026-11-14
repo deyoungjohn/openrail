@@ -12,7 +12,7 @@ const AFTER_DEPOSIT_TRIES = 16;
 /**
  * The prepaid storage credit: read on open and whenever the tab comes back into view, without a loading flash. It only
  * changes when the business issues or deposits, so there is no timer (each read is an RPC call on the server). `reload` reads it now; `watchDeposit` reads it every 2.5 seconds for about 40
- * seconds, or until the balance changes, so a deposit shows as soon as it is on chain.
+ * seconds, or until the balance changes, so a deposit shows as soon as it is onchain.
  */
 export function useStorageCredit(): [Async<Credit>, () => void, () => void] {
   const [value, setValue] = useState<Async<Credit>>({ state: "loading" });

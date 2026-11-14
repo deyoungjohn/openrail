@@ -54,7 +54,7 @@ export const STEPS: Step[] = [
     body: [
       "Every payment gets a receipt page and a PDF with its explorer links and the fingerprint (a hash) of the terms both sides saw.",
       "Download a statement for any period; its fingerprint proves the file was not changed.",
-      "The dashboard shows revenue, activity, top clients and the chains they paid from, all read from the bookings on chain.",
+      "The dashboard shows revenue, activity, top clients and the chains they paid from, all read from the bookings onchain.",
     ],
   },
   {

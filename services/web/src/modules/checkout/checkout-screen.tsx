@@ -65,7 +65,7 @@ function CheckoutCard({
   cancelHref?: string | null;
 }) {
   const p = copy.pay;
-  // `received`: the whole amount has arrived but is not booked on chain yet; the tag already says Paid (it said
+  // `received`: the whole amount has arrived but is not booked onchain yet; the tag already says Paid (it said
   // "Waiting for payment" next to ticked steps).
   const paid =
     received === true ||

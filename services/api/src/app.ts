@@ -91,7 +91,7 @@ export interface ContractPort {
   view?(methodName: string, args: object): Promise<unknown>;
   storageCredit(accountId: string): Promise<{ balance: string; amount: string }>;
   sponsorStatus?(accountId: string): Promise<{ pool: string; cap: number; used: number }>;
-  /** What became of a transaction on chain (used to follow a cash-out). */
+  /** What became of a transaction onchain (used to follow a cash-out). */
   txStatus?(txHash: string, senderId: string): Promise<"success" | "failed" | "pending">;
   /** `has_public_key` on intents.near: a withdrawal signed by an unregistered key ends FAILED. */
   intentsHasPublicKey?(accountId: string, publicKey: string): Promise<boolean>;
@@ -1123,7 +1123,7 @@ export class ApiApp {
   >();
 
   /**
-   * The invoices as they are on chain now: status, what is still owed and what was paid come from each
+   * The invoices as they are onchain now: status, what is still owed and what was paid come from each
    * claim, not from the record written at creation (which never changes). A claim that cannot be read
    * keeps the last one read, and only a claim never read keeps its stored values. Reads are cached for ten seconds and run eight at a time.
    */

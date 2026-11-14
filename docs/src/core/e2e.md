@@ -120,7 +120,7 @@ Verifies the end-to-end onboarding experience for a new merchant business.
 
 ### Flow 2: Dashboard and invoice issuance (`/app`, `/app/invoices`)
 
-Verifies creating, pricing, and issuing an invoice on-chain.
+Verifies creating, pricing, and issuing an invoice onchain.
 
 1. **Dashboard Overview**:
    - Navigate to `/app`.
@@ -162,7 +162,7 @@ Verifies that a debtor reviews the legal terms and cryptographically acknowledge
    - Wallet produces signature `(v, r, s)`.
    - Front-end submits signature to `POST /v1/ack/{token_id}/evm`.
    - Relayer calls `acknowledge_evm` on the root contract in sandbox.
-4. **On-Chain Ack Verification**:
+4. **Onchain Ack Verification**:
    - **Assertion**:
      - Page updates to display `Acknowledged` banner with green verification seal.
      - Contract view `get_ack(token_id)` returns the valid signature and timestamp.

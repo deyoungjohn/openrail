@@ -1,7 +1,7 @@
 # Payment links
 
 A payment link is a reusable page, `/l/<business>/<slug>`, that anyone can pay. Nothing is
-on-chain until a visitor presses **Pay**: each press opens one fresh Checkout (its own claim
+onchain until a visitor presses **Pay**: each press opens one fresh Checkout (its own claim
 account, 60-minute expiry), so one link serves many buyers and every payment is matched exactly.
 
 ## API

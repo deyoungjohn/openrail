@@ -75,7 +75,7 @@ const SAMPLES: { ask: string; tool: string }[] = [
     tool: `claim_status {"tokenId": "c-12"}`,
   },
   {
-    ask: "Get me the receipt and the on-chain proof for c-12.",
+    ask: "Get me the receipt and the onchain proof for c-12.",
     tool: `receipt {"tokenId": "c-12"}`,
   },
   {

@@ -11,7 +11,7 @@ and a sha256 hash. The PDF prints every field and the hash. The core clauses are
   to receive payment; the payment addresses do not change on assignment."
 
 The acknowledgement is an EIP-712 signature over the terms hash, the amount due
-and the due date, verified on chain; NEAR debtors can call the acknowledgement
+and the due date, verified onchain; NEAR debtors can call the acknowledgement
 method directly. A claim transfer re-routes later payments.
 
 The clauses are a technical record, not legal advice. Their effect depends on

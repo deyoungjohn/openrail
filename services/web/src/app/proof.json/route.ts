@@ -9,7 +9,8 @@ export async function GET() {
   return Response.json({
     contract: PROOF_CONTRACT,
     network: "near-mainnet",
-    note: "Business transactions of the Openrail contract, newest first. Confidential-balance deposits and withdrawals are not listed.",
+    business: "Belmonte Apparels (the developer's own demo business, iamyoungjohn.near)",
+    note: "Only Belmonte Apparels' transactions through the Openrail contract, newest first, run to prove the technology works. Confidential-balance deposits and withdrawals are not listed.",
     transactions: PROOF_ROWS.map((r) => ({
       type: r.type,
       amount_usd: r.amount_usd,

@@ -27,12 +27,21 @@ export default async function ProofPage() {
     <div className="min-h-dvh bg-bg text-text">
       <LandingNav />
       <main className="mx-auto max-w-[1240px] px-4 pt-10 pb-24 sm:px-6">
-        <p className="text-[14px] font-semibold text-accent-text">Proof</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[14px] font-semibold text-accent-text">Proof</p>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-[12.5px] font-semibold text-accent-text">
+            Demo business · Belmonte Apparels
+          </span>
+        </div>
         <h1 className="mt-2 text-[clamp(36px,6vw,72px)] leading-[1] font-extrabold tracking-[-0.03em]">
-          Every Payment, On Chain
+          Every Payment, Onchain
         </h1>
         <p className="mt-5 max-w-[64ch] text-[16px] leading-7 text-muted">
-          The {PROOF_ROWS.length} most recent business transactions of the Openrail contract,{" "}
+          Only the transactions of{" "}
+          <strong className="font-semibold text-text">Belmonte Apparels</strong>, the
+          developer&apos;s own hypothetical business, run to prove the technology works with real
+          money. These are its {PROOF_ROWS.length} most recent transactions through the Openrail
+          contract,{" "}
           <a
             href={nearAccountUrl(PROOF_CONTRACT)}
             target="_blank"

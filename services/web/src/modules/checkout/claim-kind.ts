@@ -12,7 +12,7 @@ export async function resolveClaimKind(id: string): Promise<number | null> {
     return 0;
   }
 
-  // 2. Try on-chain view if contract is in live mode
+  // 2. Try onchain view if contract is in live mode
   if (process.env.NEXT_PUBLIC_API_MODE === "live") {
     try {
       const root = process.env.NEXT_PUBLIC_ROOT_CONTRACT ?? "openrail.near";

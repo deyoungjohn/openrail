@@ -1,5 +1,5 @@
 /**
- * Payment links: a reusable template (`/l/<business>/<slug>`). Nothing is on-chain until a visitor
+ * Payment links: a reusable template (`/l/<business>/<slug>`). Nothing is onchain until a visitor
  * presses Pay; each press creates one fresh Checkout claim, so one link serves many buyers and every
  * payment is still matched exactly. Sessions are rate-limited per link.
  */

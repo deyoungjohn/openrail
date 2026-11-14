@@ -3,7 +3,7 @@
  *
  * For every pay session whose price is live, ask the provider's status for its deposit address (the provider's quota,
  * not an RPC call). When the word leaves `PENDING_DEPOSIT`, or changes again (PROCESSING, then SUCCESS), poke the
- * watcher: it reads that one claim on chain and books what is there. The provider's word is a trigger, never the
+ * watcher: it reads that one claim onchain and books what is there. The provider's word is a trigger, never the
  * amount: the booking is what the contract reads on the claim account.
  *
  * Cadence: every 5 s per session (human, 13 Nov) until an hour after its deadline, then no more (the watcher's daily sweep covers a

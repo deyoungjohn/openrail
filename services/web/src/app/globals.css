@@ -424,7 +424,7 @@ dialog.overlay::backdrop {
   animation: loader-pulse 1.4s ease-in-out infinite;
 }
 
-/* Landing page: the row of on-chain payments scrolls (paused on hover; still under reduced motion). */
+/* Landing page: the row of onchain payments scrolls (paused on hover; still under reduced motion). */
 @keyframes landing-marquee {
   to {
     transform: translateX(-50%);

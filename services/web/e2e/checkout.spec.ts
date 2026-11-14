@@ -428,7 +428,7 @@ test("late-then-refunded-again lifecycle: transitions across late, refunded, sec
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);
 
-  // 3. Second late arrival lands on chain and is held -> live poll updates status back to "late"
+  // 3. Second late arrival lands onchain and is held -> live poll updates status back to "late"
   state = "late_again";
   await expect(page.getByText("Paid after expiry").first()).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("button", { name: "Get price" })).toHaveCount(0);

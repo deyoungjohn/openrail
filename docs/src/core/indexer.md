@@ -67,7 +67,7 @@ kept forever; only operational rows are pruned.
 
 - Receipts exist only for a `booked` event. The origin transaction and NEAR hashes come from
   1Click `/v0/status` for the claim's latest quote. On EVM routes (`EVM_RPC_URL`) the origin
-  transaction is checked on-chain (native transfer or ERC-20 `transfer` to the deposit
+  transaction is checked onchain (native transfer or ERC-20 `transfer` to the deposit
   address); other routes use the 1Click amount check.
 - Statements include indexed totals and, when the contract view is reachable, a
   `reconciles` flag comparing them with `claim()`.

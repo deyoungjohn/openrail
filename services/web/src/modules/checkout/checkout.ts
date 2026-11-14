@@ -78,10 +78,10 @@ export const checkoutCopy = {
     `We received ${paid} so far. Pay the remaining ${stillDue} before the order expires.`,
   lateTitle: "Paid after expiry",
   lateBody:
-    "Your payment arrived after the order expired. It is safe and held on chain while the merchant accepts or refunds it to your refund address.",
+    "Your payment arrived after the order expired. It is safe and held onchain while the merchant accepts or refunds it to your refund address.",
   needsAttentionTitle: "Needs merchant attention",
   needsAttentionBody:
-    "Your payment is held safely on chain while the merchant reviews the order balance.",
+    "Your payment is held safely onchain while the merchant reviews the order balance.",
   refundedTitle: "Refunded",
   refundedBody: "This late payment is being returned to the refund address you gave.",
   overpaidNote: (extra: string) => `Includes ${extra} above the order amount.`,
@@ -89,7 +89,7 @@ export const checkoutCopy = {
   backToShop: "Back to the shop",
   cancelAndReturn: "Cancel and return to shop",
   checkingTitle: "Checking payment status",
-  checkingBody: "Checking payment status on chain. You can still pay below.",
+  checkingBody: "Checking payment status onchain. You can still pay below.",
   notFoundTitle: "We can't find this checkout",
   notFoundBody: "The link may be wrong or incomplete. Ask the merchant for a fresh link.",
   loadError: "We couldn't load this checkout. Check your connection and try again.",
@@ -98,7 +98,7 @@ export const checkoutCopy = {
 
 /**
  * The swap provider keeps its deposit address open for three days beyond what we ask for;
- * the deadline shown to a payer is always the one logged on chain (`deadline_requested`, unix s).
+ * the deadline shown to a payer is always the one logged onchain (`deadline_requested`, unix s).
  */
 export function countdownTargetMs(input: {
   deadline_requested?: number;

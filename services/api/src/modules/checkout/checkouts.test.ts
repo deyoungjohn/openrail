@@ -1109,7 +1109,7 @@ describe("checkout API: late payments never sign for the merchant", () => {
     expect(afterFirstRefund.body.status).toBe("refunded");
     expect((await post(h, id, "refund_quote")).body.error.code).toBe("checkout_already_refunded");
 
-    // A later late arrival lands on chain and is held again (`held_amount: "997500"`)
+    // A later late arrival lands onchain and is held again (`held_amount: "997500"`)
     const prev = h.chain.states.get(id)!;
     h.chain.states.set(id, {
       ...prev,
@@ -1149,7 +1149,7 @@ describe("checkout API: late payments never sign for the merchant", () => {
     const c1 = (await createCheckout(h, { order_ref: "ORD-BUNDLE-1" })).body.id as string;
     const expiry = Math.floor(NOW.getTime() / 1000) + 900;
 
-    // 1. Right after `issue_for(kind = 1)`: `checkout_state` is `null` on chain.
+    // 1. Right after `issue_for(kind = 1)`: `checkout_state` is `null` onchain.
     h.chain.claims.set(c1, {
       token_id: c1,
       kind: 1,
@@ -1360,7 +1360,7 @@ describe("checkout API: late payments never sign for the merchant", () => {
       expect(res.body.total_usd).toBe("12.03");
       expect(res.body.amount_usd).toBe("12.03");
       expect(res.body.fee_mode).toBe("pass_to_customer");
-      // On-chain claim amount is total_usd ($12.03)
+      // Onchain claim amount is total_usd ($12.03)
       expect(res.body.amount_due).toBe("12030000");
 
       // GET /v1/checkouts/:id returns the breakdown
@@ -2135,7 +2135,7 @@ describe("checkout events reach the merchant: GET /v1/events and a signed webhoo
     const { body: created } = await createCheckout(h, { order_ref: "ORD-SETTLE-1" });
     const id = created.id;
 
-    // Simulate payment on chain
+    // Simulate payment onchain
     h.chain.claims.set(id, claimView({ token_id: id, booked_total: "2000000", status: "Paid" }));
 
     // Reset spy counts before reading

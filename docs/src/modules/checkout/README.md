@@ -16,7 +16,7 @@ signed webhook events, and wallet-signed late-payment handling.
 | --- | --- | --- | --- |
 | `POST` | `/v1/checkouts` | secret key (`invoices:write`), `Idempotency-Key` required | Issue a checkout claim (expiry 1..60 min, default 15; `order_ref` unique per business and immutable in `terms_hash`) |
 | `GET` | `/v1/checkouts` | `invoices:read` | Paged list (`limit`, `cursor`), status read from chain |
-| `GET` | `/v1/checkouts/{id}` | `invoices:read` | Single checkout; `status` (`pending`, `partial`, `paid`, `late`, `accepted`, `refunded`, `expired`), `outstanding`, `paid_total` and `surplus` read from the claim on chain |
+| `GET` | `/v1/checkouts/{id}` | `invoices:read` | Single checkout; `status` (`pending`, `partial`, `paid`, `late`, `accepted`, `refunded`, `expired`), `outstanding`, `paid_total` and `surplus` read from the claim onchain |
 | `GET` | `/v1/public/checkouts/{id}` | none | Public payload for `/c/<id>` (routes, open sessions, live status; no internal fields) |
 | `POST` | `/v1/checkouts/{id}/accept_late` | `invoices:write`, `Idempotency-Key` | Returns `{ receiver_id, method: "accept_late", args: { token_id }, deposit: "0" }` for the merchant's wallet to sign |
 | `POST` | `/v1/checkouts/{id}/refund_quote` | `invoices:write`, `Idempotency-Key` | Quotes a 1Click refund to the payer's `refund_to` recorded in the payment log (never from the request) and returns the `refund_late` wallet call |
@@ -37,7 +37,7 @@ When creating the key, tick both **`invoices:read`** and **`invoices:write`**. N
 
 2. **Return and cancel URLs**:
    Checkouts accept `return_url` and `cancel_url` (must be valid `https:` URLs). These are stored, returned in API and public views, and wired into the hosted page's "Back to shop" / "Cancel and return" action buttons (`cancel_url` when unpaid, `return_url` once paid).
-   An optional `customer_name` (plain text, up to 120 characters) is the store's billing name for the buyer. It is shown as the payer in the merchant's dashboard and sent back in the `checkout.paid` webhook; it never goes on chain.
+   An optional `customer_name` (plain text, up to 120 characters) is the store's billing name for the buyer. It is shown as the payer in the merchant's dashboard and sent back in the `checkout.paid` webhook; it never goes onchain.
 
 3. **Currency rule (USD only)**:
    The API takes USD amounts. Requests can supply `amount_usd` (string e.g. `"29.99"`), `amount_cents` (integer e.g. `2999`), or `amount_usd_cents`. Any other currency (e.g. `EUR`, `CAD`, `GBP`) is refused with `400 Bad Request` and named code `unsupported_currency`. The API never converts currencies silently.
@@ -137,7 +137,7 @@ Each break was applied to `services/api/src/modules/checkout/checkouts.ts` or
 | `order_ref` slot not freed when `issuer.issueFor` fails | `checkout_order_ref_freed_when_the_claim_fails` |
 | `expires_in_minutes` bounds (1..60) not enforced | `checkout_create_validation` |
 | `return_url` allowed over plain `http:` or `javascript:` | `checkout_create_validation`, `checkout_return_url_only_allows_https` |
-| `status` read from stored creation record instead of on-chain claim | `checkout_status_is_read_from_the_claim_never_from_the_record` |
+| `status` read from stored creation record instead of onchain claim | `checkout_status_is_read_from_the_claim_never_from_the_record` |
 | Partial payment reported as `paid` before full `amount_due` is booked | `checkout_paid_only_on_full_amount` |
 | Overpayment folded into `paid_total` instead of `surplus` | `checkout_overpay_is_surplus_and_shown_separately` |
 | Quotes permitted after checkout `expiry` | `checkout_no_quote_after_expiry` |
@@ -149,7 +149,7 @@ Each break was applied to `services/api/src/modules/checkout/checkouts.ts` or
 | `refund_quote` does not verify the provider quote recipient matches `refund_to` | `late_checkout_refund_refuses_a_quote_that_pays_somebody_else` |
 | `refund_quote` permitted when `state.refunded === true` | `late_checkout_refund_once` |
 | `accept_late` or `refund_quote` permitted after `accepted` | `checkout_accept_late_refused_unless_late_and_open`, `late_checkout_refund_refused_after_accept_or_when_not_late` |
-| Countdown uses provider 3-day `deadline` instead of on-chain `deadline_requested` | `checkout_countdown_uses_requested_deadline` |
+| Countdown uses provider 3-day `deadline` instead of onchain `deadline_requested` | `checkout_countdown_uses_requested_deadline` |
 | Origin transaction seen (`processing`) not shown as "received, settling" | `pos_shows_settling_on_origin_seen` |
 | `pass_to_customer` fee not rounded up to whole cents | `checkout_fee_mode_table_rounding_up` |
 | `pass_to_customer` does not add fee to `amount_due` or response breakdown | `checkout_creates_with_fee_mode_pass_to_customer` |
@@ -165,7 +165,7 @@ A merchant chooses who pays the platform fee via `fee_mode`:
 
 ### Exact rounding arithmetic (USDC base units)
 
-The on-chain contract fee is truncated integer arithmetic: `payment * 25 / 10000`.
+The onchain contract fee is truncated integer arithmetic: `payment * 25 / 10000`.
 For a \$12.00 order subtotal under `pass_to_customer`:
 - Order subtotal: \$12.00 (12,000,000 USDC units).
 - Fee (0.25% rounded up): \$0.03 (30,000 USDC units).

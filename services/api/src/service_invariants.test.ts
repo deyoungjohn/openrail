@@ -638,7 +638,7 @@ describe("Service-level invariant tests (Blueprint 2.8 & 2.11)", () => {
       expect(executionOrder).toEqual(["provider.quote", "logger.logQuote"]);
       expect(session.deposit_address).toBe("0xdeposit_secret_address");
 
-      // 2. Failure case: if logQuote fails/reverts on-chain, deposit address must NOT be returned
+      // 2. Failure case: if logQuote fails/reverts onchain, deposit address must NOT be returned
       const failingQuoteService = new QuoteService({
         routes,
         claim: async (tokenId) => ({
