@@ -1,8 +1,6 @@
-<div align="center">
-
 # Openrail
 
-**Get paid in stablecoins from any chain. Every payment is matched to its invoice by construction and booked on NEAR, where anyone can check it.**
+Openrail lets a business get paid in stablecoins from any chain. Each invoice or checkout gets its own keyless account on NEAR. The client pays from NEAR, Base, Arbitrum, Ethereum, Solana, Polygon, Optimism or BNB Chain, and NEAR Intents converts the payment to USDC. The contract `openrail.near` books the payment against that one invoice, and the business receives USDC. Built for NEAR HACKATHON (1–14 Nov 2026).
 
 [![CI](https://github.com/deyoungjohn/openrail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/deyoungjohn/openrail/actions/workflows/ci.yml)
 [![NEAR](https://img.shields.io/badge/NEAR-mainnet-brightgreen)](https://nearblocks.io/address/openrail.near)
@@ -14,17 +12,56 @@
 [![rust](https://img.shields.io/badge/rust-1.99.1-orange)](rust-toolchain.toml)
 [![protocol](https://img.shields.io/badge/NEAR%20protocol-86-red)](https://openrail.incepture.dev/docs/contract)
 
-[Live app](https://openrail.incepture.dev) · [Docs](https://openrail.incepture.dev/docs) · [Quickstart](https://openrail.incepture.dev/docs/quickstart) · [Proof of real payments](https://openrail.incepture.dev/proof) · [API (OpenAPI 3.1)](https://api.openrail.incepture.dev/v1/openapi.json)
+## Try it: do X, see Y
 
-</div>
+| What | Where |
+| --- | --- |
+| Live app | https://openrail.incepture.dev |
+| Contract (NEAR mainnet) | [`openrail.near`](https://nearblocks.io/address/openrail.near) |
+| Recent real payments, as data | https://openrail.incepture.dev/proof.json |
+| REST API (OpenAPI 3.1) | https://api.openrail.incepture.dev/v1/openapi.json |
+| Docs | https://openrail.incepture.dev/docs |
+| Demo stores | WooCommerce https://belmonte.incepture.dev · Shopify https://belmonte-apparels.myshopify.com (password `<STOREFRONT_PASSWORD>`) |
 
-Openrail is a payment rail for businesses that bill in stablecoins. You send an invoice or open a checkout. Your client pays in what they already hold, USDC or USDT on any of eight chains, or ETH, SOL or NEAR. NEAR Intents swaps it on the way, and a contract on NEAR mainnet books the payment against that one invoice. You receive USDC on the chain you choose, on your schedule, or in a confidential balance that only you can see.
+**Check a real payment (no account, no install):**
 
-There is no memo to match, no address to copy from an email and no custody. Each invoice gets its own keyless account on NEAR, so money that lands there *is* a payment of that invoice. Only the contract moves it, and only to the invoice's owner. It runs in production today: the [Proof page](https://openrail.incepture.dev/proof) lists real payments from a real Shopify store and a real WooCommerce store, each linked to its transactions on NearBlocks.
+1. Open https://openrail.incepture.dev/proof.json. You see recent rows from the demo business `iamyoungjohn.near`: type, amount, claim account and transaction hash. For example, `Checkout paid`, `28.00`, `iamyoungjohn-near-760048132a1e.openrail.near`, tx `5HGjPCKmscYCSwVAkVF1ixqR47H2wzhgKrM52HmU3Akx`.
+2. Open the receipt at https://openrail.incepture.dev/r/5HGjPCKmscYCSwVAkVF1ixqR47H2wzhgKrM52HmU3Akx. You see the amount, the payer's transaction on its own chain, the NEAR booking transaction, and a verify command.
+3. Read the invoice from the contract (the view call is free):
+   ```bash
+   near view openrail.near claim '{"token_id":"iamyoungjohn-near-760048132a1e"}'
+   ```
+   You see `"status":"Paid"`, `"amount_due":"28000000"` (USDC, 6 decimals), the owner, the claim account and the terms fingerprint.
+4. Check that the invoice's account has no keys:
+   ```bash
+   curl -s https://rpc.mainnet.near.org -H 'content-type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_access_key_list","finality":"final","account_id":"iamyoungjohn-near-760048132a1e.openrail.near"}}'
+   ```
+   You see `"keys":[]`. No one holds a key to the account; only the contract moves what lands there.
+5. Read the invoice as an NFT with `near view openrail.near nft_token '{"token_id":"iamyoungjohn-near-760048132a1e"}'`. You see its owner and metadata (NEP-171).
 
-> These docs and this README describe what is built and measured. What the build does not do yet is listed plainly in [Limitations](https://openrail.incepture.dev/docs/limitations).
+**Make a payment yourself (needs a NEAR wallet and a few dollars of stablecoin):**
 
----
+1. Sign in at https://openrail.incepture.dev/app with a NEAR wallet (Meteor, HOT, Here, Nightly, Intear, NEAR Mobile or OKX). You see your dashboard. Signing in is a NEP-413 signed message; it costs nothing and moves nothing.
+2. Create an invoice under **Invoices → Create invoice**. You see a pay link, and a new NFT is minted with its account `<you>-<ref>.openrail.near`.
+3. Open the pay link and choose a coin and chain. You see an exact quote from NEAR Intents, with a deposit address and a deadline.
+4. Pay from any wallet or exchange. The page moves through *You send*, *Payment received* and *Paid out to the business*. The median from the provider's success to the booking is 30.5 s ([K12](evidence/)).
+5. Open the receipt. You see both transactions linked. The invoice now shows **Paid** in the dashboard and on the contract.
+
+**Or buy from a store:** check out on https://belmonte.incepture.dev with *Pay with stablecoins*. Once the payment is booked, the store marks the order complete from Openrail's signed webhook.
+
+**Run it locally without keys:** see [Run locally](#run-locally) (mock API and web app, two commands).
+
+## NEAR features used
+
+- **NEAR Intents** (1Click API and `intents.near`) handles cross-chain payment in, payouts out, and the business's confidential balance.
+- **NFTs that hold money (NEP-171/177/178/181):** each invoice is an NFT, and its own sub-account `<business>-<ref>.openrail.near` receives the payment. Transferring the NFT moves the right to be paid.
+- **Sub-accounts with no access keys**, created from a global contract (the vault). [K1](evidence/)
+- **NEP-297 events** for every booking, read by the indexer, the receipts and the webhooks.
+- **NEP-413 sign-in** for the dashboard. NEP-141 USDC and USDT.
+- **An MCP server** for AI agents. It prepares actions, and the business signs them.
+
+What the build does not do yet: [Limitations](https://openrail.incepture.dev/docs/limitations).
 
 ## The gap
 
@@ -53,7 +90,7 @@ Openrail removes all three problems at the root:
 | **Hosted checkout** | One API call per order, a hosted pay page and a signed webhook when it is paid. Late payments are held for the merchant to accept or refund. [Guide](https://openrail.incepture.dev/docs/checkout) |
 | **Store plugins** | A [Shopify](https://openrail.incepture.dev/docs/shopify) app and a [WooCommerce](https://openrail.incepture.dev/docs/woocommerce) plugin, both proven with real money on real stores. |
 | **Payouts** | USDC to the chain you choose, on your schedule, or into a [confidential balance](https://openrail.incepture.dev/docs/confidential-balance) on NEAR Intents. Cash out at any time. [Guide](https://openrail.incepture.dev/docs/cash-out) |
-| **Records that prove themselves** | Receipts and monthly statements (PDF and CSV) with explorer links and fingerprints. Anyone can [verify a payment](https://openrail.incepture.dev/docs/verify) with one command. |
+| **Receipts and statements** | Receipts and monthly statements (PDF and CSV) with explorer links and fingerprints. Anyone can [verify a payment](https://openrail.incepture.dev/docs/verify) with one command. |
 | **Developer surface** | A REST API with idempotency and scoped keys, [signed webhooks](https://openrail.incepture.dev/docs/webhooks), a [CLI and SDK](https://openrail.incepture.dev/docs/cli-sdk), and an embeddable widget. |
 | **AI agents** | An [MCP server](https://openrail.incepture.dev/docs/agents) that lets an agent check payments, fetch receipts, send pay links and prepare invoices. It holds no keys; you sign. |
 | **Fees** | 0.25% per booked payment, paid by the business or passed to the client. There is no monthly fee. [Details](https://openrail.incepture.dev/docs/fees) |
@@ -155,7 +192,7 @@ More: [Repository map](https://openrail.incepture.dev/docs/repository).
 Watch it or run it yourself. Every step below happens on mainnet.
 
 1. **Sign in** at [openrail.incepture.dev/app](https://openrail.incepture.dev/app) with a NEAR wallet (Meteor, HOT, Here, Nightly, Intear, NEAR Mobile or OKX). Signing in is one signed message. It costs nothing and moves nothing.
-2. **Create an invoice**, open its pay link, and pay it from another wallet in USDC or USDT on any supported chain.
+2. **Create an invoice** (Invoices → Create invoice), open its pay link, and pay it from another wallet in USDC or USDT on any supported chain.
 3. **Watch it book.** The pay page moves through *You send*, then *Payment received*, then *Paid out to the business*. The receipt links the payer's transaction and the booking on NearBlocks.
 4. **Buy from a store:**
    - [WooCommerce](https://belmonte.incepture.dev) is open to anyone.
