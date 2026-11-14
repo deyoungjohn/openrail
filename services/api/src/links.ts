@@ -24,6 +24,7 @@ const RESERVED = new Set([
   "features",
   "agents",
   "how-it-works",
+  "use-cases",
   "proof",
   "admin",
   "_next",

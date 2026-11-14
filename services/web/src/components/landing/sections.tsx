@@ -445,17 +445,18 @@ export function LandingFooter() {
           </div>
         ))}
         <div>
-          <p className="text-[14px] font-medium text-muted">Proof</p>
+          {/* The nav's two plain links, so the footer and the bar list the same pages. */}
+          <p className="text-[14px] font-medium text-muted">More</p>
           <ul className="mt-3 space-y-2 text-[14px]">
             <li>
-              <Link href="/proof" className="hover:text-accent-text">
-                Transactions
+              <Link href="/how-it-works" className="hover:text-accent-text">
+                How it works
               </Link>
             </li>
             <li>
-              <a href="/proof.json" className="hover:text-accent-text">
-                proof.json
-              </a>
+              <Link href="/proof" className="hover:text-accent-text">
+                Proof
+              </Link>
             </li>
           </ul>
         </div>

@@ -239,7 +239,7 @@ export default function DevelopersPage() {
             <Reveal>
               <p className="text-[14px] font-semibold text-accent-text">Developers</p>
               <h1 className="mt-2 text-[clamp(38px,5vw,64px)] leading-[1.02] font-extrabold tracking-[-0.03em]">
-                Take Stablecoins With One API Call
+                Integrate Stablecoin Payments Seamlessly
               </h1>
             </Reveal>
             <Reveal delay={100}>

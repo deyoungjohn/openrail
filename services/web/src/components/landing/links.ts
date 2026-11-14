@@ -56,28 +56,20 @@ export const MENUS: {
     items: [
       {
         label: "Shopify",
-        href: `${REPO}/tree/main/docs/src/modules/shopify`,
-        note: "Pay with stablecoins on your Shopify store",
-        external: true,
+        href: "/use-cases#shopify",
+        note: "The Shopify app, proven on a real store",
       },
       {
         label: "WooCommerce",
-        href: `${REPO}/tree/main/docs/src/modules/checkout`,
-        note: "A plugin for WordPress stores",
-        external: true,
+        href: "/use-cases#woocommerce",
+        note: "The WordPress plugin, proven on a real store",
       },
-      { label: "Add more", href: "/#any-store", note: "Any other store: one API call" },
     ],
   },
   {
     label: "Developers",
     items: [
-      {
-        label: "Quickstart",
-        href: QUICKSTART_URL,
-        note: "Your first paid checkout in minutes",
-        external: true,
-      },
+      { label: "Overview", href: "/developers", note: "Quickstart, API and docs on one page" },
       {
         label: "API reference",
         href: REFERENCE_URL,
@@ -88,7 +80,6 @@ export const MENUS: {
       { label: "GitHub", href: REPO, note: "Open source", external: true },
       { label: "llms.txt", href: "/llms.txt", note: "Openrail for language models" },
     ],
-    overview: { label: "Developer overview", href: "/developers" },
   },
 ];
 

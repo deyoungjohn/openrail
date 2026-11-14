@@ -10,6 +10,9 @@
 - [How it works (Markdown)](/how-it-works.md): the whole flow in six plain steps, from pay link to your wallet.
 - [How it works (page)](/how-it-works)
 
+## Use cases
+- [Use cases](/use-cases): the Shopify app and the WooCommerce plugin, each proven on a real store with real payments, and their limits.
+
 ## Features
 - [All features](/features): invoices, checkout, dashboards, receipts, statements, confidential payouts, cash out, payout schedule, API and webhooks, store integrations, AI agents.
 - Invoices: bill a client with lines and a due date; they pay from any supported chain.

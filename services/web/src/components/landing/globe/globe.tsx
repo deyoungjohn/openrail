@@ -8,11 +8,11 @@ interface Scene {
 }
 
 /**
- * The globe's own colours, the same in both themes: it was drawn for dark mode (off-white land, a dark sea, accent arcs),
- * and on the light page the light tokens made the sea vanish into the page (14 Nov, human).
+ * The globe's own colours, the same in both themes: off-white land on a deep blue sea, like a real one, with accent
+ * arcs (14 Nov, human). The page's light tokens made the sea vanish into the light page.
  */
 function colors(): Record<string, string> {
-  return { ink: "#EDEBE6", dim: "#2F2F35", accent: "#3f46fe", mint: "#3f46fe", bg: "#0A0A0B" };
+  return { ink: "#EDEBE6", dim: "#2E5F9E", accent: "#3f46fe", mint: "#3f46fe", bg: "#0B2A55" };
 }
 
 /**
