@@ -4,20 +4,20 @@ Where everything lives in [github.com/deyoungjohn/openrail](https://github.com/d
 
 ## Top level
 
-| Path                                 | What                                                                                                                                    |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `contracts/openrail`                 | The NEAR contract (Rust) and its module code in `src/modules`                                                                           |
-| `contracts/tests`, `contracts/model` | Sandbox tests and the model tests                                                                                                       |
-| `services/`                          | Every service: `api`, `web`, `issuer`, `watcher`, `indexer`, `payout`, `relayer`, `shopify`, `mcp`, `cli`                               |
-| `packages/`                          | Shared code: `shared` (routes, 1Click client, env), `api-client` (typed client generated from OpenAPI), `node` (SDK), `widget`, `react` |
-| `schemas/`, `abi/`                   | Event and API schemas; the contract ABI checked in CI                                                                                   |
-| `config/`                            | Routes and settlement assets                                                                                                            |
-| `deploy/`                            | The server pack, systemd units, env templates and Caddy                                                                                 |
-| `docs/src`                           | The repository's technical docs (core and modules)                                                                                      |
-| `evidence/`, `reports/`              | Measured runs: each number in the docs links to one                                                                                     |
-| `fixtures/`                          | API and indexer fixtures for the mock and the tests                                                                                     |
-| `scripts/`                           | Leak check, secret scan, module generation, gates                                                                                       |
-| `openrail.modules.json`              | Which modules are in the build                                                                                                          |
+| Path                                 | What                                                                                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contracts/openrail`                 | The NEAR contract (Rust) and its module code in `src/modules`                                                                               |
+| `contracts/tests`, `contracts/model` | Sandbox tests and the model tests                                                                                                           |
+| `services/`                          | Every service: `api`, `web`, `issuer`, `watcher`, `indexer`, `payout`, `relayer`, `shopify`, `mcp`, `cli`                                   |
+| `packages/`                          | Shared code: `shared` (routes, 1Click client, env), `api-client` (typed client generated from OpenAPI), `node-sdk` (SDK), `widget`, `react` |
+| `schemas/`, `abi/`                   | Event and API schemas; the contract ABI checked in CI                                                                                       |
+| `config/`                            | Routes and settlement assets                                                                                                                |
+| `deploy/`                            | The server pack, systemd units, env templates and Caddy                                                                                     |
+| `docs/src`                           | The repository's technical docs (core and modules)                                                                                          |
+| `evidence/`, `reports/`              | Measured runs: each number in the docs links to one                                                                                         |
+| `fixtures/`                          | API and indexer fixtures for the mock and the tests                                                                                         |
+| `scripts/`                           | Leak check, secret scan, module generation, gates                                                                                           |
+| `openrail.modules.json`              | Which modules are in the build                                                                                                              |
 
 ## The web app
 
