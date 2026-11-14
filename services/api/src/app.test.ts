@@ -1106,8 +1106,8 @@ describe("the public read-only demo (PROOF_ACCOUNT)", () => {
     expect(business.body).toMatchObject({ account_id: "demo.near" });
   });
 
-  it("never writes, and hides the confidential balance and the API keys", async () => {
-    const { app, issuer } = withProof();
+  it("never writes, hides the confidential balance and shows API keys without their secret part", async () => {
+    const { app, issuer, auth } = withProof();
     process.env.WEB_ORIGIN = "https://openrail.near";
     for (const [method, path] of [
       ["POST", "/v1/invoices"],
@@ -1123,10 +1123,18 @@ describe("the public read-only demo (PROOF_ACCOUNT)", () => {
       );
       expect(r.status, `${method} ${path}`).toBe(403);
     }
-    for (const path of ["/v1/balance/confidential/key", "/v1/api_keys"]) {
-      const r = await app.handle(request("GET", path, undefined, "", demoCookie));
-      expect(r.status, path).toBe(403);
-    }
+    const hidden = await app.handle(
+      request("GET", "/v1/balance/confidential/key", undefined, "", demoCookie),
+    );
+    expect(hidden.status).toBe(403);
+    const { secret: demoSecret } = auth.createApiKey("demo.near", "Store", "secret", [
+      "invoices:read",
+    ]);
+    const keys = await app.handle(request("GET", "/v1/api_keys", undefined, "", demoCookie));
+    expect(keys.status).toBe(200);
+    const prefix = (keys.body as { data: { prefix: string }[] }).data[0]!.prefix;
+    expect(prefix).toMatch(/^or_sk_live_•+$/);
+    expect(prefix).not.toContain(demoSecret.slice(11, 14));
     expect(issuer.issueFor).not.toHaveBeenCalled();
   });
 

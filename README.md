@@ -32,7 +32,7 @@ These figures are frozen at the hackathon's end. The live numbers are on the lan
 **Read-only demo:** [openrail.incepture.dev/app?demo=1](https://openrail.incepture.dev/app?demo=1) opens the demo business's own dashboard, read-only:
 - charts, invoices, checkouts, payments, statements and webhooks, updated in real time;
 - no sign-in and no invoices to create first;
-- every write is refused by the API, and the confidential balance and API keys are not shown.
+- every write is refused by the API; the confidential balance is not shown, and API keys show none of their secret characters.
 
 ## Try it: do X, see Y
 
@@ -56,7 +56,7 @@ Each step below is an action, then what you should see. Steps 1 and 4 need nothi
 | Click **Invoices**, then a paid invoice | Status **Paid**, the amount, the invoice's own account (`<business>-<ref>.openrail.near`), and each payment with the payer's transaction and the NEAR booking transaction. |
 | Click **Statements**, pick a month and **CSV** | A CSV of every settled payment in that month (date, source, amount) and the total, ready for an accountant. |
 | Click **API Integration** and open a webhook endpoint's delivery log | The signed webhook deliveries sent to the demo store, with their status. |
-| Try to change anything | The API refuses it: the demo is read-only. The confidential balance and API keys are not shown. |
+| Try to change anything | The API refuses it: the demo is read-only. The confidential balance is not shown, and API keys show only their kind (`or_sk_live_••••`). |
 
 ### 2. Get paid yourself (about 5 minutes, $2 of stablecoin)
 

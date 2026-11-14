@@ -565,8 +565,12 @@ function cookieToken(header: string | undefined): string | undefined {
  */
 export const DEMO_TOKEN = "openrail-read-only-demo";
 
-/** Reads the demo may not make even though they are GETs: the confidential balance and the API keys. */
-const DEMO_HIDDEN = /^\/v1\/(balance\/confidential|api_keys)(\/|$)/;
+/** Reads the demo may not make even though they are GETs: the confidential balance. */
+const DEMO_HIDDEN = /^\/v1\/balance\/confidential(\/|$)/;
+
+/** In the demo an API key shows only its kind (`or_sk_live_`), never any of its secret characters. */
+const demoPrefix = (prefix: string): string =>
+  `${prefix.replace(/^((?:[a-z]+_){3}).*$/, "$1")}••••••••`;
 
 function sessionCookie(token: string, maxAgeSeconds: number): string {
   const domain = process.env.COOKIE_DOMAIN;
@@ -1592,7 +1596,7 @@ export class ApiApp {
             data: this.auth.listApiKeys(context.accountId).map((key) => ({
               id: key.id,
               name: key.name,
-              prefix: key.prefix,
+              prefix: context.demo === true ? demoPrefix(key.prefix) : key.prefix,
               scopes: key.scopes,
               created_at: key.createdAt,
               last_used_at: key.lastUsedAt,
