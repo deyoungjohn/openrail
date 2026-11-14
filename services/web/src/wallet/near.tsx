@@ -93,6 +93,9 @@ export function NearProvider({ children }: { children: ReactNode }) {
   const probed = useRef(false);
   /** True after a sign-out, until the next sign-in: the selector's store still lists the old account. */
   const signedOut = useRef(false);
+  /** The wallet the person just connected. Signing must use it, not the selector's last selected wallet (which opened
+   * Meteor before OKX, and NEAR Mobile on Nightly, 14 Nov). */
+  const connectedId = useRef<string | null>(null);
   const [picker, setPicker] = useState<null | {
     purpose: PickerPurpose;
     done: (id: string | null) => void;
@@ -101,7 +104,7 @@ export function NearProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
-    setupWalletSelector({ network, modules: nearWalletModules(window.location.origin) })
+    setupWalletSelector({ network, modules: nearWalletModules() })
       .then((s) => {
         if (cancelled) return;
         selector.current = s;
@@ -160,6 +163,7 @@ export function NearProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(async (id: string, signal?: AbortSignal) => {
     const s = selector.current;
     if (!s) throw new Error("WALLET_NOT_READY");
+    connectedId.current = id;
     const w = await abortable(s.wallet(id), signal);
     // Connect without a contract: sign-in is a signed message, so the wallet must not add an access
     // key. Adding one is a transaction, and some wallets refuse it below 0.1 NEAR. Every
@@ -230,7 +234,7 @@ export function NearProvider({ children }: { children: ReactNode }) {
     async (c: ChallengeToSign, signal?: AbortSignal): Promise<SignedChallenge> => {
       const s = selector.current;
       if (!s) throw new Error("WALLET_NOT_READY");
-      const wallet = await abortable(s.wallet(), signal);
+      const wallet = await abortable(s.wallet(connectedId.current ?? undefined), signal);
       const nonce = Uint8Array.from(atob(c.nonce), (ch) => ch.charCodeAt(0));
       let signed;
       try {

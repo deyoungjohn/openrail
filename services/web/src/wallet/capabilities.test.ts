@@ -16,9 +16,7 @@ const EXPECTED: Record<string, boolean> = {
   "@near-wallet-selector/here-wallet": true,
   "@near-wallet-selector/nightly": true,
   "@near-wallet-selector/intear-wallet": true,
-  "@near-wallet-selector/near-mobile-wallet": true,
   "@near-wallet-selector/okx-wallet": true,
-  "@near-wallet-selector/wallet-connect": true,
   // Bitget's module has no signMessage: the selector refuses it, so it cannot sign you in.
   "@near-wallet-selector/bitget-wallet": false,
 };
@@ -31,5 +29,10 @@ describe("which wallet modules define signMessage (selector 10.1.4)", () => {
 
   it("MyNearWallet is not installed", () => {
     expect(() => require.resolve("@near-wallet-selector/my-near-wallet")).toThrow();
+  });
+
+  it("NEAR Mobile and WalletConnect are not installed (removed 14 Nov)", () => {
+    expect(() => require.resolve("@near-wallet-selector/near-mobile-wallet")).toThrow();
+    expect(() => require.resolve("@near-wallet-selector/wallet-connect")).toThrow();
   });
 });

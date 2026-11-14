@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { copy } from "@/copy";
 import { AccountId } from "../ui/account-id";
 import { Button } from "../ui/button";
-import { ErrorNote } from "../ui/error-note";
+import { useToast } from "../ui/toast";
 import { useAuth } from "./auth-provider";
 
 /**
@@ -14,22 +14,29 @@ import { useAuth } from "./auth-provider";
 export function AccountBar({ place = "page" }: { place?: "header" | "menu" | "page" } = {}) {
   const { state, signIn, signOut, cancelSignIn, hint } = useAuth();
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const failed = state.status === "signedOut" ? state.failed : undefined;
+  const detail = state.status === "signedOut" ? state.detail : undefined;
+  // A failed sign-in is told in a toast: the header has no room for a sentence (it wrapped one letter per line, 14 Nov),
+  // and a toast never moves the page or covers a control. Only the header bar reports it, so it is told once.
+  useEffect(() => {
+    if (place !== "header" || !failed) return;
+    toast({
+      tone: "error",
+      title:
+        failed === "unsupported"
+          ? copy.auth.unsupported
+          : failed === "timeout"
+            ? copy.auth.timeout
+            : copy.auth.failed,
+      ...(detail ? { body: `${copy.auth.walletSaid}: ${detail}` } : {}),
+    });
+  }, [failed, detail, place, toast]);
   // Only the header offers Sign in (one button on the page); elsewhere a signed-out bar is empty.
   if (state.status === "signedOut" && place === "header")
     return (
       <div className="flex min-w-0 items-center gap-2">
         {busy && hint ? <span className="caption hidden truncate lg:inline">{hint}</span> : null}
-        <ErrorNote className="mt-0 hidden w-auto max-w-[36ch] text-right lg:block">
-          {!busy && state.failed
-            ? `${state.detail ? `${copy.auth.walletSaid}: ${state.detail}. ` : ""}${
-                state.failed === "unsupported"
-                  ? copy.auth.unsupported
-                  : state.failed === "timeout"
-                    ? copy.auth.timeout
-                    : copy.auth.failed
-              }`
-            : null}
-        </ErrorNote>
         {busy ? (
           <Button
             variant="secondary"

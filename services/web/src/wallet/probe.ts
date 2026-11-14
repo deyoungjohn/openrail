@@ -24,9 +24,7 @@ const STATIC_SIGNS_MESSAGE: Readonly<Record<string, boolean>> = {
   "here-wallet": true,
   nightly: true,
   "intear-wallet": true,
-  "near-mobile-wallet": true,
   "okx-wallet": true,
-  "wallet-connect": true,
   "bitget-wallet": false,
 };
 
