@@ -8,11 +8,12 @@ interface Scene {
 }
 
 /**
- * The globe's own colours, the same in both themes: off-white land on a deep blue sea, like a real one, with accent
+ * The globe's own colours, the same in both themes: off-white land on a sea in the brand accent, with light accent
  * arcs (14 Nov, human). The page's light tokens made the sea vanish into the light page.
  */
 function colors(): Record<string, string> {
-  return { ink: "#EDEBE6", dim: "#2E5F9E", accent: "#3f46fe", mint: "#3f46fe", bg: "#0B2A55" };
+  // The sea is the brand accent; arcs and blinks are a light tint of it so they still show on it.
+  return { ink: "#F4F4FF", dim: "#7C82FF", accent: "#D6D8FF", mint: "#D6D8FF", bg: "#3F46FE" };
 }
 
 /**
