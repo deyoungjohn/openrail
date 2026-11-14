@@ -36,5 +36,5 @@ container_build_command = [
     "non-reproducible-wasm",
     "--locked",
     "--features",
-    "standing,checkout,proof,shopify,settle,woocommerce",
+    "checkout,shopify,settle,woocommerce",
 ]

@@ -25,10 +25,7 @@
   "support": [
     {
       "id": "payout",
-      "enabled_if": [
-        "checkout",
-        "settle"
-      ]
+      "enabled_if": ["checkout", "settle"]
     }
   ]
 }

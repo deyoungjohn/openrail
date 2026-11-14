@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Prints the enabled module ids from openrail.modules.json, comma-separated (empty if none).
-# With --all prints every enabled id (one per line) for CI loops.
+# Prints the enabled module ids that are contract features (the [features] table of contracts/openrail/Cargo.toml),
+# comma-separated (empty if none). A module with no contract part, such as the MCP server, has no feature.
+# With --all prints every such id (one per line) for CI loops.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 node -e '
-const m = JSON.parse(require("fs").readFileSync("openrail.modules.json", "utf8")).modules.filter((x) => x.enabled);
+const fs = require("fs");
+const cargo = fs.readFileSync("contracts/openrail/Cargo.toml", "utf8");
+const table = (cargo.split(/^\[features\]\s*$/m)[1] || "").split(/^\[/m)[0];
+const features = new Set([...table.matchAll(/^([a-z0-9_-]+)\s*=/gm)].map((x) => x[1]));
+const m = JSON.parse(fs.readFileSync("openrail.modules.json", "utf8")).modules.filter((x) => x.enabled && features.has(x.id));
 if (process.argv[1] === "--all") console.log(m.map((x) => x.id).join("\n"));
 else console.log(m.map((x) => x.id).join(","));
 ' -- "${1:-}"
