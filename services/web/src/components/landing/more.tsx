@@ -67,52 +67,6 @@ export function ChainsMarquee() {
   );
 }
 
-/** A drawn confidential-balance screen (the live one needs a wallet signature, so the ring shows this). */
-function PrivateBalanceMock() {
-  const rows: [string, string, string][] = [
-    ["Nov 13, 2026", "$30.00", "Withdrawn"],
-    ["Nov 13, 2026", "$26.93", "In your confidential balance"],
-    ["Nov 13, 2026", "$27.93", "In your confidential balance"],
-    ["Nov 13, 2026", "$9.97", "In your confidential balance"],
-  ];
-  return (
-    <div className="flex size-full flex-col gap-3 bg-[#0b0b0f] p-5 text-[#eef0f6]">
-      <div className="grid grid-cols-4 gap-2.5">
-        {[
-          ["Held", "$0.00"],
-          ["On its way", "$0.00"],
-          ["In your confidential balance", "$86.80"],
-          ["Returned", "$0.00"],
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-xl border border-[#2b2b33] bg-[#121216] p-3">
-            <p className="text-[10.5px] text-[#9aa3b2]">{k}</p>
-            <p
-              className={`mt-1 text-[20px] font-bold ${k === "In your confidential balance" ? "text-[#8b90ff]" : ""}`}
-            >
-              {v}
-            </p>
-          </div>
-        ))}
-      </div>
-      <div className="flex-1 rounded-xl border border-[#2b2b33] bg-[#121216] p-3">
-        <p className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold">
-          <Lock aria-hidden size={13} /> Where your money is
-        </p>
-        {rows.map((r, i) => (
-          <div
-            key={i}
-            className="flex justify-between border-t border-[#2b2b33] py-2 text-[11.5px]"
-          >
-            <span className="text-[#9aa3b2]">{r[0]}</span>
-            <span className="font-medium">{r[1]}</span>
-            <span className="w-[150px] text-right">{r[2]}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 const SCREENS: RingItem[] = [
   {
     title: "Dashboard and analytics",
@@ -132,7 +86,8 @@ const SCREENS: RingItem[] = [
   {
     title: "Confidential balance",
     description: "Payments move to a balance only you can see, and leave it when you say.",
-    node: <PrivateBalanceMock />,
+    // The real Stats page, from the recording (the drawn version did not look like the app, 14 Nov).
+    image: "/landing/confidential.webp",
   },
   {
     title: "Payout settings",
