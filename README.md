@@ -1,6 +1,6 @@
 # Openrail
 
-Openrail lets a business get paid in stablecoins from any chain. Each invoice or checkout gets its own keyless account on NEAR. The client pays from NEAR, Base, Arbitrum, Ethereum, Solana, Polygon, Optimism or BNB Chain, and NEAR Intents converts the payment to USDC. The contract `openrail.near` books the payment against that one invoice, and the business receives USDC. Built for NEAR HACKATHON (1–14 Nov 2026).
+Openrail lets a business get paid in stablecoins from any chain. Each invoice or checkout gets its own keyless account on NEAR. The client pays from NEAR, Base, Arbitrum, Ethereum, Solana, Polygon, Optimism or BNB Chain, and NEAR Intents converts the payment to USDC. The contract `openrail.near` books the payment against that one invoice, and the business receives USDC.
 
 [![CI](https://github.com/deyoungjohn/openrail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/deyoungjohn/openrail/actions/workflows/ci.yml)
 [![NEAR](https://img.shields.io/badge/NEAR-mainnet-brightgreen)](https://nearblocks.io/address/openrail.near)
