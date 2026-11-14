@@ -60,7 +60,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return <div key="app">{children}</div>;
 }
 
-
 /**
  * A click anywhere on the preview says why nothing happens: a small card at the pointer with a Sign in button, so a
  * signed-out visitor never thinks the page is broken (14 Nov). Keyboard users have the Sign in button in the header;
