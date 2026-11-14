@@ -179,8 +179,7 @@ export function CashoutScreen() {
   const demo = auth.state.status === "signedIn" && auth.state.demo === true;
 
   // Public and private: the public balance is this page; an enabled module adds its own tab (the confidential balance).
-  // The read-only demo shows the public balance only: the confidential one stays private (14 Nov).
-  const sections = demo ? [] : payoutSections;
+  const sections = payoutSections;
   const withSections = (publicPanel: ReactNode) =>
     sections.length === 0 ? (
       publicPanel
@@ -353,7 +352,8 @@ export function CashoutScreen() {
                       )}
                       <ErrorNote>{error && phase === "form" ? error : null}</ErrorNote>
                       <div className="flex justify-center">
-                        <Button type="submit" loading={phase === "asking"}>
+                        {/* The read-only demo can look at the form but never ask for a price (14 Nov). */}
+                        <Button type="submit" loading={phase === "asking"} disabled={demo}>
                           {phase === "asking" ? t.gettingQuote : t.getQuote}
                         </Button>
                       </div>

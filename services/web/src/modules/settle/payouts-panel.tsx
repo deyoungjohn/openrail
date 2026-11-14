@@ -171,6 +171,7 @@ function StatsPanel() {
 /** The confidential balance on the Payout page: take money out of it, and see where it is. (Its settings are in Settings.) */
 export function PayoutsPanel() {
   const auth = useAuth();
+  if (auth.state.status === "signedIn" && auth.state.demo === true) return <DemoConfidential />;
   return (
     <div className="space-y-6 py-1">
       <Tabs
@@ -201,6 +202,65 @@ export function PayoutSettingsPanel() {
         <PrivateBalanceCard accountId={auth.state.accountId} />
       ) : null}
       <ScheduleCard />
+    </div>
+  );
+}
+
+/**
+ * The confidential balance in the read-only demo: it stays private (only the business can read it, by signing with
+ * its wallet), so the cards show $0.00 and say why, and the Withdraw tab explains how a withdrawal works.
+ */
+function DemoConfidential() {
+  const steps = [
+    "Turn it on in Settings → Payouts. From then on, booked payments move into your confidential balance on NEAR Intents instead of your public one.",
+    "Click Show my balance and sign one message in your wallet. NEAR Intents then shows the balance to you alone; no one else can read it.",
+    "Choose the token you hold, the amount, the chain and the address to receive it, then Get price for an exact quote from NEAR Intents.",
+    "Sign the withdrawal in your wallet. The first time, your wallet also registers its key with intents.near in one small transaction.",
+    "NEAR Intents sends the USDC to your address. The table below the form shows the withdrawal's status and its explorer links.",
+  ];
+  return (
+    <div className="space-y-6 py-1">
+      <Tabs
+        label="Confidential balance"
+        items={[
+          {
+            id: "withdraw",
+            label: "Withdraw",
+            panel: (
+              <div className="surface-card space-y-4 p-6">
+                <h3 className="text-[18px] font-semibold">How a withdrawal works</h3>
+                <ol className="list-decimal space-y-2 pl-5 text-[15px] leading-6 text-muted marker:font-semibold marker:text-accent-text">
+                  {steps.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ol>
+                <p className="caption">The demo is read-only, so nothing can be withdrawn here.</p>
+              </div>
+            ),
+          },
+          {
+            id: "stats",
+            label: "Stats",
+            panel: (
+              <div className="space-y-4 py-1">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {["Confidential balance", "Withdrawn", "Moved in"].map((label) => (
+                    <div key={label} className="surface-card p-5">
+                      <p className="caption">{label}</p>
+                      <p className="tabular mt-1 text-[28px] font-bold">$0.00</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="caption">
+                  The demo business&apos;s confidential balance is private: only the business can
+                  read it, by signing with its wallet. So the demo shows $0.00 here, not the real
+                  amounts.
+                </p>
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
