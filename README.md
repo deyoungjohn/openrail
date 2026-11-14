@@ -1,6 +1,6 @@
 # Openrail
 
-Openrail lets a business get paid in stablecoins from any chain. Each invoice or checkout gets its own keyless account on NEAR. The client pays from NEAR, Base, Arbitrum, Ethereum, Solana, Polygon, Optimism or BNB Chain, and NEAR Intents converts the payment to USDC. The contract `openrail.near` books the payment against that one invoice, and the business receives USDC.
+Openrail lets a business get paid in stablecoins from any chain. Each invoice or checkout gets its own keyless account on NEAR. The client pays from NEAR, Base, Arbitrum, Ethereum, Solana, Polygon, Optimism or BNB Chain, and NEAR Intents converts the payment to USDC. The contract `openrail.near` books the payment against that one invoice, and the business receives USDC. Built at NEAR HACKATHON (1–14 Nov 2026).
 
 [![CI](https://github.com/deyoungjohn/openrail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/deyoungjohn/openrail/actions/workflows/ci.yml)
 [![NEAR](https://img.shields.io/badge/NEAR-mainnet-brightgreen)](https://nearblocks.io/address/openrail.near)
@@ -136,7 +136,7 @@ indexer ──(events)──► API ──► dashboard, receipts, statements, w
 
   [Services](https://openrail.incepture.dev/docs/services)
 - **NEAR Intents** moves value between chains on the way in (the payer's coin to USDC) and on the way out (the payout to the business's chain).
-- **Modules** are optional features (`checkout`, `shopify`, `woocommerce`, `settle`, `agent`) declared in [`openrail.modules.json`](openrail.modules.json). A module that is switched off is absent from the contract, the services, the app and the docs, and a leak check enforces it. [Modules](https://openrail.incepture.dev/docs/modules)
+- **Modules** are optional features (`checkout`, `shopify`, `woocommerce`, `settle`, `agent`) declared in [`openrail.modules.json`](openrail.modules.json). A module that is switched off is absent from the contract, the services, the app and the docs, and a leak check (`make leak-check`, given a keyword list) enforces it. [Modules](https://openrail.incepture.dev/docs/modules)
 
 Overview: [Architecture](https://openrail.incepture.dev/docs/architecture) · [Trust model](https://openrail.incepture.dev/docs/trust) · [Security](https://openrail.incepture.dev/docs/security)
 
@@ -240,7 +240,7 @@ Services read configuration only from the environment. A missing secret stops a 
 make test          # contract unit, model and sandbox suites, then every service
 pnpm test          # the TypeScript packages and services
 make lint          # rustfmt, clippy, eslint, prettier
-make leak-check    # no trace of switched-off modules
+make leak-check    # no trace of switched-off modules (needs LEAK_KEYWORDS_FILE)
 make secret-scan   # no secrets in the tree
 ```
 
@@ -255,7 +255,7 @@ On every pull request, CI:
 - runs the core tests;
 - builds and tests each module set, and all modules on;
 - runs the web e2e suite and checks the deploy scripts;
-- runs the leak check and the secret scan.
+- runs the secret scan, and the leak check whenever a keyword list of switched-off modules is configured.
 
 A merge needs all of them green. More: [Tests and evidence](https://openrail.incepture.dev/docs/testing).
 

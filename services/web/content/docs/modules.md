@@ -36,4 +36,4 @@ The contract exposes a fixed hook interface (frozen early in the build) that mod
 
 ## The leak check
 
-CI builds every module set and runs a leak check over the wasm exports, the web bundle, the CLI help, the README and the generated docs. Any term of a switched-off module that appears fails the build.
+CI builds every module set. Given a keyword list of switched-off modules, the leak check scans the wasm exports, the web bundle, the CLI help, the README and the generated docs. Any term of a switched-off module that appears fails the build.

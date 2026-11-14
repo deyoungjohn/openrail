@@ -8,7 +8,7 @@ How Openrail is tested, how to run the tests, and where the measured runs behind
 make test          # contract unit, model and sandbox suites, then every service
 pnpm test          # the TypeScript packages and services
 make lint          # rustfmt, clippy, eslint, prettier
-make leak-check    # no trace of switched-off modules
+make leak-check    # no trace of switched-off modules (needs LEAK_KEYWORDS_FILE)
 make secret-scan   # no secrets in the tree
 ```
 
@@ -16,7 +16,7 @@ The web app also has Playwright suites: `pnpm --filter @openrail/web test:e2e:we
 
 ## What CI runs
 
-Every pull request builds the contract, checks its wasm imports and ABI, runs the core tests, builds and tests **each module set** and **all modules on**, runs the web e2e suite, checks the deploy scripts and runs the leak check and secret scan. A merge needs all of them green.
+Every pull request builds the contract, checks its wasm imports and ABI, runs the core tests, builds and tests **each module set** and **all modules on**, runs the web e2e suite, checks the deploy scripts and runs the secret scan, and runs the leak check whenever a keyword list of switched-off modules is configured. A merge needs all of them green.
 
 ## How tests are written
 

@@ -156,9 +156,14 @@ jobs:
         env:
           LEAK_KEYWORDS: ${{ secrets.LEAK_KEYWORDS }}
         run: |
+          if [ -z "$LEAK_KEYWORDS" ]; then
+            echo "No LEAK_KEYWORDS secret: the leak-check is skipped (no switched-off module left to hide)."
+            exit 0
+          fi
           printf '%s\n' "$LEAK_KEYWORDS" > "$RUNNER_TEMP/leak-keywords.txt"
           echo "LEAK_KEYWORDS_FILE=$RUNNER_TEMP/leak-keywords.txt" >> "$GITHUB_ENV"
       - name: leak-check
+        if: env.LEAK_KEYWORDS_FILE != ''
         run: make leak-check
 
   # Core tests: contract workspace tests, unit tests, ts packages, and type checking
