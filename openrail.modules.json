@@ -2,15 +2,7 @@
   "_comment": "Modules in this build. Set enabled=false and the module disappears from the contract, app, CLI and docs.",
   "modules": [
     {
-      "id": "standing",
-      "enabled": true
-    },
-    {
       "id": "checkout",
-      "enabled": true
-    },
-    {
-      "id": "proof",
       "enabled": true
     },
     {
@@ -33,7 +25,10 @@
   "support": [
     {
       "id": "payout",
-      "enabled_if": ["checkout", "settle"]
+      "enabled_if": [
+        "checkout",
+        "settle"
+      ]
     }
   ]
 }
