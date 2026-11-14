@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { FEATURE_MOCKS } from "@/components/landing/feature-mocks";
 import { FEATURES } from "@/components/landing/features-data";
 import { LandingNav } from "@/components/landing/nav";
-import { Reveal } from "@/components/landing/reveal";
+import { Reveal } from "@/components/motion/reveal";
 import { LandingFooter } from "@/components/landing/sections";
 import { ChainIcon, CHAINS, type ChainId } from "@/components/ui/chain-badge";
 import { cn } from "@/lib/cn";
@@ -71,8 +71,9 @@ function SideCard({ side }: { side: "left" | "right" }) {
 
 function Hero() {
   return (
-    <section className="px-2 pt-2 sm:px-4">
-      <div className="relative isolate mx-auto max-w-[1240px] overflow-hidden rounded-[28px] bg-[#07070a] px-4 pt-20 pb-10 text-center text-white sm:px-6">
+    // Edge to edge: the dark band spans the whole page width; only its content is held to the page column.
+    <section className="relative isolate mt-2 overflow-hidden bg-[#07070a] text-center text-white">
+      <div className="relative mx-auto max-w-[1240px] px-4 pt-20 pb-12 sm:px-6">
         {/* Vertical bands of the accent, brightest in the middle, fading down. */}
         <div
           aria-hidden
@@ -151,7 +152,10 @@ export default function FeaturesPage() {
                 aria-labelledby={`${f.id}-title`}
                 className="grid scroll-mt-28 grid-cols-[minmax(0,1fr)] items-center gap-8 [&>*]:min-w-0 rounded-[28px] border border-border bg-surface p-5 sm:p-8 lg:grid-cols-2 lg:gap-14"
               >
-                <Reveal className={cn("lg:px-4", flip && "lg:order-2")}>
+                <Reveal
+                  from={flip ? "right" : "left"}
+                  className={cn("lg:px-4", flip && "lg:order-2")}
+                >
                   <p className="text-[13px] font-semibold text-accent-text">
                     {String(i + 1).padStart(2, "0")}
                   </p>
@@ -171,7 +175,11 @@ export default function FeaturesPage() {
                     </a>
                   ) : null}
                 </Reveal>
-                <Reveal delay={100} className={cn(flip && "lg:order-1")}>
+                <Reveal
+                  delay={100}
+                  from={flip ? "left" : "right"}
+                  className={cn(flip && "lg:order-1")}
+                >
                   <div className={cn("rounded-[22px] p-4 sm:p-7", TINTS[i % TINTS.length])}>
                     {Mock ? <Mock /> : null}
                   </div>

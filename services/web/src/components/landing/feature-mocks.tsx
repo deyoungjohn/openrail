@@ -508,7 +508,7 @@ function AgentsMock() {
       <p className="mt-3 text-muted">agent → openrail.prepare_invoice</p>
       <pre className="mt-1 rounded-xl bg-surface-2 p-3 whitespace-pre-wrap">{`{ "debtor": "northwind.near",
   "amountDue": "250000000",
-  "dueDate": "2026-12-01" }`}</pre>
+  "dueDate": 1796083200 }`}</pre>
       <p className="mt-3 flex items-center gap-1.5 font-sans text-[12px] text-success-text">
         <CheckCircle2 aria-hidden size={14} /> Ready to sign: approval link sent to you
       </p>

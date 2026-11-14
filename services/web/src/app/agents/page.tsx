@@ -4,7 +4,8 @@ import Link from "next/link";
 import { FEATURE_MOCKS } from "@/components/landing/feature-mocks";
 import { REPO_URL } from "@/components/landing/links";
 import { LandingNav } from "@/components/landing/nav";
-import { Reveal } from "@/components/landing/reveal";
+import { Reveal } from "@/components/motion/reveal";
+import { CodeBlock } from "@/components/ui/code-block";
 import { LandingFooter } from "@/components/landing/sections";
 
 export const metadata: Metadata = {
@@ -62,6 +63,30 @@ const CONFIG = `{
     }
   }
 }`;
+
+/** Things to ask an agent once it is connected, and the tool call each one becomes. */
+const SAMPLES: { ask: string; tool: string }[] = [
+  {
+    ask: "Which of my invoices are still open?",
+    tool: `list_claims {"status": "Open", "limit": 20}`,
+  },
+  {
+    ask: "Has c-12 been paid yet? How much is still owed?",
+    tool: `claim_status {"tokenId": "c-12"}`,
+  },
+  {
+    ask: "Get me the receipt and the on-chain proof for c-12.",
+    tool: `receipt {"tokenId": "c-12"}`,
+  },
+  {
+    ask: "Send Spectra Inc the pay link for the $386.50 they owe on c-14.",
+    tool: `quote_pay_link {"tokenId": "c-14", "amountUsd": "386.50"}`,
+  },
+  {
+    ask: "Bill northwind.near $250 for the December retainer, due December 1.",
+    tool: `prepare_invoice {"debtor": "northwind.near", "amountDue": "250000000", "dueDate": 1796083200}`,
+  },
+];
 
 /** The Agent MCP: what an agent can do with Openrail, and what it can never do. */
 export default function AgentsPage() {
@@ -179,7 +204,7 @@ export default function AgentsPage() {
         <section
           id="setup"
           aria-labelledby="setup-title"
-          className="mx-auto max-w-[1240px] scroll-mt-28 px-4 pt-16 pb-24 sm:px-6"
+          className="mx-auto max-w-[1240px] scroll-mt-28 px-4 pt-16 pb-12 sm:px-6"
         >
           <Reveal>
             <h2
@@ -240,11 +265,44 @@ export default function AgentsPage() {
               </Reveal>
             ))}
           </ol>
-          <Reveal className="mt-6">
-            <pre className="overflow-x-auto rounded-[22px] border border-border bg-surface-2 p-6 font-mono text-[13px] leading-6">
-              {CONFIG}
-            </pre>
+          <Reveal className="mt-6 grid gap-4 lg:grid-cols-2">
+            <div className="space-y-4">
+              <CodeBlock
+                label="Get the server"
+                code={`git clone ${REPO_URL}.git\ncd openrail\npnpm install`}
+              />
+              <CodeBlock
+                label="Try it with no key (sample data)"
+                code="node services/mcp/bin/openrail-mcp.mjs --fake"
+              />
+            </div>
+            <CodeBlock label="MCP client config (JSON)" code={CONFIG} />
           </Reveal>
+        </section>
+
+        <section aria-labelledby="samples" className="mx-auto max-w-[1240px] px-4 pb-24 sm:px-6">
+          <Reveal>
+            <h2
+              id="samples"
+              className="text-[clamp(28px,4vw,44px)] leading-[1.05] font-extrabold tracking-[-0.03em]"
+            >
+              Things To Ask Your Agent
+            </h2>
+            <p className="mt-4 max-w-[60ch] text-[16px] leading-7 text-muted">
+              Say it in plain words. Under each one is the tool call your agent makes, if you want
+              to run it yourself.
+            </p>
+          </Reveal>
+          <ol className="mt-8 grid gap-4 lg:grid-cols-2">
+            {SAMPLES.map((x, i) => (
+              <Reveal key={x.ask} delay={(i % 2) * 80}>
+                <li className="h-full rounded-[22px] border border-border bg-surface p-5">
+                  <p className="text-[16px] leading-7 font-medium">&ldquo;{x.ask}&rdquo;</p>
+                  <CodeBlock className="mt-3" label="Tool call" code={x.tool} />
+                </li>
+              </Reveal>
+            ))}
+          </ol>
         </section>
       </main>
       <LandingFooter />

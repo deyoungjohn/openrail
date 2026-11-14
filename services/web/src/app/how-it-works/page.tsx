@@ -2,7 +2,7 @@ import { ArrowUpRight, FileText } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LandingNav } from "@/components/landing/nav";
-import { Reveal } from "@/components/landing/reveal";
+import { Reveal } from "@/components/motion/reveal";
 import { LandingFooter } from "@/components/landing/sections";
 import { CHECK, INTRO, LINKS, STEPS } from "@/lib/how-it-works";
 

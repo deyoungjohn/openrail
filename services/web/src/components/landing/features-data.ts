@@ -15,6 +15,47 @@ export interface Feature {
 
 export const FEATURES: Feature[] = [
   {
+    id: "dashboards",
+    title: "Dashboards And Analytics",
+    subtitle:
+      "Revenue by month, activity by day, top clients and the chains they pay from, all read from the payments booked on chain.",
+    card: "Revenue, activity, top clients and chains, from the payments booked on chain.",
+  },
+  {
+    id: "stores",
+    title: "Store Integrations",
+    subtitle:
+      "A Shopify app and a WooCommerce plugin put stablecoins at checkout. Any other store or app does the same with one API call.",
+    card: "A Shopify app and a WooCommerce plugin; any other store with one API call.",
+  },
+  {
+    id: "confidential",
+    title: "Confidential Payouts",
+    subtitle:
+      "Turn on the confidential balance and payments move into NEAR Intents' confidential balance, which only you can see. Withdraw from it to any supported chain.",
+    card: "Move payments to a confidential balance on NEAR Intents and withdraw to any chain.",
+  },
+  {
+    id: "statements",
+    title: "Statements",
+    subtitle:
+      "Download a statement for any period, every payment listed. Its fingerprint proves the file was not edited after it was made.",
+    card: "Download a statement for any period; its fingerprint proves the file was not edited.",
+  },
+  {
+    id: "api",
+    title: "API And Webhooks",
+    subtitle:
+      "An OpenAPI 3.1 API with keys you create and revoke, and signed webhooks for every invoice and checkout event, with a delivery log and test events.",
+    card: "OpenAPI, API keys and signed webhooks for every invoice and checkout event.",
+  },
+  {
+    id: "cash-out",
+    title: "Cash Out Simple",
+    subtitle:
+      "Send USDC from your balance to an address on the chain you choose, in one signature. Choose how much with the slider and see the price before you sign.",
+  },
+  {
     id: "invoices",
     title: "Invoices Paid From Any Chain",
     subtitle:
@@ -28,13 +69,6 @@ export const FEATURES: Feature[] = [
     card: "A hosted checkout for any store, paid from any chain; your store hears back by webhook.",
   },
   {
-    id: "dashboards",
-    title: "Dashboards And Analytics",
-    subtitle:
-      "Revenue by month, activity by day, top clients and the chains they pay from, all read from the payments booked on chain.",
-    card: "Revenue, activity, top clients and chains, from the payments booked on chain.",
-  },
-  {
     id: "receipts",
     title: "Receipts",
     subtitle:
@@ -42,44 +76,10 @@ export const FEATURES: Feature[] = [
     card: "A receipt page and PDF for every payment, with the explorer links and the terms fingerprint.",
   },
   {
-    id: "statements",
-    title: "Statements",
-    subtitle:
-      "Download a statement for any period, every payment listed. Its fingerprint proves the file was not edited after it was made.",
-    card: "Download a statement for any period; its fingerprint proves the file was not edited.",
-  },
-  {
-    id: "confidential",
-    title: "Confidential Payouts",
-    subtitle:
-      "Turn on the confidential balance and payments move into NEAR Intents' confidential balance, which only you can see. Withdraw from it to any supported chain.",
-    card: "Move payments to a confidential balance on NEAR Intents and withdraw to any chain.",
-  },
-  {
-    id: "cash-out",
-    title: "Cash Out Publicly",
-    subtitle:
-      "Send USDC from your balance to an address on the chain you choose, in one signature. Choose how much with the slider and see the price before you sign.",
-  },
-  {
     id: "schedule",
     title: "Your Payout Schedule",
     subtitle:
       "Decide when held payments move: after each payment, once a day, once a week or once a month.",
-  },
-  {
-    id: "api",
-    title: "API And Webhooks",
-    subtitle:
-      "An OpenAPI 3.1 API with keys you create and revoke, and signed webhooks for every invoice and checkout event, with a delivery log and test events.",
-    card: "OpenAPI, API keys and signed webhooks for every invoice and checkout event.",
-  },
-  {
-    id: "stores",
-    title: "Store Integrations",
-    subtitle:
-      "A Shopify app and a WooCommerce plugin put stablecoins at checkout. Any other store or app does the same with one API call.",
-    card: "A Shopify app and a WooCommerce plugin; any other store with one API call.",
   },
   {
     id: "agents",
