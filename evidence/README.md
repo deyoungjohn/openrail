@@ -77,3 +77,7 @@ These reports were produced before the build window, while designing and testing
 | [K8-real-2026-10-28T21-09-46Z.json](K8-real-2026-10-28T21-09-46Z.json) | 2026-10-28 | "I paid" trace on recorded and real cases | PASS |
 | [K8-record-evidence-2026-10-28T21-10-29Z.json](K8-record-evidence-2026-10-28T21-10-29Z.json) | 2026-10-28 | "I paid" trace on recorded and real cases | PASS |
 | [pay-report-2026-10-31T19-13-15-901Z.json](pay-report-2026-10-31T19-13-15-901Z.json) | 2026-10-31 | live confidential 1Click swap: origin and destination hashes, amounts vs signed quote | SUCCESS |
+
+## Screenshots
+
+[`screenshots/checkout/`](screenshots/checkout): the hosted checkout page in every state (loading, empty, checking, paid, late, expired, error), light and dark, at 360 px, on fixture data.

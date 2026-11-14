@@ -342,10 +342,8 @@ test.describe("claim detail", () => {
     await expect(page.getByRole("heading", { name: "Open payment links" })).toBeVisible();
     await expect(page.getByText("invoice.paid")).toBeVisible();
     await expect(page.getByText("no keys", { exact: false })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Sell invoice" })).toHaveAttribute(
-      "href",
-      "/app/invoices/c-1/transfer",
-    );
+    // Selling an invoice was dropped from the product (14 Nov): no button on the invoice.
+    await expect(page.getByRole("link", { name: "Sell invoice" })).toHaveCount(0);
   });
 
   test("links to a statement for this invoice only", async ({ page }) => {

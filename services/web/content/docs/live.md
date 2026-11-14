@@ -24,10 +24,10 @@ Everything Openrail runs in production, with the addresses you can check yoursel
 
 Both stores belong to Belmonte Apparels, the developer's own demo business, run to prove the technology works with real money.
 
-| Store       | Address                                                                    | Access                                                        |
-| ----------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| WooCommerce | [belmonte.incepture.dev](https://belmonte.incepture.dev)                   | Open to anyone                                                |
-| Shopify     | [belmonte-apparels.myshopify.com](https://belmonte-apparels.myshopify.com) | A development store: the storefront password is in the README |
+| Store       | Address                                                                    | Access                                              |
+| ----------- | -------------------------------------------------------------------------- | --------------------------------------------------- |
+| WooCommerce | [belmonte.incepture.dev](https://belmonte.incepture.dev)                   | Open to anyone                                      |
+| Shopify     | [belmonte-apparels.myshopify.com](https://belmonte-apparels.myshopify.com) | A development store, storefront password `openrail` |
 
 ## Real payments
 

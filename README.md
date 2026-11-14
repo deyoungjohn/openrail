@@ -21,7 +21,7 @@ Openrail lets a business get paid in stablecoins from any chain. Each invoice or
 | Recent real payments, as data | https://openrail.incepture.dev/proof.json |
 | REST API (OpenAPI 3.1) | https://api.openrail.incepture.dev/v1/openapi.json |
 | Docs | https://openrail.incepture.dev/docs |
-| Demo stores | WooCommerce https://belmonte.incepture.dev · Shopify https://belmonte-apparels.myshopify.com (password `<STOREFRONT_PASSWORD>`) |
+| Demo stores | WooCommerce https://belmonte.incepture.dev · Shopify https://belmonte-apparels.myshopify.com (password `openrail`) |
 
 **Check a real payment (no account, no install):**
 
@@ -38,7 +38,7 @@ Openrail lets a business get paid in stablecoins from any chain. Each invoice or
      -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_access_key_list","finality":"final","account_id":"iamyoungjohn-near-760048132a1e.openrail.near"}}'
    ```
    You see `"keys":[]`. No one holds a key to the account; only the contract moves what lands there.
-5. Read the invoice as an NFT with `near view openrail.near nft_token '{"token_id":"iamyoungjohn-near-760048132a1e"}'`. You see its owner and metadata (NEP-171).
+5. Read the invoice as an NFT with `near view openrail.near nft_token '{"token_id":"iamyoungjohn-near-760048132a1e"}'`. You see its owner and metadata (NEP-171). Run `near view openrail.near nft_metadata '{}'` to see the collection, `"name":"Openrail Claim"`, `"symbol":"OPENRAIL"`. Run `near view openrail.near nft_total_supply '{}'` to see how many invoices and checkouts have been minted.
 
 **Make a payment yourself (needs a NEAR wallet and a few dollars of stablecoin):**
 
@@ -55,7 +55,11 @@ Openrail lets a business get paid in stablecoins from any chain. Each invoice or
 ## NEAR features used
 
 - **NEAR Intents** (1Click API and `intents.near`) handles cross-chain payment in, payouts out, and the business's confidential balance.
-- **NFTs that hold money (NEP-171/177/178/181):** each invoice is an NFT, and its own sub-account `<business>-<ref>.openrail.near` receives the payment. Transferring the NFT moves the right to be paid.
+- **NFTs that get paid (NEP-171/177/178/181):**
+  - Every invoice and checkout is minted by `openrail.near` as an NFT of the collection "Openrail Claim".
+  - Its token id names its own keyless sub-account, `<token_id>.openrail.near`, which receives the payment.
+  - The contract pays whoever holds the token. On mainnet a transferred token paid its new holder, and the old holder got nothing ([K13](evidence/K13-T2-2026-10-29T18-34-40Z.json)).
+  - The contract implements `nft_transfer`; this build's app does not offer selling an invoice.
 - **Sub-accounts with no access keys**, created from a global contract (the vault). [K1](evidence/)
 - **NEP-297 events** for every booking, read by the indexer, the receipts and the webhooks.
 - **NEP-413 sign-in** for the dashboard. NEP-141 USDC and USDT.
@@ -196,7 +200,7 @@ Watch it or run it yourself. Every step below happens on mainnet.
 3. **Watch it book.** The pay page moves through *You send*, then *Payment received*, then *Paid out to the business*. The receipt links the payer's transaction and the booking on NearBlocks.
 4. **Buy from a store:**
    - [WooCommerce](https://belmonte.incepture.dev) is open to anyone.
-   - [Shopify](https://belmonte-apparels.myshopify.com) is a development store. Its storefront password is `<STOREFRONT_PASSWORD>`.
+   - [Shopify](https://belmonte-apparels.myshopify.com) is a development store. Its storefront password is `openrail`.
 
    Choose *Pay with stablecoins* at checkout. The order completes from the signed webhook.
 5. **Check it yourself** on the [Proof page](https://openrail.incepture.dev/proof), or with the command printed on any receipt ([Verify a payment](https://openrail.incepture.dev/docs/verify)).
@@ -257,6 +261,7 @@ A merge needs all of them green. More: [Tests and evidence](https://openrail.inc
 
 ## History
 
+- **Origin.** The project began as one idea: an invoice as an NFT that pays whoever holds it. Openrail grew from that into invoices, checkouts, store plugins and payouts. The NFT is still the core: every invoice and checkout is one.
 - **Before 1 Nov 2026: design and spikes.** Every risky assumption was tested on mainnet before any product code was written:
   - keyless invoice accounts created from a contract (K1);
   - a transferred claim that pays its new holder (K13);

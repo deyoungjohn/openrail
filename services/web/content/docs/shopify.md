@@ -3,7 +3,7 @@
 The Openrail Shopify app adds stablecoins to a USD Shopify store: the buyer chooses "Pay with stablecoins (Openrail)" at checkout and pays from a block on the order page.
 
 > [!NOTE]
-> Proven on a real store: the demo development store [belmonte-apparels.myshopify.com](https://belmonte-apparels.myshopify.com) took a $28.00 order paid in USDT on BNB Chain, booked on NEAR mainnet. Its storefront password is in the README. See [Use cases](/use-cases#shopify).
+> Proven on a real store: the demo development store [belmonte-apparels.myshopify.com](https://belmonte-apparels.myshopify.com) took a $28.00 order paid in USDT on BNB Chain, booked on NEAR mainnet. Its storefront password is `openrail`. See [Use cases](/use-cases#shopify).
 
 ## How it works
 
