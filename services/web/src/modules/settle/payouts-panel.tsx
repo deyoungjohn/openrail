@@ -88,6 +88,9 @@ function PrivateBalanceCard({ accountId }: { accountId: string }) {
   const [settlement, setSettlement] = useState<Settlement | null | "error" | "loading">("loading");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  // What the merchant just signed for, shown at once; cleared when the chain reads the same (14 Nov: the button said
+  // "Turn on" after signing until a reload, because the read right after the call still saw the old value).
+  const [expected, setExpected] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -101,7 +104,8 @@ function PrivateBalanceCard({ accountId }: { accountId: string }) {
   }, [load]);
 
   const ready = settlement !== "loading" && settlement !== "error";
-  const on = ready && privateBalanceOn(settlement, accountId);
+  const onChain = ready && privateBalanceOn(settlement, accountId);
+  const on = expected ?? onChain;
   return (
     <Card
       title="Confidential balance"
@@ -124,8 +128,21 @@ function PrivateBalanceCard({ accountId }: { accountId: string }) {
               setBusy(true);
               setFailed(false);
               try {
+                const want = !on;
                 await near.call(on ? clearSettlementCall(ROOT) : setPrivateCall(ROOT, accountId));
-                await load();
+                setExpected(want);
+                // Read the newest block until it shows the change (a few seconds at most).
+                for (let i = 0; i < 12; i += 1) {
+                  const now = await readSettlement(ROOT, accountId, "optimistic").catch(
+                    () => undefined,
+                  );
+                  if (now !== undefined && privateBalanceOn(now, accountId) === want) {
+                    setSettlement(now);
+                    break;
+                  }
+                  await new Promise((r) => setTimeout(r, 1000));
+                }
+                setExpected(null);
               } catch {
                 setFailed(true);
               } finally {

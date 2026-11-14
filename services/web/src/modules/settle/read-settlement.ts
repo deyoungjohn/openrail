@@ -4,8 +4,15 @@ const RPC_URLS = [process.env.NEXT_PUBLIC_NEAR_RPC_URL, "https://free.rpc.fastne
   (u): u is string => typeof u === "string" && u !== "",
 );
 
-/** The merchant's payout destination on the root contract, or null when none is set. */
-export async function readSettlement(root: string, accountId: string): Promise<Settlement | null> {
+/**
+ * The merchant's payout destination on the root contract, or null when none is set. `optimistic` reads the newest
+ * block: right after the merchant signs a change, a `final` read still shows the old value for a few seconds.
+ */
+export async function readSettlement(
+  root: string,
+  accountId: string,
+  finality: "final" | "optimistic" = "final",
+): Promise<Settlement | null> {
   let last: unknown = new Error("RPC: no url");
   for (const url of RPC_URLS) {
     try {
@@ -18,7 +25,7 @@ export async function readSettlement(root: string, accountId: string): Promise<S
           method: "query",
           params: {
             request_type: "call_function",
-            finality: "final",
+            finality,
             account_id: root,
             method_name: "settlement_of",
             args_base64: btoa(JSON.stringify({ account_id: accountId })),
