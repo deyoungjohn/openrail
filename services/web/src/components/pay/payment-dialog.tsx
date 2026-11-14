@@ -24,11 +24,14 @@ export function PaymentDialog({
   open,
   onClose,
   title,
+  compact = false,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** The payment is settled: a small square card in the middle of the screen, not the wide payment panel. */
+  compact?: boolean;
   children: ReactNode;
 }) {
   const close = useRef<HTMLButtonElement>(null);
@@ -99,7 +102,9 @@ export function PaymentDialog({
     <div
       hidden={!visible}
       className={cn(
-        "fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-2 sm:items-center sm:p-4",
+        compact
+          ? "fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4"
+          : "fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-2 sm:items-center sm:p-4",
         "transition-opacity duration-[var(--dur-slow)] ease-[var(--ease)]",
         shown ? "opacity-100" : "opacity-0",
       )}
@@ -122,7 +127,9 @@ export function PaymentDialog({
         className={cn(
           // Liquid glass like the other pop-ups; the fill is the surface at 80% so the prices and steps stay easy to
           // read over the dimmed page (the token is changed here, not the background of the component).
-          "glass relative z-10 my-auto w-full max-w-4xl p-4 sm:p-6 [--pop-bg:color-mix(in_srgb,var(--surface)_80%,transparent)]",
+          compact
+            ? "glass relative z-10 my-auto w-full max-w-[400px] rounded-[28px]! p-6 [--pop-bg:color-mix(in_srgb,var(--surface)_92%,transparent)]"
+            : "glass relative z-10 my-auto w-full max-w-4xl p-4 sm:p-6 [--pop-bg:color-mix(in_srgb,var(--surface)_80%,transparent)]",
           "transition-[opacity,transform] duration-[var(--dur-slow)] ease-[var(--ease)]",
           shown ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-[0.97] opacity-0",
         )}

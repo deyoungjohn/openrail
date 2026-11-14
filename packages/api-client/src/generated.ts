@@ -145,6 +145,7 @@ export interface Invoice {
   paid_total: U128;
   recurring_id?: string;
   line_items?: LineItem[];
+  client_address?: string | null;
 }
 
 export interface InvoiceList {
@@ -171,6 +172,7 @@ export interface CreateInvoiceRequest {
   pay_link?: string;
   assignment_agreement_sha256?: Hex32;
   clauses?: string[];
+  client_address?: string;
 }
 
 export interface SendInvoiceRequest {
@@ -385,6 +387,7 @@ export interface AckData {
   primary_type: "Acknowledge";
   message: AckMessage;
   line_items: LineItem[];
+  claim?: ClaimView;
 }
 
 export interface AuthChallengeRequest {
@@ -602,6 +605,7 @@ export interface PublicReceipt {
   receipt: Receipt;
   verify_url: string;
   claim_account: string;
+  line_items?: LineItem[];
 }
 
 export interface KindRules {
@@ -865,6 +869,39 @@ export interface IntentsBalance {
     token_id: string;
     amount: string;
   }>;
+}
+
+export interface ConfidentialAuthPayload {
+  standard: "nep413";
+  payload: {
+    message: string;
+    nonce: string;
+    recipient: "intents.near";
+  };
+}
+
+export interface ConfidentialWithdrawal {
+  deposit_address: string;
+  account_id?: string;
+  amount: string;
+  source_asset: string;
+  destination_chain: string;
+  address: string;
+  created_at: string;
+  updated_at?: string;
+  status: string;
+  amount_out?: string | null;
+  destination_tx_hashes: string[];
+  destination_explorer_urls: string[];
+  near_tx_hashes: string[];
+}
+
+export interface ConfidentialWithdrawalList {
+  data: ConfidentialWithdrawal[];
+}
+
+export interface ConfidentialWithdrawalImport {
+  deposit_address: string;
 }
 
 export interface operations {
@@ -1601,6 +1638,32 @@ export interface operations {
     "200": IntentsBalance;
     "401": Error;
     "503": Error;
+    };
+  };
+  getConfidentialAuthPayload: {
+    responses: {
+    "200": ConfidentialAuthPayload;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "503": Error;
+    };
+  };
+  listConfidentialWithdrawals: {
+    responses: {
+    "200": ConfidentialWithdrawalList;
+    "400": Error;
+    "401": Error;
+    };
+  };
+  importConfidentialWithdrawal: {
+    requestBody: ConfidentialWithdrawalImport;
+    responses: {
+    "201": ConfidentialWithdrawal;
+    "400": Error;
+    "401": Error;
+    "403": Error;
+    "404": Error;
     };
   };
 }

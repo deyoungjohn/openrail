@@ -1,0 +1,31 @@
+# Learn more about configuring a checkout UI extension:
+# https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration
+
+api_version = "2026-04"
+
+[[extensions]]
+name = "Openrail Checkout"
+handle = "openrail-checkout"
+type = "ui_extension"
+
+# Checkout page, before the order: when the buyer picks Openrail as the payment method, this block shows the payment link.
+[[extensions.targeting]]
+module = "./src/CheckoutPay.tsx"
+target = "purchase.checkout.block.render"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+
+[extensions.settings]
+[[extensions.settings.fields]]
+key = "openrail_app_base_url"
+type = "single_line_text_field"
+name = "Openrail App Base URL"
+description = "HTTPS base URL of the Openrail Shopify connector (for example https://shopify.openrail.incepture.dev)."
+
+[[extensions.settings.fields]]
+key = "openrail_payment_handle"
+type = "single_line_text_field"
+name = "Openrail Payment Method Handle"
+description = "Handle of the manual payment method for Openrail (from Shopify Admin Settings > Payments > Manual payment methods). Required to distinguish Openrail from other manual payment methods."

@@ -112,11 +112,24 @@ export function WeeklyActivityCard({
   days,
   state = "ready",
 }: {
-  days: readonly { label: string; count: number }[];
+  days: readonly { label: string; count: number; cents?: bigint; at?: number }[];
   state?: ViewState;
 }) {
   const c = copy.statCards;
-  const max = Math.max(...days.map((d) => d.count), 1);
+  // Bars are the day's revenue (the count of payments when a caller gives no amounts).
+  const valueOf = (d: (typeof days)[number]) => (d.cents === undefined ? d.count : Number(d.cents));
+  const max = Math.max(...days.map(valueOf), 1);
+  const dayName = (at: number | undefined) =>
+    at === undefined
+      ? ""
+      : new Intl.DateTimeFormat("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }).format(new Date(at));
+  const tip = (d: (typeof days)[number]) =>
+    d.cents === undefined ? String(d.count) : `${formatUsd(d.cents)}`;
   return (
     <section className={shell} aria-label={c.weekly}>
       <h3 className="text-[16px] leading-6 font-semibold">{c.weekly}</h3>
@@ -129,16 +142,25 @@ export function WeeklyActivityCard({
         <div
           className="mt-auto flex h-32 items-stretch gap-1.5"
           role="img"
-          aria-label={days.map((d) => `${d.label}: ${d.count}`).join(", ")}
+          aria-label={days.map((d) => `${dayName(d.at) || d.label}: ${tip(d)}`).join(", ")}
         >
           {days.map((d, i) => (
-            <div key={i} className="group flex h-full flex-1 flex-col justify-end gap-1.5">
+            <div key={i} className="group relative flex h-full flex-1 flex-col justify-end gap-1.5">
+              {/* The day's revenue on hover: a tooltip above the bar, never moving the layout. */}
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 rounded-lg border border-border bg-surface px-2 py-1 text-[12px] whitespace-nowrap opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                {dayName(d.at) ? <span className="text-muted">{dayName(d.at)} · </span> : null}
+                <span className="tabular font-semibold">{tip(d)}</span>
+              </span>
               <div
-                title={String(d.count)}
-                style={{ height: `${Math.max((d.count / max) * 100, d.count > 0 ? 8 : 3)}%` }}
+                style={{
+                  height: `${Math.max((valueOf(d) / max) * 100, valueOf(d) > 0 ? 8 : 3)}%`,
+                }}
                 className={cn(
                   "w-full rounded-sm bg-gradient-to-t from-accent/25 to-accent/80 opacity-70 transition-opacity group-hover:opacity-100",
-                  d.count === 0 && "from-border to-border",
+                  valueOf(d) === 0 && "from-border to-border",
                 )}
               />
               <span className="text-center text-[12px] text-muted">{d.label}</span>

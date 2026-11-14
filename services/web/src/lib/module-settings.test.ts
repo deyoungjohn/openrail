@@ -30,7 +30,7 @@ describe("collectSettingsSections", () => {
 describe("collectPayoutSections: the tabs a module adds to the pay-out page", () => {
   it("reads payoutSections, not settingsSections", () => {
     const modules = [
-      { module: { payoutSections: [{ id: "private", label: "Private", Panel }] } },
+      { module: { payoutSections: [{ id: "private", label: "Confidential", Panel }] } },
       { module: { settingsSections: [{ id: "other", label: "Other", Panel }] } },
     ];
     expect(collectPayoutSections(modules).map((s) => s.id)).toEqual(["private"]);

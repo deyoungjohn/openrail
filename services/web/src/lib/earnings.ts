@@ -20,6 +20,8 @@ export interface ReceiptLike {
   time: string;
   /** Absent until the receipt is verified against the origin chain; the asset still says which chain it came from. */
   origin_tx?: { chain?: string; hash?: string; sender?: string } | null;
+  /** The chain the client paid from (the route of their pay session), sent by the API. */
+  origin_chain?: string | null;
   booking_tx_hash: string;
 }
 
@@ -39,6 +41,8 @@ export interface Earning {
   chain: string;
   txHash: string;
   invoiceId: string;
+  /** Where "Paid for" links to; a module row sets its own page (an invoice row links to the invoice). */
+  href?: string;
 }
 
 const DAY_MS = 86_400_000;
@@ -57,7 +61,14 @@ const ASSET_CHAIN: [string, string][] = [
 ];
 
 /** The chain the money came from: the verified origin transaction when there is one, else read from the asset. */
-export function chainOfReceipt(r: Pick<ReceiptLike, "asset" | "origin_tx">): string {
+/**
+ * Where the client paid from. The asset id only says where the merchant's money settled (a payment from Base settled
+ * as NEAR USDC looked like a NEAR payment), so it is the last resort.
+ */
+export function chainOfReceipt(
+  r: Pick<ReceiptLike, "asset" | "origin_tx"> & { origin_chain?: string | null },
+): string {
+  if (r.origin_chain) return r.origin_chain;
   const verified = r.origin_tx?.chain;
   if (verified) return verified;
   const id = r.asset.replace(/^nep\d+:/, "");
@@ -139,17 +150,20 @@ export function revenueSummary(earnings: readonly Earning[], nowMs: number): Rev
 export function lastSevenDays(
   earnings: readonly Earning[],
   nowMs: number,
-): { label: string; count: number }[] {
+): { label: string; count: number; cents: bigint; at: number }[] {
   const startOfToday = Math.floor(nowMs / DAY_MS) * DAY_MS;
   const days = Array.from({ length: 7 }, (_, i) => {
     const at = startOfToday - (6 - i) * DAY_MS;
-    return { at, label: "SMTWTFS"[new Date(at).getUTCDay()] ?? "", count: 0 };
+    return { at, label: "SMTWTFS"[new Date(at).getUTCDay()] ?? "", count: 0, cents: 0n };
   });
   for (const e of earnings) {
     const d = days.find((x) => e.time >= x.at && e.time < x.at + DAY_MS);
-    if (d) d.count += 1;
+    if (d) {
+      d.count += 1;
+      d.cents += e.cents;
+    }
   }
-  return days.map(({ label, count }) => ({ label, count }));
+  return days.map(({ label, count, cents, at }) => ({ label, count, cents, at }));
 }
 
 export interface OverviewRow {

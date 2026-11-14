@@ -42,12 +42,18 @@ describe("access key port", () => {
     const port = createAccessKeyPort("http://rpc", chain({ view_access_key: NO_KEY }));
     expect(await port.has("alice.near", KEY)).toBe(false);
   });
-  it("accepts an unfunded implicit account's own key (the account is not on chain yet)", async () => {
+  it("accepts an unfunded implicit account's own key (the account is not onchain yet)", async () => {
     const port = createAccessKeyPort(
       "http://rpc",
       chain({ view_access_key: NO_KEY, view_account: NO_ACCOUNT }),
     );
     expect(await port.has(HEX, KEY)).toBe(true);
+  });
+  it("accepts an implicit account's own key when the key lookup itself says the account is unknown", async () => {
+    const port = createAccessKeyPort("http://rpc", chain({ view_access_key: NO_ACCOUNT }));
+    expect(await port.has(HEX, KEY)).toBe(true);
+    expect(await port.has(HEX, "ed25519:6E8Cxn2yZfs1x7hRbp2QPrNmCc3qFUq5Tn8Z2TUrjMLK")).toBe(false);
+    expect(await port.has("alice.near", KEY)).toBe(false);
   });
   it("refuses another key for an unfunded implicit account", async () => {
     const port = createAccessKeyPort(

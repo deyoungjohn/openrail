@@ -49,12 +49,11 @@ const screens: [string, string, boolean][] = [
   ["claim detail", "/app/invoices/inv_01J00000000000000000000000", true],
   ["issue form", "/app/invoices/new", true],
   ["statements", "/app/statements", true],
-  ["cash out", "/app/cashout", true],
+  ["cash out", "/app/payout", true],
   ["settings", "/app/settings", true],
   ["developers", "/app/developers", true],
   ["onboarding", "/app/onboarding", true],
   ["transfer", "/app/invoices/c-3/transfer", true],
-  ["ack", "/ack/c-1", false],
   ["pay", "/pay/c-1", false],
   ["receipt", `/r/${HASH}`, false],
 ];

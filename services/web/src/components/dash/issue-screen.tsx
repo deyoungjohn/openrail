@@ -147,12 +147,6 @@ function DoneSheet({ invoice, onClose }: { invoice: Invoice; onClose: () => void
           </dd>
         </div>
         <div>
-          <dt className="caption">{t.ackLink}</dt>
-          <dd>
-            <AddressChip value={invoice.ack_url} head={30} tail={8} />
-          </dd>
-        </div>
-        <div>
           <dt className="caption">{t.account}</dt>
           <dd>
             <AddressChip value={invoice.claim_account} head={12} tail={14} />
@@ -180,7 +174,7 @@ export function IssueScreen() {
   const t = copy.issue;
   const [biz] = useAsync(() => dashClient.business.get(), []);
   const [credit, , watchDeposit] = useStorageCredit();
-  const creditLow = credit.state === "ready" && storageCreditLow(BigInt(credit.data.balance));
+  // No storage-credit warning at launch (14 Nov): an invoice without credit is paid from the shared sponsor pool.
   const [issuerEdit, setIssuerEdit] = useState<string | null>(null);
   const issuer = issuerEdit ?? (biz.state === "ready" ? biz.data.legal_name : "");
 
@@ -217,6 +211,9 @@ export function IssueScreen() {
           invoice_number: form.invoiceNumber.trim(),
           issuer_legal_name: issuer.trim(),
           debtor_legal_name: form.debtorName.trim(),
+          ...((form.clientAddress ?? "").trim() === ""
+            ? {}
+            : { client_address: (form.clientAddress ?? "").trim() }),
           amount_usd: formatUsd(total).slice(1).replaceAll(",", ""),
           due_date: form.dueDate,
           line_items: form.lines.map((l) => ({
@@ -251,8 +248,6 @@ export function IssueScreen() {
       <header className="space-y-1">
         <h1 className="text-[32px] leading-10 font-bold">{t.title}</h1>
         <p className="text-[15px]">{t.intro}</p>
-        {/* The space is always there, so the line appearing never pushes the page down. */}
-        <ErrorNote>{creditLow ? t.creditLow : null}</ErrorNote>
       </header>
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -277,6 +272,12 @@ export function IssueScreen() {
             value={form.debtorName}
             onChange={(e) => set("debtorName", e.target.value)}
             error={err("debtorName")}
+          />
+          <Input
+            label={t.clientAddress}
+            helper={t.clientAddressHelp}
+            value={form.clientAddress ?? ""}
+            onChange={(e) => set("clientAddress", e.target.value)}
           />
           <div className="grid gap-6 sm:grid-cols-2">
             <Input

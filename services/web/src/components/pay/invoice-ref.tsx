@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import { copy } from "@/copy";
 import { client } from "@/lib/client";
 import { useAsync } from "@/lib/use-async";
-import { AckScreen } from "../claim/ack-screen";
 import { EmptyState, ErrorState, Skeleton } from "../ui/state";
 import { PayScreen } from "./pay-screen";
 
@@ -43,19 +42,5 @@ export function InvoiceRef({
 export function PayByRef({ invoiceRef }: { invoiceRef: string }) {
   return (
     <InvoiceRef invoiceRef={invoiceRef}>{(tokenId) => <PayScreen tokenId={tokenId} />}</InvoiceRef>
-  );
-}
-
-/** The acceptance page for an invoice link. */
-export function AckByRef({ invoiceRef, business }: { invoiceRef: string; business: string }) {
-  return (
-    <InvoiceRef invoiceRef={invoiceRef}>
-      {(tokenId) => (
-        <AckScreen
-          tokenId={tokenId}
-          payHref={`/${encodeURIComponent(business)}/inv/${encodeURIComponent(invoiceRef)}`}
-        />
-      )}
-    </InvoiceRef>
   );
 }

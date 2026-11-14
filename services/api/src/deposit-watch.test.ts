@@ -70,11 +70,11 @@ describe("deposit watch (the provider triggers, the watcher confirms)", () => {
     const h = harness([session("ps1", "c-1")], {});
     for (let i = 0; i < 30; i++) {
       await h.watch.runOnce();
-      h.advance(5_000);
+      h.advance(1_000);
     }
     expect(h.pokes).toEqual([]);
-    // Every 20 s, not every 5 s round.
-    expect(h.asked.length).toBeLessThanOrEqual(8);
+    // Every 5 s per session, not every 1 s round: 30 s of rounds is 6 asks.
+    expect(h.asked.length).toBe(6);
   });
 
   it("pokes once per change of word, and stores the final word", async () => {
@@ -84,7 +84,7 @@ describe("deposit watch (the provider triggers, the watcher confirms)", () => {
     });
     for (let i = 0; i < 4; i++) {
       await h.watch.runOnce();
-      h.advance(20_000);
+      h.advance(5_000);
     }
     expect(h.pokes).toEqual(["c-7", "c-7"]);
     expect(h.saved.at(-1)?.status).toBe("success");

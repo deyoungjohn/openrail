@@ -118,3 +118,14 @@ export function canonicalTerms(terms: Terms): string {
 export function termsHash(terms: Terms): string {
   return sha256Hex0x(canonicalTerms(terms));
 }
+
+/** Sorted, compact UTF-8 JSON. Keys sorted alphabetically, undefined omitted. */
+export function canonicalJson(obj: Record<string, unknown>): string {
+  const ordered: Record<string, unknown> = {};
+  for (const key of Object.keys(obj).sort()) {
+    if (obj[key] !== undefined) {
+      ordered[key] = obj[key];
+    }
+  }
+  return JSON.stringify(ordered);
+}

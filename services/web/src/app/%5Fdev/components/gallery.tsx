@@ -54,14 +54,6 @@ const pickerWallets: NearWalletInfo[] = [
     available: true,
     signsMessage: null,
   },
-  {
-    id: "coin98-wallet",
-    name: "Coin98 Wallet",
-    iconUrl: null,
-    type: "injected",
-    available: false,
-    signsMessage: null,
-  },
 ];
 
 const statuses: Status[] = [

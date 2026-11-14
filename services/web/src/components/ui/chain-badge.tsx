@@ -14,11 +14,12 @@ export const CHAINS = {
 
 export type ChainId = keyof typeof CHAINS;
 
-/** The icon files in /public/icons, by chain. A chain without one (Optimism) shows an empty disc. */
+/** The icon files in /public/icons, by chain. A chain without one shows an empty disc. */
 const CHAIN_FILE: Partial<Record<ChainId, string>> = {
   ethereum: "ethereum",
   base: "base",
   arbitrum: "arbitrum",
+  optimism: "optimism",
   polygon: "polygon",
   bnb: "bsc",
   solana: "solana",
@@ -34,6 +35,7 @@ const COIN_FILE: Record<string, string> = {
   NEAR: "near",
   BNB: "bsc",
   POL: "polygon",
+  OP: "optimism",
   HYPE: "hyperliquid",
 };
 

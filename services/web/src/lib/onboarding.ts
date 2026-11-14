@@ -24,7 +24,8 @@ export function onboardingSteps(input: {
 } {
   const b = input.business;
   const steps: { id: OnboardingStepId; done: boolean }[] = [
-    { id: "profile", done: !!b && b.legal_name.trim() !== "" && b.contact_email.trim() !== "" },
+    // Email is optional: Openrail sends no email, it is only printed if the business gives one.
+    { id: "profile", done: !!b && b.legal_name.trim() !== "" },
     { id: "payout", done: !!b && b.payout_account.trim() !== "" },
     { id: "credit", done: input.creditYocto !== null && !storageCreditLow(input.creditYocto) },
     { id: "invoice", done: input.invoiceCount !== null && input.invoiceCount > 0 },

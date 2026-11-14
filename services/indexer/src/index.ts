@@ -159,13 +159,19 @@ async function main(): Promise<void> {
     ...(eventPaths[0] === undefined ? {} : { watcherDbPath: eventPaths[0] }),
     sourceLabel: eventPaths.length > 0 ? "watcher" : "scan",
     rpcEndpoints: () => near.rpcHealth(),
+    rpcBudget: () => near.rpcBudget(),
+    txHealth: () => near.txHealth(),
     // A gap is filled from the claim's own receipts (not a scan of the root's history): the root's logs in them.
     gapSourceFactory: (claimAccount) =>
       new NearBlocksEventSource(
         rootAccount,
         getEnv("NEARBLOCKS_API_URL") ?? "https://api.nearblocks.io",
         nearBlocksKeys,
-        rpcUrls,
+        // Old transactions are only on archival nodes: ask those first.
+        [
+          ...rpcUrls.filter((u) => /archival/i.test(u)),
+          ...rpcUrls.filter((u) => !/archival/i.test(u)),
+        ],
         undefined,
         25,
         5,

@@ -90,13 +90,6 @@ test.describe("loading: a skeleton while the answer is on its way, never a blank
     await expect(page.getByRole("button", { name: "Sign in" })).toHaveCount(0);
   });
 
-  test("ack page and transfer page (fixture mode)", async ({ page }) => {
-    await page.goto("/ack/c-slow", { waitUntil: "commit" });
-    await expect(skeleton(page)).toBeVisible();
-    await page.goto("/app/invoices/c-slow/transfer", { waitUntil: "commit" });
-    await expect(skeleton(page)).toBeVisible();
-  });
-
   test("statements and cash out show a busy button while they work", async ({ page }) => {
     await mockApi(page, {
       ...base(),
@@ -114,8 +107,11 @@ test.describe("loading: a skeleton while the answer is on its way, never a blank
       "true",
     );
 
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await page.getByLabel("Amount").fill("2");
+    // NEAR is the default destination: pick Base for an EVM address.
+    await page.getByRole("button", { name: /^Send to/ }).click();
+    await page.getByRole("option", { name: "Base" }).click();
     await page.getByLabel("Address").fill("0x53C5D39A5828BaDf817E40f22d75d96D731f8239");
     await page.getByRole("button", { name: "Get quote" }).click();
     await expect(page.getByRole("button", { name: "Getting your quote" })).toHaveAttribute(
@@ -282,7 +278,7 @@ test.describe("keyboard: every control is reachable and shows the focus ring", (
     ["claim detail", "/app/invoices/inv_01J00000000000000000000000", 6],
     ["issue form", "/app/invoices/new", 8],
     ["statements", "/app/statements", 6],
-    ["cash out", "/app/cashout", 6],
+    ["cash out", "/app/payout", 6],
     ["onboarding", "/app/onboarding", 6],
     ["settings", "/app/settings", 6],
     ["developers", "/app/developers", 6],
@@ -305,7 +301,6 @@ test.describe("keyboard: every control is reachable and shows the focus ring", (
     ["sign-in card", "/app", 3],
     ["pay page", "/pay/c-1", 3],
     ["receipt", `/r/${RECEIPT_HASH}`, 3],
-    ["ack page", "/ack/c-1", 4],
   ];
   for (const [name, path, min] of open)
     test(name, async ({ page }) => {

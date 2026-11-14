@@ -14,3 +14,11 @@ export function writeStored(key: string, value: string): void {
     // The choice just is not remembered.
   }
 }
+
+export function removeStored(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Nothing was stored.
+  }
+}

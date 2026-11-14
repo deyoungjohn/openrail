@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const SERVICES = ["api", "watcher", "indexer", "relayer", "cli", "web"] as const;
+export const SERVICES = ["api", "watcher", "indexer", "relayer", "cli", "web", "mcp"] as const;
 const HEADER = "GENERATED, do not edit. Source: openrail.modules.json (scripts/gen-modules.ts).";
 const ID_RE = /^[a-z][a-z0-9_]*$/;
 
@@ -131,7 +131,11 @@ export function generate(root: string): Generated {
   const enabled = modules.filter((m) => m.enabled && ID_RE.test(m.id)).map((m) => m.id);
 
   const have = new Set(cargoFeatures(root).filter((f) => f !== "default"));
-  for (const id of enabled) {
+  // Modules without a contract directory (such as the MCP server) have no Cargo feature.
+  const contractIds = enabled.filter((id) =>
+    isDir(join(root, `contracts/openrail/src/modules/${id}`)),
+  );
+  for (const id of contractIds) {
     if (!have.has(id))
       errors.push(`contracts/openrail/Cargo.toml [features] is missing enabled module: ${id}`);
   }

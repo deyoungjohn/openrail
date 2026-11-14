@@ -1,0 +1,29 @@
+# Openrail
+
+> Stablecoin invoices and checkout for businesses, booked on NEAR. Clients pay from eight chains (NEAR, Base, Arbitrum, Ethereum, Solana, Polygon, Optimism, BNB Chain); the business receives USDC on the chain it chooses. Each invoice or checkout has its own account on NEAR, and every payment is booked by the Openrail contract (openrail.near), where anyone can check it.
+
+## Proof
+- [Transactions on NEAR mainnet (page)](/proof): recent invoices, checkouts and payments with explorer links.
+- [Transactions (JSON)](/proof.json): the same list as data.
+
+## How it works
+- [How it works (Markdown)](/how-it-works.md): the whole flow in six plain steps, from pay link to your wallet.
+- [How it works (page)](/how-it-works)
+
+## Use cases
+- [Use cases](/use-cases): the Shopify app and the WooCommerce plugin, each proven on a real store with real payments, and their limits.
+
+## Features
+- [All features](/features): invoices, checkout, dashboards, receipts, statements, confidential payouts, cash out, payout schedule, API and webhooks, store integrations, AI agents.
+- Invoices: bill a client with lines and a due date; they pay from any supported chain.
+- Checkout: a hosted pay page per order, for Shopify, WooCommerce or any store through the API.
+- Confidential payouts: payments move to a confidential balance on NEAR Intents that only the business can see.
+- [Agent MCP](/agents): an MCP server so an AI agent can check payments, fetch receipts, send pay links and prepare invoices; it holds no keys and never signs.
+
+## Developers
+- [Documentation](/docs)
+- [Quickstart](/docs/quickstart)
+- [API endpoints](/docs/endpoints)
+- [API reference (OpenAPI)](https://github.com/deyoungjohn/openrail/blob/main/services/api/openapi.json)
+- [Source code](https://github.com/deyoungjohn/openrail)
+- [Limitations](/docs/limitations)

@@ -23,7 +23,7 @@ export function InvoiceCard({
   received = false,
 }: {
   claim: PayClaim;
-  /** The provider has delivered the payment; the claim on chain is being booked and still says Issued. */
+  /** The provider has delivered the payment; the claim onchain is being booked and still says Issued. */
   received?: boolean;
 }) {
   const p = copy.pay;

@@ -1,0 +1,26 @@
+# Learn more about configuring a checkout UI extension:
+# https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration
+
+api_version = "2026-04"
+
+[[extensions]]
+name = "Thank You"
+handle = "openrail-thank-you"
+type = "ui_extension"
+uid = "ac472b4c-4c8a-b03a-c6f2-1041fb472106b8107e12"
+
+# The thank-you page, after the order: thanks, transaction hashes, order summary.
+[[extensions.targeting]]
+module = "./src/Extension.tsx"
+target = "purchase.thank-you.block.render"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+
+[extensions.settings]
+[[extensions.settings.fields]]
+key = "openrail_app_base_url"
+type = "single_line_text_field"
+name = "Openrail App Base URL"
+description = "HTTPS base URL of the Openrail Shopify connector (for example https://shopify.openrail.incepture.dev)."

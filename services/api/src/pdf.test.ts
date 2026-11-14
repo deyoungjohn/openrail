@@ -42,19 +42,19 @@ describe("invoice PDF layout contract", () => {
     const pdf = content();
     expect(pdf).toContain("/BaseFont /Helvetica");
     expect(pdf).toContain("/BaseFont /Helvetica-Bold");
-    expect(pdf).toContain("/BaseFont /Times-Bold");
-    expect(pdf).toContain("Invoice");
-    expect(pdf).toContain("FROM");
-    expect(pdf).toContain("BILLED TO");
+    // The receipt's template (14 Nov): one layout for the invoice and the receipt.
+    expect(pdf).toContain("/BaseFont /Courier");
+    expect(pdf).toContain("INVOICE");
+    expect(pdf).toContain("Invoice to :");
     expect(pdf).toContain("DESCRIPTION");
-    expect(pdf).toContain("AMOUNT");
     expect(pdf).toContain("TOTAL");
-    expect(pdf).toContain("PAYMENT INSTRUCTIONS");
+    expect(pdf).toContain("Pay online :");
+    expect(pdf).toContain("Check it onchain");
     expect(pdf).toContain("0.247 0.275 0.996 rg");
     expect(pdf).toContain("Tf");
     expect(
       Buffer.from(renderInvoicePdf(terms, hash, "2026-11-01T00:00:00Z")).toString("latin1"),
-    ).toContain("ISSUE DATE");
+    ).toContain("Issued : Nov 1, 2026");
   });
 
   it("does not print the line items hash (the page shows no line items, so it would be a number nobody can use)", () => {
@@ -122,12 +122,12 @@ describe("invoice PDF layout contract", () => {
       "latin1",
     );
     const fonts = new Map([
-      ["Invoice", ["/F3", 30]],
-      [terms.invoice_number, ["/F1", 9]],
-      ["Nov 1, 2026", ["/F1", 9]],
-      ["Dec 1, 2026", ["/F1", 9]],
-      [terms.claim_account, ["/F1", 9]],
-      ["$12.50", ["/F1", 9]],
+      ["INVOICE", ["/F1", 34]],
+      [`No: ${terms.invoice_number}`, ["/F1", 9]],
+      ["Issued : Nov 1, 2026", ["/F1", 9]],
+      ["Due : Dec 1, 2026", ["/F1", 9]],
+      ["USD : $12.50", ["/F2", 18]],
+      ["$12.50", ["/F2", 11]],
     ] as const);
     for (const [value, [font, size]] of fonts) {
       const escaped = value
@@ -182,9 +182,9 @@ describe("invoice PDF line items", () => {
   it("prints description, quantity, unit price and amount for every item", () => {
     const pdf = Buffer.from(renderInvoicePdf(terms, hash, undefined, items)).toString("latin1");
     expect(pdf).toContain("DESCRIPTION");
-    expect(pdf).toContain("QUANTITY");
-    expect(pdf).toContain("UNIT PRICE");
-    expect(pdf).toContain("AMOUNT");
+    expect(pdf).toContain("QTY");
+    expect(pdf).toContain("PRICE");
+    expect(pdf).toContain("TOTAL");
     for (const item of items) {
       expect(pdf).toContain(item.description);
       expect(pdf).toContain(`$${item.unit_amount_usd}`);
@@ -316,7 +316,7 @@ describe("receipt PDF", () => {
     const pdf = Buffer.from(renderReceiptPdf(receipt)).toString("latin1");
     expect(pdf.startsWith("%PDF-1.4")).toBe(true);
     expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
-    expect(pdf).toContain("Receipt");
+    expect(pdf).toContain("RECEIPT");
     expect(pdf).toContain("PAID");
     for (const value of [
       receipt.receipt_id,
@@ -327,19 +327,26 @@ describe("receipt PDF", () => {
       receipt.business_username,
       receipt.buyer_name,
       receipt.amount_usd,
-      receipt.paid_amount,
-      receipt.paid_asset,
-      "base",
+      "12.50 USDC on NEAR",
+      "Base",
       receipt.fee_usd,
       "0xpayer",
       receipt.near_tx,
       receipt.claim_account,
       receipt.terms_fingerprint,
-      receipt.verify_command,
+      // The verify command as a terminal shows it: a prompt, one flag a line, in Courier. (In the PDF a backslash
+      // is written escaped, as two.)
+      `$ openrail-verify claim acme-9f3c2a7d41b8.openrail.near ${"\\".repeat(2)}`,
+      `    --terms-hash ${receipt.terms_fingerprint}`,
     ]) {
       expect(pdf).toContain(value);
     }
+    expect(pdf).toContain("/F5 7.2 Tf");
     expect(pdf).not.toContain(receipt.paid_at);
+    // The token's contract id and the raw units are left out (14 Nov), and an empty field is "-", never "?".
+    expect(pdf).not.toContain(receipt.paid_asset);
+    expect(pdf).not.toContain(receipt.paid_amount);
+    expect(pdf).not.toContain("(?) Tj");
   });
 
   it("is deterministic and does not break on long names", async () => {
@@ -373,25 +380,17 @@ describe("invoice PDF header details (11 Nov, live)", () => {
       s: String(m[3]),
     }));
 
-  it("pdf_long_claim_account_does_not_run_over_its_label", () => {
+  it("pdf_claim_account_is_under_its_caption_in_check_it_on_chain", () => {
     const long = {
       ...terms,
       claim_account: "iamyoungjohn-near-89357a7d3075.openrail.near",
     };
     const all = runs(draw(long));
-    const label = all.find((r) => r.s === "CLAIM ACCOUNT")!;
+    const caption = all.find((r) => r.s === "Claim account")!;
     const value = all.find((r) => r.s === long.claim_account)!;
-    // The value is on its own line, below the label, so the two never share a line.
-    expect(value.y).toBeLessThan(label.y - 6);
-    // Its left edge stays right of the details column.
-    expect(value.x).toBeGreaterThanOrEqual(360);
-  });
-
-  it("pdf_short_claim_account_stays_on_the_label_line", () => {
-    const all = runs(draw(terms));
-    const label = all.find((r) => r.s === "CLAIM ACCOUNT")!;
-    const value = all.find((r) => r.s === terms.claim_account)!;
-    expect(value.y).toBe(label.y);
+    // On its own line under the caption, left-aligned with it, so the two never share a line.
+    expect(value.y).toBeLessThan(caption.y - 6);
+    expect(value.x).toBe(caption.x);
   });
 
   it("pdf_placeholder_client_account_is_not_printed", () => {

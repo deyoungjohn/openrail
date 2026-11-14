@@ -31,7 +31,7 @@ function ProfileForm({ business, onSaved }: { business: Business | null; onSaved
   const [shown, setShown] = useState(false);
   const [state, setState] = useState<"idle" | "saving" | "failed">("idle");
   const nameBad = name.trim() === "";
-  const emailBad = !EMAIL.test(email.trim());
+  const emailBad = email.trim() !== "" && !EMAIL.test(email.trim());
 
   return (
     <form

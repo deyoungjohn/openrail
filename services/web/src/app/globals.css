@@ -5,7 +5,7 @@
 /* Tokens: DESIGN.md sections 2 to 5. Light is :root, dark is [data-theme="dark"]. */
 :root {
   color-scheme: light;
-  --bg: #f7f8fa;
+  --bg: #e9ebef;
   --surface: #ffffff;
   --surface-2: #f1f3f7;
   --sidebar: #ffffff;
@@ -258,6 +258,37 @@ h3 {
   animation: rise var(--dur-slow) var(--ease) both;
 }
 
+/* Scroll reveal (components/landing/reveal.tsx). The animation plays at first paint from the server HTML; the
+   component parks what is below the screen ("wait") and starts it again on entry ("in"). Only `from` is given, so
+   nothing stays applied afterwards. It animates `translate`, the property Tailwind 4's translate-* classes write. */
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    translate: var(--reveal-x, 0px) var(--reveal-y, 24px);
+  }
+}
+.reveal {
+  animation: reveal-in 700ms cubic-bezier(0.16, 1, 0.3, 1) var(--reveal-delay, 0ms) backwards;
+}
+.reveal[data-reveal="wait"] {
+  opacity: 0;
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal[data-reveal="wait"] {
+    opacity: 1;
+    animation: none;
+  }
+}
+@media print {
+  .reveal,
+  .reveal[data-reveal="wait"] {
+    opacity: 1;
+    animation: none;
+  }
+}
+
 dialog.overlay {
   padding: 0;
   border: 0;
@@ -391,4 +422,79 @@ dialog.overlay::backdrop {
 }
 .loader-pulse {
   animation: loader-pulse 1.4s ease-in-out infinite;
+}
+
+/* Landing page: the row of onchain payments scrolls (paused on hover; still under reduced motion). */
+@keyframes landing-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Landing globe: the "payment settled" chip that rises where the globe was tapped. */
+.globe-chip {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font:
+    12px "JetBrains Mono",
+    ui-monospace,
+    monospace;
+  color: var(--text);
+  white-space: nowrap;
+  animation: globe-chip 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.globe-chip i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.globe-chip b {
+  color: var(--accent-text);
+  font-weight: 500;
+}
+@keyframes globe-chip {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.9);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -16px) scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -46px);
+  }
+}
+
+/* Landing page: the chains and coins slide left to right (the list is three copies; one third is one loop). */
+@keyframes landing-marquee-right {
+  from {
+    transform: translateX(-33.3333%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Landing page: the chains and coins slide right to left (three copies; one third is one loop). */
+@keyframes landing-marquee-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-33.3333%);
+  }
 }

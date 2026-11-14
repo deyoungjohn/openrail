@@ -53,6 +53,19 @@ export interface NearClientLike {
     last_error: string | null;
     calls_last_hour: number;
   }[];
+  rpcBudget?(): {
+    used: number;
+    budget: number;
+    remaining: number;
+    pace_per_hour: number;
+    by_class: Record<string, number>;
+  };
+  txHealth?(): {
+    tx_sent: number;
+    tx_failed: Record<string, number>;
+    near_burnt: string;
+    methods: Record<string, unknown>;
+  };
 }
 
 export interface ChainStatus {

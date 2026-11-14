@@ -12,7 +12,6 @@ for (const scheme of ["light", "dark"] as const) {
     for (const [slug, path] of [
       ["app", "/app"],
       ["gallery", "/_dev/components"],
-      ["ack", "/ack/c-2"],
       ["transfer", "/app/invoices/c-3/transfer"],
     ] as const) {
       test(`${slug} ${scheme} ${name}`, async ({ page, context }) => {

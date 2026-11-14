@@ -33,17 +33,18 @@ import { ErrorNote } from "@/components/ui/error-note";
 
 // Cash-out destinations (blueprint 2.9). Not BNB Chain: it cannot be quoted (K11).
 type Destination = Exclude<ChainId, "bnb"> | "confidential";
-// "confidential" moves the merchant's own balance to their private (Near Intents confidential) balance: no address is
+// "confidential" moves the merchant's own balance to their Near Intents confidential balance: no address is
 // asked, it is their own account. Offered only when the build says the API has it switched on.
 const PRIVATE_BALANCE = process.env.NEXT_PUBLIC_CONFIDENTIAL_INTENTS === "1";
+// NEAR first: it is the default everywhere (human, 13 Nov).
 const DESTINATIONS: readonly Destination[] = [
+  "near",
   "base",
   "arbitrum",
   "optimism",
   "polygon",
   "solana",
   "ethereum",
-  "near",
   ...(PRIVATE_BALANCE ? (["confidential"] as const) : []),
 ];
 
@@ -65,7 +66,7 @@ export function CashoutScreen() {
   const near = useNear();
   const actions = useActions();
   const [amountText, setAmountText] = useState("");
-  const [chain, setChain] = useState<Destination>("base");
+  const [chain, setChain] = useState<Destination>("near");
   const [address, setAddress] = useState("");
   const [shown, setShown] = useState(false);
   const [phase, setPhase] = useState<Phase>("form");
@@ -86,7 +87,8 @@ export function CashoutScreen() {
   // The money is taken from one token: the one the business holds the most of (a payment from Base is a balance of
   // the Base USDC token, and moving a token that is not held is refused by the chain). What can be cashed out now is
   // that balance, in whole cents (cut, never rounded up).
-  const lines = balance.state === "ready" ? balance.data.lines : [];
+  // Only what can be cashed out: a token with nothing in it is not offered.
+  const lines = balance.state === "ready" ? balance.data.lines.filter((l) => l.units > 0n) : [];
   const largest = lines.reduce<(typeof lines)[number] | null>(
     (best, l) => (best === null || l.units > best.units ? l : best),
     null,
@@ -175,7 +177,7 @@ export function CashoutScreen() {
 
   const busy = phase === "asking" || phase === "signing";
 
-  // Public and private: the public balance is this page; an enabled module adds its own tab (the private balance).
+  // Public and private: the public balance is this page; an enabled module adds its own tab (the confidential balance).
   const withSections = (publicPanel: ReactNode) =>
     payoutSections.length === 0 ? (
       publicPanel

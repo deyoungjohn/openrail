@@ -38,7 +38,6 @@ import { formatUsd } from "@/lib/format";
 import { usePayWallet } from "@/wallet/pay-wallet";
 import { AddressChip } from "../ui/address-chip";
 import { Button } from "../ui/button";
-import dynamic from "next/dynamic";
 import { PageSkeleton } from "../ui/page-skeleton";
 import { Card } from "../ui/card";
 import { CHAINS, PairIcon, WithIcon } from "../ui/chain-badge";
@@ -82,7 +81,7 @@ export interface PayScreenSource {
   listSessions: (tokenId: string, claim: PayFlowClaim) => Promise<Session[]>;
   /** A price can be asked for it. */
   isOpen: (claim: PayFlowClaim) => boolean;
-  /** Settled on chain: stop reading it again. */
+  /** Settled onchain: stop reading it again. */
   isPaid: (claim: PayFlowClaim) => boolean;
   /** The card on the left; `topStage` is how far the payment on screen has got. */
   summary: (
@@ -141,7 +140,7 @@ function useNow(intervalMs = 1000): number | null {
 const amountOf = (session: Session, route: Route): string => {
   const units = payUnits(session.amount_in, route.origin_decimals, route.payer_asset);
   // ETH and SOL keep the digits a wallet needs; everything else shows two decimals (rounded up by payUnits).
-  return route.payer_asset === "ETH" || route.payer_asset === "SOL"
+  return route.payer_asset === "ETH" || route.payer_asset === "SOL" || route.payer_asset === "NEAR"
     ? formatCoinAmount(units, route.origin_decimals)
     : formatToken(units, route.origin_decimals, "up");
 };
@@ -179,7 +178,8 @@ function QuoteNote({
   const chainName = chain ? CHAINS[chain] : route.origin_chain;
   const upto = amountPrefix(route) === "upto";
   // Price protection is for coins that move in price (ETH, SOL); a stablecoin swap has no such margin to explain.
-  const volatile = route.payer_asset === "ETH" || route.payer_asset === "SOL";
+  const volatile =
+    route.payer_asset === "ETH" || route.payer_asset === "SOL" || route.payer_asset === "NEAR";
   return (
     <section
       aria-label={partLabel ? `${p.quoteTitle}, ${partLabel}` : p.quoteTitle}
@@ -239,7 +239,7 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
       void client.pay.nudgeDeposit(session.id, hash).catch(() => undefined);
     } catch (e) {
       const code = (e as { code?: number } | null)?.code;
-      const why = e instanceof Error ? e.message.slice(0, 80) : "";
+      const why = e instanceof Error ? e.message : "";
       console.error("wallet payment failed", e);
       // Say why when the wallet or the network said something (the Solana RPC refusing a browser, no SOL for the account rent).
       setProblem(
@@ -255,9 +255,55 @@ function WalletPay({ session, route }: { session: Session; route: Route }) {
     <div className="w-full space-y-3">
       <div className="flex justify-center">
         {wallet.address ? (
-          <Button type="button" onClick={() => void send()} loading={busy} disabled={sent !== null}>
-            {p.walletPay(amount)}
-          </Button>
+          <div className="flex flex-col items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => void send()}
+              loading={busy}
+              disabled={sent !== null}
+            >
+              {p.walletPay(amount)}
+            </Button>
+            {sent === null && !busy ? (
+              <button
+                type="button"
+                onClick={wallet.disconnect}
+                className="caption min-h-11 px-2 underline-offset-2 hover:text-text hover:underline"
+              >
+                {wallet.walletName ? `${wallet.walletName} · ` : ""}
+                {wallet.address.length > 14
+                  ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`
+                  : wallet.address}{" "}
+                · {copy.wallet.useAnother}
+              </button>
+            ) : null}
+          </div>
+        ) : wallet.choices.length > 1 ? (
+          // More than one wallet of this kind is installed: the payer picks, so it is never just the last one used.
+          <div className="flex flex-col items-center gap-2">
+            <p className="caption">{copy.wallet.pickEvmWallet}</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {wallet.choices.map((w) => (
+                <Button
+                  key={w.id}
+                  type="button"
+                  variant="secondary"
+                  onClick={() => wallet.connect(w.id)}
+                >
+                  {w.icon ? (
+                    <img
+                      src={w.icon}
+                      alt=""
+                      width={18}
+                      height={18}
+                      className="size-[18px] rounded"
+                    />
+                  ) : null}
+                  {w.name}
+                </Button>
+              ))}
+            </div>
+          </div>
         ) : (
           <Button type="button" variant="secondary" onClick={() => wallet.connect()}>
             {p.walletConnect}
@@ -357,12 +403,16 @@ function SessionView({
   if (stage === "paid")
     return (
       <div className="space-y-4">
-        <div className="surface-card space-y-3 p-6" role="status">
-          <p className="flex items-center gap-2 text-[20px] font-semibold">
-            <CheckCircle2 size={22} strokeWidth={1.5} className="text-success-text" aria-hidden />
-            {p.paidTitle}
-          </p>
-          <p className="text-[15px]">{p.paidBody(session.amount_usd)}</p>
+        <div
+          className="surface-card flex aspect-square max-h-[320px] flex-col items-center justify-center gap-3 p-6 text-center"
+          role="status"
+        >
+          <span className="grid size-16 place-items-center rounded-full bg-[color-mix(in_srgb,var(--success)_14%,transparent)]">
+            <CheckCircle2 size={34} strokeWidth={1.5} className="text-success-text" aria-hidden />
+          </span>
+          <p className="text-[22px] leading-7 font-semibold">{p.paidTitle}</p>
+          <p className="tabular text-[28px] leading-8 font-bold">${session.amount_usd}</p>
+          <p className="max-w-[28ch] text-[14px] leading-5 text-muted">{p.paidBody()}</p>
         </div>
         {hashes.origin.length + hashes.near.length > 0 ? (
           <Card title={p.proofTitle}>
@@ -479,23 +529,12 @@ interface Leg {
 
 type Mode = "paste" | "wallet" | "split";
 
-// The wallet connector (WalletConnect, wagmi, Solana) is heavy: it loads here, on the pay pages only, and not in every
-// page of the app (it kept the whole site busy, and the dashboard stuttered while it started).
-const ConnectorProvider = dynamic(
-  () => import("@/wallet/connector").then((m) => m.ConnectorProvider),
-  {
-    ssr: false,
-  },
-);
-
 export function PayScreen({ tokenId, source }: { tokenId: string; source?: PayScreenSource }) {
   const flow = source ?? invoiceSource;
   const words = useMemo<PayWords>(() => ({ ...copy.pay, ...(flow.words ?? {}) }), [flow]);
   return (
     <PayWordsContext.Provider value={words}>
-      <ConnectorProvider>
-        <PayFlow tokenId={tokenId} source={flow} />
-      </ConnectorProvider>
+      <PayFlow tokenId={tokenId} source={flow} />
     </PayWordsContext.Provider>
   );
 }
@@ -525,7 +564,6 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
   const [gaveUp, setGaveUp] = useState(false);
   const [dialog, setDialog] = useState(false);
-  const priced = useRef(0);
   // Bumped each time the pop-over opens, so the countdown inside starts again on screen.
   const [epoch, setEpoch] = useState(0);
   const skipOpen = useRef(false);
@@ -533,13 +571,19 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
     setEpoch((e) => e + 1);
     setDialog(true);
   };
+  // Every price seen so far, by session id: a new one (a first price, another part, or a new quote that replaces an
+  // expired one) opens the pop-over. Counting prices missed a new quote, which replaces the old one (14 Nov).
+  const seenPrices = useRef<Set<string>>(new Set());
+  const priceIds = legs.map((l) => l.session.id).join(",");
   useEffect(() => {
     // A price made on this page opens the pop-over by itself; a price brought back by a reload does not (the payer
     // may have paid already: the page shows the state first). Closing it is the payer's choice and is kept.
-    if (legs.length > priced.current && !skipOpen.current) showDialog();
+    const ids = priceIds === "" ? [] : priceIds.split(",");
+    const isNew = ids.some((id) => !seenPrices.current.has(id));
+    for (const id of ids) seenPrices.current.add(id);
+    if (isNew && !skipOpen.current) showDialog();
     skipOpen.current = false;
-    priced.current = legs.length;
-  }, [legs.length]);
+  }, [priceIds]);
 
   useEffect(() => {
     let off = false;
@@ -741,7 +785,19 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
       } catch (e) {
         const note = source.sessionNote?.(e) ?? null;
         setSessionNote(note);
-        setSessionWhy(e instanceof ApiError ? e.code : "network");
+        // A refused quote says why, in the swap service's own words (it was only the code, so a payer could not tell a
+        // too-small amount from a route that is down, 14 Nov).
+        const said =
+          e instanceof ApiError && e.code === "provider_rejected"
+            ? e.message.replace(/^provider_rejected:\s*/, "").trim()
+            : "";
+        setSessionWhy(
+          e instanceof ApiError
+            ? said !== "" && said !== `HTTP ${e.status}`
+              ? `the swap service said: ${said}`
+              : e.code
+            : "network",
+        );
         console.error("price failed", e);
         setSessionError(
           e instanceof ApiError && e.code === "invalid_refund_address" ? "refund" : "failed",
@@ -859,20 +915,23 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   const past = earlier.filter((e) => !shown.has(e.address));
   const pastNote =
     past.length > 0 ? (
-      <section
-        aria-label={p.earlierTitle}
-        className="surface-card space-y-2 p-4 text-[14px] sm:p-6"
-      >
-        <h2 className="text-[16px] font-semibold">{p.earlierTitle}</h2>
-        <p className="caption">{p.earlierBody}</p>
-        <ul className="space-y-1">
+      // Folded: one line unless the payer opens it. Listing every old address after each new quote crowded the page.
+      <details aria-label={p.earlierTitle} className="surface-card group p-4 text-[14px] sm:px-6">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 font-medium">
+          {p.earlierTitle} ({past.length})
+          <span aria-hidden className="caption transition-transform group-open:rotate-180">
+            ▾
+          </span>
+        </summary>
+        <p className="caption mt-2">{p.earlierBody}</p>
+        <ul className="mt-2 space-y-1">
           {past.map((e) => (
             <li key={e.address} className="tabular break-all">
               {e.route} · {e.address}
             </li>
           ))}
         </ul>
-      </section>
+      </details>
     ) : null;
 
   const parts =
@@ -993,7 +1052,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
   }
 
   const unsettled = legs.some((l) => l.stage === "waiting" || l.stage === "processing");
-  // The provider delivered the whole amount, but the claim on chain is not booked yet (it takes the watcher a moment,
+  // The provider delivered the whole amount, but the claim onchain is not booked yet (it takes the watcher a moment,
   // longer when the RPC is busy): the page is already the page of a paid invoice, not a page that asks for money.
   const received =
     legs.some((l) => l.stage === "paid") &&
@@ -1018,7 +1077,12 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
           {parts}
           {nextCard}
         </div>
-        <PaymentDialog open={dialog} onClose={() => setDialog(false)} title={p.detailsTitle}>
+        <PaymentDialog
+          open={dialog}
+          onClose={() => setDialog(false)}
+          title={p.detailsTitle}
+          compact={legs.length > 0 && legs.every((l) => l.stage === "paid")}
+        >
           {prices}
         </PaymentDialog>
       </>
@@ -1096,6 +1160,7 @@ function PayFlow({ tokenId, source }: { tokenId: string; source: PayScreenSource
         open={dialog && legs.length > 0}
         onClose={() => setDialog(false)}
         title={p.detailsTitle}
+        compact={legs.length > 0 && legs.every((l) => l.stage === "paid")}
       >
         {prices}
       </PaymentDialog>

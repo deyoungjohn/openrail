@@ -35,6 +35,15 @@ export interface ApiModuleContext {
   withIdempotency(request: ApiRequest, run: () => Promise<ApiResponse>): Promise<ApiResponse>;
   /** Read-only contract view; the module supplies its own method name and arguments. */
   view(contractMethod: string, args: object): Promise<unknown>;
+  /** The provider's word about a deposit address (its own quota, no RPC); undefined when it cannot say. */
+  providerStatus?(
+    depositAddress: string,
+  ): Promise<
+    { status: string; nearTxHashes?: string[]; destinationChainTxHashes?: string[] } | undefined
+  >;
+  /** Ask the indexer to poll sooner after a booked payment (core throttling lives in the API). */
+  pokeIndexer?(): Promise<void>;
+  indexer?: import("./app.js").IndexerPort;
 }
 
 export interface ApiModule {
@@ -45,6 +54,21 @@ export interface ApiModule {
   route?(request: ApiRequest, context: ApiModuleContext): Promise<ApiResponse | undefined>;
   /** Extra events derived from an indexed event (for example a module-specific event type). */
   events?(event: IndexedEvent, context: ApiModuleContext): IndexedEvent[];
+  /**
+   * Token ids of the claims this module keeps for a merchant. Core keeps a merchant's own events in
+   * `GET /v1/events` by token, and claims a module issues are not in the invoice list.
+   */
+  ownedTokens?(accountId: string, context: ApiModuleContext): string[];
+  /**
+   * Asked before a pay quote is requested for a claim. A module that owns the claim may refuse it
+   * (throw `ApiError`) or cap the quote deadline: `notAfter` is a unix time in seconds, and the
+   * quote's deadline never goes past it. Returns undefined for claims it does not own.
+   */
+  quoteWindow?(tokenId: string, context: ApiModuleContext): Promise<QuoteWindow | undefined>;
+}
+
+export interface QuoteWindow {
+  notAfter: number;
 }
 
 /** Picks the `apiModule` export of each enabled module that has one. */

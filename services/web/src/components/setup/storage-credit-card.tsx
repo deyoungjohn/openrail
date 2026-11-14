@@ -34,11 +34,6 @@ export function StorageCreditCard({
         <>
           <p className="tabular text-[20px] leading-7 font-bold">{formatNear(balance!)} NEAR</p>
           <p className="caption">{t.creditHelp}</p>
-          {low ? (
-            <p role="status" className="text-warning text-[14px]">
-              {t.creditLow}
-            </p>
-          ) : null}
           {low || sent ? (
             <DepositControl
               contractId={credit.data.contract_id}

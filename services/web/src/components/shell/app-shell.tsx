@@ -4,7 +4,6 @@ import {
   Banknote,
   ChevronsLeft,
   ChevronsRight,
-  CreditCard,
   FileSpreadsheet,
   FileText,
   Code2,
@@ -37,9 +36,8 @@ interface NavItem {
 const coreNav: readonly NavItem[] = [
   { href: "/app", label: copy.nav.dashboard, Icon: LayoutDashboard },
   { href: "/app/invoices", label: copy.nav.invoices, Icon: FileText },
-  { href: "/app/payments", label: copy.nav.payments, Icon: CreditCard },
   { href: "/app/statements", label: copy.nav.statements, Icon: FileSpreadsheet },
-  { href: "/app/cashout", label: copy.nav.cashout, Icon: Banknote },
+  { href: "/app/payout", label: copy.nav.cashout, Icon: Banknote },
   { href: "/app/developers", label: copy.nav.developers, Icon: Code2 },
   { href: "/app/settings", label: copy.nav.settings, Icon: Settings },
 ];
@@ -200,8 +198,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
           </Tooltip>
           <Brand className="h-6 w-auto md:hidden" />
-          <div className="ml-auto hidden items-center gap-3 sm:flex">
-            <AccountBar />
+          <div className="ml-auto flex items-center gap-3">
+            <AccountBar place="header" />
           </div>
           <ThemeToggle className="md:hidden" />
         </header>
@@ -214,7 +212,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Modal open={menu} onClose={() => setMenu(false)} title={copy.brand} variant="drawer">
         <NavList collapsed={false} onNavigate={() => setMenu(false)} />
         <div className="mt-6 space-y-3 border-t border-border pt-4">
-          <AccountBar />
+          <AccountBar place="menu" />
         </div>
       </Modal>
     </div>

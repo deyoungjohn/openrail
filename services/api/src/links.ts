@@ -19,6 +19,13 @@ const RESERVED = new Set([
   "login",
   "setup",
   "docs",
+  // Site pages (14 Nov): a business username must never take their address.
+  "developers",
+  "features",
+  "agents",
+  "how-it-works",
+  "use-cases",
+  "proof",
   "admin",
   "_next",
   "_dev",

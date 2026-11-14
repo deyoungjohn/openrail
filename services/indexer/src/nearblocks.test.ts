@@ -335,3 +335,43 @@ describe("NearBlocks claim backfill (receipt listing)", () => {
     expect(source.callCounts()["nearblocks.receipts"]).toBe(1);
   });
 });
+
+describe("claim backfill keeps going past an unreadable transaction", () => {
+  it("skips the transaction no RPC can read and keeps the next one", async () => {
+    let n = 0;
+    const fetchImpl: FetchLike = async (input) => {
+      if (input.includes("/v3/accounts/")) {
+        const row = (hash: string) => ({
+          actions: [{ action: "FUNCTION_CALL", method: "forward" }],
+          block: {
+            block_hash: "h",
+            block_height: "223457791",
+            block_timestamp: "1794049556410738353",
+          },
+          predecessor_account_id: "openrail.near",
+          receiver_account_id: "c-3.openrail.near",
+          transaction_hash: hash,
+        });
+        return nbResponse([row("TxBad"), row("TxGood")], null);
+      }
+      n += 1;
+      return n === 1 ? new Response("busy", { status: 429 }) : rpcResponse([BOOKED]);
+    };
+    const source = new NearBlocksEventSource(
+      "openrail.near",
+      "https://nb.example",
+      "",
+      ["https://rpc.example"],
+      fetchImpl,
+      25,
+      5,
+      undefined,
+      0,
+      () => true,
+      { listAccount: "c-3.openrail.near", listing: "receipts" },
+    );
+    const page = await source.fetch(null);
+    expect(page.blocks[0]?.receipts.map((r) => r.txHash)).toEqual(["TxGood"]);
+    expect(source.callCounts()["rpc.tx_status_failed"]).toBe(1);
+  });
+});

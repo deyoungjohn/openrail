@@ -27,7 +27,7 @@ export function BalanceButton() {
           ? t.unreadableShort
           : `${t.label} ${formatUsd(balance.data.total / 10_000n)}`;
   return (
-    <Link href="/app/cashout" aria-label={t.openCashOut}>
+    <Link href="/app/payout" aria-label={t.openCashOut}>
       <Button icon={<Landmark size={18} strokeWidth={1.5} aria-hidden />}>
         <span className="tabular" data-testid="balance-total">
           {shown}

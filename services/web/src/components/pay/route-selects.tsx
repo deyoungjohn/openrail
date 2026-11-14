@@ -21,13 +21,34 @@ export function RouteSelects({
   onPick: (id: string) => void;
 }) {
   const p = copy.pay;
-  const order = ["USDC", "ETH", "SOL"];
+  const order = ["USDC", "USDT", "NEAR", "ETH", "SOL"];
+  const rank = (list: string[], v: string) => (list.indexOf(v) + 99) % 99;
   const assets = [...new Set(routes.map((r) => r.payer_asset))].sort(
-    (a, b) => ((order.indexOf(a) + 99) % 99) - ((order.indexOf(b) + 99) % 99),
+    (a, b) => rank(order, a) - rank(order, b),
   );
   const current = routes.find((r) => r.id === routeId) ?? null;
-  const [asset, setAsset] = useState<string>(current?.payer_asset ?? "");
-  const chains = routes.filter((r) => r.payer_asset === asset);
+  // USDC is chosen first (NEAR as its network, below): the default everywhere is NEAR (human, 13 Nov).
+  const [asset, setAsset] = useState<string>(
+    current?.payer_asset ?? (assets.includes("USDC") ? "USDC" : (assets[0] ?? "")),
+  );
+  const chainOrder = [
+    "near",
+    "base",
+    "arbitrum",
+    "solana",
+    "ethereum",
+    "optimism",
+    "polygon",
+    "bnb",
+  ];
+  const chains = routes
+    .filter((r) => r.payer_asset === asset)
+    .sort((a, b) => rank(chainOrder, a.origin_chain) - rank(chainOrder, b.origin_chain));
+  const nearRoute = chains.find((r) => r.origin_chain === "near") ?? null;
+  useEffect(() => {
+    // Nothing chosen yet: NEAR is preselected.
+    if (routeId === null && nearRoute !== null) onPick(nearRoute.id);
+  }, [routeId, nearRoute, onPick]);
   const onlyOne = chains.length === 1 ? (chains[0] as Route) : null;
   useEffect(() => {
     if (onlyOne && routeId !== onlyOne.id) onPick(onlyOne.id);

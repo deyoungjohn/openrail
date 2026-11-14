@@ -14,10 +14,7 @@ near-sdk = { version = "=5.30.0", features = ["unstable"] }
 # One empty feature per module enabled in openrail.modules.json.
 # P0.2 keeps this table in sync with that file.
 [features]
-standing = []
 checkout = []
-proof = []
-agent = []
 shopify = []
 settle = []
 woocommerce = []
@@ -39,5 +36,5 @@ container_build_command = [
     "non-reproducible-wasm",
     "--locked",
     "--features",
-    "standing,checkout,proof,agent,shopify,settle,woocommerce",
+    "checkout,shopify,settle,woocommerce",
 ]

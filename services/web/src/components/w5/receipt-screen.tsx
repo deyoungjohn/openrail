@@ -81,6 +81,7 @@ export function ReceiptScreen({ hash }: { hash: string }) {
   }
 
   const { receipt, verify_url, claim_account } = r.data;
+  const items = r.data.line_items ?? [];
   const symbol = assetSymbol(receipt.asset);
   const amount =
     symbol === "USDC" ? `${formatToken(receipt.amount, 6)} USDC` : `${receipt.amount} ${symbol}`;
@@ -120,6 +121,31 @@ export function ReceiptScreen({ hash }: { hash: string }) {
           <Row label={t.agreed}>{receipt.payment_instruction_v1}</Row>
         </dl>
       </Card>
+
+      {items.length > 0 ? (
+        <Card title={t.items}>
+          <table className="w-full text-[14px]">
+            <thead>
+              <tr className="caption text-left">
+                <th className="pb-2 font-medium">{t.items}</th>
+                <th className="pb-2 text-right font-medium">{t.itemsQty}</th>
+                <th className="pb-2 text-right font-medium">{t.itemsPrice}</th>
+                <th className="pb-2 text-right font-medium">{t.itemsTotal}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, i) => (
+                <tr key={`${item.description}-${i}`} className="border-t border-border">
+                  <td className="py-2 pr-3">{item.description}</td>
+                  <td className="tabular py-2 text-right">{item.quantity}</td>
+                  <td className="tabular py-2 text-right">${item.unit_amount_usd}</td>
+                  <td className="tabular py-2 text-right">${item.amount_usd}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      ) : null}
 
       {origin ? (
         <Card title={t.origin}>

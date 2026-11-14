@@ -122,6 +122,8 @@ export class Watcher {
   private readonly finished = new Map<string, number>();
   /** When `clear_stale_lock` was last sent for a claim: a module may refuse it (a payout still out), so do not repeat it every tick. */
   private readonly clearedAt = new Map<string, number>();
+  /** Refused `clear_stale_lock` calls in a row, per claim: the backoff grows with them. */
+  private readonly clearRefusals = new Map<string, number>();
   /** When each claim is next due, and the last view of it (so an idle claim costs no call until it is due). */
   private readonly dueAt = new Map<string, number>();
   private readonly knownClaims = new Map<string, ClaimView>();
@@ -195,6 +197,15 @@ export class Watcher {
         ...(this.chain.callCounts?.() ?? {}),
       },
       ...(this.near.rpcHealth === undefined ? {} : { rpc_endpoints: this.near.rpcHealth() }),
+      ...(this.near.rpcBudget === undefined ? {} : { rpc_budget: this.near.rpcBudget() }),
+      ...(this.near.txHealth === undefined
+        ? {}
+        : (({ tx_sent, tx_failed, near_burnt, methods }) => ({
+            tx_sent,
+            tx_failed,
+            near_burnt,
+            tx_methods: methods,
+          }))(this.near.txHealth())),
       ...(this.config.mode === "triggered"
         ? {
             mode: "triggered" as const,
@@ -427,10 +438,20 @@ export class Watcher {
       return;
     }
     if (this.lockExpired(claim.lock, blockHeight)) {
+      // A module may refuse to clear (a payout still out: SETTLE_PAYOUT_IN_FLIGHT). Each refusal is a paid
+      // transaction, so the wait doubles from 2 minutes to 6 hours (13 Nov: one refused clear every 2 minutes).
       const last = this.clearedAt.get(claim.token_id);
-      if (last !== undefined && this.now() - last < CLEAR_BACKOFF_MS) return;
+      const refused = this.clearRefusals.get(claim.token_id) ?? 0;
+      const wait = Math.min(6 * 60 * 60_000, CLEAR_BACKOFF_MS * 2 ** refused);
+      if (last !== undefined && this.now() - last < wait) return;
       this.clearedAt.set(claim.token_id, this.now());
-      await this.send(WATCHER_METHODS.clearStaleLock, claim.token_id);
+      try {
+        await this.send(WATCHER_METHODS.clearStaleLock, claim.token_id);
+        this.clearRefusals.delete(claim.token_id);
+      } catch (error) {
+        this.clearRefusals.set(claim.token_id, refused + 1);
+        throw error;
+      }
       summary.cleared.push(claim.token_id);
     }
   }
@@ -571,7 +592,7 @@ export class Watcher {
     const claims = [...work.values()];
     summary.claims = claims.length;
     this.claimsTracked = this.knownClaims.size;
-    // The block height only judges a lock: read it when a claim in hand holds one, at most once a minute.
+    // The block height only tells whether a lock has expired: read it when a claim in hand holds one, at most once a minute.
     if (
       claims.some((claim) => !isNoneLock(claim.lock)) &&
       (this.lastBlockHeight === null ||

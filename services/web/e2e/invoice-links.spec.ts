@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { fixture, mockApi } from "./api-mock";
 
-// Invoice links are `/<business>/inv/<ref>` (pay) and `/<business>/inv/ack/<ref>` (accept): the reference is the
-// invoice's own random id, and the pages find the claim from it.
+// Invoice links are `/<business>/inv/<ref>`: the reference is the invoice's own random id, and the page finds the
+// claim from it.
 const claim = fixture("pay.claims.get");
 
 test("the pay link finds the invoice by its reference", async ({ page }) => {
@@ -11,14 +11,6 @@ test("the pay link finds the invoice by its reference", async ({ page }) => {
   });
   await page.goto("/acme-ltd/inv/9f3c2a7d41b86e0c15");
   await expect(page.getByRole("button", { name: /^Pay with/ })).toBeVisible();
-});
-
-test("the acceptance link finds the invoice by its reference", async ({ page }) => {
-  await mockApi(page, {
-    "GET /v1/pay/claims/{id}": () => ({ body: { ...claim, status: "Issued" } }),
-  });
-  await page.goto("/acme-ltd/inv/ack/9f3c2a7d41b86e0c15");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });
 
 test("an unknown reference says so plainly", async ({ page }) => {

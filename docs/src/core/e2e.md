@@ -120,7 +120,7 @@ Verifies the end-to-end onboarding experience for a new merchant business.
 
 ### Flow 2: Dashboard and invoice issuance (`/app`, `/app/invoices`)
 
-Verifies creating, pricing, and issuing an invoice on-chain.
+Verifies creating, pricing, and issuing an invoice onchain.
 
 1. **Dashboard Overview**:
    - Navigate to `/app`.
@@ -162,7 +162,7 @@ Verifies that a debtor reviews the legal terms and cryptographically acknowledge
    - Wallet produces signature `(v, r, s)`.
    - Front-end submits signature to `POST /v1/ack/{token_id}/evm`.
    - Relayer calls `acknowledge_evm` on the root contract in sandbox.
-4. **On-Chain Ack Verification**:
+4. **Onchain Ack Verification**:
    - **Assertion**:
      - Page updates to display `Acknowledged` banner with green verification seal.
      - Contract view `get_ack(token_id)` returns the valid signature and timestamp.
@@ -215,7 +215,7 @@ Verifies transferring debt claim ownership to a third-party assignee.
      - Querying sandbox `nft_token` confirms owner is `investor.near`.
      - Original creditor dashboard updates: invoice moves to "Transferred / Factored" tab.
 
-### Flow 6: Statements and verifiable receipts (`/app/statements`, `/r/[hash]`, `/app/cashout`)
+### Flow 6: Statements and verifiable receipts (`/app/statements`, `/r/[hash]`, `/app/payout`)
 
 Verifies historical statement inspection, receipt verification, and cash-out flow.
 
@@ -235,8 +235,8 @@ Verifies historical statement inspection, receipt verification, and cash-out flo
        - Payout destination transaction hash.
      - "Download Statement (CSV)" produces valid CSV export.
      - "Download Invoice Envelope (PDF)" delivers base64-decoded PDF document.
-4. **Cash-Out Flow (`/app/cashout`)**:
-   - Navigate to `/app/cashout`.
+4. **Cash-Out Flow (`/app/payout`)**:
+   - Navigate to `/app/payout`.
    - Select destination external chain and payout address.
    - **Assertion**: Displays exact output received, network route fee, and arrival confirmation once processed.
 

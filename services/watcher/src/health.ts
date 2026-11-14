@@ -14,6 +14,17 @@ export interface HealthSnapshot {
   /** RPC requests since the start, per feature: where the provider's credits go. */
   rpc_calls?: Record<string, number>;
   /** Endpoint hosts (no paths or keys), cooling state and calls in the last hour. */
+  rpc_budget?: {
+    used: number;
+    budget: number;
+    remaining: number;
+    pace_per_hour: number;
+    by_class: Record<string, number>;
+  };
+  tx_sent?: number;
+  tx_failed?: Record<string, number>;
+  near_burnt?: string;
+  tx_methods?: Record<string, unknown>;
   rpc_endpoints?: {
     host: string;
     state: "ok" | "cooling";

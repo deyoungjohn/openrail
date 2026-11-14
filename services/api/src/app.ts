@@ -1,4 +1,5 @@
 /** Core API implementation (S1b). Dependencies are ports so tests stay offline. */
+import { proofRows } from "./proof.js";
 import { randomBytes } from "node:crypto";
 import {
   allowedRoutes,
@@ -33,10 +34,13 @@ import { enabledModules } from "./enabled.js";
 import {
   apiModulesFrom,
   createMemoryModuleStore,
+  expandEvents,
   type ApiModule,
   type ApiModuleContext,
   type ModuleStore,
 } from "./modules.js";
+import type { IndexedEvent } from "./webhooks.js";
+import { confidentialAuthPayload } from "./confidential-auth.js";
 import { DepositWatch } from "./deposit-watch.js";
 import { QuoteError, QuoteService, type ClaimSnapshot, type QuoteProvider } from "./quote.js";
 import { CORE_CLAUSES, buildTerms, termsHash, type Terms } from "./terms.js";
@@ -73,6 +77,8 @@ export interface ApiConfig {
   confidentialIntents?: boolean;
   /** Largest confidential withdraw amount in settlement base units (default 10,000 USDC). */
   confidentialWithdrawMax?: string;
+  /** The one business whose transactions the public Proof page lists (`PROOF_ACCOUNT`); unset, the route is off. */
+  proofAccount?: string;
   /** REL-2: new invoices get `<username>-<ref>` claim labels. Off until the contract supports them. */
   claimLabels?: boolean;
 }
@@ -85,7 +91,7 @@ export interface ContractPort {
   view?(methodName: string, args: object): Promise<unknown>;
   storageCredit(accountId: string): Promise<{ balance: string; amount: string }>;
   sponsorStatus?(accountId: string): Promise<{ pool: string; cap: number; used: number }>;
-  /** What became of a transaction on chain (used to follow a cash-out). */
+  /** What became of a transaction onchain (used to follow a cash-out). */
   txStatus?(txHash: string, senderId: string): Promise<"success" | "failed" | "pending">;
   /** `has_public_key` on intents.near: a withdrawal signed by an unregistered key ends FAILED. */
   intentsHasPublicKey?(accountId: string, publicKey: string): Promise<boolean>;
@@ -98,6 +104,19 @@ export interface ContractPort {
     last_error: string | null;
     calls_last_hour: number;
   }[];
+  rpcBudget?(): {
+    used: number;
+    budget: number;
+    remaining: number;
+    pace_per_hour: number;
+    by_class: Record<string, number>;
+  };
+  txHealth?(): {
+    tx_sent: number;
+    tx_failed: Record<string, number>;
+    near_burnt: string;
+    methods: Record<string, unknown>;
+  };
 }
 
 export interface IssuerPort {
@@ -191,6 +210,63 @@ export interface ConfidentialBalancePort {
   generateIntent(depositAddress: string, signerId: string): Promise<Record<string, unknown>>;
   submitIntent(signedData: Record<string, unknown>): Promise<Record<string, unknown>>;
   withdrawStatus(depositAddress: string): Promise<Record<string, unknown>>;
+  /** The intents contract's current nonce salt (8 hex digits), for the session payload. */
+  currentSalt?(): Promise<string>;
+}
+
+/** A private-balance withdrawal started on this site, kept so the dashboard can list it with its explorer links. */
+export interface ConfidentialWithdrawalRecord {
+  deposit_address: string;
+  account_id: string;
+  amount: string;
+  source_asset: string;
+  destination_chain: string;
+  address: string;
+  created_at: string;
+  status: string;
+  amount_out: string | null;
+  destination_tx_hashes: string[];
+  destination_explorer_urls: string[];
+  near_tx_hashes: string[];
+  updated_at: string;
+}
+
+/** Hashes and explorer links from the provider's status, whatever its exact shape (strings or `{hash, explorerUrl}`). */
+export function withdrawalLinksOf(provider: Record<string, unknown>): {
+  destination_tx_hashes: string[];
+  destination_explorer_urls: string[];
+  near_tx_hashes: string[];
+  amount_out: string | null;
+} {
+  const details = (provider.swapDetails ?? provider) as Record<string, unknown>;
+  const hashes = (v: unknown): { hash: string; url: string | null }[] =>
+    Array.isArray(v)
+      ? v.flatMap((x) =>
+          typeof x === "string"
+            ? [{ hash: x, url: null }]
+            : x !== null &&
+                typeof x === "object" &&
+                typeof (x as { hash?: unknown }).hash === "string"
+              ? [
+                  {
+                    hash: (x as { hash: string }).hash,
+                    url:
+                      typeof (x as { explorerUrl?: unknown }).explorerUrl === "string"
+                        ? (x as { explorerUrl: string }).explorerUrl
+                        : null,
+                  },
+                ]
+              : [],
+        )
+      : [];
+  const dest = hashes(details.destinationChainTxHashes);
+  const amountOut = details.amountOut ?? details.amountOutFormatted;
+  return {
+    destination_tx_hashes: dest.map((d) => d.hash),
+    destination_explorer_urls: dest.flatMap((d) => (d.url === null ? [] : [d.url])),
+    near_tx_hashes: hashes(details.nearTxHashes).map((d) => d.hash),
+    amount_out: typeof amountOut === "string" ? amountOut : null,
+  };
 }
 
 export interface PayoutEstimatorPort {
@@ -280,6 +356,8 @@ export interface InvoiceRecord {
   created_block: number;
   terms: Terms;
   line_items?: LineItem[];
+  /** The client's postal address, as the business typed it. Off chain, not part of the terms hash. */
+  client_address?: string | null;
   fee_mode?: FeeMode;
   /** The transaction that issued the claim on NEAR. */
   issue_tx?: string;
@@ -423,6 +501,20 @@ export function withdrawPhaseOf(word: unknown): WithdrawPhase {
     default:
       return { phase: "pending", terminal: false };
   }
+}
+
+/** Text a person typed, kept printable: control characters and angle brackets dropped, trimmed, cut to `max`. */
+export function plainText(value: string, max: number, keepNewlines = false): string {
+  return Array.from(value)
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      if (ch === "<" || ch === ">") return false;
+      if (keepNewlines && ch === "\n") return true;
+      return code >= 32 && code !== 127;
+    })
+    .join("")
+    .trim()
+    .slice(0, max);
 }
 
 function nowIso(clock: () => Date): string {
@@ -634,9 +726,132 @@ export class ApiApp {
     return invoice;
   }
 
+  /**
+   * The indexed events of one business's own claims, newest first, read page by page from the shared stream (bounded).
+   * A module type (`checkout.paid`) is matched after expansion; `expand` expands every event (the Proof rows need the
+   * module's names to tell a checkout from an invoice).
+   */
+  private async ownEvents(
+    accountId: string,
+    type: string | null,
+    want: number,
+    cursor?: string,
+    expand = false,
+  ): Promise<{ found: Record<string, unknown>[]; next: string | null }> {
+    const indexer = this.deps.indexer;
+    if (indexer === undefined) return { found: [], next: null };
+    const own = new Set(this.store.listInvoices(accountId).map((i) => i.token_id));
+    for (const module of this.modules) {
+      try {
+        for (const id of module.ownedTokens?.(accountId, this.moduleContext) ?? []) own.add(id);
+      } catch {
+        // a broken module never hides the merchant's core events
+      }
+    }
+    const tokenOf = (e: Record<string, unknown>): string | undefined => {
+      const data = e.data as { token_id?: unknown } | undefined;
+      return typeof data?.token_id === "string" ? data.token_id : undefined;
+    };
+    let after = cursor;
+    const found: Record<string, unknown>[] = [];
+    let next: string | null = null;
+    for (let page = 0; page < 10 && found.length < want; page += 1) {
+      // Module event names (`checkout.paid`) are derived from the indexed ones (`checkout_paid`): read the raw
+      // stream, expand each event through the enabled modules, then filter by type.
+      // A core name (`booked`) filters at the indexer; a module name (`checkout.paid`) only exists after expansion.
+      const coreType = type !== null && !type.includes(".") ? type : undefined;
+      const batch = await indexer.listEvents({
+        ...(after === undefined ? {} : { after }),
+        ...(coreType === undefined ? {} : { type: coreType }),
+        limit: 200,
+      });
+      for (const raw of batch.data as Record<string, unknown>[]) {
+        const expanded =
+          type === null && !expand
+            ? [raw]
+            : (expandEvents(
+                raw as unknown as IndexedEvent,
+                this.modules,
+                this.moduleContext,
+              ) as unknown as Record<string, unknown>[]);
+        for (const e of expanded) {
+          if (type !== null && e.type !== type) continue;
+          const token = tokenOf(e);
+          if (token === undefined || !own.has(token)) continue;
+          const data = (e.data ?? {}) as Record<string, unknown>;
+          const originChain = data.origin_chain === undefined ? this.originChainOf(token) : null;
+          found.push(
+            originChain === null ? e : { ...e, data: { ...data, origin_chain: originChain } },
+          );
+        }
+      }
+      next = batch.next_cursor ?? null;
+      if (next === null) break;
+      after = next;
+    }
+    return { found, next };
+  }
+
+  /**
+   * The chain the client paid from: the route of the claim's latest pay session that took money (no call at all). Not
+   * the chain the merchant's money settled on, which is what the asset id says.
+   */
+  originChainOf(tokenId: string): string | null {
+    const sessions = this.store.listPaySessions(tokenId);
+    for (let i = sessions.length - 1; i >= 0; i -= 1) {
+      const session = sessions[i];
+      if (
+        session === undefined ||
+        session.status === "pending_deposit" ||
+        session.status === "expired"
+      )
+        continue;
+      try {
+        return getRoute(session.route_id, this.routes).originChain;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The payer's own transaction on the chain they paid from, when the indexer has none: the provider's status for the
+   * claim's pay sessions names it (no RPC). Kept once found.
+   */
+  private async paymentOrigin(tokenId: string): Promise<{ hash: string; chain: string } | null> {
+    const sessions = this.store.listPaySessions(tokenId).slice().reverse();
+    for (const session of sessions) {
+      if (session.status === "pending_deposit" || session.status === "expired") continue;
+      const kept = this.docs.get<{ hash: string; chain: string }>("payment_origin", session.id);
+      if (kept !== undefined) return kept;
+      try {
+        const live = await this.quotes.status(session.deposit_address);
+        const hash = live?.originChainTxHashes?.[0];
+        if (typeof hash !== "string" || hash === "") continue;
+        let chain = "";
+        try {
+          chain = getRoute(session.route_id, this.routes).originChain;
+        } catch {
+          chain = "";
+        }
+        const found = { hash, chain };
+        this.docs.put("payment_origin", session.id, found);
+        return found;
+      } catch {
+        // the provider cannot say now
+      }
+    }
+    return null;
+  }
+
   private async receiptMachine(bookingTxHash: string): Promise<ReceiptDocument> {
     const receipt = await this.receiptFor(bookingTxHash);
     if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
+    if (receipt.origin_tx === null || receipt.origin_tx === undefined) {
+      const origin = await this.paymentOrigin(String(receipt.token_id ?? ""));
+      if (origin !== null) receipt.origin_tx = origin;
+    }
     const tokenId = String(receipt.token_id ?? "");
     const invoice = this.store.getInvoice(tokenId);
     const business = invoice === undefined ? undefined : this.store.getBusiness(invoice.issuer_id);
@@ -669,9 +884,41 @@ export class ApiApp {
       payer_tx: receipt.origin_tx ?? null,
       near_tx: nearHashes[0] ?? bookingTxHash,
       claim_account: claimAccount,
+      line_items: (invoice?.line_items ?? []).map((item) => ({ ...item })),
+      client_address: invoice?.client_address ?? null,
       terms_fingerprint: invoice?.terms_hash ?? String(receipt.terms_hash ?? ""),
       verify_command: `openrail-verify claim ${claimAccount} --terms-hash ${invoice?.terms_hash ?? String(receipt.terms_hash ?? "")}`,
     }) as unknown as ReceiptDocument;
+  }
+
+  /** Stores the provider's latest word and links on a withdrawal started here; quietly nothing for an unknown one. */
+  private noteWithdrawal(
+    depositAddress: string,
+    provider: Record<string, unknown>,
+  ): ConfidentialWithdrawalRecord | undefined {
+    const kept = this.docs.get<ConfidentialWithdrawalRecord>(
+      "confidential_withdrawals",
+      depositAddress,
+    );
+    if (kept === undefined) return undefined;
+    const links = withdrawalLinksOf(provider);
+    const next: ConfidentialWithdrawalRecord = {
+      ...kept,
+      status: typeof provider.status === "string" ? provider.status : kept.status,
+      amount_out: links.amount_out ?? kept.amount_out,
+      destination_tx_hashes:
+        links.destination_tx_hashes.length > 0
+          ? links.destination_tx_hashes
+          : kept.destination_tx_hashes,
+      destination_explorer_urls:
+        links.destination_explorer_urls.length > 0
+          ? links.destination_explorer_urls
+          : kept.destination_explorer_urls,
+      near_tx_hashes: links.near_tx_hashes.length > 0 ? links.near_tx_hashes : kept.near_tx_hashes,
+      updated_at: nowIso(this.clock),
+    };
+    this.docs.put("confidential_withdrawals", depositAddress, next, kept.account_id);
+    return next;
   }
 
   /**
@@ -876,7 +1123,7 @@ export class ApiApp {
   >();
 
   /**
-   * The invoices as they are on chain now: status, what is still owed and what was paid come from each
+   * The invoices as they are onchain now: status, what is still owed and what was paid come from each
    * claim, not from the record written at creation (which never changes). A claim that cannot be read
    * keeps the last one read, and only a claim never read keeps its stored values. Reads are cached for ten seconds and run eight at a time.
    */
@@ -1183,6 +1430,17 @@ export class ApiApp {
           ...(this.deps.contract.rpcHealth === undefined
             ? {}
             : { rpc_endpoints: this.deps.contract.rpcHealth() }),
+          ...(this.deps.contract.rpcBudget === undefined
+            ? {}
+            : { rpc_budget: this.deps.contract.rpcBudget() }),
+          ...(this.deps.contract.txHealth === undefined
+            ? {}
+            : (({ tx_sent, tx_failed, near_burnt, methods }) => ({
+                tx_sent,
+                tx_failed,
+                near_burnt,
+                tx_methods: methods,
+              }))(this.deps.contract.txHealth())),
         },
       };
     }
@@ -1596,7 +1854,16 @@ export class ApiApp {
         this.requireScope(context, "receipts:read");
         const invoice = this.ownInvoice(context.accountId, invoiceId);
         const receipts = await this.receiptsFor(invoice);
-        return { status: 200, body: { data: receipts } };
+        const originChain = this.originChainOf(invoice.token_id);
+        return {
+          status: 200,
+          body: {
+            data:
+              originChain === null
+                ? receipts
+                : receipts.map((r) => ({ ...r, origin_chain: r.origin_chain ?? originChain })),
+          },
+        };
       }
       if (action === "pdf" && method === "GET") {
         const context = this.requireAuth(request);
@@ -1691,12 +1958,20 @@ export class ApiApp {
           if (error instanceof AddressError) throw new ApiError(400, error.code, error.message);
           throw new ApiError(400, "unknown_route");
         }
+        let deadlineSeconds = body.deadline_seconds;
+        for (const module of this.modules) {
+          const window = await module.quoteWindow?.(body.token_id, this.moduleContext);
+          if (window === undefined) continue;
+          const left = window.notAfter - Math.floor(this.clock().getTime() / 1000);
+          if (left <= 0) throw new ApiError(409, "quote_window_closed");
+          deadlineSeconds = Math.min(deadlineSeconds ?? left, left);
+        }
         const session = await this.quotes.createSession({
           tokenId: body.token_id,
           routeId: body.route_id,
           amountUsd: body.amount_usd,
           refundTo: body.refund_to,
-          deadlineSeconds: body.deadline_seconds,
+          deadlineSeconds,
         });
         this.store.savePaySession(session);
         const quotes = this.store.getOpenQuotes(session.token_id);
@@ -1852,6 +2127,8 @@ export class ApiApp {
             line_items: invoice.line_items ?? [],
             due_date: Date.parse(invoice.terms.due_date) / 1000,
             status: typeof live?.status === "string" ? live.status : invoice.status,
+            // The page reads the claim from here, not from a public RPC in the browser (rate limited per visitor).
+            ...(live === undefined ? {} : { claim: live }),
             terms: invoice.terms,
             ...(await this.publicHistory(invoice)),
             domain: {
@@ -1962,16 +2239,39 @@ export class ApiApp {
         if (error instanceof AddressError) throw new ApiError(400, "invalid_address");
         throw error;
       }
-      return {
-        status: 200,
-        body: await this.deps.confidential.withdrawQuote({
+      const quoted = await this.deps.confidential.withdrawQuote({
+        amount: body.amount,
+        sourceAsset: body.source_asset,
+        destinationChain: body.destination_chain,
+        address: body.address,
+        refundTo: context.accountId,
+      });
+      const quoteBody = (quoted.quote ?? quoted) as { depositAddress?: unknown };
+      if (typeof quoteBody.depositAddress === "string" && quoteBody.depositAddress !== "") {
+        const now = nowIso(this.clock);
+        const record: ConfidentialWithdrawalRecord = {
+          deposit_address: quoteBody.depositAddress,
+          account_id: context.accountId,
           amount: body.amount,
-          sourceAsset: body.source_asset,
-          destinationChain: body.destination_chain,
+          source_asset: body.source_asset,
+          destination_chain: body.destination_chain,
           address: body.address,
-          refundTo: context.accountId,
-        }),
-      };
+          created_at: now,
+          status: "QUOTED",
+          amount_out: null,
+          destination_tx_hashes: [],
+          destination_explorer_urls: [],
+          near_tx_hashes: [],
+          updated_at: now,
+        };
+        this.docs.put(
+          "confidential_withdrawals",
+          record.deposit_address,
+          record,
+          context.accountId,
+        );
+      }
+      return { status: 200, body: quoted };
     }
     if (path === "/v1/balance/confidential/withdraw/intent" && method === "POST") {
       if (this.deps.config.confidentialIntents !== true)
@@ -2021,9 +2321,114 @@ export class ApiApp {
       if (depositAddress === "")
         throw new ApiError(400, "invalid_request", "deposit_address required");
       const provider = await this.deps.confidential.withdrawStatus(depositAddress);
+      this.noteWithdrawal(depositAddress, provider);
       return {
         status: 200,
         body: { ...provider, ...withdrawPhaseOf(provider.status) },
+      };
+    }
+    if (path === "/v1/balance/confidential/withdrawals" && method === "GET") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      const context = this.requireAuth(request);
+      this.requireScope(context, "payments:read");
+      const now = this.clock().getTime();
+      const rows = this.docs
+        .list<ConfidentialWithdrawalRecord>("confidential_withdrawals", context.accountId)
+        // A price nobody signed within the hour is not a withdrawal.
+        .filter(
+          (row) =>
+            !(row.status === "QUOTED" || row.status === "PENDING_DEPOSIT") ||
+            now - Date.parse(row.created_at) < 3_600_000,
+        );
+      // A withdrawal still on its way is asked about again (the provider, not an RPC), at most a day after it started.
+      for (const row of rows) {
+        if (
+          this.deps.confidential === undefined ||
+          withdrawPhaseOf(row.status).terminal ||
+          now - Date.parse(row.created_at) > 86_400_000
+        )
+          continue;
+        try {
+          const provider = await this.deps.confidential.withdrawStatus(row.deposit_address);
+          Object.assign(row, this.noteWithdrawal(row.deposit_address, provider) ?? {});
+        } catch {
+          /* keep what is stored */
+        }
+      }
+      const started = rows.filter(
+        (row) => row.status !== "QUOTED" && row.status !== "PENDING_DEPOSIT",
+      );
+      started.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+      return { status: 200, body: { data: started } };
+    }
+    // A withdrawal made before they were recorded here (or from the CLI): added by its deposit address, only when the
+    // provider says it was this merchant's own (the quote's refund account is the merchant).
+    if (path === "/v1/balance/confidential/withdrawals" && method === "POST") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential === undefined) throw new ApiError(503, "confidential_unavailable");
+      const context = this.requireAuth(request);
+      if (context.kind !== "session") throw new ApiError(403, "session_required");
+      const depositAddress = (request.body as { deposit_address?: unknown } | undefined)
+        ?.deposit_address;
+      if (typeof depositAddress !== "string" || !/^[0-9A-Za-z._-]{8,128}$/.test(depositAddress))
+        throw new ApiError(400, "invalid_request", "deposit_address required");
+      const provider = await this.deps.confidential.withdrawStatus(depositAddress);
+      const quoteRequest = ((provider.quoteResponse as Record<string, unknown> | undefined)
+        ?.quoteRequest ?? {}) as Record<string, unknown>;
+      if (
+        quoteRequest.refundTo !== context.accountId ||
+        quoteRequest.depositType !== "CONFIDENTIAL_INTENTS"
+      )
+        throw new ApiError(404, "withdrawal_not_found");
+      const destination =
+        typeof quoteRequest.destinationAsset === "string" ? quoteRequest.destinationAsset : "";
+      const chain = /:base-/.test(destination)
+        ? "base"
+        : /:arb-/.test(destination)
+          ? "arbitrum"
+          : /:eth-/.test(destination)
+            ? "ethereum"
+            : /:sol-/.test(destination)
+              ? "solana"
+              : "near";
+      const created =
+        typeof provider.updatedAt === "string" ? provider.updatedAt : nowIso(this.clock);
+      const record: ConfidentialWithdrawalRecord = {
+        deposit_address: depositAddress,
+        account_id: context.accountId,
+        amount: typeof quoteRequest.amount === "string" ? quoteRequest.amount : "0",
+        source_asset: typeof quoteRequest.originAsset === "string" ? quoteRequest.originAsset : "",
+        destination_chain: chain,
+        address: typeof quoteRequest.recipient === "string" ? quoteRequest.recipient : "",
+        created_at: created,
+        status: "QUOTED",
+        amount_out: null,
+        destination_tx_hashes: [],
+        destination_explorer_urls: [],
+        near_tx_hashes: [],
+        updated_at: created,
+      };
+      this.docs.put("confidential_withdrawals", depositAddress, record, context.accountId);
+      return { status: 201, body: this.noteWithdrawal(depositAddress, provider) ?? record };
+    }
+    if (path === "/v1/balance/confidential/auth-payload" && method === "GET") {
+      if (this.deps.config.confidentialIntents !== true)
+        throw new ApiError(400, "confidential_intents_disabled");
+      if (this.deps.confidential?.currentSalt === undefined)
+        throw new ApiError(503, "confidential_unavailable");
+      const context = this.requireAuth(request);
+      if (context.kind !== "session") throw new ApiError(403, "session_required");
+      const salt = await this.deps.confidential.currentSalt();
+      return {
+        status: 200,
+        body: confidentialAuthPayload(
+          context.accountId,
+          salt,
+          this.clock().getTime(),
+          randomBytes(7),
+        ),
       };
     }
     if (path === "/v1/balance/confidential/session" && method === "POST") {
@@ -2379,10 +2784,35 @@ export class ApiApp {
       };
     }
 
+    // The Proof page's data: one business's transactions (PROOF_ACCOUNT), public and read-only, newest first. Each row
+    // is a transaction on NEAR anyone can check, so nothing private is shown (no names, no payer addresses).
+    if (path === "/v1/public/proof" && method === "GET") {
+      const account = this.deps.config.proofAccount;
+      if (account === undefined || account === "" || this.deps.indexer === undefined)
+        throw new ApiError(404, "not_found");
+      const { found } = await this.ownEvents(account, null, 400, undefined, true);
+      return {
+        status: 200,
+        headers: { "cache-control": "public, max-age=30" },
+        body: {
+          account,
+          contract: this.deps.config.rootAccount,
+          rows: proofRows(found, this.deps.config.rootAccount),
+        },
+      };
+    }
     if (path === "/v1/events" && method === "GET") {
       const context = this.requireAuth(request);
       // The event stream is shared by every merchant: keep only the events of this merchant's own claims.
       const own = new Set(this.store.listInvoices(context.accountId).map((i) => i.token_id));
+      for (const module of this.modules) {
+        try {
+          for (const id of module.ownedTokens?.(context.accountId, this.moduleContext) ?? [])
+            own.add(id);
+        } catch {
+          // a broken module never hides the merchant's core events
+        }
+      }
       const tokenOf = (e: Record<string, unknown>): string | undefined => {
         const data = e.data as { token_id?: unknown } | undefined;
         return typeof data?.token_id === "string" ? data.token_id : undefined;
@@ -2390,25 +2820,12 @@ export class ApiApp {
       if (this.deps.indexer !== undefined) {
         const limit = Number(request.query.get("limit") ?? "50");
         const want = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50;
-        const type = request.query.get("type");
-        let after = request.query.get("cursor") ?? undefined;
-        const found: Record<string, unknown>[] = [];
-        let next: string | null = null;
-        // Read the shared stream page by page until there are enough of this merchant's events (bounded).
-        for (let page = 0; page < 10 && found.length < want; page += 1) {
-          const batch = await this.deps.indexer.listEvents({
-            ...(after === undefined ? {} : { after }),
-            ...(type === null ? {} : { type: type ?? undefined }),
-            limit: 200,
-          });
-          for (const e of batch.data as Record<string, unknown>[]) {
-            const token = tokenOf(e);
-            if (token !== undefined && own.has(token)) found.push(e);
-          }
-          next = batch.next_cursor ?? null;
-          if (next === null) break;
-          after = next;
-        }
+        const { found, next } = await this.ownEvents(
+          context.accountId,
+          request.query.get("type"),
+          want,
+          request.query.get("cursor") ?? undefined,
+        );
         return { status: 200, body: { data: found.slice(0, want), next_cursor: next } };
       }
       return {
@@ -2450,10 +2867,18 @@ export class ApiApp {
       const bookingTxHash = receiptMatch[1] ?? "";
       const receipt = await this.receiptFor(bookingTxHash);
       if (receipt === undefined) throw new ApiError(404, "receipt_not_found");
+      const tokenId = String(receipt.token_id ?? "");
+      const origin =
+        receipt.origin_tx === null || receipt.origin_tx === undefined
+          ? await this.paymentOrigin(tokenId)
+          : null;
+      const invoice = this.store.getInvoice(tokenId);
       return {
         status: 200,
         body: {
-          receipt,
+          receipt: origin === null ? receipt : { ...receipt, origin_tx: origin },
+          // What was paid for, from the invoice (off chain): the page and the PDF list it.
+          line_items: invoice?.line_items ?? [],
           verify_url: `${this.deps.config.payBaseUrl}/r/${bookingTxHash}`,
           claim_account: `${String(receipt.token_id ?? "")}.${this.deps.config.rootAccount}`,
         },
@@ -2504,11 +2929,25 @@ export class ApiApp {
       requireAuth: (request, allowPublishable) => this.requireAuth(request, allowPublishable),
       requireScope: (context, scope) => this.requireScope(context, scope),
       withIdempotency: (request, run) => this.withIdempotency(request, run),
+      ...(this.deps.pokeIndexer === undefined
+        ? {}
+        : { pokeIndexer: () => this.deps.pokeIndexer?.() ?? Promise.resolve() }),
+      providerStatus: async (depositAddress) => {
+        const live = await this.quotes.status(depositAddress);
+        return live === undefined
+          ? undefined
+          : {
+              status: live.status,
+              nearTxHashes: live.nearTxHashes ?? [],
+              destinationChainTxHashes: live.destinationChainTxHashes ?? [],
+            };
+      },
       view: async (methodName, args) => {
         if (this.deps.contract.view === undefined)
           throw new ApiError(503, "contract_view_unavailable");
         return this.deps.contract.view(methodName, args);
       },
+      indexer: this.deps.indexer,
     };
   }
 
@@ -2539,6 +2978,7 @@ export class ApiApp {
       line_items?: unknown;
       line_items_sha256?: string;
       fee_mode?: unknown;
+      client_address?: unknown;
       pay_link?: string;
       assignment_agreement_sha256?: string;
       clauses?: string[];
@@ -2705,6 +3145,10 @@ export class ApiApp {
       terms,
       line_items: feeResult.items,
       fee_mode: feeMode,
+      client_address:
+        typeof body.client_address === "string"
+          ? plainText(body.client_address, 300, true) || null
+          : null,
       ...(issueTx === undefined ? {} : { issue_tx: issueTx }),
       ...(options.recurringId === undefined ? {} : { recurring_id: options.recurringId }),
     };

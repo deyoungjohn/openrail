@@ -120,7 +120,7 @@ export const verifyNep413: Nep413Verifier = (publicKey, signature, payload) => {
 
 /**
  * An implicit NEAR account is the 64 hex characters of an ed25519 public key. Before anything is sent
- * to it the account does not exist on chain, but that key is its key by protocol, so a message signed
+ * to it the account does not exist onchain, but that key is its key by protocol, so a message signed
  * with it proves the owner. Used only when the chain says the account does not exist.
  */
 export function implicitKeyMatches(accountId: string, publicKey: string): boolean {

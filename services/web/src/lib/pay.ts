@@ -72,7 +72,13 @@ export function formatCoinAmount(units: string, decimals: number): string {
  */
 export function payDecimals(asset: string, decimals: number): number {
   const keep =
-    asset === "ETH" ? 6 : asset === "SOL" ? 5 : asset === "USDC" || asset === "USDT" ? 2 : decimals;
+    asset === "ETH" || asset === "NEAR"
+      ? 6
+      : asset === "SOL"
+        ? 5
+        : asset === "USDC" || asset === "USDT"
+          ? 2
+          : decimals;
   return Math.min(keep, decimals);
 }
 

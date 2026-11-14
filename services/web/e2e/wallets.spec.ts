@@ -95,7 +95,6 @@ test.describe("what the selector says about each wallet", () => {
       "nightly",
       "intear-wallet",
       "near-mobile-wallet",
-      "coin98-wallet",
     ])
       expect(ids).toContain(id);
     for (const r of table) expect(["yes", "no", "unknown"]).toContain(r.signMessage);

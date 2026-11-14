@@ -31,7 +31,7 @@ At `issue`, the contract creates a keyless claim account. Existing claims use `c
 after REL-2 (`CLAIM_LABELS=1`) new invoices use `<username>-<ref>.<root>`, where the username is
 made URL-safe and cut to 32 characters and `<ref>` is the first 12 hex of the invoice reference.
 The token id is the label, so `claim(<label>)`, `nft_token(<label>)` and the account agree. A later
-username change does not rename the old account: the on-chain name is fixed for ever.
+username change does not rename the old account: the onchain name is fixed for ever.
 It obeys only the Openrail contract, which uses `env::promise_*` calls. A credit
 to that account is a payment of that invoice; matching is structural, not a memo
 or a manual match. **built and tested in the sandbox**

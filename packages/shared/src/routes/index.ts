@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 
 export type Chain =
   "base" | "arbitrum" | "ethereum" | "optimism" | "polygon" | "bnb" | "solana" | "near";
-export type PayerAsset = "USDC" | "ETH" | "SOL";
+export type PayerAsset = "USDC" | "USDT" | "ETH" | "SOL" | "NEAR";
 export type SwapType = "FLEX_INPUT" | "EXACT_OUTPUT";
 export type TokenStandard = "nep141" | "nep245";
 

@@ -250,7 +250,7 @@ test.describe("cash out", () => {
     await mockApi(page, {
       "GET /v1/cashouts": { body: { data: [row] } },
     });
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await page.getByRole("tab", { name: "Stats" }).click();
     const table = page.getByRole("region", { name: "Cash-outs" });
     await expect(table).toContainText("$2.00");
@@ -271,7 +271,7 @@ test.describe("cash out", () => {
     page,
   }) => {
     const calls = await mockApi(page, { "POST /v1/cashout/quote": { status: 201, body: quote() } });
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await ask(page);
     const cost = page.getByRole("region", { name: "What it costs" });
     await expect(cost).toContainText("$0.01");
@@ -292,7 +292,7 @@ test.describe("cash out", () => {
 
   test("signing sends the cash-out (fixture mode)", async ({ page }) => {
     await mockApi(page, { "POST /v1/cashout/quote": { status: 201, body: quote() } });
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await ask(page);
     await page.getByRole("button", { name: "Sign Payout" }).click();
     await expect(page.getByText("Cash-out sent")).toBeVisible();
@@ -300,16 +300,16 @@ test.describe("cash out", () => {
 
   test("BNB Chain is not offered, and a bad address or amount sends nothing", async ({ page }) => {
     const calls = await mockApi(page, { "POST /v1/cashout/quote": { status: 201, body: quote() } });
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await page.getByRole("button", { name: /^Send to/ }).click();
     await expect(page.getByRole("option")).toHaveText([
+      "NEAR",
       "Base",
       "Arbitrum",
       "Optimism",
       "Polygon",
       "Solana",
       "Ethereum",
-      "NEAR",
     ]);
     await page.keyboard.press("Escape");
     await ask(page, "0", "Base", "0x123");
@@ -325,7 +325,7 @@ test.describe("cash out", () => {
         body: quote({ deadline: new Date(Date.now() - 1000).toISOString() }),
       },
     });
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await ask(page);
     await expect(page.getByText("This quote expired")).toBeVisible();
     await expect(page.getByRole("button", { name: "Sign Payout" })).toHaveCount(0);
@@ -339,7 +339,7 @@ test.describe("cash out", () => {
         body: { error: { code: "internal", message: "x" } },
       },
     });
-    await page.goto("/app/cashout");
+    await page.goto("/app/payout");
     await ask(page);
     await expect(
       page.locator("main [role=alert]").filter({ hasText: "Nothing was charged" }),
@@ -350,7 +350,7 @@ test.describe("cash out", () => {
     test(`360px, ${scheme}: no scroll, no WCAG AA violations`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await mockApi(page, { "POST /v1/cashout/quote": { status: 201, body: quote() } });
-      await page.goto("/app/cashout");
+      await page.goto("/app/payout");
       await ask(page);
       await expect(page.getByRole("button", { name: "Sign Payout" })).toBeVisible();
       await axeClean(page);

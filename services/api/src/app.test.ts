@@ -439,7 +439,7 @@ describe("invoice route", () => {
     expect((await poll()).status).toBe("success");
   });
 
-  it("the invoice list and detail show the claim's state on chain, not the record from creation", async () => {
+  it("the invoice list and detail show the claim's state onchain, not the record from creation", async () => {
     const { app, secret, contract } = harness();
     await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
     contract.claim.mockResolvedValue({
@@ -580,7 +580,7 @@ describe("invoice route", () => {
 });
 
 describe("pay session route", () => {
-  it("returns the on-chain deadline, not the provider's, after log_quote", async () => {
+  it("returns the onchain deadline, not the provider's, after log_quote", async () => {
     const { app, secret, issuer, quoteProvider, pokeIndexer } = harness();
     await app.handle(request("POST", "/v1/invoices", invoiceBody, secret));
     const response = await app.handle(

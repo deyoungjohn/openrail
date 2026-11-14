@@ -37,6 +37,23 @@ const EVENT_TYPES = [
   "invoice.closed",
 ] as const;
 
+/**
+ * The names the event list shows and filters on: the contract's own events, as indexed. The webhook names above are
+ * for subscriptions; filtering the list by them matched nothing, so every filter came back empty (14 Nov).
+ */
+const STREAM_TYPES = [
+  "issue",
+  "ack",
+  "booked",
+  "distributed",
+  "distribution_failed",
+  "close",
+  "cancel",
+  "storage_sponsored",
+  "nft_transfer",
+  "unmatched",
+] as const;
+
 function SecretDialog({
   title,
   warning,
@@ -693,7 +710,7 @@ function EventsPanel() {
           <div className="w-56">
             <Select label={t.eventType} value={type} onValueChange={setType}>
               <option value="">{t.allEvents}</option>
-              {EVENT_TYPES.map((ev) => (
+              {STREAM_TYPES.map((ev) => (
                 <option key={ev} value={ev}>
                   {ev}
                 </option>

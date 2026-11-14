@@ -37,3 +37,17 @@ describe("walletKindOf: the wallet a route is paid from", () => {
     expect(walletKindOf(null)).toBeNull();
   });
 });
+
+describe("walletKindOf: NEAR", () => {
+  it("a NEAR token is paid from the connected NEAR wallet", () => {
+    expect(
+      walletKindOf(
+        route({
+          origin_chain: "near",
+          evm_chain_id: null,
+          origin_contract: "usdt.tether-token.near",
+        }),
+      ),
+    ).toBe("near");
+  });
+});

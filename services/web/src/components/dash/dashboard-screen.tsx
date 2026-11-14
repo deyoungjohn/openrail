@@ -3,7 +3,7 @@
 import { Receipt } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Cell, Pie, PieChart } from "recharts";
+import { Cell, Pie, PieChart, Tooltip as ChartTooltip } from "recharts";
 import { copy } from "@/copy";
 import { cn } from "@/lib/cn";
 import {
@@ -106,7 +106,6 @@ const streamOptions: { value: Stream | "all"; label: string }[] = [
   { value: "all", label: copy.dash.allStreams },
   { value: "invoice", label: copy.dash.streamLabels.invoice },
   { value: "checkout", label: copy.dash.streamLabels.checkout },
-  { value: "pay_link", label: copy.dash.streamLabels.pay_link },
 ];
 
 function Collections({ earnings }: { earnings: readonly Earning[] }) {
@@ -121,43 +120,9 @@ function Collections({ earnings }: { earnings: readonly Earning[] }) {
     [earnings, range, stream],
   );
   const months = useMemo(() => byMonth(filtered).reverse(), [filtered]);
-  const chains = useMemo(() => byChain(filtered), [filtered]);
 
   const monthCols: DataTableColumn<(typeof months)[number]>[] = [
     { id: "month", header: d.month, sortable: true, value: (r) => r.month },
-    {
-      id: "cents",
-      header: d.amount,
-      sortable: true,
-      numeric: true,
-      value: (r) => Number(r.cents),
-      cell: (r) => formatUsd(r.cents),
-      formatTotal: (n) => formatUsd(BigInt(Math.round(n))),
-    },
-  ];
-  const chainCols: DataTableColumn<(typeof chains)[number]>[] = [
-    {
-      id: "chain",
-      header: d.network,
-      sortable: true,
-      value: (r) => CHAINS[r.chain as keyof typeof CHAINS] ?? r.chain,
-      cell: (r) =>
-        r.chain in CHAINS ? (
-          <WithIcon icon={<ChainIcon chain={r.chain as keyof typeof CHAINS} />}>
-            {CHAINS[r.chain as keyof typeof CHAINS]}
-          </WithIcon>
-        ) : (
-          r.chain
-        ),
-    },
-    {
-      id: "count",
-      header: d.payments,
-      sortable: true,
-      numeric: true,
-      hideBelow: "sm",
-      value: (r) => r.count,
-    },
     {
       id: "cents",
       header: d.amount,
@@ -181,23 +146,13 @@ function Collections({ earnings }: { earnings: readonly Earning[] }) {
         />
         <Pills label={d.streamFilter} value={stream} options={streamOptions} onChange={setStream} />
       </div>
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div>
         <DataTable
           data={months}
           columns={monthCols}
           rowId={(r) => r.month}
           title={d.byMonth}
           caption={d.byMonth}
-          totals={["cents"]}
-          pageSize={6}
-          emptyState={empty}
-        />
-        <DataTable
-          data={chains}
-          columns={chainCols}
-          rowId={(r) => r.chain}
-          title={d.paidFrom}
-          caption={d.paidFrom}
           totals={["cents"]}
           pageSize={6}
           emptyState={empty}
@@ -225,8 +180,9 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
       value: (r) => r.product,
       cell: (r) => (
         <Link
-          href={`/app/invoices/${encodeURIComponent(r.invoiceId)}`}
-          className="text-accent-text hover:underline"
+          href={r.href ?? `/app/invoices/${encodeURIComponent(r.invoiceId)}`}
+          title={r.product}
+          className="block max-w-[22ch] truncate text-accent-text hover:underline"
         >
           {r.product}
         </Link>
@@ -341,6 +297,27 @@ function Activity({ earnings }: { earnings: readonly Earning[] }) {
   );
 }
 
+/** Hover on a slice: its name and its share of the total. */
+function sliceTip(total: bigint, nameOf: (key: string) => string) {
+  return function SliceTip({
+    active,
+    payload,
+  }: {
+    active?: boolean;
+    payload?: { payload?: { key?: string; value?: number } }[];
+  }) {
+    const item = payload?.[0]?.payload;
+    if (!active || item?.key === undefined || item.key === "none" || total === 0n) return null;
+    const pct = ((item.value ?? 0) / Number(total)) * 100;
+    return (
+      <div className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px]">
+        <span className="font-medium">{nameOf(item.key)}</span>
+        <span className="tabular text-muted"> · {pct.toFixed(pct >= 10 ? 0 : 1)}%</span>
+      </div>
+    );
+  };
+}
+
 function Streams({
   earnings,
   failedStreams,
@@ -352,15 +329,17 @@ function Streams({
   const data = byStream(earnings);
   const total = data.reduce((n, s) => n + s.cents, 0n);
   const label = data.map((s) => `${d.streamLabels[s.stream]}: ${formatUsd(s.cents)}`).join(", ");
+  const TIP = sliceTip(total, (k) => d.streamLabels[k as Stream] ?? k);
   return (
-    <Card title={d.streamsTitle} info={d.streamsInfo}>
-      <div className="flex items-center gap-4">
+    <Card title={d.streamsTitle} info={d.streamsInfo} className="h-full">
+      <div className="flex h-[150px] items-center gap-4">
         <PieChart width={120} height={120} role="img" aria-label={label}>
           <Pie
             data={
               total === 0n
-                ? [{ stream: "none", value: 1, color: "var(--surface-2)" }]
+                ? [{ key: "none", stream: "none", value: 1, color: "var(--surface-2)" }]
                 : data.map((s) => ({
+                    key: s.stream,
                     stream: s.stream,
                     value: Number(s.cents),
                     color: STREAM_COLOR[s.stream],
@@ -379,6 +358,7 @@ function Streams({
               <Cell key={i} fill={m.color} />
             ))}
           </Pie>
+          <ChartTooltip content={TIP as never} isAnimationActive={false} />
         </PieChart>
         {failedStreams.length > 0 ? (
           <p className="text-[12px] text-muted">Some payment sources could not be loaded.</p>
@@ -392,6 +372,74 @@ function Streams({
                 style={{ background: STREAM_COLOR[s.stream] }}
               />
               <span>{d.streamLabels[s.stream]}</span>
+              <span className="tabular ml-auto pl-3 font-medium">{formatUsd(s.cents)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Card>
+  );
+}
+
+/** Brand colours of the chains, so the slices read at a glance. */
+const CHAIN_COLOR: Record<string, string> = {
+  base: "#0052ff",
+  arbitrum: "#28a0f0",
+  ethereum: "#627eea",
+  optimism: "#ff0420",
+  polygon: "#8247e5",
+  bnb: "#f0b90b",
+  solana: "#14f195",
+  near: "#00c08b",
+};
+
+/** Where clients paid from: the chain of each client's own payment (not where the money settled). */
+function PaidFrom({ earnings }: { earnings: readonly Earning[] }) {
+  const d = copy.dash;
+  const data = byChain(earnings);
+  const total = data.reduce((n, s) => n + s.cents, 0n);
+  const name = (chain: string) => CHAINS[chain as keyof typeof CHAINS] ?? chain;
+  const colour = (chain: string) => CHAIN_COLOR[chain] ?? "var(--text-muted)";
+  const label = data.map((s) => `${name(s.chain)}: ${formatUsd(s.cents)}`).join(", ");
+  const TIP = sliceTip(total, name);
+  return (
+    <Card title={d.paidFrom} info={d.paidFromInfo} className="h-full">
+      <div className="flex h-[150px] items-center gap-4">
+        <PieChart width={120} height={120} role="img" aria-label={label}>
+          <Pie
+            data={
+              total === 0n
+                ? [{ key: "none", chain: "none", value: 1 }]
+                : data.map((s) => ({ key: s.chain, chain: s.chain, value: Number(s.cents) }))
+            }
+            dataKey="value"
+            innerRadius={36}
+            outerRadius={56}
+            stroke="none"
+            isAnimationActive={false}
+          >
+            {(total === 0n ? [{ chain: "none" }] : data).map((s, i) => (
+              <Cell key={i} fill={s.chain === "none" ? "var(--surface-2)" : colour(s.chain)} />
+            ))}
+          </Pie>
+          <ChartTooltip content={TIP as never} isAnimationActive={false} />
+        </PieChart>
+        {total === 0n ? <p className="caption">{d.noPayments}</p> : null}
+        <ul className="min-w-0 flex-1 space-y-1.5 text-[14px]">
+          {data.map((s) => (
+            <li key={s.chain} className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ background: colour(s.chain) }}
+              />
+              {s.chain in CHAINS ? (
+                <WithIcon icon={<ChainIcon chain={s.chain as keyof typeof CHAINS} />}>
+                  {name(s.chain)}
+                </WithIcon>
+              ) : (
+                <span>{name(s.chain)}</span>
+              )}
               <span className="tabular ml-auto pl-3 font-medium">{formatUsd(s.cents)}</span>
             </li>
           ))}
@@ -453,14 +501,8 @@ export function DashboardScreen() {
             <TopClientsCard clients={clients} state={loading ? "loading" : "ready"} />
           </div>
 
-          <div className="grid items-stretch gap-4 lg:grid-cols-3">
-            <div className="min-w-0 lg:col-span-2">
-              {loading ? (
-                <DataTable data={[]} columns={[]} rowId={() => ""} title={d.activity} loading />
-              ) : (
-                <Activity earnings={earnings} />
-              )}
-            </div>
+          {/* Two pie cards under the four cards, each as wide as two of them. */}
+          <div className="grid items-stretch gap-4 lg:grid-cols-2">
             <div className="min-w-0">
               {loading ? (
                 <Card title={d.streamsTitle} state="loading" />
@@ -471,6 +513,21 @@ export function DashboardScreen() {
                 />
               )}
             </div>
+            <div className="min-w-0">
+              {loading ? (
+                <Card title={d.paidFrom} state="loading" />
+              ) : (
+                <PaidFrom earnings={earnings} />
+              )}
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            {loading ? (
+              <DataTable data={[]} columns={[]} rowId={() => ""} title={d.activity} loading />
+            ) : (
+              <Activity earnings={earnings} />
+            )}
           </div>
 
           {loading ? null : <Collections earnings={earnings} />}

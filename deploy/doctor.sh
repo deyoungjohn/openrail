@@ -13,7 +13,9 @@ have() { command -v "$1" >/dev/null 2>&1; }
 section "time and build"
 date -u +"now (UTC): %Y-%m-%d %H:%M:%S"
 readlink -f /opt/openrail/current 2>/dev/null || true
-ls -1 /opt/openrail/current/.pack-commit /opt/openrail/current/PACK_COMMIT 2>/dev/null | head -1 | xargs -r cat
+for f in /opt/openrail/current/.pack-commit /opt/openrail/current/PACK_COMMIT; do
+  if [ -f "$f" ]; then cat "$f"; break; fi
+done
 
 section "services"
 for u in api issuer watcher indexer web payout shopify; do

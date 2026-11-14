@@ -64,7 +64,7 @@ async function rpc<T>(
 
 /**
  * Does `publicKey` belong to `accountId`? A key the chain lists: yes. A key it does not list: no.
- * An implicit account that has never been funded does not exist on chain yet; its own key is accepted
+ * An implicit account that has never been funded does not exist onchain yet; its own key is accepted
  * then (see implicitKeyMatches). A failing chain read is a 503, never a silent "no".
  */
 /** The chain answered "no": the key or account is not there, or what we sent is not a valid account or key. */
@@ -123,9 +123,13 @@ export function createAccessKeyPort(
         }
       } catch (error) {
         const name = (error as { causeName?: string }).causeName;
+        // An unfunded implicit account is not onchain, and the RPC says so on the key lookup itself: its own key
+        // (the account id is that key in hex) is the right signer. This refused OKX, Trust and other multi-chain
+        // wallets, whose NEAR account is a fresh implicit one (14 Nov).
+        if (name === "UNKNOWN_ACCOUNT" && implicitKeyMatches(accountId, publicKey)) return true;
         if (isDefinite(name)) return false;
         log(`access key check unavailable: ${(error as Error).message}`);
-        throw new ApiError(503, "chain_unavailable", "could not check the account key on chain");
+        throw new ApiError(503, "chain_unavailable", "could not check the account key onchain");
       }
     },
   };
@@ -133,7 +137,7 @@ export function createAccessKeyPort(
 
 /**
  * The business's prepaid storage credit, read from the contract on every call (`storage_credit_of`), so a deposit
- * shows as soon as it is on chain. `amount` is the deposit the page suggests (an env default).
+ * shows as soon as it is onchain. `amount` is the deposit the page suggests (an env default).
  */
 export function issuerUnavailableError(status?: number, code?: string): ApiError {
   console.error(
@@ -214,6 +218,12 @@ export function createContractPort(rootAccount: string): ContractPort {
     },
     rpcHealth() {
       return near.rpcHealth();
+    },
+    rpcBudget() {
+      return near.rpcBudget();
+    },
+    txHealth() {
+      return near.txHealth();
     },
     // At most one read per account a minute, whatever the number of open tabs: the browser asks us, we ask the chain.
     // The token list changes only when a new token arrives, so it is kept for 15 minutes: one call per read, not two.
@@ -363,10 +373,19 @@ export function createHttpIssuer(baseUrl: string): IssuerPort {
 export function providerFailure(error: unknown): never {
   if (error instanceof OneClickRequestError) {
     const rejected = error.status >= 400 && error.status < 500;
+    // The provider's own reason ("Amount is too low…"), not its raw JSON, so the pay page can show it to the payer.
+    const raw = error.message.replace(/^ONECLICK_HTTP_\d+:\s*/, "");
+    let reason = raw;
+    try {
+      const parsed = JSON.parse(raw) as { message?: unknown };
+      if (typeof parsed.message === "string" && parsed.message !== "") reason = parsed.message;
+    } catch {
+      // not JSON: keep the text
+    }
     throw new ApiError(
       rejected ? 422 : 502,
       rejected ? "provider_rejected" : "provider_unavailable",
-      error.message.slice(0, 300),
+      reason.slice(0, 300),
     );
   }
   throw error;
@@ -522,7 +541,13 @@ export function createCashoutPort(
 }
 
 const USDC_NEAR = "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+/**
+ * Where a withdrawal from the private balance (or a payout estimate) can go: USDC on each chain, as the provider lists
+ * it (checked against `/v0/tokens` on 13 Nov; "ethereum" pointed at NEAR's USDC before). NEAR first. The address is a
+ * placeholder used only for estimates.
+ */
 const PAYOUT_DESTINATIONS: Record<string, { asset: string; address: string }> = {
+  near: { asset: USDC_NEAR, address: "openrail.near" },
   base: {
     asset: "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
     address: "0x1111222233334444555566667777888899990000",
@@ -532,7 +557,19 @@ const PAYOUT_DESTINATIONS: Record<string, { asset: string; address: string }> = 
     address: "0x1111222233334444555566667777888899990000",
   },
   ethereum: {
-    asset: "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    asset: "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+    address: "0x1111222233334444555566667777888899990000",
+  },
+  optimism: {
+    asset: "nep245:v2_1.omni.hot.tg:10_A2ewyUyDp6qsue1jqZsGypkCxRJ",
+    address: "0x1111222233334444555566667777888899990000",
+  },
+  polygon: {
+    asset: "nep141:pol-0x3c499c542cef5e3811e1192ce70d8cc03d5c3359.omdep.near",
+    address: "0x1111222233334444555566667777888899990000",
+  },
+  bnb: {
+    asset: "nep141:bnb-0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d.omdep.near",
     address: "0x1111222233334444555566667777888899990000",
   },
   solana: {
@@ -608,6 +645,8 @@ async function confidentialPost(path: string, body: unknown): Promise<Record<str
 }
 
 function createConfidentialBalancePort(): ConfidentialBalancePort {
+  // The salt changes rarely; a session payload needs the current one.
+  let saltCache: { at: number; value: string } | undefined;
   return {
     async authenticate(signedData) {
       // Not confirmed by a real call yet: the cited guide shows the SDK call, not this path.
@@ -655,6 +694,18 @@ function createConfidentialBalancePort(): ConfidentialBalancePort {
     async submitIntent(signedData) {
       return confidentialPost("/v0/submit-intent", { type: "swap_transfer", signedData });
     },
+    async currentSalt() {
+      if (saltCache !== undefined && Date.now() - saltCache.at < 10 * 60_000)
+        return saltCache.value;
+      const value = await nearClientFromEnv().view<string>({
+        contractId: "intents.near",
+        methodName: "current_salt",
+        args: {},
+        feature: "api.intents_salt",
+      });
+      saltCache = { at: Date.now(), value };
+      return value;
+    },
     async withdrawStatus(depositAddress) {
       const response = await fetch(
         `${confidentialBase()}/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`,
@@ -667,19 +718,27 @@ function createConfidentialBalancePort(): ConfidentialBalancePort {
       return (await response.json()) as Record<string, unknown>;
     },
     async balances(userToken, tokenIds) {
-      const query = tokenIds.map(encodeURIComponent).join(",");
-      const response = await fetch(`${confidentialBase()}/v0/account/balances?tokenIds=${query}`, {
-        headers: { authorization: `Bearer ${userToken}` },
+      // As the CLI that read it on 12 Nov: no tokenIds filter (with one the answer came back empty and the dashboard
+      // showed $0.00), the partner key beside the user's token; the wanted tokens are kept here.
+      const jwt = getEnv("ONECLICK_JWT");
+      const response = await fetch(`${confidentialBase()}/v0/account/balances`, {
+        headers: {
+          authorization: `Bearer ${userToken}`,
+          ...(jwt === undefined ? {} : { "X-API-Key": jwt }),
+        },
         signal: AbortSignal.timeout(20_000),
       });
       if (!response.ok) throw new ApiError(502, "confidential_balance_failed");
       const body = (await response.json()) as {
         balances?: { tokenId?: unknown; available?: unknown; source?: unknown }[];
       };
+      const wanted = new Set(tokenIds);
       return (body.balances ?? [])
         .filter(
           (entry): entry is { tokenId: string; available: string; source?: string } =>
-            typeof entry.tokenId === "string" && typeof entry.available === "string",
+            typeof entry.tokenId === "string" &&
+            typeof entry.available === "string" &&
+            (wanted.size === 0 || wanted.has(entry.tokenId)),
         )
         .map((entry) => ({
           tokenId: entry.tokenId,
@@ -708,6 +767,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
       claimLabels: getEnv("CLAIM_LABELS") === "1",
       confidentialIntents: getEnv("CONFIDENTIAL_INTENTS") === "1",
       confidentialWithdrawMax: getEnv("CONFIDENTIAL_WITHDRAW_MAX") ?? "10000000000",
+      proofAccount: getEnv("PROOF_ACCOUNT"),
     },
     store: stores.api,
     recurring: stores.recurring,
@@ -754,7 +814,7 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
     });
   }, 5_000);
   timer.unref();
-  // The provider's status for live deposit addresses, every 5 s (each session at most every 20 s): the watcher reads
+  // The provider's status for live deposit addresses, each session at most every 5 s: the watcher reads
   // the chain only when this pokes it. Off without a provider status or a watcher to poke.
   if (getEnv("WATCHER_URL") !== "off" && getEnv("DEPOSIT_WATCH") !== "off") {
     let running = false;
@@ -772,7 +832,8 @@ export async function createApiAppFromEnv(): Promise<ApiApp> {
         .finally(() => {
           running = false;
         });
-    }, 5_000);
+      // Rounds every second; each session is asked at most every 5 s (DEPOSIT_ASK_EVERY_MS).
+    }, 1_000);
     depositTimer.unref();
   }
   const recurringLogger = createLogger("api-recurring");

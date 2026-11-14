@@ -49,7 +49,7 @@ function ProfileCard({
 
   const nameBad = name.trim() === "";
   const payoutBad = !isNearAccountId(payout.trim());
-  const emailBad = !EMAIL.test(email.trim());
+  const emailBad = email.trim() !== "" && !EMAIL.test(email.trim());
 
   useEffect(() => {
     if (dirty && state === "saved") setState("idle");

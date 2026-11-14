@@ -223,9 +223,6 @@ export function InvoiceDetailScreen({ id }: { id: string }) {
           <Link href={`/app/statements?token_id=${encodeURIComponent(invoice.token_id)}`}>
             <Button variant="secondary">{t.statement}</Button>
           </Link>
-          <Link href={`/app/invoices/${encodeURIComponent(invoice.token_id)}/transfer`}>
-            <Button variant="secondary">{t.sell}</Button>
-          </Link>
         </div>
       </header>
 
@@ -253,15 +250,6 @@ export function InvoiceDetailScreen({ id }: { id: string }) {
           <Card title={t.accountTitle}>
             <AddressChip value={invoice.claim_account} head={12} tail={14} />
             <p className="caption mt-3">{t.accountBody}</p>
-          </Card>
-          <Card title={t.ackTitle}>
-            {claim.ack ? (
-              <StatusChip status={{ kind: "acknowledged" }} />
-            ) : (
-              <p className="text-[15px]">{t.ackNone}</p>
-            )}
-            <p className="caption mt-3">{t.ackLink}</p>
-            <AddressChip value={invoice.ack_url} head={28} tail={10} />
           </Card>
         </div>
       </div>
