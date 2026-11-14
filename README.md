@@ -2,6 +2,8 @@
 
 Openrail lets a business get paid in stablecoins from any chain. Each invoice or checkout gets its own keyless account on NEAR. The client pays from NEAR, Base, Arbitrum, Ethereum, Solana, Polygon, Optimism or BNB Chain, and NEAR Intents converts the payment to USDC. The contract `openrail.near` books the payment against that one invoice, and the business receives USDC. Built at NEAR HACKATHON (1–14 Nov 2026).
 
+**The problem it solves:** cross-border payments by wire or card are slow, costly and matched to invoices by hand. Stablecoins are fast, but the client's coin and chain rarely match the business's, a payment arrives with no link to its invoice, and on a public chain anyone can see a merchant's balance. Openrail matches every payment to its invoice by construction, takes any of 8 chains in, pays out USDC, and can keep the balance confidential.
+
 [![CI](https://github.com/deyoungjohn/openrail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/deyoungjohn/openrail/actions/workflows/ci.yml)
 [![NEAR](https://img.shields.io/badge/NEAR-mainnet-brightgreen)](https://nearblocks.io/address/openrail.near)
 [![contract](https://img.shields.io/badge/contract-openrail.near-orange)](https://nearblocks.io/address/openrail.near)
@@ -44,7 +46,39 @@ These figures are frozen at the hackathon's end. The live numbers are on the lan
 | Read-only demo dashboard | https://openrail.incepture.dev/app?demo=1 |
 | Demo stores | WooCommerce https://belmonte.incepture.dev · Shopify https://belmonte-apparels.myshopify.com (password `openrail`) |
 
-**Check a real payment (no account, no install):**
+Each step below is an action, then what you should see. Steps 1 and 4 need nothing: no wallet, no account, no money. Step 2 needs a NEAR wallet and about $2 of USDC or USDT on any supported chain. Everything runs on NEAR mainnet.
+
+### 1. See a real business's dashboard (2 minutes, nothing needed)
+
+| Do | See |
+| --- | --- |
+| Open https://openrail.incepture.dev/app?demo=1 | The dashboard of the demo business, Belmonte Apparels, marked **Read-only demo**: revenue chart, weekly activity, invoices, checkouts and payments from real mainnet payments. |
+| Click **Invoices**, then a paid invoice | Status **Paid**, the amount, the invoice's own account (`<business>-<ref>.openrail.near`), and each payment with the payer's transaction and the NEAR booking transaction. |
+| Click **Statements**, pick a month and **CSV** | A CSV of every settled payment in that month (date, source, amount) and the total, ready for an accountant. |
+| Click **API Integration** and open a webhook endpoint's delivery log | The signed webhook deliveries sent to the demo store, with their status. |
+| Try to change anything | The API refuses it: the demo is read-only. The confidential balance and API keys are not shown. |
+
+### 2. Get paid yourself (about 5 minutes, $2 of stablecoin)
+
+| Do | See |
+| --- | --- |
+| Sign in at https://openrail.incepture.dev/app with a NEAR wallet (Meteor, HOT, Intear, Nightly, Here or OKX) | Your wallet asks you to sign one message: no transaction, no NEAR spent. A new account lands on onboarding (business name, where to be paid). |
+| **Invoices → Create invoice**: one line of $2.00 and a due date | A pay link. On chain, the invoice is minted as an NFT with its own keyless account. Its storage comes from the sponsor pool, so you need no NEAR. |
+| Open the pay link in another browser and pick a coin and chain, for example USDC on Base or USDT on BNB Chain | An exact price from NEAR Intents, a one-time deposit address and a deadline. |
+| Send the amount from any wallet or exchange | The pay page moves through *You send*, *Payment received*, *Paid out to the business*. The booking usually lands about 30 s after the provider confirms (median 30.5 s, [K12](evidence/)). |
+| Go back to your dashboard | The invoice shows **Paid**; the payment is on the dashboard and under Payments. Its receipt links the payer's transaction and the NEAR booking. The USDC is held for you on `intents.near`: **Payout** shows it, and you can cash it out to the chain you choose. |
+| Pay less than the amount due on another invoice | **Partially paid**, with what is still due. The rest can follow from any chain. |
+
+### 3. Buy from a real store (3 minutes, about $2)
+
+| Do | See |
+| --- | --- |
+| On https://belmonte.incepture.dev add an item to the cart and choose **Pay with stablecoins** | Openrail's hosted pay page for that order. |
+| Pay from any supported chain | When the payment is booked, the store marks the order complete from Openrail's signed webhook. The payment appears on the [Proof page](https://openrail.incepture.dev/proof) and in the demo dashboard. |
+
+The Shopify store https://belmonte-apparels.myshopify.com (password `openrail`) works the same way from its order page.
+
+### 4. Check it onchain yourself (no install)
 
 1. Open https://openrail.incepture.dev/proof.json. You see recent rows from the demo business `iamyoungjohn.near`: type, amount, claim account and transaction hash. For example, `Checkout paid`, `28.00`, `iamyoungjohn-near-760048132a1e.openrail.near`, tx `5HGjPCKmscYCSwVAkVF1ixqR47H2wzhgKrM52HmU3Akx`.
 2. Open the receipt at https://openrail.incepture.dev/r/5HGjPCKmscYCSwVAkVF1ixqR47H2wzhgKrM52HmU3Akx. You see the amount, the payer's transaction on its own chain, the NEAR booking transaction, and a verify command.
@@ -61,17 +95,9 @@ These figures are frozen at the hackathon's end. The live numbers are on the lan
    You see `"keys":[]`. No one holds a key to the account; only the contract moves what lands there.
 5. Read the invoice as an NFT with `near view openrail.near nft_token '{"token_id":"iamyoungjohn-near-760048132a1e"}'`. You see its owner and metadata (NEP-171). Run `near view openrail.near nft_metadata '{}'` to see the collection, `"name":"Openrail Claim"`, `"symbol":"OPENRAIL"`. Run `near view openrail.near nft_total_supply '{}'` to see how many invoices and checkouts have been minted.
 
-**Make a payment yourself (needs a NEAR wallet and a few dollars of stablecoin):**
+### 5. Run it locally without keys
 
-1. Sign in at https://openrail.incepture.dev/app with a NEAR wallet (Meteor, HOT, Here, Nightly, Intear, NEAR Mobile or OKX). You see your dashboard. Signing in is a NEP-413 signed message; it costs nothing and moves nothing.
-2. Create an invoice under **Invoices → Create invoice**. You see a pay link, and a new NFT is minted with its account `<you>-<ref>.openrail.near`.
-3. Open the pay link and choose a coin and chain. You see an exact quote from NEAR Intents, with a deposit address and a deadline.
-4. Pay from any wallet or exchange. The page moves through *You send*, *Payment received* and *Paid out to the business*. The median from the provider's success to the booking is 30.5 s ([K12](evidence/)).
-5. Open the receipt. You see both transactions linked. The invoice now shows **Paid** in the dashboard and on the contract.
-
-**Or buy from a store:** check out on https://belmonte.incepture.dev with *Pay with stablecoins*. Once the payment is booked, the store marks the order complete from Openrail's signed webhook.
-
-**Run it locally without keys:** see [Run locally](#run-locally) (mock API and web app, two commands).
+See [Run locally](#run-locally): a mock API and the web app, two commands.
 
 ## NEAR features used
 
@@ -87,6 +113,32 @@ These figures are frozen at the hackathon's end. The live numbers are on the lan
 - **An MCP server** for AI agents. It prepares actions, and the business signs them.
 
 What the build does not do yet: [Limitations](https://openrail.incepture.dev/docs/limitations).
+
+## How control passes when an invoice NFT moves
+
+Each invoice is a NEP-171 token, and its token id names a sub-account, `<token_id>.openrail.near`, that receives the payment. This is how the right to be paid follows the token, and what stops the old owner keeping it:
+
+- **No one holds a key to the money.** The invoice's account is created with no access keys (`view_access_key_list` returns `"keys":[]`). Only `openrail.near` can move what lands there, so an owner never has anything to keep after a sale.
+- **Payment goes to the holder at the moment of booking.** `reconcile` credits the token's current `owner_id` on `intents.near`. After a transfer, the next payment goes to the new holder and none to the old one. This was shown on mainnet with the spike contract ([K13](evidence/K13-T2-2026-10-29T18-34-40Z.json)): $2 to the issuer, then a transfer, then the next $2 to the buyer.
+- **A transfer cannot race a payment.** While a payment is being booked, the token is locked (`Reconciling`), and `nft_transfer` refuses (Rule 1). A sale first opens a short `TransferWindow` with `prepare_transfer`. In the sandbox race test on the spike contract, 1,707 transfer attempts were made under a lock and none succeeded ([K5](evidence/K5-2026-10-28T16-35-42Z.json)).
+- **Money already booked stays with whoever it was booked for.** A payout that failed is retried to the payee recorded at booking, never to a later owner (test `undistributed_payee_fixed_at_booking`).
+- **Contract rules on every transfer:**
+  - only unpaid or partly paid invoices move (Rule 2);
+  - exactly 1 yoctoNEAR is attached (Rule 6);
+  - the receiver cannot be the invoice's own account (Rule 5).
+
+This build's app does not offer selling an invoice; the contract supports it.
+
+## Hackathon scope, baseline and libraries
+
+- **Built in the window.** The repository starts on 1 Nov 2026 (first commit: `init: evidence, fixtures, module list`). The spike reports in [`evidence/`](evidence) date from 27 to 29 Oct 2026, after the event was announced on 19 Oct. There is no earlier product and no baseline branch: everything here was built for NEAR HACKATHON.
+- **Libraries:**
+  - contract: `near-sdk` 5.30 (built with `cargo-near`, no `near-contract-standards`);
+  - web: Next.js 16, React 19, Tailwind CSS 4, Motion, `near-api-js`, `@near-wallet-selector` 10.1.4, `viem` (EVM wallets), `@solana/web3.js`;
+  - services: Node.js 22 with TypeScript, `near-api-js` and `viem`.
+  - External services: the NEAR Intents 1Click API and NEAR RPC.
+  - The code was written with AI coding agents (Claude Code and others), working from a written spec, with tests written before the code.
+- **License:** [MIT](LICENSE).
 
 ## The gap
 
