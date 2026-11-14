@@ -416,6 +416,8 @@ export const copy = {
   },
   auth: {
     previewLabel: "Preview: sign in to use this page",
+    nudgeTitle: "Sign in to use this",
+    nudgeBody: "This page is a preview. Sign in with your NEAR wallet to see your own data and use it.",
     title: "Sign in to Openrail",
     body: "Sign in with your NEAR account. You sign one message in your wallet. It costs nothing, and you stay signed in on this device for a week.",
     failed: "We couldn't sign you in. Nothing was changed. Check your wallet and try again.",

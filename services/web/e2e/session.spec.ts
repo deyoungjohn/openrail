@@ -15,6 +15,13 @@ test("signed out: the dashboard is a preview with nothing in it, and only Sign i
   await expect(preview).toHaveCount(1);
   await expect(preview.getByText("Dashboard", { exact: true }).first()).toBeAttached();
   await expect(page.getByText("acme.openrail.near")).toHaveCount(0);
+  // A click on the preview says why nothing happens, with a way to sign in right there.
+  await page.getByTestId("preview-click-layer").click({ position: { x: 400, y: 300 } });
+  const nudge = page.getByRole("status").filter({ hasText: "Sign in to use this" });
+  await expect(nudge).toBeVisible();
+  await nudge.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByText("acme.openrail.near").first()).toBeVisible();
 });
 
 test("sign in, reload, still signed in with no second prompt", async ({ page }) => {
