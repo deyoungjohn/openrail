@@ -23,6 +23,16 @@ interface InjectedSolana {
   signAndSendTransaction(transaction: unknown): Promise<{ signature: string } | string>;
 }
 
+/** The Solana wallets the pay page knows, in the order people most often use them; the ones not installed are listed
+ * as such in the wallet sheet. */
+export const KNOWN_SOLANA_WALLETS: readonly { id: string; name: string }[] = [
+  { id: "phantom", name: "Phantom" },
+  { id: "jupiter", name: "Jupiter" },
+  { id: "okx", name: "OKX Wallet" },
+  { id: "solflare", name: "Solflare" },
+  { id: "backpack", name: "Backpack" },
+];
+
 /** One Solana wallet installed in this browser. */
 export interface SolanaWallet {
   id: string;
@@ -36,6 +46,7 @@ export function injectedSolanaWallets(): SolanaWallet[] {
   const w = window as unknown as {
     phantom?: { solana?: InjectedSolana };
     jupiter?: InjectedSolana & { solana?: InjectedSolana };
+    okxwallet?: { solana?: InjectedSolana };
     solflare?: InjectedSolana;
     backpack?: InjectedSolana;
     solana?: InjectedSolana;
@@ -43,6 +54,7 @@ export function injectedSolanaWallets(): SolanaWallet[] {
   const all: [string, string, InjectedSolana | undefined][] = [
     ["phantom", "Phantom", w.phantom?.solana],
     ["jupiter", "Jupiter", w.jupiter?.solana ?? w.jupiter],
+    ["okx", "OKX Wallet", w.okxwallet?.solana],
     ["solflare", "Solflare", w.solflare],
     ["backpack", "Backpack", w.backpack],
     ["solana", "Solana wallet", w.solana],

@@ -54,6 +54,14 @@ const pickerWallets: NearWalletInfo[] = [
     available: true,
     signsMessage: null,
   },
+  {
+    id: "okx-wallet",
+    name: "OKX Wallet",
+    iconUrl: null,
+    type: "injected",
+    available: false,
+    signsMessage: false,
+  },
 ];
 
 const statuses: Status[] = [
