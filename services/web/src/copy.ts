@@ -853,7 +853,9 @@ export const copy = {
         sending: (chain: string) =>
           chain === "confidential" ? "Moved to your confidential balance" : `Sent to ${chain}`,
         arrived: (chain: string) =>
-          chain === "confidential" ? "Credited to your confidential balance" : "Arrived at your address",
+          chain === "confidential"
+            ? "Credited to your confidential balance"
+            : "Arrived at your address",
       },
       notes: {
         quoted: "Nothing has left your balance yet.",

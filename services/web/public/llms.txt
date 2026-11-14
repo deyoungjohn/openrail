@@ -21,7 +21,9 @@
 - [Agent MCP](/agents): an MCP server so an AI agent can check payments, fetch receipts, send pay links and prepare invoices; it holds no keys and never signs.
 
 ## Developers
-- [Documentation](https://github.com/deyoungjohn/openrail/tree/main/docs)
+- [Documentation](/docs)
+- [Quickstart](/docs/quickstart)
+- [API endpoints](/docs/endpoints)
 - [API reference (OpenAPI)](https://github.com/deyoungjohn/openrail/blob/main/services/api/openapi.json)
 - [Source code](https://github.com/deyoungjohn/openrail)
-- [Limitations](https://github.com/deyoungjohn/openrail/blob/main/docs/src/core/LIMITATIONS.md)
+- [Limitations](/docs/limitations)

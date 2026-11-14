@@ -2,8 +2,7 @@
  * How Openrail works, in plain words: a short version of the docs that anyone can follow. One source for the page
  * (`/how-it-works`) and its Markdown twin (`/how-it-works.md`) that agents and language models read.
  */
-const REPO = "https://github.com/deyoungjohn/openrail";
-const DOC = (path: string) => `${REPO}/blob/main/docs/src/${path}`;
+const DOC = (slug: string, anchor?: string) => `/docs/${slug}${anchor ? `#${anchor}` : ""}`;
 
 export interface Step {
   id: string;
@@ -25,7 +24,7 @@ export const STEPS: Step[] = [
       "Each invoice or checkout gets its own account on NEAR, created by the Openrail contract (openrail.near). The account has no keys, so nobody can spend from it; only the contract's rules move what lands there.",
       "You get a pay link to send. Shopify and WooCommerce stores show it at checkout for you.",
     ],
-    more: { label: "Architecture: the per-invoice account", href: DOC("core/ARCHITECTURE.md") },
+    more: { label: "Architecture: the per-invoice account", href: DOC("invoice-accounts") },
   },
   {
     id: "pay",
@@ -35,7 +34,7 @@ export const STEPS: Step[] = [
       "They pay from a connected wallet, or send from an exchange to a one-time deposit address. NEAR Intents swaps it to USDC on the way, and the price is shown before they pay.",
       "A payment can be split over several chains, and a partial payment is kept until the rest arrives.",
     ],
-    more: { label: "Checkout: the hosted pay page", href: DOC("modules/checkout/README.md") },
+    more: { label: "Checkout: the hosted pay page", href: DOC("checkout") },
   },
   {
     id: "book",
@@ -45,7 +44,7 @@ export const STEPS: Step[] = [
       "A watcher service asks the contract to book as soon as it sees the money, but anyone can call the same function, so a booking never depends on Openrail being up.",
       "A payment that arrives after an invoice is closed is refunded to the payer.",
     ],
-    more: { label: "Trust model: what you rely on", href: DOC("core/TRUST.md") },
+    more: { label: "Trust model: what you rely on", href: DOC("trust") },
   },
   {
     id: "receive",
@@ -55,7 +54,7 @@ export const STEPS: Step[] = [
       "Choose where it goes: USDC on the chain you pick, or your confidential balance on NEAR Intents, which only you can see.",
       "Cash out or withdraw any time to an address on any supported chain, in one signature.",
     ],
-    more: { label: "Cash out: quotes and statuses", href: DOC("core/cashout.md") },
+    more: { label: "Cash out: quotes and statuses", href: DOC("cash-out") },
   },
   {
     id: "records",
@@ -65,7 +64,7 @@ export const STEPS: Step[] = [
       "Download a statement for any period; its fingerprint proves the file was not changed.",
       "The dashboard shows revenue, activity, top clients and the chains they paid from, all read from the bookings onchain.",
     ],
-    more: { label: "Fees, line items and receipts", href: DOC("core/fees.md") },
+    more: { label: "Fees, line items and receipts", href: DOC("fees") },
   },
   {
     id: "connect",
@@ -92,12 +91,12 @@ export const LINKS: [string, string][] = [
   ["Developers: quickstart and API", "/developers"],
   ["Agent MCP", "/agents"],
   ["Features", "/features"],
-  ["Documentation", "https://github.com/deyoungjohn/openrail/tree/main/docs"],
+  ["Documentation", "/docs"],
   [
     "API reference (OpenAPI)",
     "https://github.com/deyoungjohn/openrail/blob/main/services/api/openapi.json",
   ],
-  ["Limitations", "https://github.com/deyoungjohn/openrail/blob/main/docs/src/core/LIMITATIONS.md"],
+  ["Limitations", "/docs/limitations"],
   ["llms.txt", "/llms.txt"],
 ];
 

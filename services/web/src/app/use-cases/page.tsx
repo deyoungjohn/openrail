@@ -1,7 +1,6 @@
 import { AlertTriangle, ArrowUpRight, CheckCircle2, ExternalLink, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { REPO_URL } from "@/components/landing/links";
 import { LandingNav } from "@/components/landing/nav";
 import { LandingFooter } from "@/components/landing/sections";
 import { Reveal } from "@/components/motion/reveal";
@@ -63,7 +62,7 @@ const STORES: Store[] = [
       "Buyer names are protected data, so these checkouts show “Store customer” in the dashboard.",
       "USD stores only, and the demo is a development store behind a password.",
     ],
-    docs: `${REPO_URL}/blob/main/docs/src/modules/shopify/README.md`,
+    docs: "/docs/shopify",
   },
   {
     id: "woocommerce",
@@ -97,7 +96,7 @@ const STORES: Store[] = [
       "USD stores only. A payment below the order total, a partial one or a late one puts the order on hold for the merchant to review instead of completing it.",
       "Confirmation can take about a minute, longer for USDT, and the swap provider sometimes refuses a quote for a route; the buyer then picks another coin or chain.",
     ],
-    docs: `${REPO_URL}/blob/main/docs/src/modules/checkout/README.md`,
+    docs: "/docs/woocommerce",
   },
 ];
 
@@ -245,8 +244,6 @@ export default function UseCasesPage() {
                       </ul>
                       <a
                         href={s.docs}
-                        target="_blank"
-                        rel="noreferrer"
                         className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-accent-text hover:underline"
                       >
                         Read the {s.name} docs <ArrowUpRight aria-hidden size={15} />

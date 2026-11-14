@@ -4,7 +4,7 @@ const REPO = "https://github.com/deyoungjohn/openrail";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 /** The full pages the Developers menu and the /developers overview point to. /docs leads to the documentation. */
-export const QUICKSTART_URL = `${REPO}/blob/main/docs/src/modules/checkout/README.md`;
+export const QUICKSTART_URL = "/docs/quickstart";
 export const REFERENCE_URL =
   API === "" ? `${REPO}/blob/main/services/api/openapi.json` : `${API}/v1/openapi.json`;
 export const DOCS_URL = "/docs";
@@ -72,7 +72,7 @@ export const MENUS: {
       { label: "Overview", href: "/developers", note: "Quickstart, API and docs on one page" },
       {
         label: "API reference",
-        href: REFERENCE_URL,
+        href: "/docs/endpoints",
         note: "OpenAPI 3.1, every route",
         external: true,
       },

@@ -15,7 +15,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import { GitHubButton, LandingNav } from "@/components/landing/nav";
-import { DOCS_URL, QUICKSTART_URL, REFERENCE_URL, REPO_URL } from "@/components/landing/links";
+import { DOCS_URL, QUICKSTART_URL, REFERENCE_URL } from "@/components/landing/links";
 import { LandingFooter } from "@/components/landing/sections";
 import { Reveal } from "@/components/motion/reveal";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -170,48 +170,48 @@ const METHOD_TONE: Record<Method, string> = {
   DELETE: "bg-danger/12 text-danger-text",
 };
 
-const DOC = (path: string) => `${REPO_URL}/blob/main/docs/src/${path}`;
+const DOC = (slug: string) => `/docs/${slug}`;
 const DOCS: { title: string; body: string; href: string; icon: typeof Webhook }[] = [
   {
     title: "Architecture",
     body: "The contract, the per-invoice account and the services around them.",
-    href: DOC("core/ARCHITECTURE.md"),
+    href: DOC("architecture"),
     icon: Layers,
   },
   {
     title: "Trust model",
     body: "What you trust, what you do not, and how each risk is handled.",
-    href: DOC("core/TRUST.md"),
+    href: DOC("trust"),
     icon: ShieldCheck,
   },
   {
     title: "API contract",
     body: "Auth, idempotency, error codes and every core route.",
-    href: DOC("core/api.md"),
+    href: DOC("api"),
     icon: Terminal,
   },
   {
     title: "Fees and line items",
     body: "The 0.25% fee, who pays it, and how amounts are kept exact.",
-    href: DOC("core/fees.md"),
+    href: DOC("fees"),
     icon: Coins,
   },
   {
     title: "Checkout",
     body: "Hosted checkouts, late payments, refunds and payment links.",
-    href: DOC("modules/checkout/README.md"),
+    href: DOC("checkout"),
     icon: Store,
   },
   {
     title: "Shopify",
     body: "The Shopify app: install, settings and the order flow.",
-    href: DOC("modules/shopify/README.md"),
+    href: DOC("shopify"),
     icon: Boxes,
   },
   {
     title: "Cash out",
     body: "Quotes, statuses and where the money is at each step.",
-    href: DOC("core/cashout.md"),
+    href: DOC("cash-out"),
     icon: ArrowUpRight,
   },
   {
@@ -223,7 +223,7 @@ const DOCS: { title: string; body: string; href: string; icon: typeof Webhook }[
   {
     title: "Limitations",
     body: "What this build does not do yet, stated plainly.",
-    href: DOC("core/LIMITATIONS.md"),
+    href: DOC("limitations"),
     icon: BookOpen,
   },
 ];
@@ -334,8 +334,6 @@ export default function DevelopersPage() {
               </div>
               <a
                 href={QUICKSTART_URL}
-                target="_blank"
-                rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-accent-text hover:underline"
               >
                 Full quickstart <ArrowUpRight aria-hidden size={16} />
