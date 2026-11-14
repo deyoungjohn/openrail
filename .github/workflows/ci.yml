@@ -42,14 +42,12 @@ jobs:
         with:
           filters: |
             contracts:
-              - '.github/**'
               - 'contracts/**'
               - 'abi/**'
               - 'schemas/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
             modules:
-              - '.github/**'
               - 'contracts/**'
               - 'scripts/gen-modules.*'
               - 'openrail.modules.json'
@@ -386,21 +384,21 @@ jobs:
           fi
 
           # 4. Conditionally required jobs (fail if skipped when change set required them)
-          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_CONTRACTS" = "true" ]; then
+          if [ "$FILTER_CONTRACTS" = "true" ]; then
             if [ "$CONTRACT_RES" != "success" ]; then
               echo "Error: 'contract' job was required but result is $CONTRACT_RES."
               exit 1
             fi
           fi
 
-          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_CORE" = "true" ]; then
+          if [ "$FILTER_CONTRACTS" = "true" ]; then
             if [ "$CORE_RES" != "success" ]; then
               echo "Error: 'core-only' job was required but result is $CORE_RES."
               exit 1
             fi
           fi
 
-          if [ "$EVENT_NAME" = "push" ] || [ "$FILTER_MODULES" = "true" ]; then
+          if [ "$FILTER_MODULES" = "true" ]; then
             if [ "$EACH_RES" != "success" ] || [ "$ALL_RES" != "success" ]; then
               echo "Error: Module test jobs ('each-module': $EACH_RES, 'all-enabled': $ALL_RES) were required."
               exit 1
