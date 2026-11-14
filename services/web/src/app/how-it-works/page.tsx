@@ -50,6 +50,15 @@ export default function HowItWorksPage() {
                       </li>
                     ))}
                   </ul>
+                  <a
+                    href={s.more.href}
+                    {...(s.more.href.startsWith("http")
+                      ? { target: "_blank", rel: "noreferrer" }
+                      : {})}
+                    className="mt-4 inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-accent-text hover:underline"
+                  >
+                    Read more: {s.more.label} <ArrowUpRight aria-hidden size={15} />
+                  </a>
                 </article>
               </Reveal>
             </li>
