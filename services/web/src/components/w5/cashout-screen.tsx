@@ -176,10 +176,13 @@ export function CashoutScreen() {
   };
 
   const busy = phase === "asking" || phase === "signing";
+  const demo = auth.state.status === "signedIn" && auth.state.demo === true;
 
   // Public and private: the public balance is this page; an enabled module adds its own tab (the confidential balance).
+  // The read-only demo shows the public balance only: the confidential one stays private (14 Nov).
+  const sections = demo ? [] : payoutSections;
   const withSections = (publicPanel: ReactNode) =>
-    payoutSections.length === 0 ? (
+    sections.length === 0 ? (
       publicPanel
     ) : (
       <Tabs
@@ -190,7 +193,7 @@ export function CashoutScreen() {
             label: t.tabPublic,
             panel: <div className="space-y-6 py-1">{publicPanel}</div>,
           },
-          ...payoutSections.map(({ id, label, Panel }) => ({ id, label, panel: <Panel /> })),
+          ...sections.map(({ id, label, Panel }) => ({ id, label, panel: <Panel /> })),
         ]}
       />
     );

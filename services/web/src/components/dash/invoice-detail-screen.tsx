@@ -255,7 +255,11 @@ export function InvoiceDetailScreen({ id }: { id: string }) {
       </div>
 
       <Payments invoiceId={invoice.id} />
-      <OpenQuotes invoiceId={invoice.id} />
+      {/* Open deposit addresses matter only while money is still due: once paid or closed, their countdowns meant
+          nothing and kept running (14 Nov). */}
+      {chip.kind === "paid" || chip.kind === "closed" || chip.kind === "cancelled" ? null : (
+        <OpenQuotes invoiceId={invoice.id} />
+      )}
       <Events invoiceId={invoice.id} />
     </div>
   );

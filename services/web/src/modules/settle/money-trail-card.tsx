@@ -112,6 +112,10 @@ export function usePrivateBalance(): [PrivateBalance, () => void] {
       setValue({ state: "ready", units, tokens });
       return true;
     } catch (e) {
+      if ((e as { code?: string }).code === "read_only_demo") {
+        setValue({ state: "error", message: "The confidential balance is not shown in the demo." });
+        return false;
+      }
       if ((e as { code?: string }).code === "confidential_session_required") {
         setValue({ state: "locked" });
         return false;

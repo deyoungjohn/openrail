@@ -17,7 +17,8 @@ import { useAuth } from "./auth-provider";
  * before they sign in). The preview reads come from the client's guest mode, so no request leaves the browser.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { state, retry } = useAuth();
+  const { state, retry, signIn } = useAuth();
+  const demo = state.status === "signedIn" && state.demo === true;
   const router = useRouter();
 
   // Before the page renders (its effects run before this component's), so its first reads are already the guest ones.
@@ -25,19 +26,30 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   // Right after signing in (not on a reload of a signed-in page): a new business starts at onboarding, an existing
   // one at the dashboard, whatever page the sign-in started from.
-  const before = useRef(state.status);
+  // "demo" counts as signed out here: leaving the demo by signing in is a sign-in like any other.
+  const phase = demo ? "demo" : state.status;
+  const before = useRef(phase);
   useEffect(() => {
     const was = before.current;
-    before.current = state.status;
-    if (state.status !== "signedIn" || was !== "signedOut") return;
+    before.current = phase;
+    if (phase === "demo" && was === "signedOut") {
+      router.replace("/app");
+      return;
+    }
+    if (phase !== "signedIn" || (was !== "signedOut" && was !== "demo")) return;
     void dashClient.business
       .get()
       .then((b) => {
-        const isNew = b.legal_name.trim() === "" || b.payout_account.trim() === "";
+        // The API creates a new business with its account id as the name, so that means "not set up yet" too: a fresh
+        // OKX account skipped onboarding (14 Nov).
+        const isNew =
+          b.legal_name.trim() === "" ||
+          b.payout_account.trim() === "" ||
+          b.legal_name === b.account_id;
         router.replace(isNew ? "/app/onboarding" : "/app");
       })
       .catch(() => router.replace("/app/onboarding"));
-  }, [state.status, router]);
+  }, [phase, router]);
 
   if (state.status === "loading") return <PageSkeleton />;
   if (state.status === "error")
@@ -57,6 +69,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <SignInNudge />
       </div>
     );
+  if (demo)
+    return (
+      <div key="demo">
+        <DemoBanner onSignIn={() => void signIn()} />
+        {children}
+      </div>
+    );
   return <div key="app">{children}</div>;
 }
 
@@ -66,7 +85,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
  * this layer is for the pointer only.
  */
 function SignInNudge() {
-  const { signIn } = useAuth();
+  const { signIn, startDemo } = useAuth();
   const [at, setAt] = useState<{ x: number; y: number; n: number } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -78,7 +97,7 @@ function SignInNudge() {
 
   const W = 272;
   const left = at ? Math.max(12, Math.min(at.x - W / 2, window.innerWidth - W - 12)) : 0;
-  const top = at ? (at.y + 140 > window.innerHeight ? at.y - 132 : at.y + 14) : 0;
+  const top = at ? (at.y + 190 > window.innerHeight ? at.y - 182 : at.y + 14) : 0;
 
   return (
     <>
@@ -114,10 +133,39 @@ function SignInNudge() {
               >
                 <LogIn aria-hidden size={15} /> {copy.wallet.signIn}
               </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2 w-full"
+                onClick={() => {
+                  setAt(null);
+                  void startDemo().catch(() => undefined);
+                }}
+              >
+                {copy.demo.cta}
+              </Button>
             </div>,
             document.body,
           )
         : null}
     </>
+  );
+}
+
+/** Top of every page in the demo: whose pages these are, that they are live and that nothing can be changed. */
+function DemoBanner({ onSignIn }: { onSignIn: () => void }) {
+  const t = copy.demo;
+  return (
+    <div
+      role="note"
+      className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent-soft px-4 py-3"
+    >
+      <p className="text-[14px] leading-6">
+        <strong className="font-semibold text-accent-text">{t.label}</strong> {t.body}
+      </p>
+      <Button size="sm" variant="secondary" className="shrink-0" onClick={onSignIn}>
+        {t.signIn}
+      </Button>
+    </div>
   );
 }

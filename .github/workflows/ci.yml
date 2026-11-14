@@ -119,7 +119,7 @@ jobs:
     name: contract
     timeout-minutes: 30
     needs: changes
-    if: (github.event_name == 'push') || (needs.changes.outputs.contracts == 'true')
+    if: (needs.changes.outputs.contracts == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -172,7 +172,7 @@ jobs:
     name: core-only
     timeout-minutes: 40
     needs: [changes, contract]
-    if: always() && (needs.changes.result == 'success') && (needs.contract.result == 'success' || needs.contract.result == 'skipped') && ((github.event_name == 'push') || (needs.changes.outputs.core == 'true'))
+    if: always() && (needs.changes.result == 'success') && (needs.contract.result == 'success' || needs.contract.result == 'skipped') && (needs.changes.outputs.contracts == 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Set sandbox temp directory
@@ -214,7 +214,7 @@ jobs:
     name: each-module
     timeout-minutes: 15
     needs: changes
-    if: (github.event_name == 'push') || (needs.changes.outputs.modules == 'true')
+    if: (needs.changes.outputs.modules == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -234,7 +234,7 @@ jobs:
     name: all-enabled
     timeout-minutes: 15
     needs: changes
-    if: (github.event_name == 'push') || (needs.changes.outputs.modules == 'true')
+    if: (needs.changes.outputs.modules == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

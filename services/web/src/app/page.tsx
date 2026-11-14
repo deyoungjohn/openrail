@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ChainsMarquee, Faq, Features, Showcase } from "@/components/landing/more";
 import { LandingNav } from "@/components/landing/nav";
 import { Reveal } from "@/components/motion/reveal";
+import { Stats } from "@/components/landing/stats";
 import { loadProofRows } from "@/lib/proof-data";
 import {
   Band,
@@ -44,6 +45,7 @@ export default async function Landing() {
         <Reveal>
           <Band />
         </Reveal>
+        <Stats proof={rows} />
         <Reveal>
           <OnChain proof={rows} />
         </Reveal>

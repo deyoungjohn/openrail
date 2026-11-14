@@ -12,6 +12,26 @@ Openrail lets a business get paid in stablecoins from any chain. Each invoice or
 [![rust](https://img.shields.io/badge/rust-1.99.1-orange)](rust-toolchain.toml)
 [![protocol](https://img.shields.io/badge/NEAR%20protocol-86-red)](https://openrail.incepture.dev/docs/contract)
 
+## Numbers at the end of the hackathon
+
+Openrail's mainnet numbers as of 14 Nov 2026, when NEAR HACKATHON's build window closed. They are bookings by `openrail.near` for the demo business `iamyoungjohn.near`, read from [`/proof.json`](https://openrail.incepture.dev/proof.json):
+
+| Metric | Value |
+| --- | --- |
+| Processed onchain | **$562.41** |
+| Payments booked | 21 |
+| Invoices and checkouts | 28 |
+| Average payment | $26.78 |
+| Chains a client can pay from | 8 |
+| Median time from payment to booking | 30.5 s ([K12](evidence/)) |
+
+These figures are frozen at the hackathon's end. The live numbers are on the landing page's [stats section](https://openrail.incepture.dev/#stats) and the [Proof page](https://openrail.incepture.dev/proof). Both are computed from the same data and refresh every minute.
+
+**Read-only demo:** [openrail.incepture.dev/app?demo=1](https://openrail.incepture.dev/app?demo=1) opens the demo business's own dashboard, read-only:
+- charts, invoices, checkouts, payments, statements and webhooks, updated in real time;
+- no sign-in and no invoices to create first;
+- every write is refused by the API, and the confidential balance and API keys are not shown.
+
 ## Try it: do X, see Y
 
 | What | Where |
@@ -21,6 +41,7 @@ Openrail lets a business get paid in stablecoins from any chain. Each invoice or
 | Recent real payments, as data | https://openrail.incepture.dev/proof.json |
 | REST API (OpenAPI 3.1) | https://api.openrail.incepture.dev/v1/openapi.json |
 | Docs | https://openrail.incepture.dev/docs |
+| Read-only demo dashboard | https://openrail.incepture.dev/app?demo=1 |
 | Demo stores | WooCommerce https://belmonte.incepture.dev · Shopify https://belmonte-apparels.myshopify.com (password `openrail`) |
 
 **Check a real payment (no account, no install):**

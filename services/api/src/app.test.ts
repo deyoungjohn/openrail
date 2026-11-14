@@ -1084,3 +1084,57 @@ describe("fetch once", () => {
     expect(quoteProvider.status).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("the public read-only demo (PROOF_ACCOUNT)", () => {
+  const demoCookie = { cookie: "or_sess=openrail-read-only-demo", origin: "https://openrail.near" };
+  const withProof = () =>
+    harness({
+      config: { ...config, proofAccount: "demo.near", confidentialIntents: true },
+      confidential: {},
+    } as unknown as Partial<ApiDeps>);
+
+  it("hands out the demo cookie and reads as the demo business", async () => {
+    const { app } = withProof();
+    const start = await app.handle(request("POST", "/v1/auth/demo", {}, ""));
+    expect(start.status).toBe(200);
+    expect(String(start.headers?.["set-cookie"])).toContain("or_sess=openrail-read-only-demo");
+    const session = await app.handle(request("GET", "/v1/auth/session", undefined, "", demoCookie));
+    expect(session.status).toBe(200);
+    expect(session.body).toMatchObject({ account_id: "demo.near", demo: true });
+    const business = await app.handle(request("GET", "/v1/business", undefined, "", demoCookie));
+    expect(business.status).toBe(200);
+    expect(business.body).toMatchObject({ account_id: "demo.near" });
+  });
+
+  it("never writes, and hides the confidential balance and the API keys", async () => {
+    const { app, issuer } = withProof();
+    process.env.WEB_ORIGIN = "https://openrail.near";
+    for (const [method, path] of [
+      ["POST", "/v1/invoices"],
+      ["PUT", "/v1/business"],
+      ["POST", "/v1/webhook_endpoints"],
+      ["DELETE", "/v1/api_keys/k1"],
+    ] as const) {
+      const r = await app.handle(
+        request(method, path, invoiceBody, "", {
+          ...demoCookie,
+          "content-type": "application/json",
+        }),
+      );
+      expect(r.status, `${method} ${path}`).toBe(403);
+    }
+    for (const path of ["/v1/balance/confidential/key", "/v1/api_keys"]) {
+      const r = await app.handle(request("GET", path, undefined, "", demoCookie));
+      expect(r.status, path).toBe(403);
+    }
+    expect(issuer.issueFor).not.toHaveBeenCalled();
+  });
+
+  it("is off when no PROOF_ACCOUNT is set", async () => {
+    const { app } = harness();
+    expect((await app.handle(request("POST", "/v1/auth/demo", {}, ""))).status).toBe(404);
+    expect(
+      (await app.handle(request("GET", "/v1/business", undefined, "", demoCookie))).status,
+    ).toBe(401);
+  });
+});

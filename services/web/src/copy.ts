@@ -423,6 +423,14 @@ export const copy = {
     refundNote: (a: string) => `If anything goes wrong, your money is returned to ${a}.`,
     refundNone: "Connect the wallet you pay from so any refund goes back to it.",
   },
+  demo: {
+    label: "Read-only demo.",
+    body: "These pages belong to Belmonte Apparels, the developer's own business, and show its real data on NEAR mainnet, updated in real time. Nothing here can be changed.",
+    signIn: "Use your own account",
+    cta: "See the live demo",
+    ctaNote: "Browse a real business's dashboard, read-only",
+    exit: "Leave the demo",
+  },
   auth: {
     previewLabel: "Preview: sign in to use this page",
     nudgeTitle: "Sign in to use this",

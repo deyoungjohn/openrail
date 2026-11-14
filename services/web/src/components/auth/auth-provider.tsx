@@ -20,11 +20,13 @@ export type AuthState =
   | { status: "loading" }
   | { status: "error" }
   | { status: "signedOut"; failed?: "unsupported" | "failed" | "timeout"; detail?: string }
-  | { status: "signedIn"; accountId: string };
+  | { status: "signedIn"; accountId: string; demo?: boolean };
 
 interface AuthCtx {
   state: AuthState;
   signIn: () => Promise<void>;
+  /** Opens the public read-only demo (the developer's own business). */
+  startDemo: () => Promise<void>;
   /** A short hint about the wallet being used, shown while we wait for it. */
   hint: string | null;
   /** Stops waiting for the wallet (closed pop-up, app that never answers). */
@@ -65,7 +67,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .session()
       .then((s) => {
         if (off) return;
-        setState(s ? { status: "signedIn", accountId: s.account_id } : { status: "signedOut" });
+        setState(
+          s
+            ? { status: "signedIn", accountId: s.account_id, ...(s.demo ? { demo: true } : {}) }
+            : { status: "signedOut" },
+        );
       })
       .catch(() => !off && setState({ status: "error" }));
     return () => {
@@ -148,10 +154,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [near]);
 
+  const startDemo = useCallback(async () => {
+    const s = await auth.startDemo();
+    setState({ status: "signedIn", accountId: s.account_id, demo: true });
+  }, []);
+
+  // `/app?demo=1` (the landing page's "See the live demo") opens the demo straight away for a signed-out visitor.
+  useEffect(() => {
+    if (state.status !== "signedOut") return;
+    if (new URLSearchParams(window.location.search).get("demo") !== "1") return;
+    window.history.replaceState(null, "", window.location.pathname);
+    void startDemo().catch(() => undefined);
+  }, [state.status, startDemo]);
+
   const retry = useCallback(() => setTick((t) => t + 1), []);
   const value = useMemo(
-    () => ({ state, signIn, hint, cancelSignIn, signOut, retry }),
-    [state, signIn, hint, cancelSignIn, signOut, retry],
+    () => ({ state, signIn, startDemo, hint, cancelSignIn, signOut, retry }),
+    [state, signIn, startDemo, hint, cancelSignIn, signOut, retry],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

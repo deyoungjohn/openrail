@@ -40,6 +40,8 @@ export interface AuthContext {
   scopes: string[];
   source: "bearer" | "cookie";
   session?: { tokenHash: string; expiresAt: number };
+  /** The public read-only demo of the developer's own business (PROOF_ACCOUNT): reads only, never writes. */
+  demo?: true;
 }
 
 export interface Challenge {

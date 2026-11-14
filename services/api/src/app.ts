@@ -559,6 +559,15 @@ function cookieToken(header: string | undefined): string | undefined {
   return undefined;
 }
 
+/**
+ * The cookie value of the public read-only demo. It is not a secret: anyone may look at the developer's own business
+ * (PROOF_ACCOUNT), and `requireAuth` lets it read and never write.
+ */
+export const DEMO_TOKEN = "openrail-read-only-demo";
+
+/** Reads the demo may not make even though they are GETs: the confidential balance and the API keys. */
+const DEMO_HIDDEN = /^\/v1\/(balance\/confidential|api_keys)(\/|$)/;
+
 function sessionCookie(token: string, maxAgeSeconds: number): string {
   const domain = process.env.COOKIE_DOMAIN;
   return [
@@ -675,6 +684,15 @@ export class ApiApp {
     const cookie = cookieToken(request.headers.cookie);
     const token = bearer ?? cookie;
     const source = bearer === undefined ? "cookie" : "bearer";
+    if (source === "cookie" && token === DEMO_TOKEN) {
+      const account = this.deps.config.proofAccount;
+      if (account === undefined || account === "") throw new ApiError(401, "unauthorized");
+      if (request.method !== "GET" && request.method !== "HEAD")
+        throw new ApiError(403, "read_only_demo", "the demo is read-only: sign in to make changes");
+      if (DEMO_HIDDEN.test(request.path))
+        throw new ApiError(403, "read_only_demo", "the demo does not show this");
+      return { kind: "session", accountId: account, scopes: [], source: "cookie", demo: true };
+    }
     if (source === "cookie" && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
       const origin = request.headers.origin;
       if (origin === undefined || !allowedOrigins().includes(origin)) {
@@ -1516,8 +1534,28 @@ export class ApiApp {
       });
     }
 
+    // The public read-only demo: a cookie that shows the developer's own business (PROOF_ACCOUNT), reads only.
+    if (path === "/v1/auth/demo" && method === "POST") {
+      const account = this.deps.config.proofAccount;
+      if (account === undefined || account === "") throw new ApiError(404, "not_found");
+      return {
+        status: 200,
+        headers: { "set-cookie": sessionCookie(DEMO_TOKEN, 24 * 60 * 60) },
+        body: { account_id: account, demo: true },
+      };
+    }
+
     if (path === "/v1/auth/session" && method === "GET") {
       const context = this.requireAuth(request);
+      if (context.demo === true)
+        return {
+          status: 200,
+          body: {
+            account_id: context.accountId,
+            expires_at: new Date(this.clock().getTime() + 24 * 60 * 60 * 1000).toISOString(),
+            demo: true,
+          },
+        };
       if (context.kind !== "session" || context.session === undefined) {
         throw new ApiError(401, "unauthorized");
       }
@@ -2797,7 +2835,8 @@ export class ApiApp {
         body: {
           account,
           contract: this.deps.config.rootAccount,
-          rows: proofRows(found, this.deps.config.rootAccount),
+          // Every row the scan found (the page pages them by 20 and adds them up for its stats).
+          rows: proofRows(found, this.deps.config.rootAccount, 1000),
         },
       };
     }

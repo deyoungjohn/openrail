@@ -6,6 +6,8 @@ import type { AuthChallenge, AuthSession } from "@openrail/api-client";
 export interface SessionInfo {
   account_id: string;
   expires_at: string;
+  /** The public read-only demo of the developer's own business: reads only. */
+  demo?: boolean;
 }
 
 /** What the wallet returns for a NEP-413 message. */
@@ -30,6 +32,8 @@ export interface AuthApi {
     accountId?: string,
   ): Promise<SessionInfo>;
   signOut(): Promise<void>;
+  /** Opens the public read-only demo (the developer's own business). */
+  startDemo(): Promise<SessionInfo>;
 }
 
 export type AuthFetch = (url: string, init: RequestInit) => Promise<Response>;
@@ -68,7 +72,22 @@ export function liveAuth(baseUrl: string, f: AuthFetch = (url, init) => fetch(ur
       if (r.status === 401) return null;
       if (!r.ok) throw new Error(`SESSION_CHECK_${r.status}`);
       const s = (await r.json()) as SessionInfo;
-      return { account_id: s.account_id, expires_at: s.expires_at };
+      return {
+        account_id: s.account_id,
+        expires_at: s.expires_at,
+        ...(s.demo === true ? { demo: true } : {}),
+      };
+    },
+
+    async startDemo() {
+      const r = await post("/v1/auth/demo", {});
+      if (!r.ok) throw new Error(await failure("DEMO", r));
+      const s = (await r.json()) as { account_id: string };
+      return {
+        account_id: s.account_id,
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+        demo: true,
+      };
     },
 
     async signIn(sign, accountId) {
@@ -119,7 +138,14 @@ export const mockAuth: AuthApi = {
       await wait(8000);
       return null;
     }
+    if (v === "__demo")
+      return { account_id: MOCK_ACCOUNT, expires_at: week().toISOString(), demo: true };
     return v ? { account_id: v, expires_at: week().toISOString() } : null;
+  },
+  async startDemo() {
+    await wait(150);
+    document.cookie = `${MOCK_COOKIE}=__demo; path=/; expires=${week().toUTCString()}; samesite=lax`;
+    return { account_id: MOCK_ACCOUNT, expires_at: week().toISOString(), demo: true };
   },
   async signIn() {
     await wait(600);

@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight, ExternalLink, ShieldCheck } from "lucide-react";
+import { ArrowRight, ArrowUpRight, ExternalLink, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import { Brand, BrandMark } from "@/components/brand";
 import {
@@ -65,10 +65,11 @@ export function Hero() {
                   </span>
                 </Link>
                 <Link
-                  href="/proof"
+                  href="/app?demo=1"
                   className="inline-flex h-14 items-center gap-2 rounded-full border border-border bg-surface px-6 text-[15px] font-medium hover:bg-surface-2"
                 >
-                  <ShieldCheck aria-hidden size={18} className="text-accent" /> See the proof
+                  <LayoutDashboard aria-hidden size={18} className="text-accent" /> See the live
+                  demo
                 </Link>
               </div>
             </Reveal>

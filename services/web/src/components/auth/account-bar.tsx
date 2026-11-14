@@ -12,7 +12,7 @@ import { useAuth } from "./auth-provider";
  * (the pages behind it are a preview until then), with Cancel while the wallet is open and what went wrong if it did.
  */
 export function AccountBar({ place = "page" }: { place?: "header" | "menu" | "page" } = {}) {
-  const { state, signIn, signOut, cancelSignIn, hint } = useAuth();
+  const { state, signIn, signOut, cancelSignIn, hint, startDemo } = useAuth();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   const failed = state.status === "signedOut" ? state.failed : undefined;
@@ -37,6 +37,16 @@ export function AccountBar({ place = "page" }: { place?: "header" | "menu" | "pa
     return (
       <div className="flex min-w-0 items-center gap-2">
         {busy && hint ? <span className="caption hidden truncate lg:inline">{hint}</span> : null}
+        {!busy ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="hidden shrink-0 whitespace-nowrap sm:inline-flex"
+            onClick={() => void startDemo().catch(() => undefined)}
+          >
+            {copy.demo.cta}
+          </Button>
+        ) : null}
         {busy ? (
           <Button
             variant="secondary"
@@ -65,6 +75,21 @@ export function AccountBar({ place = "page" }: { place?: "header" | "menu" | "pa
       </div>
     );
   if (state.status !== "signedIn") return null;
+  if (state.demo)
+    return (
+      <div
+        className={
+          place === "header"
+            ? "hidden flex-wrap items-center gap-2 sm:flex"
+            : "flex flex-wrap items-center gap-2"
+        }
+      >
+        <span className="caption">{copy.demo.label}</span>
+        <Button variant="secondary" size="sm" onClick={() => void signOut()}>
+          {copy.demo.exit}
+        </Button>
+      </div>
+    );
   return (
     // In the header, phones show the account in the menu instead (the bar is narrow there).
     <div
