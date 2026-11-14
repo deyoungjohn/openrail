@@ -8,21 +8,11 @@ interface Scene {
 }
 
 /**
- * Colours from the page's own tokens. In dark mode the globe is the reference one: off-white land, faint grey sea and
- * ring, mint arcs and blinks, on near-black.
+ * The globe's own colours, the same in both themes: it was drawn for dark mode (off-white land, a dark sea, accent arcs),
+ * and on the light page the light tokens made the sea vanish into the page (14 Nov, human).
  */
 function colors(): Record<string, string> {
-  if (document.documentElement.dataset.theme === "dark")
-    return { ink: "#EDEBE6", dim: "#2F2F35", accent: "#3f46fe", mint: "#3f46fe", bg: "#0A0A0B" };
-  const css = getComputedStyle(document.documentElement);
-  const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
-  return {
-    ink: v("--text", "#0f172a"),
-    dim: v("--border", "#e4e7ee"),
-    accent: v("--accent", "#3f46fe"),
-    mint: v("--accent", "#3f46fe"),
-    bg: v("--bg", "#f7f8fa"),
-  };
+  return { ink: "#EDEBE6", dim: "#2F2F35", accent: "#3f46fe", mint: "#3f46fe", bg: "#0A0A0B" };
 }
 
 /**

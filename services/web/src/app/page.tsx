@@ -30,10 +30,10 @@ export default async function Landing() {
       <LandingNav />
       <main>
         <Hero />
-        <DashboardShot />
         <Reveal>
           <ChainsMarquee />
         </Reveal>
+        <DashboardShot />
         <TwoCards />
         <Reveal>
           <Global />

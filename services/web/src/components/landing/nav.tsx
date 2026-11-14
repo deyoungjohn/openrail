@@ -6,10 +6,29 @@ import { useEffect, useRef, useState } from "react";
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/cn";
-import { MENUS } from "./links";
+import { MENUS, REPO_URL } from "./links";
 
 /** The landing page's bar: three menus, Proof, and the way into the app. */
-export function LandingNav() {
+/** The repository, as an icon button: the Developers page keeps it top right. */
+export function GitHubButton() {
+  return (
+    <a
+      href={REPO_URL}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Openrail on GitHub"
+      className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[14px] font-semibold hover:bg-surface-2"
+    >
+      <svg aria-hidden viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+        <path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z" />
+      </svg>
+      <span className="hidden sm:inline">GitHub</span>
+    </a>
+  );
+}
+
+/** The landing page's bar. `extra` sits top right, before the theme toggle (the Developers page puts GitHub there). */
+export function LandingNav({ extra }: { extra?: React.ReactNode } = {}) {
   const [open, setOpen] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -99,6 +118,18 @@ export function LandingNav() {
                         </a>
                       </li>
                     ))}
+                    {m.overview ? (
+                      <li className="mt-1 border-t border-border pt-1">
+                        <a
+                          href={m.overview.href}
+                          onClick={() => setOpen(null)}
+                          className="flex items-center justify-between rounded-xl px-3 py-2.5 text-[14px] font-semibold text-accent-text hover:bg-surface-2"
+                        >
+                          {m.overview.label}
+                          <ArrowUpRight aria-hidden size={14} className="rotate-45" />
+                        </a>
+                      </li>
+                    ) : null}
                   </ul>
                 </div>
               ) : null}
@@ -119,6 +150,7 @@ export function LandingNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2 lg:ml-0">
+          {extra}
           <ThemeToggle />
           <Link
             href="/app"
@@ -141,7 +173,19 @@ export function LandingNav() {
           <div className="absolute inset-x-0 top-[72px] rounded-2xl border border-border bg-surface p-4 lg:hidden">
             {MENUS.map((m) => (
               <div key={m.label} className="mb-3">
-                <p className="caption mb-1 font-semibold">{m.label}</p>
+                <p className="caption mb-1 font-semibold">
+                  {m.overview ? (
+                    <a
+                      href={m.overview.href}
+                      onClick={() => setMobile(false)}
+                      className="hover:underline"
+                    >
+                      {m.label}
+                    </a>
+                  ) : (
+                    m.label
+                  )}
+                </p>
                 <ul className="grid grid-cols-2 gap-1">
                   {m.items.map((it) => (
                     <li key={it.label}>

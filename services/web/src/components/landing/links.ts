@@ -3,6 +3,12 @@
 const REPO = "https://github.com/deyoungjohn/openrail";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+/** The full pages the Developers menu and the /developers overview point to. /docs leads to the documentation. */
+export const QUICKSTART_URL = `${REPO}/blob/main/docs/src/modules/checkout/README.md`;
+export const REFERENCE_URL =
+  API === "" ? `${REPO}/blob/main/services/api/openapi.json` : `${API}/v1/openapi.json`;
+export const DOCS_URL = "/docs";
+
 export interface MenuItem {
   label: string;
   href: string;
@@ -10,7 +16,11 @@ export interface MenuItem {
   external?: boolean;
 }
 
-export const MENUS: { label: string; items: MenuItem[] }[] = [
+export const MENUS: {
+  label: string;
+  items: MenuItem[];
+  overview?: { label: string; href: string };
+}[] = [
   {
     label: "Features",
     items: [
@@ -62,28 +72,23 @@ export const MENUS: { label: string; items: MenuItem[] }[] = [
   {
     label: "Developers",
     items: [
-      { label: "API Integration", href: "/app/developers", note: "API keys and webhooks" },
-      {
-        label: "Documentation",
-        href: `${REPO}/tree/main/docs`,
-        note: "Everything, in the repo",
-        external: true,
-      },
       {
         label: "Quickstart",
-        href: `${REPO}/blob/main/docs/src/core/api.md`,
-        note: "Your first invoice in minutes",
+        href: QUICKSTART_URL,
+        note: "Your first paid checkout in minutes",
         external: true,
       },
       {
         label: "API reference",
-        href: API === "" ? `${REPO}/blob/main/services/api/openapi.json` : `${API}/v1/openapi.json`,
-        note: "OpenAPI 3.1",
+        href: REFERENCE_URL,
+        note: "OpenAPI 3.1, every route",
         external: true,
       },
-      { label: "llms.txt", href: "/llms.txt", note: "Openrail for language models" },
+      { label: "Documentation", href: DOCS_URL, note: "How it is built, part by part" },
       { label: "GitHub", href: REPO, note: "Open source", external: true },
+      { label: "llms.txt", href: "/llms.txt", note: "Openrail for language models" },
     ],
+    overview: { label: "Developer overview", href: "/developers" },
   },
 ];
 
