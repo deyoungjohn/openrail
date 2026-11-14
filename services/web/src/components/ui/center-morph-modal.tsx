@@ -261,7 +261,8 @@ export function CenterMorphModalContent({
                 }}
                 onClick={() => context.setOpen(false)}
                 className={cn(
-                  "pointer-events-auto fixed inset-0 z-[100] h-full w-full cursor-default bg-background/10 backdrop-blur-sm",
+                  "fixed inset-0 z-[100] h-full w-full cursor-default bg-background/10 backdrop-blur-sm",
+                  isPresent ? "pointer-events-auto" : "pointer-events-none",
                   backdropClassName,
                 )}
               />
@@ -300,8 +301,14 @@ export function CenterMorphModalContent({
                             clipPath: CENTER_OPEN_CLIP,
                           }
                         : {
-                            opacity: 1,
+                            // Fade out as the fold ends: a folded surface left at opacity 1 stayed on the page as a
+                            // small rounded square when its removal stalled (on the dashboard chart, 14 Nov).
+                            opacity: 0,
                             clipPath: CENTER_FOLDED_CLIP,
+                            transition: {
+                              clipPath: CENTER_UNFOLD_TRANSITION,
+                              opacity: { duration: 0.12, delay: 0.3, ease: EASE_OUT },
+                            },
                           }
                     }
                     {...gate}
@@ -309,7 +316,8 @@ export function CenterMorphModalContent({
                       reduce ? { duration: 0.14, ease: EASE_OUT } : CENTER_UNFOLD_TRANSITION
                     }
                     className={cn(
-                      "pointer-events-auto relative w-full max-w-[26rem] origin-center overflow-hidden rounded-[30px] border border-border will-change-[clip-path]",
+                      "relative w-full max-w-[26rem] origin-center overflow-hidden rounded-[30px] border border-border will-change-[clip-path]",
+                      isPresent ? "pointer-events-auto" : "pointer-events-none",
                       className,
                     )}
                   >

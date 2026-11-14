@@ -106,7 +106,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const s = await auth.signIn((c) => near.signMessage(c, ctl.signal), accountId);
       setState({ status: "signedIn", accountId: s.account_id });
     } catch (e) {
-      const cancelled = e instanceof Error && e.message === "WALLET_CANCELLED";
+      // Closing or rejecting in the wallet is not a failure: each wallet words it its own way ("User rejected the
+      // request", "Wallet closed", "cancelled"), so read the words, and say nothing.
+      const message = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+      const cancelled =
+        message === "WALLET_CANCELLED" ||
+        /reject|cancel|denied|declined|closed|user abort/i.test(message);
       if (cancelled && !timedOut) {
         setState({ status: "signedOut" });
         return;

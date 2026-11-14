@@ -16,12 +16,8 @@ export function walletHint(
   switch (walletId) {
     case "hot-wallet":
       return hasHotExtension ? hints.scanTwice : `${hints.scanTwice} ${hints.hotNoExtension}`;
-    case "near-mobile-wallet":
-      return hints.scanTwice;
     case "intear-wallet":
       return hints.popupBlocked;
-    case "wallet-connect":
-      return hints.walletConnectNear;
     default:
       return null;
   }

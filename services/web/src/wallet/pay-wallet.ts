@@ -5,7 +5,7 @@ import type { Address } from "viem";
 import { useEvm } from "./evm";
 import { useNear } from "./near";
 import { nearTokenPayment } from "./near-pay";
-import { useSolana } from "./solana";
+import { KNOWN_SOLANA_WALLETS, useSolana } from "./solana";
 import { walletKindOf, type PayWalletKind } from "./wallet-kind";
 
 export interface PayWallet {
@@ -15,8 +15,10 @@ export interface PayWallet {
   /** A way to connect a wallet exists for this route. */
   available: boolean;
   error: boolean;
-  /** The wallets the payer can pick from (EVM: each installed one); empty when there is just one way. */
+  /** The wallets in this browser the payer can pick from (EVM and Solana; empty for NEAR, which has its own picker). */
   choices: { id: string; name: string; icon: string }[];
+  /** Wallets the page knows but this browser does not have (Solana), shown as not installed. */
+  missing: { id: string; name: string }[];
   /** The name of the connected wallet, when known. */
   walletName: string | null;
   /** Connects the wallet of the route's chain family (the picked one, for EVM). */
@@ -32,6 +34,7 @@ const NONE: PayWallet = {
   available: false,
   error: false,
   choices: [],
+  missing: [],
   walletName: null,
   connect: () => undefined,
   disconnect: () => undefined,
@@ -58,6 +61,7 @@ export function usePayWallet(route: Route | null): PayWallet {
       available: near.ready,
       error: near.error,
       choices: [],
+      missing: [],
       walletName: null,
       connect: () => near.signIn(),
       disconnect: () => void near.signOut(),
@@ -77,8 +81,8 @@ export function usePayWallet(route: Route | null): PayWallet {
       address: sol.address,
       available: sol.available,
       error: sol.error,
-      choices:
-        sol.wallets.length > 1 ? sol.wallets.map(({ id, name }) => ({ id, name, icon: "" })) : [],
+      choices: sol.wallets.map(({ id, name }) => ({ id, name, icon: "" })),
+      missing: KNOWN_SOLANA_WALLETS.filter((k) => !sol.wallets.some((w) => w.id === k.id)),
       walletName: sol.connectedName,
       connect: (id) => void sol.connect(id),
       disconnect: sol.disconnect,
@@ -96,8 +100,8 @@ export function usePayWallet(route: Route | null): PayWallet {
     address: evm.address,
     available: evm.available,
     error: evm.error,
-    choices:
-      evm.wallets.length > 1 ? evm.wallets.map(({ id, name, icon }) => ({ id, name, icon })) : [],
+    choices: evm.wallets.map(({ id, name, icon }) => ({ id, name, icon })),
+    missing: [],
     walletName: evm.connectedName,
     connect: (id) => void evm.connect(id),
     disconnect: evm.disconnect,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { copy } from "@/copy";
 import { useEvm } from "@/wallet/evm";
 import type { PayWallet } from "@/wallet/pay-wallet";
@@ -7,6 +8,7 @@ import { useNear } from "@/wallet/near";
 import { AccountId } from "./ui/account-id";
 import { AddressChip } from "./ui/address-chip";
 import { Button } from "./ui/button";
+import { PayWalletSheet } from "./pay-wallet-sheet";
 
 export function NearWalletButton() {
   return <NearWalletView {...useNear()} />;
@@ -102,33 +104,39 @@ export function WalletConnectView({ wallet, chosen }: { wallet: PayWallet; chose
         </Button>
       </div>
     );
-  if (wallet.choices.length > 1)
-    return (
-      <div className="flex flex-col items-start gap-2">
-        <p className="caption">{t.pickEvmWallet}</p>
-        <div className="flex flex-wrap gap-2">
-          {wallet.choices.map((w) => (
-            <Button key={w.id} size="sm" variant="secondary" onClick={() => wallet.connect(w.id)}>
-              {w.icon ? (
-                <img src={w.icon} alt="" width={18} height={18} className="size-[18px] rounded" />
-              ) : null}
-              {w.name}
-            </Button>
-          ))}
-        </div>
-        {wallet.error ? <p className="text-danger text-[13px]">{t.evmFailed}</p> : null}
-      </div>
-    );
+  if (wallet.kind === "evm" || wallet.kind === "solana")
+    return <PayWalletPicker wallet={wallet} family={wallet.kind} />;
   return (
     <div className="flex flex-col items-start gap-1">
       <Button size="sm" onClick={() => wallet.connect()}>
-        {wallet.kind === "solana"
-          ? t.connectSolana
-          : wallet.kind === "near"
-            ? t.connectNear
-            : t.connectEvm}
+        {t.connectNear}
       </Button>
       {wallet.error ? <p className="text-danger text-[13px]">{t.evmFailed}</p> : null}
+    </div>
+  );
+}
+
+/** One button that opens the wallet sheet; picking a wallet connects it and closes the sheet. */
+function PayWalletPicker({ wallet, family }: { wallet: PayWallet; family: "evm" | "solana" }) {
+  const t = copy.wallet;
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Button size="sm" onClick={() => setOpen(true)}>
+        {family === "solana" ? t.connectSolana : t.connectEvm}
+      </Button>
+      {wallet.error ? <p className="text-danger text-[13px]">{t.evmFailed}</p> : null}
+      <PayWalletSheet
+        open={open}
+        family={family}
+        choices={wallet.choices}
+        missing={wallet.missing}
+        onClose={() => setOpen(false)}
+        onPick={(id) => {
+          setOpen(false);
+          wallet.connect(id);
+        }}
+      />
     </div>
   );
 }

@@ -39,6 +39,15 @@ export const copy = {
       "This asset cannot be sent from a connected wallet here. Copy the address and send it from your own wallet.",
     connectEvm: "Connect an EVM wallet",
     pickEvmWallet: "Pick the wallet to pay from:",
+    sheetTitle: "Choose a wallet",
+    sheetIntroEvm: "Pay from a wallet in this browser. You approve the payment in the wallet.",
+    sheetIntroSolana:
+      "Pay from a Solana wallet in this browser. You approve the payment in the wallet.",
+    inBrowser: "In this browser",
+    notInstalled: "Not installed in this browser",
+    notInstalledNote: "Install it, then reload this page.",
+    sameAccountNote:
+      "Some wallets, such as OKX, reconnect the account you used last. To pay from another account, switch it in the wallet first.",
     useAnother: "Use another wallet",
     connectSolana: "Connect a Solana wallet",
     connectNear: "Connect a NEAR wallet",
@@ -416,6 +425,9 @@ export const copy = {
   },
   auth: {
     previewLabel: "Preview: sign in to use this page",
+    nudgeTitle: "Sign in to use this",
+    nudgeBody:
+      "This page is a preview. Sign in with your NEAR wallet to see your own data and use it.",
     title: "Sign in to Openrail",
     body: "Sign in with your NEAR account. You sign one message in your wallet. It costs nothing, and you stay signed in on this device for a week.",
     failed: "We couldn't sign you in. Nothing was changed. Check your wallet and try again.",

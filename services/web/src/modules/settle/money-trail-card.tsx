@@ -23,6 +23,7 @@ import {
   type TrailStage,
   type WithdrawalJson,
 } from "./money-trail";
+import { addPublicKeyCall, intentsKeysOf } from "./intents-keys";
 import { ed25519Signature } from "./withdraw";
 
 const TYPES = ["settle_held", "settle_sent", "settle_settled", "settle_refunded"] as const;
@@ -133,6 +134,18 @@ export function usePrivateBalance(): [PrivateBalance, () => void] {
         recipient: p.payload.recipient,
         nonce: p.payload.nonce,
       });
+      // NEAR Intents accepts a signature only from a key registered with `intents.near`. A wallet key never used
+      // there before is registered first, in one wallet transaction the merchant approves (the CLI did this by hand
+      // for the first account, 12 Nov). If the key list cannot be read, try the session anyway.
+      const keys = await intentsKeysOf(signed.accountId).catch(() => null);
+      if (keys !== null && !keys.includes(signed.publicKey)) {
+        await near.call(addPublicKeyCall(signed.publicKey));
+        for (let i = 0; i < 10; i += 1) {
+          const now = await intentsKeysOf(signed.accountId).catch((): string[] => []);
+          if (now.includes(signed.publicKey)) break;
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
       await dashClient.confidential.session({
         standard: p.standard,
         payload: p.payload,
@@ -148,7 +161,7 @@ export function usePrivateBalance(): [PrivateBalance, () => void] {
         message: /reject|declin|cancel/i.test(msg)
           ? "You declined it in your wallet."
           : (e as { code?: string }).code === "confidential_auth_failed"
-            ? "The provider refused the signature. Check that this wallet key is registered (make one withdrawal first)."
+            ? "The provider refused the signature. Sign in again with the wallet you use for this account, then try again."
             : "We couldn't open your confidential balance. Try again.",
       });
     }

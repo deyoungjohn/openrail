@@ -17,7 +17,7 @@ test.describe("wallet picker (static cases in the gallery)", () => {
     ]);
     await expect(dialog.getByRole("button", { name: /Meteor Wallet/ })).toBeEnabled();
     await expect(dialog.getByRole("button", { name: /Nightly/ })).toBeDisabled();
-    await expect(dialog.getByRole("button", { name: /Coin98 Wallet/ })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: /OKX Wallet/ })).toBeDisabled();
     await expect(dialog.getByRole("alert")).toHaveCount(0);
     await dialog.getByRole("button", { name: /HOT Wallet/ }).click();
     await expect(dialog.getByRole("alert")).toHaveText(
@@ -94,9 +94,12 @@ test.describe("what the selector says about each wallet", () => {
       "here-wallet",
       "nightly",
       "intear-wallet",
-      "near-mobile-wallet",
+      "okx-wallet",
     ])
       expect(ids).toContain(id);
+    // Removed 14 Nov: NEAR Mobile never finished a sign-in, WalletConnect never came back from the wallet.
+    expect(ids).not.toContain("near-mobile-wallet");
+    expect(ids).not.toContain("wallet-connect");
     for (const r of table) expect(["yes", "no", "unknown"]).toContain(r.signMessage);
   });
 });
