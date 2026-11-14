@@ -1,7 +1,7 @@
 /**
- * Real transactions of the Openrail contract (`openrail.near`) on NEAR mainnet, read from the chain on 13 Nov 2026.
- * Each one is checkable on the explorer. Confidential-balance deposits and withdrawals are left out. Static: the page makes
- * no call to show them.
+ * Real transactions of the Openrail contract (`openrail.near`) on NEAR mainnet. The Proof page reads them live from the
+ * API (`/v1/public/proof`, the business set by PROOF_ACCOUNT) every minute; the list below, read from the chain on
+ * 13 Nov 2026, is only shown when the API cannot be reached. Confidential-balance deposits and withdrawals are left out.
  */
 export interface ProofRow {
   type:
@@ -167,3 +167,24 @@ export const PROOF_ROWS: ProofRow[] = [
 
 export const nearTxUrl = (hash: string) => `https://nearblocks.io/txns/${hash}`;
 export const nearAccountUrl = (account: string) => `https://nearblocks.io/address/${account}`;
+
+/** How often the Proof page and /proof.json read the API again, in seconds. */
+export const PROOF_REVALIDATE = 60;
+
+/** The newest rows from the API, or the list above when the API is not reachable (the page never breaks). */
+export async function loadProofRows(): Promise<{ rows: ProofRow[]; live: boolean }> {
+  const api = process.env.NEXT_PUBLIC_API_URL;
+  if (!api) return { rows: PROOF_ROWS, live: false };
+  try {
+    const r = await fetch(`${api.replace(/\/+$/, "")}/v1/public/proof`, {
+      next: { revalidate: PROOF_REVALIDATE },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) throw new Error(`PROOF_HTTP_${r.status}`);
+    const body = (await r.json()) as { rows?: ProofRow[] };
+    if (!Array.isArray(body.rows) || body.rows.length === 0) throw new Error("PROOF_EMPTY");
+    return { rows: body.rows, live: true };
+  } catch {
+    return { rows: PROOF_ROWS, live: false };
+  }
+}

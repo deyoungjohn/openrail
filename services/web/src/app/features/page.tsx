@@ -1,7 +1,7 @@
 import { Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import { FEATURE_MOCKS } from "@/components/landing/feature-mocks";
-import { FEATURES } from "@/components/landing/features-data";
+import { FEATURES, featureHref } from "@/components/landing/features-data";
 import { LandingNav } from "@/components/landing/nav";
 import { Reveal } from "@/components/motion/reveal";
 import { LandingFooter } from "@/components/landing/sections";
@@ -52,42 +52,43 @@ function SideCard({ side }: { side: "left" | "right" }) {
     <div
       aria-hidden
       className={cn(
-        "absolute bottom-24 hidden w-[230px] rounded-2xl border border-[#3f46fe]/50 bg-[#0d0d12]/90 p-4 text-[11px] text-[#c9cbd6] shadow-[0_0_40px_-10px_#3f46fe] lg:block",
+        "absolute bottom-24 hidden w-[230px] rounded-2xl border border-accent/40 bg-surface/90 p-4 text-[11px] text-muted shadow-[0_0_40px_-12px_var(--accent)] lg:block",
         side === "left" ? "-left-10 -rotate-[14deg]" : "-right-10 rotate-[14deg]",
       )}
     >
-      <p className="mb-2 font-semibold text-white">
-        {side === "left" ? "Invoices" : "Top clients"}
-      </p>
+      <p className="mb-2 font-semibold text-text">{side === "left" ? "Invoices" : "Top clients"}</p>
       {rows.map(([a, b]) => (
-        <p key={a} className="flex justify-between border-t border-white/10 py-1.5">
+        <p key={a} className="flex justify-between border-t border-border py-1.5">
           <span>{a}</span>
-          <span className={b === "Paid" ? "text-[#4ade80]" : ""}>{b}</span>
+          <span className={b === "Paid" ? "text-success-text" : ""}>{b}</span>
         </p>
       ))}
     </div>
   );
 }
 
+/**
+ * The hero, edge to edge and in the page's own colours: no box. Light mode is the ash page with soft accent bands and
+ * dark text; dark mode the same bands, stronger, on black (14 Nov: a dark box on the light page did not belong).
+ */
 function Hero() {
   return (
-    // Edge to edge: the dark band spans the whole page width; only its content is held to the page column.
-    <section className="relative isolate mt-2 overflow-hidden bg-[#07070a] text-center text-white">
+    <section className="relative isolate overflow-hidden text-center text-text">
+      {/* Vertical bands of the accent, brightest in the middle, fading down; across the whole width. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,black,transparent_80%)]"
+      >
+        <div className="absolute inset-x-0 top-0 h-full [mask-image:linear-gradient(90deg,transparent,black_22%,black_78%,transparent)] bg-[repeating-linear-gradient(90deg,color-mix(in_oklab,var(--accent)_5%,transparent)_0_64px,color-mix(in_oklab,var(--accent)_11%,transparent)_64px_128px)] dark:bg-[repeating-linear-gradient(90deg,rgba(63,70,254,0.10)_0_64px,rgba(63,70,254,0.22)_64px_128px)]" />
+        <div className="absolute inset-x-[25%] top-0 h-full bg-[radial-gradient(ellipse_at_top,color-mix(in_oklab,var(--accent)_28%,transparent),transparent_70%)] dark:bg-[radial-gradient(ellipse_at_top,rgba(63,70,254,0.55),transparent_70%)]" />
+      </div>
       <div className="relative mx-auto max-w-[1240px] px-4 pt-20 pb-12 sm:px-6">
-        {/* Vertical bands of the accent, brightest in the middle, fading down. */}
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,black,transparent_75%)]"
-        >
-          <div className="absolute inset-x-[18%] top-0 h-full bg-[repeating-linear-gradient(90deg,rgba(63,70,254,0.10)_0_64px,rgba(63,70,254,0.22)_64px_128px)]" />
-          <div className="absolute inset-x-[30%] top-0 h-full bg-[radial-gradient(ellipse_at_top,rgba(63,70,254,0.55),transparent_70%)]" />
-        </div>
         <SideCard side="left" />
         <SideCard side="right" />
         <Reveal>
-          <p className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[12.5px] font-medium">
-            <Sparkles aria-hidden size={13} className="text-[#8b90ff]" /> Everything after the
-            payment, too
+          <p className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/70 px-3 py-1 text-[12.5px] font-medium">
+            <Sparkles aria-hidden size={13} className="text-accent" /> Everything after the payment,
+            too
           </p>
         </Reveal>
         <Reveal delay={80}>
@@ -96,18 +97,18 @@ function Hero() {
           </h1>
         </Reveal>
         <Reveal delay={160}>
-          <p className="mx-auto mt-5 max-w-[58ch] text-[16px] leading-7 text-[#b4b7c4]">
+          <p className="mx-auto mt-5 max-w-[58ch] text-[16px] leading-7 text-muted">
             Bill clients and run a checkout that takes stablecoins from any chain, then keep the
             books, prove them, and move the money where you want it.
           </p>
         </Reveal>
         <Reveal delay={240}>
-          <ul className="mx-auto mt-9 flex max-w-[720px] flex-wrap justify-center gap-2.5">
+          <ul className="mx-auto mt-9 flex max-w-[760px] flex-wrap justify-center gap-2.5">
             {FEATURES.map((f) => (
               <li key={f.id}>
                 <a
-                  href={`#${f.id}`}
-                  className="inline-flex h-10 items-center rounded-full border border-white/12 bg-white/[0.06] px-4 text-[13px] font-medium text-[#e6e7ee] hover:border-[#8b90ff] hover:text-white"
+                  href={featureHref(f.id)}
+                  className="inline-flex h-10 items-center rounded-full border border-border bg-surface/80 px-4 text-[13px] font-medium hover:border-accent hover:text-accent-text"
                 >
                   {f.title}
                 </a>
@@ -115,17 +116,14 @@ function Hero() {
             ))}
           </ul>
         </Reveal>
-        <div className="mx-auto mt-14 flex max-w-[520px] items-center gap-3 text-[13px] font-medium text-[#b4b7c4]">
-          <span className="h-px flex-1 bg-gradient-to-r from-transparent to-white/30" />
+        <div className="mx-auto mt-14 flex max-w-[520px] items-center gap-3 text-[13px] font-medium text-muted">
+          <span className="h-px flex-1 bg-gradient-to-r from-transparent to-border" />
           Clients pay from eight chains
-          <span className="h-px flex-1 bg-gradient-to-l from-transparent to-white/30" />
+          <span className="h-px flex-1 bg-gradient-to-l from-transparent to-border" />
         </div>
         <ul className="mt-6 flex flex-wrap justify-center gap-x-8 gap-y-4">
           {CHAIN_ROW.map((c) => (
-            <li
-              key={c}
-              className="flex items-center gap-2 text-[15px] font-semibold text-[#e6e7ee]"
-            >
+            <li key={c} className="flex items-center gap-2 text-[15px] font-semibold">
               <ChainIcon chain={c} size={26} /> {CHAINS[c]}
             </li>
           ))}

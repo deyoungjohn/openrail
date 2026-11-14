@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { CountUp } from "@/components/landing/count-up";
 import { LandingNav } from "@/components/landing/nav";
 import { LandingFooter } from "@/components/landing/sections";
-import { nearAccountUrl, nearTxUrl, PROOF_CONTRACT, PROOF_ROWS } from "@/lib/proof-data";
+import { loadProofRows, nearAccountUrl, nearTxUrl, PROOF_CONTRACT } from "@/lib/proof-data";
+
+// Read again from the API at most once a minute: new transactions appear without a deploy.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Proof: Openrail transactions on NEAR",
@@ -14,7 +17,8 @@ export const metadata: Metadata = {
 const when = (t: number) =>
   `${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(t * 1000))} UTC`;
 
-export default function ProofPage() {
+export default async function ProofPage() {
+  const { rows: PROOF_ROWS } = await loadProofRows();
   const paid = PROOF_ROWS.filter(
     (r) => r.type === "Checkout paid" || r.type === "Invoice payment booked",
   );

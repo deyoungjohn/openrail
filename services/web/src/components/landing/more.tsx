@@ -125,7 +125,7 @@ const SCREENS: RingItem[] = [
     image: "/landing/statements.webp",
   },
   {
-    title: "Cash out, publicly",
+    title: "Cash out",
     description: "Send USDC from your balance to any chain you choose, in one signature.",
     image: "/landing/public_payout.webp",
   },

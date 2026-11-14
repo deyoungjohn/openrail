@@ -51,7 +51,7 @@ export const FEATURES: Feature[] = [
   },
   {
     id: "cash-out",
-    title: "Cash Out Simple",
+    title: "Cash Out",
     subtitle:
       "Send USDC from your balance to an address on the chain you choose, in one signature. Choose how much with the slider and see the price before you sign.",
   },

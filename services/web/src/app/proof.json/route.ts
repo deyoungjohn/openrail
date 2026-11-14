@@ -1,9 +1,11 @@
-import { nearTxUrl, PROOF_CONTRACT, PROOF_ROWS } from "@/lib/proof-data";
+import { loadProofRows, nearTxUrl, PROOF_CONTRACT } from "@/lib/proof-data";
 
-export const dynamic = "force-static";
+// Read again from the API at most once a minute, like the page.
+export const revalidate = 60;
 
 /** The Proof page as data, for programs and AI agents. */
-export function GET() {
+export async function GET() {
+  const { rows: PROOF_ROWS } = await loadProofRows();
   return Response.json({
     contract: PROOF_CONTRACT,
     network: "near-mainnet",

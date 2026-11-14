@@ -1,4 +1,5 @@
 /** Core API implementation (S1b). Dependencies are ports so tests stay offline. */
+import { proofRows } from "./proof.js";
 import { randomBytes } from "node:crypto";
 import {
   allowedRoutes,
@@ -76,6 +77,8 @@ export interface ApiConfig {
   confidentialIntents?: boolean;
   /** Largest confidential withdraw amount in settlement base units (default 10,000 USDC). */
   confidentialWithdrawMax?: string;
+  /** The one business whose transactions the public Proof page lists (`PROOF_ACCOUNT`); unset, the route is off. */
+  proofAccount?: string;
   /** REL-2: new invoices get `<username>-<ref>` claim labels. Off until the contract supports them. */
   claimLabels?: boolean;
 }
@@ -721,6 +724,72 @@ export class ApiApp {
     const invoice = this.invoiceBy(idOrToken);
     if (invoice.issuer_id !== accountId) throw new ApiError(404, "invoice_not_found");
     return invoice;
+  }
+
+  /**
+   * The indexed events of one business's own claims, newest first, read page by page from the shared stream (bounded).
+   * A module type (`checkout.paid`) is matched after expansion; `expand` expands every event (the Proof rows need the
+   * module's names to tell a checkout from an invoice).
+   */
+  private async ownEvents(
+    accountId: string,
+    type: string | null,
+    want: number,
+    cursor?: string,
+    expand = false,
+  ): Promise<{ found: Record<string, unknown>[]; next: string | null }> {
+    const indexer = this.deps.indexer;
+    if (indexer === undefined) return { found: [], next: null };
+    const own = new Set(this.store.listInvoices(accountId).map((i) => i.token_id));
+    for (const module of this.modules) {
+      try {
+        for (const id of module.ownedTokens?.(accountId, this.moduleContext) ?? []) own.add(id);
+      } catch {
+        // a broken module never hides the merchant's core events
+      }
+    }
+    const tokenOf = (e: Record<string, unknown>): string | undefined => {
+      const data = e.data as { token_id?: unknown } | undefined;
+      return typeof data?.token_id === "string" ? data.token_id : undefined;
+    };
+    let after = cursor;
+    const found: Record<string, unknown>[] = [];
+    let next: string | null = null;
+    for (let page = 0; page < 10 && found.length < want; page += 1) {
+      // Module event names (`checkout.paid`) are derived from the indexed ones (`checkout_paid`): read the raw
+      // stream, expand each event through the enabled modules, then filter by type.
+      // A core name (`booked`) filters at the indexer; a module name (`checkout.paid`) only exists after expansion.
+      const coreType = type !== null && !type.includes(".") ? type : undefined;
+      const batch = await indexer.listEvents({
+        ...(after === undefined ? {} : { after }),
+        ...(coreType === undefined ? {} : { type: coreType }),
+        limit: 200,
+      });
+      for (const raw of batch.data as Record<string, unknown>[]) {
+        const expanded =
+          type === null && !expand
+            ? [raw]
+            : (expandEvents(
+                raw as unknown as IndexedEvent,
+                this.modules,
+                this.moduleContext,
+              ) as unknown as Record<string, unknown>[]);
+        for (const e of expanded) {
+          if (type !== null && e.type !== type) continue;
+          const token = tokenOf(e);
+          if (token === undefined || !own.has(token)) continue;
+          const data = (e.data ?? {}) as Record<string, unknown>;
+          const originChain = data.origin_chain === undefined ? this.originChainOf(token) : null;
+          found.push(
+            originChain === null ? e : { ...e, data: { ...data, origin_chain: originChain } },
+          );
+        }
+      }
+      next = batch.next_cursor ?? null;
+      if (next === null) break;
+      after = next;
+    }
+    return { found, next };
   }
 
   /**
@@ -2715,6 +2784,23 @@ export class ApiApp {
       };
     }
 
+    // The Proof page's data: one business's transactions (PROOF_ACCOUNT), public and read-only, newest first. Each row
+    // is a transaction on NEAR anyone can check, so nothing private is shown (no names, no payer addresses).
+    if (path === "/v1/public/proof" && method === "GET") {
+      const account = this.deps.config.proofAccount;
+      if (account === undefined || account === "" || this.deps.indexer === undefined)
+        throw new ApiError(404, "not_found");
+      const { found } = await this.ownEvents(account, null, 400, undefined, true);
+      return {
+        status: 200,
+        headers: { "cache-control": "public, max-age=30" },
+        body: {
+          account,
+          contract: this.deps.config.rootAccount,
+          rows: proofRows(found, this.deps.config.rootAccount),
+        },
+      };
+    }
     if (path === "/v1/events" && method === "GET") {
       const context = this.requireAuth(request);
       // The event stream is shared by every merchant: keep only the events of this merchant's own claims.
@@ -2734,48 +2820,12 @@ export class ApiApp {
       if (this.deps.indexer !== undefined) {
         const limit = Number(request.query.get("limit") ?? "50");
         const want = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50;
-        const type = request.query.get("type");
-        let after = request.query.get("cursor") ?? undefined;
-        const found: Record<string, unknown>[] = [];
-        let next: string | null = null;
-        // Read the shared stream page by page until there are enough of this merchant's events (bounded).
-        for (let page = 0; page < 10 && found.length < want; page += 1) {
-          // Module event names (`checkout.paid`) are derived from the indexed ones (`checkout_paid`): read the raw
-          // stream, expand each event through the enabled modules, then filter by type. Filtering the raw stream by a
-          // module name matched nothing, so checkout payments never reached the dashboard.
-          // A core name (`booked`) filters at the indexer; a module name (`checkout.paid`) only exists after expansion.
-          const coreType = type !== null && !type.includes(".") ? type : undefined;
-          const batch = await this.deps.indexer.listEvents({
-            ...(after === undefined ? {} : { after }),
-            ...(coreType === undefined ? {} : { type: coreType }),
-            limit: 200,
-          });
-          for (const raw of batch.data as Record<string, unknown>[]) {
-            // Without a type the stream stays as indexed; a type may name a module event, so expand first.
-            const expanded =
-              type === null
-                ? [raw]
-                : (expandEvents(
-                    raw as unknown as IndexedEvent,
-                    this.modules,
-                    this.moduleContext,
-                  ) as unknown as Record<string, unknown>[]);
-            for (const e of expanded) {
-              if (type !== null && e.type !== type) continue;
-              const token = tokenOf(e);
-              if (token === undefined || !own.has(token)) continue;
-              const data = (e.data ?? {}) as Record<string, unknown>;
-              const originChain =
-                data.origin_chain === undefined ? this.originChainOf(token) : null;
-              found.push(
-                originChain === null ? e : { ...e, data: { ...data, origin_chain: originChain } },
-              );
-            }
-          }
-          next = batch.next_cursor ?? null;
-          if (next === null) break;
-          after = next;
-        }
+        const { found, next } = await this.ownEvents(
+          context.accountId,
+          request.query.get("type"),
+          want,
+          request.query.get("cursor") ?? undefined,
+        );
         return { status: 200, body: { data: found.slice(0, want), next_cursor: next } };
       }
       return {

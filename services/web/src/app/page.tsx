@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { ChainsMarquee, Faq, Features, Showcase } from "@/components/landing/more";
 import { LandingNav } from "@/components/landing/nav";
-import { Reveal } from "@/components/landing/reveal";
+import { Reveal } from "@/components/motion/reveal";
+import { loadProofRows } from "@/lib/proof-data";
 import {
   Band,
   DashboardShot,
@@ -19,7 +20,11 @@ export const metadata: Metadata = {
     "Invoices and checkout for businesses. Clients pay from eight chains; you receive USDC where you choose, and every payment is proven on NEAR.",
 };
 
-export default function Landing() {
+// The on-chain strip reads the Proof data again at most once a minute.
+export const revalidate = 60;
+
+export default async function Landing() {
+  const { rows } = await loadProofRows();
   return (
     <div className="min-h-dvh bg-bg text-text">
       <LandingNav />
@@ -40,7 +45,7 @@ export default function Landing() {
           <Band />
         </Reveal>
         <Reveal>
-          <OnChain />
+          <OnChain proof={rows} />
         </Reveal>
         <Faq />
       </main>

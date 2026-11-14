@@ -1,7 +1,13 @@
 import { ArrowRight, ArrowUpRight, ExternalLink, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { Brand, BrandMark } from "@/components/brand";
-import { nearAccountUrl, nearTxUrl, PROOF_CONTRACT, PROOF_ROWS } from "@/lib/proof-data";
+import {
+  nearAccountUrl,
+  nearTxUrl,
+  PROOF_CONTRACT,
+  PROOF_ROWS,
+  type ProofRow,
+} from "@/lib/proof-data";
 import { CoinCards, FauxAgent, FauxDashboard, FauxInvoice, FauxPay, Toast } from "./faux";
 import { Globe } from "./globe/globe";
 import { MENUS, REPO_URL } from "./links";
@@ -357,10 +363,10 @@ export function Band() {
 }
 
 /** Real payments, checkable on the explorer (where the reference shows customer quotes). */
-export function OnChain() {
-  const rows = PROOF_ROWS.filter(
-    (r) => r.type !== "Checkout opened" && r.type !== "Invoice issued",
-  ).slice(0, 10);
+export function OnChain({ proof = PROOF_ROWS }: { proof?: readonly ProofRow[] }) {
+  const rows = proof
+    .filter((r) => r.type !== "Checkout opened" && r.type !== "Invoice issued")
+    .slice(0, 10);
   const loop = [...rows, ...rows];
   const when = (t: number) =>
     new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(
